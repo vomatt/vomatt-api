@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>歡迎加入Vomatt</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            padding: 20px;
+            border: 1px solid #ddd;
+        }
+        .header {
+            text-align: center;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 20px;
+        }
+        .welcome-message {
+            font-size: 18px;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .button {
+            display: block;
+            width: 200px;
+            margin: 30px auto;
+            padding: 10px 20px;
+            background-color: #4285f4;
+            color: white;
+            text-align: center;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .features {
+            margin: 20px 0;
+            padding: 0;
+        }
+        .features li {
+            margin-bottom: 10px;
+        }
+        .footer {
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 10px;
+            border-top: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>歡迎加入Vomatt</h1>
+        </div>
+        
+        <div class="welcome-message">
+            <p>您好，<span th:text="${username}">用戶</span>！</p>
+            <p>感謝您註冊成為Vomatt的會員。</p>
+        </div>
+        
+        <p>我們很高興您成為我們社區的一份子。作為會員，您將享有以下優勢：</p>
+        
+        <ul class="features">
+            <li>獨家會員折扣</li>
+            <li>提前訪問新產品</li>
+            <li>專屬會員活動</li>
+            <li>專業客戶支援</li>
+        </ul>
+        
+        <a class="button" href="https://vomatt.com/account" target="_blank">查看您的帳戶</a>
+        
+        <p>如果您有任何問題或需要協助，請隨時與我們聯繫。</p>
+        
+        <p>再次感謝您的加入！</p>
+        
+        <p>敬上，<br>Vomatt團隊</p>
+        
+        <div class="footer">
+            <p>此郵件是自動發送的，請勿回復。</p>
+            <p>&copy; 2024 Vomatt. 版權所有。</p>
+        </div>
+    </div>
+</body>
+</html>

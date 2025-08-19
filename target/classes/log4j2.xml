@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="INFO">
+    <Properties>
+        <Property name="log4j-appender">${env:LOG4J_APPENDER:-console}</Property>
+        <Property name="LOG_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%F:%L] - %msg%n</Property>
+    </Properties>
+    
+    <Appenders>
+        <Console name="console" target="SYSTEM_OUT">
+            <PatternLayout pattern="${LOG_PATTERN}" />
+        </Console>
+        
+        <!-- 可选的文件日志配置 -->
+        <RollingFile name="file" fileName="logs/app.log"
+                    filePattern="logs/app-%d{yyyy-MM-dd}-%i.log.gz">
+            <PatternLayout pattern="${LOG_PATTERN}" />
+            <Policies>
+                <SizeBasedTriggeringPolicy size="10 MB" />
+                <TimeBasedTriggeringPolicy />
+            </Policies>
+            <DefaultRolloverStrategy max="10" />
+        </RollingFile>
+    </Appenders>
+
+    <Loggers>
+        <!-- 应用程序特定日志配置 -->
+        <Logger name="com.vomattapi" level="DEBUG" additivity="false">
+            <AppenderRef ref="${log4j-appender}" />
+        </Logger>
+        
+        <!-- Spring框架日志 -->
+        <Logger name="org.springframework" level="INFO" additivity="false">
+            <AppenderRef ref="${log4j-appender}" />
+        </Logger>
+        
+        <!-- Hibernate日志 -->
+        <Logger name="org.hibernate" level="INFO" additivity="false">
+            <AppenderRef ref="${log4j-appender}" />
+        </Logger>
+        
+        <!-- 默认日志配置 -->
+        <Root level="INFO">
+            <AppenderRef ref="${log4j-appender}" />
+        </Root>
+    </Loggers>
+</Configuration>

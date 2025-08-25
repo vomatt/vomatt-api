@@ -39,6 +39,7 @@ public class WebSecurityConfig {
         "/api/auth/signin",
         "/api/auth/signup",
         "/api/auth/refreshtoken",
+        "/api/auth/generateVerifyCode",
         "/api/public/**",
         "/swagger-ui/**",
         "/swagger-ui.html",
@@ -64,10 +65,8 @@ public class WebSecurityConfig {
     @Bean
     public DaoAuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
-        
         authProvider.setUserDetailsService(userDetailsService);
         authProvider.setPasswordEncoder(passwordEncoder());
-        
         return authProvider;
     }
     

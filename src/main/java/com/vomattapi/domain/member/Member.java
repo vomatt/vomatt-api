@@ -57,9 +57,9 @@ public class Member {
     @Column(name = "phone_number")
     private String phoneNumber;
 
-    @NotBlank
     @Size(max = 120)
-    private String password;
+    @Column(name = "verifyCode")
+    private String verifyCode;
 
     @Column(name = "email_verified")
     private boolean emailVerified = true;
@@ -111,7 +111,7 @@ public class Member {
         this.id = UUID.randomUUID().toString();
         this.username = username;
         this.email = email;
-        this.password = password;
+        this.verifyCode = password;
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
     }

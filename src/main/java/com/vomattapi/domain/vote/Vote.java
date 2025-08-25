@@ -74,6 +74,12 @@ public class Vote {
     @UpdateTimestamp
     private LocalDateTime updatedAt;
 
+    @Column(name = "is_public")
+    private boolean isPublic = true;
+
+    @Column(name = "max_choices")
+    private Integer maxChoices = 1;
+
     @OneToMany(mappedBy = "vote", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<VoteOption> options = new HashSet<>();
 

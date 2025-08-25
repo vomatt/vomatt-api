@@ -1,6 +1,5 @@
 package com.vomattapi.application.service;
 
-import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -43,7 +42,7 @@ public class MemberService {
         
         if (memberOpt.isPresent()) {
             Member member = memberOpt.get();
-            member.setPassword(passwordEncoder.encode(newPassword));
+            member.setVerifyCode(passwordEncoder.encode(newPassword));
             member.clearVerificationCode();
             member.unlockAccount();
             memberRepository.save(member);
@@ -102,8 +101,8 @@ public class MemberService {
     public boolean changePassword(String memberId, String currentPassword, String newPassword) {
         Member member = findMemberById(memberId);
         
-        if (passwordEncoder.matches(currentPassword, member.getPassword())) {
-            member.setPassword(passwordEncoder.encode(newPassword));
+        if (passwordEncoder.matches(currentPassword, member.getVerifyCode())) {
+            member.setVerifyCode(passwordEncoder.encode(newPassword));
             memberRepository.save(member);
             
             logActivity(member, "PASSWORD_CHANGED", "Password changed successfully");
@@ -172,14 +171,25 @@ public class MemberService {
     }
 
     /**
-     * Generate random verification code
+     * Change member password
      */
-    private String generateVerificationCode() {
-        SecureRandom random = new SecureRandom();
-        StringBuilder code = new StringBuilder();
-        for (int i = 0; i < 6; i++) {
-            code.append(random.nextInt(10));
+    @Transactional
+    public boolean changeVerifyCode(String email, String verifyCode) {
+        Member member = findMemberByEmail(email);
+        if (member == null) {
+            return false;
         }
-        return code.toString();
+
+        member.setVerifyCode(passwordEncoder.encode(verifyCode));
+        memberRepository.save(member);
+        logActivity(member, "VERIFY_CODE_CHANGED", "Verify Code changed successfully");
+        return true;
+    }
+
+    /**
+     * Helper method to find member by ID or throw exception
+     */
+    private Member findMemberByEmail(String email) {
+        return memberRepository.findByEmail(email).orElse(null);
     }
 }

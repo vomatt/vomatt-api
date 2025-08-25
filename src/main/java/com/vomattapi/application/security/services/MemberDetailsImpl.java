@@ -54,7 +54,7 @@ public class MemberDetailsImpl implements UserDetails {
                 member.getId(),
                 member.getUsername(),
                 member.getEmail(),
-                member.getPassword(),
+                member.getVerifyCode(),
                 member.isEmailVerified(),
                 member.isPhoneVerified(),
                 member.isActive(),

@@ -37,6 +37,7 @@ public class AuthTokenFilter extends OncePerRequestFilter {
         "/api/auth/signin",
         "/api/auth/signup",
         "/api/auth/refreshtoken",
+        "/api/auth/generateVerifyCode",
         "/api/public/**",
         "/swagger-ui/**",
         "/swagger-ui.html",

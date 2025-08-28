@@ -12,7 +12,12 @@ import com.vomattapi.domain.member.Member;
 import com.vomattapi.domain.member.MemberActivity;
 import com.vomattapi.domain.member.repository.MemberActivityRepository;
 import com.vomattapi.domain.member.repository.MemberRepository;
+import com.vomattapi.infrastructure.redis.CacheUtil;
+import com.vomattapi.infrastructure.redis.RedisService;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @Service
 public class MemberService {
 
@@ -25,33 +30,15 @@ public class MemberService {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private RedisService redisService;
+
+    @Autowired
+    private CacheUtil cacheUtil;
+
     private static final int VERIFICATION_CODE_EXPIRY_MINUTES = 15;
     private static final int MAX_LOGIN_ATTEMPTS = 5;
     private static final int ACCOUNT_LOCK_MINUTES = 30;
-
-    /**
-     * Reset password using token
-     */
-    @Transactional
-    public boolean resetPassword(String token, String newPassword) {
-        Optional<Member> memberOpt = memberRepository.findAll().stream()
-                .filter(m -> token.equals(m.getVerificationCode()) && 
-                       m.getVerificationCodeExpiry() != null && 
-                       m.getVerificationCodeExpiry().isAfter(LocalDateTime.now()))
-                .findFirst();
-        
-        if (memberOpt.isPresent()) {
-            Member member = memberOpt.get();
-            member.setVerifyCode(passwordEncoder.encode(newPassword));
-            member.clearVerificationCode();
-            member.unlockAccount();
-            memberRepository.save(member);
-            
-            logActivity(member, "PASSWORD_RESET_COMPLETED", "Password reset completed successfully");
-            return true;
-        }
-        return false;
-    }
 
     /**
      * Update member profile information
@@ -89,6 +76,10 @@ public class MemberService {
         if (changed) {
             memberRepository.save(member);
             logActivity(member, "PROFILE_UPDATED", "Member profile updated");
+
+            // 清除用戶緩存
+            cacheUtil.evictUserCache(memberId);
+            log.debug("Evicted cache for user after profile update: {}", memberId);
         }
         
         return member;
@@ -106,6 +97,11 @@ public class MemberService {
             memberRepository.save(member);
             
             logActivity(member, "PASSWORD_CHANGED", "Password changed successfully");
+
+            // 清除用戶緩存
+            cacheUtil.evictUserCache(memberId);
+            log.debug("Evicted cache for user after password change: {}", memberId);
+
             return true;
         } else {
             logActivity(member, "PASSWORD_CHANGE_FAILED", "Invalid current password");
@@ -123,6 +119,10 @@ public class MemberService {
             if (member.getLoginAttempts() >= MAX_LOGIN_ATTEMPTS) {
                 member.lockAccount(ACCOUNT_LOCK_MINUTES);
                 logActivity(member, "ACCOUNT_LOCKED", "Account locked due to multiple failed login attempts");
+
+                // 清除用戶緩存
+                cacheUtil.evictUserCache(member.getId());
+                log.debug("Evicted cache for locked user: {}", member.getId());
             }
             memberRepository.save(member);
         });
@@ -138,13 +138,36 @@ public class MemberService {
         memberRepository.save(member);
         
         logActivity(member, "LOGIN", "Successful login", ipAddress, userAgent);
+
+        // 清除用戶緩存以確保最新的登錄信息
+        cacheUtil.evictUserCache(memberId);
+        log.debug("Evicted cache for user after successful login: {}", memberId);
     }
 
     /**
-     * Get member by ID
+     * Get member by ID with caching
      */
     public Member getMemberById(String memberId) {
-        return findMemberById(memberId);
+        return cacheUtil.cacheUserData(memberId, CacheUtil.CacheKeys.USER_PROFILE, Member.class,
+            () -> findMemberById(memberId));
+    }
+
+    /**
+     * Get member by email with caching
+     */
+    public Member getMemberByEmail(String email) {
+        String cacheKey = "member:email:" + email;
+        return cacheUtil.getOrSet(cacheKey, Member.class,
+            () -> memberRepository.findByEmail(email).orElse(null));
+    }
+
+    /**
+     * Get member by username with caching
+     */
+    public Member getMemberByUsername(String username) {
+        String cacheKey = "member:username:" + username;
+        return cacheUtil.getOrSet(cacheKey, Member.class,
+            () -> memberRepository.findByUsername(username).orElse(null));
     }
 
     /**
@@ -183,6 +206,14 @@ public class MemberService {
         member.setVerifyCode(passwordEncoder.encode(verifyCode));
         memberRepository.save(member);
         logActivity(member, "VERIFY_CODE_CHANGED", "Verify Code changed successfully");
+
+        // 清除用戶緩存
+        cacheUtil.evictUserCache(member.getId());
+        // 也清除按email查詢的緩存
+        String emailCacheKey = "member:email:" + email;
+        cacheUtil.evict(emailCacheKey);
+        log.debug("Evicted cache for user after verify code change: {}", member.getId());
+
         return true;
     }
 

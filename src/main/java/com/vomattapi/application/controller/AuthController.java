@@ -17,6 +17,7 @@ import com.vomattapi.domain.member.RefreshToken;
 import com.vomattapi.domain.member.Role;
 import com.vomattapi.domain.member.repository.MemberRepository;
 import com.vomattapi.domain.member.repository.RoleRepository;
+import com.vomattapi.infrastructure.redis.RedisService;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -42,6 +43,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Duration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -62,6 +64,7 @@ public class AuthController {
     private final JwtUtils jwtUtils;
     private final RefreshTokenService refreshTokenService;
     private final AuthService authService;
+    private final RedisService redisService;
 
     @PostMapping("/signin")
     @RateLimiter(name = "login")
@@ -186,7 +189,7 @@ public class AuthController {
             @Parameter(description = "email") @RequestParam(name = "email", required = true) String email) {
         log.error("generateVerifyCode for email: {}", email);
         String verifyCode = authService.generateVerifyCode(email);
-
+        redisService.set(email, verifyCode, Duration.ofMinutes(10));
         return ResponseEntity.ok(verifyCode);
     }
 }

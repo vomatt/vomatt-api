@@ -58,14 +58,11 @@ public class Member {
     private String phoneNumber;
 
     @Size(max = 120)
-    @Column(name = "verifyCode")
+    @Column(name = "verify_code")
     private String verifyCode;
 
-    @Column(name = "email_verified")
-    private boolean emailVerified = true;
-
-    @Column(name = "phone_verified")
-    private boolean phoneVerified = true;
+    @Column(name = "verify_code_expiry")
+    private LocalDateTime verifyCodeExpiry;
 
     @Column(name = "created_at")
     @CreationTimestamp
@@ -83,12 +80,6 @@ public class Member {
 
     @Column(name = "locked_until")
     private LocalDateTime lockedUntil;
-
-    @Column(name = "verification_code")
-    private String verificationCode;
-
-    @Column(name = "verification_code_expiry")
-    private LocalDateTime verificationCodeExpiry;
 
     private int points = 0;
 
@@ -147,23 +138,6 @@ public class Member {
     public void recordLogin() {
         this.lastLoginAt = LocalDateTime.now();
         this.loginAttempts = 0;
-    }
-
-    // Methods for verification (simplified)
-    public void setVerificationCode(String code, int expiryMinutes) {
-        this.verificationCode = code;
-        this.verificationCodeExpiry = LocalDateTime.now().plusMinutes(expiryMinutes);
-    }
-
-    public boolean isVerificationCodeValid(String code) {
-        return this.verificationCode != null && 
-               this.verificationCode.equals(code) && 
-               LocalDateTime.now().isBefore(this.verificationCodeExpiry);
-    }
-
-    public void clearVerificationCode() {
-        this.verificationCode = null;
-        this.verificationCodeExpiry = null;
     }
 
     // Methods for membership management

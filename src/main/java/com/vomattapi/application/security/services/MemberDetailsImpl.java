@@ -33,14 +33,11 @@ public class MemberDetailsImpl implements UserDetails {
     private Collection<? extends GrantedAuthority> authorities;
 
     public MemberDetailsImpl(String id, String username, String email, String password,
-                             boolean isEmailVerified, boolean isPhoneVerified, boolean isActive,
-                             Collection<? extends GrantedAuthority> authorities) {
+                             boolean isActive, Collection<? extends GrantedAuthority> authorities) {
         this.id = id;
         this.username = username;
         this.email = email;
         this.password = password;
-        this.isEmailVerified = isEmailVerified;
-        this.isPhoneVerified = isPhoneVerified;
         this.isActive = isActive;
         this.authorities = authorities;
     }
@@ -55,8 +52,6 @@ public class MemberDetailsImpl implements UserDetails {
                 member.getUsername(),
                 member.getEmail(),
                 member.getVerifyCode(),
-                member.isEmailVerified(),
-                member.isPhoneVerified(),
                 member.isActive(),
                 authorities);
     }

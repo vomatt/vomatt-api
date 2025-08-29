@@ -44,7 +44,6 @@ import lombok.extern.slf4j.Slf4j;
 @Tag(name = "Vote", description = "Vote management APIs")
 @SecurityRequirement(name = "Bearer Authentication")
 public class VoteController {
-
     private final VoteService voteService;
 
     @PostMapping

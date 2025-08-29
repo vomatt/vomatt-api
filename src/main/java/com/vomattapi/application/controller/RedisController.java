@@ -87,9 +87,9 @@ public class RedisController {
             @Parameter(description = "過期時間(秒)", required = false) @RequestParam(required = false) Integer ttlSeconds) {
         try {
             if (ttlSeconds != null && ttlSeconds > 0) {
-                redisService.set(key, value, java.time.Duration.ofSeconds(ttlSeconds));
+                redisService.set("cache", key, value, java.time.Duration.ofSeconds(ttlSeconds));
             } else {
-                redisService.set(key, value);
+                redisService.set("cache", key, value);
             }
             return ResponseEntity.ok("Cache set successfully");
         } catch (Exception e) {
@@ -102,7 +102,7 @@ public class RedisController {
     @Operation(summary = "獲取緩存", description = "獲取指定鍵的緩存值")
     public ResponseEntity<Object> getCache(@Parameter(description = "緩存鍵") @PathVariable String key) {
         try {
-            Object value = redisService.get(key, Object.class);
+            Object value = redisService.get("cache", key, Object.class);
             if (value != null) {
                 return ResponseEntity.ok(value);
             } else {
@@ -118,7 +118,7 @@ public class RedisController {
     @Operation(summary = "刪除緩存", description = "刪除指定鍵的緩存")
     public ResponseEntity<String> deleteCache(@Parameter(description = "緩存鍵") @PathVariable String key) {
         try {
-            boolean deleted = redisService.delete(key);
+            boolean deleted = redisService.delete("cache", key);
             if (deleted) {
                 return ResponseEntity.ok("Cache deleted successfully");
             } else {
@@ -135,7 +135,7 @@ public class RedisController {
     public ResponseEntity<Set<String>> searchKeys(
             @Parameter(description = "搜索模式", example = "user:*") @RequestParam String pattern) {
         try {
-            Set<String> keys = redisService.keys(pattern);
+            Set<String> keys = redisService.keys("cache", pattern);
             return ResponseEntity.ok(keys);
         } catch (Exception e) {
             log.error("Failed to search keys: pattern={}", pattern, e);
@@ -152,9 +152,9 @@ public class RedisController {
             @Parameter(description = "過期時間(秒)", required = false) @RequestParam(required = false) Integer ttlSeconds) {
         try {
             if (ttlSeconds != null && ttlSeconds > 0) {
-                redisService.multiSet(keyValueMap, java.time.Duration.ofSeconds(ttlSeconds));
+                redisService.multiSet("cache", keyValueMap, java.time.Duration.ofSeconds(ttlSeconds));
             } else {
-                redisService.multiSet(keyValueMap);
+                redisService.multiSet("cache", keyValueMap);
             }
             return ResponseEntity.ok("Batch cache set successfully");
         } catch (Exception e) {
@@ -168,7 +168,7 @@ public class RedisController {
     public ResponseEntity<Map<String, Object>> getBatchCache(
             @Parameter(description = "緩存鍵集合") @RequestBody Set<String> keys) {
         try {
-            Map<String, Object> values = redisService.multiGet(keys, Object.class);
+            Map<String, Object> values = redisService.multiGet("cache", keys, Object.class);
             return ResponseEntity.ok(values);
         } catch (Exception e) {
             log.error("Failed to get batch cache: count={}", keys.size(), e);
@@ -181,7 +181,7 @@ public class RedisController {
     public ResponseEntity<String> deleteBatchCache(
             @Parameter(description = "緩存鍵集合") @RequestBody Set<String> keys) {
         try {
-            long deletedCount = redisService.multiDelete(keys);
+            long deletedCount = redisService.multiDelete("cache", keys);
             return ResponseEntity.ok("Deleted " + deletedCount + " cache entries");
         } catch (Exception e) {
             log.error("Failed to delete batch cache: count={}", keys.size(), e);
@@ -283,7 +283,7 @@ public class RedisController {
     public ResponseEntity<String> cleanupByPattern(
             @Parameter(description = "清理模式", example = "temp:*") @RequestParam String pattern) {
         try {
-            long cleaned = redisService.deleteByPattern(pattern);
+            long cleaned = redisService.deleteByPattern("cache", pattern);
             return ResponseEntity.ok("Cleaned up " + cleaned + " cache entries matching pattern: " + pattern);
         } catch (Exception e) {
             log.error("Failed to cleanup by pattern: pattern={}", pattern, e);

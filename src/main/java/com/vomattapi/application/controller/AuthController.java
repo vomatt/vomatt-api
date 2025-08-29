@@ -1,23 +1,22 @@
 package com.vomattapi.application.controller;
 
 import com.vomattapi.application.dto.request.LoginRequest;
+import com.vomattapi.application.dto.request.PreSignupRequest;
 import com.vomattapi.application.dto.request.SignupRequest;
 import com.vomattapi.application.dto.request.TokenRefreshRequest;
 import com.vomattapi.application.dto.response.JwtResponse;
 import com.vomattapi.application.dto.response.MessageResponse;
+import com.vomattapi.application.dto.response.PreSignupResponse;
 import com.vomattapi.application.dto.response.TokenRefreshResponse;
 import com.vomattapi.application.exception.TokenRefreshException;
 import com.vomattapi.application.security.jwt.JwtUtils;
 import com.vomattapi.application.security.services.MemberDetailsImpl;
 import com.vomattapi.application.service.AuthService;
+import com.vomattapi.application.service.MemberService;
+import com.vomattapi.application.service.PreSignupService;
 import com.vomattapi.application.service.RefreshTokenService;
-import com.vomattapi.domain.member.ERole;
-import com.vomattapi.domain.member.Member;
+import com.vomattapi.application.service.SignupService;
 import com.vomattapi.domain.member.RefreshToken;
-import com.vomattapi.domain.member.Role;
-import com.vomattapi.domain.member.repository.MemberRepository;
-import com.vomattapi.domain.member.repository.RoleRepository;
-import com.vomattapi.infrastructure.redis.RedisService;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -29,12 +28,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -43,28 +42,23 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.Duration;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 @RequestMapping("/api/auth")
 @Tag(name = "認證", description = "認證相關的API，包括登入、註冊、刷新令牌和登出")
-@RequiredArgsConstructor
 @Slf4j
+@RequiredArgsConstructor
 public class AuthController {
-
     private final AuthenticationManager authenticationManager;
-    private final MemberRepository memberRepository;
-    private final RoleRepository roleRepository;
-    private final PasswordEncoder encoder;
     private final JwtUtils jwtUtils;
     private final RefreshTokenService refreshTokenService;
     private final AuthService authService;
-    private final RedisService redisService;
+    private final MemberService memberService;
+    private final PreSignupService preSignupService;
+    private final SignupService signupService;
 
     @PostMapping("/signin")
     @RateLimiter(name = "login")
@@ -93,6 +87,34 @@ public class AuthController {
                         memberDetails.getEmail(), roles));
     }
 
+    @PostMapping("/pre-signup")
+    @RateLimiter(name = "pre-signup")
+    @Operation(summary = "預註冊驗證", description = "檢查用戶名和email是否已存在，生成驗證碼並發送郵件")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "預註冊請求成功，驗證碼已發送", content = @Content(schema = @Schema(implementation = PreSignupResponse.class))),
+            @ApiResponse(responseCode = "400", description = "用戶名或email已存在"),
+            @ApiResponse(responseCode = "500", description = "內部伺服器錯誤") })
+    public ResponseEntity<PreSignupResponse> preSignup(
+            @Parameter(description = "預註冊請求", required = true) @Valid @RequestBody PreSignupRequest request) {
+        try {
+            log.info("Pre-signup request received for email: {}, username: {}", request.getEmail(),
+                    request.getUsername());
+
+            PreSignupResponse response = preSignupService.processPreSignup(request);
+
+            if (response.isSuccess()) {
+                return ResponseEntity.ok(response);
+            } else {
+                return ResponseEntity.badRequest().body(response);
+            }
+
+        } catch (Exception e) {
+            log.error("Pre-signup request failed for email: {}", request.getEmail(), e);
+            return ResponseEntity.internalServerError()
+                    .body(new PreSignupResponse(false, "Internal server error", null, 0));
+        }
+    }
+
     @PostMapping("/signup")
     @Operation(summary = "會員註冊", description = "創建新會員帳戶")
     @ApiResponses({
@@ -100,55 +122,14 @@ public class AuthController {
             @ApiResponse(responseCode = "400", description = "註冊資料無效，如用戶名已被使用") })
     public ResponseEntity<?> registerUser(
             @Parameter(description = "註冊請求，包含用戶名、電子郵件、密碼等") @Valid @RequestBody SignupRequest signUpRequest) {
-        if (memberRepository.existsByUsername(signUpRequest.getUsername())) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Error: Username is already taken!"));
-        }
+        // Delegate to SignupService
+        var result = signupService.processSignup(signUpRequest);
 
-        if (memberRepository.existsByEmail(signUpRequest.getEmail())) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Error: Email is already in use!"));
-        }
-
-        if (signUpRequest.getPhoneNumber() != null && !signUpRequest.getPhoneNumber().isEmpty()
-                && memberRepository.existsByPhoneNumber(signUpRequest.getPhoneNumber())) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Error: Phone number is already in use!"));
-        }
-
-        // Create new member's account
-        Member member = new Member(signUpRequest.getUsername(), signUpRequest.getEmail(),
-                signUpRequest.getPhoneNumber(), encoder.encode(signUpRequest.getPassword()));
-
-        Set<String> strRoles = signUpRequest.getRoles();
-        Set<Role> roles = new HashSet<>();
-
-        if (strRoles == null) {
-            Role userRole = roleRepository.findByName(ERole.ROLE_USER)
-                    .orElseThrow(() -> new RuntimeException("Error: Role is not found."));
-            roles.add(userRole);
+        if (result.isSuccess()) {
+            return ResponseEntity.ok(result.toMessageResponse());
         } else {
-            strRoles.forEach(role -> {
-                switch (role) {
-                case "admin":
-                    Role adminRole = roleRepository.findByName(ERole.ROLE_ADMIN)
-                            .orElseThrow(() -> new RuntimeException("Error: Role is not found."));
-                    roles.add(adminRole);
-                    break;
-                case "mod":
-                    Role modRole = roleRepository.findByName(ERole.ROLE_MODERATOR)
-                            .orElseThrow(() -> new RuntimeException("Error: Role is not found."));
-                    roles.add(modRole);
-                    break;
-                default:
-                    Role userRole = roleRepository.findByName(ERole.ROLE_USER)
-                            .orElseThrow(() -> new RuntimeException("Error: Role is not found."));
-                    roles.add(userRole);
-                }
-            });
+            return ResponseEntity.badRequest().body(result.toMessageResponse());
         }
-
-        member.setRoles(roles);
-        memberRepository.save(member);
-
-        return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
     }
 
     @PostMapping("/refreshtoken")
@@ -187,9 +168,12 @@ public class AuthController {
     @ApiResponses({ @ApiResponse(responseCode = "200", description = "登入成功") })
     public ResponseEntity<?> generateVerifyCode(
             @Parameter(description = "email") @RequestParam(name = "email", required = true) String email) {
-        log.error("generateVerifyCode for email: {}", email);
+        log.info("generateVerifyCode for email: {}", email);
         String verifyCode = authService.generateVerifyCode(email);
-        redisService.set(email, verifyCode, Duration.ofMinutes(10));
-        return ResponseEntity.ok(verifyCode);
+        if (verifyCode != null) {
+            return ResponseEntity.ok(verifyCode);
+        } else {
+            return ResponseEntity.badRequest().body(new MessageResponse("Failed to generate verification code"));
+        }
     }
 }

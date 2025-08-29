@@ -38,6 +38,7 @@ public class WebSecurityConfig {
     private static final String[] PUBLIC_URLS = {
         "/api/auth/signin",
         "/api/auth/signup",
+        "/api/auth/pre-signup",
         "/api/auth/refreshtoken",
         "/api/auth/generateVerifyCode",
         "/api/public/**",

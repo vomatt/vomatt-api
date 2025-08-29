@@ -3,6 +3,7 @@ package com.vomattapi.infrastructure.redis;
 import java.time.Duration;
 import java.util.function.Supplier;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -14,10 +15,9 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class CacheUtil {
-
-    @Autowired
-    private RedisService redisService;
+    private final RedisService redisService;
 
     // 默認緩存時間
     private static final Duration DEFAULT_CACHE_DURATION = Duration.ofMinutes(30);
@@ -38,7 +38,7 @@ public class CacheUtil {
     public <T> T getOrSet(String key, Class<T> clazz, Supplier<T> supplier, Duration timeout) {
         try {
             // 先嘗試從緩存獲取
-            T cachedValue = redisService.get(key, clazz);
+            T cachedValue = redisService.get("cache", key, clazz);
             if (cachedValue != null) {
                 log.debug("Cache hit: key={}", key);
                 return cachedValue;
@@ -50,7 +50,7 @@ public class CacheUtil {
 
             if (value != null) {
                 // 緩存結果
-                redisService.set(key, value, timeout);
+                redisService.set("cache", key, value, timeout);
                 log.debug("Cache set: key={}, timeout={}", key, timeout);
             }
 
@@ -67,7 +67,7 @@ public class CacheUtil {
      */
     public boolean evict(String key) {
         try {
-            boolean result = redisService.delete(key);
+            boolean result = redisService.delete("cache", key);
             log.debug("Cache evict: key={}, result={}", key, result);
             return result;
         } catch (Exception e) {
@@ -81,7 +81,7 @@ public class CacheUtil {
      */
     public long evictByPattern(String pattern) {
         try {
-            long result = redisService.deleteByPattern(pattern);
+            long result = redisService.deleteByPattern("cache", pattern);
             log.debug("Cache evict by pattern: pattern={}, count={}", pattern, result);
             return result;
         } catch (Exception e) {

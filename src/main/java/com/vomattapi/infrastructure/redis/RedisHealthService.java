@@ -34,13 +34,13 @@ public class RedisHealthService implements HealthIndicator {
             String testKey = HEALTH_CHECK_KEY + ":" + System.currentTimeMillis();
 
             // 測試寫入
-            redisService.set(testKey, HEALTH_CHECK_VALUE, Duration.ofSeconds(10));
+            redisService.set("health", testKey, HEALTH_CHECK_VALUE, Duration.ofSeconds(10));
 
             // 測試讀取
-            String value = redisService.get(testKey, String.class);
+            String value = redisService.get("health", testKey, String.class);
 
             // 清理測試數據
-            redisService.delete(testKey);
+            redisService.delete("health", testKey);
 
             if (HEALTH_CHECK_VALUE.equals(value)) {
                 return Health.up()
@@ -76,9 +76,9 @@ public class RedisHealthService implements HealthIndicator {
 
             // 測試基本操作
             String testKey = "stats:test:" + System.currentTimeMillis();
-            redisService.set(testKey, "test", Duration.ofSeconds(5));
-            redisService.get(testKey, String.class);
-            redisService.delete(testKey);
+            redisService.set("health", testKey, "test", Duration.ofSeconds(5));
+            redisService.get("health", testKey, String.class);
+            redisService.delete("health", testKey);
 
             long basicOpTime = System.currentTimeMillis() - startTime;
             stats.setBasicOperationTime(basicOpTime);
@@ -89,8 +89,8 @@ public class RedisHealthService implements HealthIndicator {
             for (int i = 0; i < 10; i++) {
                 batchData.put("batch:test:" + i, "value" + i);
             }
-            redisService.multiSet(batchData, Duration.ofSeconds(5));
-            redisService.multiDelete(batchData.keySet());
+            redisService.multiSet("health", batchData, Duration.ofSeconds(5));
+            redisService.multiDelete("health", batchData.keySet());
 
             long batchOpTime = System.currentTimeMillis() - startTime;
             stats.setBatchOperationTime(batchOpTime);
@@ -121,10 +121,10 @@ public class RedisHealthService implements HealthIndicator {
     public long cleanupTestData() {
         try {
             long cleaned = 0;
-            cleaned += redisService.deleteByPattern("test:*");
-            cleaned += redisService.deleteByPattern("health:check:*");
-            cleaned += redisService.deleteByPattern("stats:test:*");
-            cleaned += redisService.deleteByPattern("batch:test:*");
+            cleaned += redisService.deleteByPattern("health", "test:*");
+            cleaned += redisService.deleteByPattern("health", "health:check:*");
+            cleaned += redisService.deleteByPattern("health", "stats:test:*");
+            cleaned += redisService.deleteByPattern("health", "batch:test:*");
 
             log.info("Cleaned up {} test cache entries", cleaned);
             return cleaned;
@@ -167,7 +167,7 @@ public class RedisHealthService implements HealthIndicator {
 
     private long countKeysByPattern(String pattern) {
         try {
-            Set<String> keys = redisService.keys(pattern);
+            Set<String> keys = redisService.keys("health", pattern);
             return keys.size();
         } catch (Exception e) {
             log.warn("Failed to count keys for pattern: {}", pattern, e);

@@ -43,8 +43,7 @@ public class RedisExampleService {
      * 儲存用戶會話
      */
     public void storeUserSession(String sessionId, UserSession session) {
-        String key = "session:" + sessionId;
-        redisService.set(key, session, Duration.ofHours(24));
+        redisService.set("user_session", sessionId, session, Duration.ofHours(24));
         log.info("Stored user session: sessionId={}, userId={}", sessionId, session.getUserId());
     }
 
@@ -52,8 +51,7 @@ public class RedisExampleService {
      * 獲取用戶會話
      */
     public UserSession getUserSession(String sessionId) {
-        String key = "session:" + sessionId;
-        return redisService.get(key, UserSession.class);
+        return redisService.get("user_session", sessionId, UserSession.class);
     }
 
     /**
@@ -66,7 +64,12 @@ public class RedisExampleService {
                 Map.Entry::getValue
             ));
 
-        redisService.multiSet(cacheData, Duration.ofHours(24));
+        Map<String, Object> sessionData = sessions.entrySet().stream()
+            .collect(Collectors.toMap(
+                Map.Entry::getKey,
+                Map.Entry::getValue
+            ));
+        redisService.multiSet("user_session", sessionData, Duration.ofHours(24));
         log.info("Batch stored {} user sessions", sessions.size());
     }
 
@@ -74,18 +77,7 @@ public class RedisExampleService {
      * 批量獲取用戶會話
      */
     public Map<String, UserSession> batchGetUserSessions(Set<String> sessionIds) {
-        Set<String> keys = sessionIds.stream()
-            .map(id -> "session:" + id)
-            .collect(Collectors.toSet());
-
-        Map<String, UserSession> sessions = redisService.multiGet(keys, UserSession.class);
-
-        // 轉換 key 回原始的 sessionId
-        return sessions.entrySet().stream()
-            .collect(Collectors.toMap(
-                entry -> entry.getKey().replace("session:", ""),
-                Map.Entry::getValue
-            ));
+        return redisService.multiGet("user_session", sessionIds, UserSession.class);
     }
 
     // ==================== 用戶活躍度統計 ====================
@@ -94,14 +86,12 @@ public class RedisExampleService {
      * 記錄用戶活躍度
      */
     public void recordUserActivity(String userId, String activity) {
-        String key = "user:activity:" + userId;
-
         // 使用 Hash 儲存用戶的各種活動計數
-        redisService.hSet(key, activity,
-            redisService.hGet(key, activity, Long.class) + 1);
+        Long currentCount = redisService.hGet("user_activity", userId, activity, Long.class);
+        redisService.hSet("user_activity", userId, activity, (currentCount != null ? currentCount : 0) + 1);
 
         // 設置過期時間為30天
-        redisService.expire(key, Duration.ofDays(30));
+        redisService.expire("user_activity", userId, Duration.ofDays(30));
 
         log.debug("Recorded activity: userId={}, activity={}", userId, activity);
     }
@@ -111,10 +101,9 @@ public class RedisExampleService {
      */
     public void batchRecordUserActivity(Map<String, Map<String, Long>> userActivities) {
         userActivities.forEach((userId, activities) -> {
-            String key = "user:activity:" + userId;
             Map<String, Object> activityData = new HashMap<>(activities);
-            redisService.hMultiSet(key, activityData);
-            redisService.expire(key, Duration.ofDays(30));
+            redisService.hMultiSet("user_activity", userId, activityData);
+            redisService.expire("user_activity", userId, Duration.ofDays(30));
         });
 
         log.info("Batch recorded activities for {} users", userActivities.size());
@@ -124,8 +113,7 @@ public class RedisExampleService {
      * 獲取用戶活躍度統計
      */
     public Map<String, Long> getUserActivityStats(String userId) {
-        String key = "user:activity:" + userId;
-        return redisService.hGetAll(key, Long.class);
+        return redisService.hGetAll("user_activity", userId, Long.class);
     }
 
     /**
@@ -150,8 +138,7 @@ public class RedisExampleService {
      * 緩存投票結果
      */
     public void cacheVoteResults(String voteId, VoteResult result) {
-        String key = "vote:result:" + voteId;
-        redisService.set(key, result, Duration.ofMinutes(30));
+        redisService.set("vote_result", voteId, result, Duration.ofMinutes(30));
         log.debug("Cached vote results: voteId={}", voteId);
     }
 
@@ -159,13 +146,12 @@ public class RedisExampleService {
      * 批量緩存投票結果
      */
     public void batchCacheVoteResults(Map<String, VoteResult> voteResults) {
-        Map<String, Object> cacheData = voteResults.entrySet().stream()
+        Map<String, Object> resultData = voteResults.entrySet().stream()
             .collect(Collectors.toMap(
-                entry -> "vote:result:" + entry.getKey(),
+                Map.Entry::getKey,
                 Map.Entry::getValue
             ));
-
-        redisService.multiSet(cacheData, Duration.ofMinutes(30));
+        redisService.multiSet("vote_result", resultData, Duration.ofMinutes(30));
         log.info("Batch cached {} vote results", voteResults.size());
     }
 
@@ -173,8 +159,7 @@ public class RedisExampleService {
      * 獲取投票結果
      */
     public VoteResult getVoteResults(String voteId) {
-        String key = "vote:result:" + voteId;
-        VoteResult cached = redisService.get(key, VoteResult.class);
+        VoteResult cached = redisService.get("vote_result", voteId, VoteResult.class);
 
         if (cached == null) {
             // 從資料庫查詢並緩存
@@ -193,8 +178,7 @@ public class RedisExampleService {
      * 更新用戶分數排行榜
      */
     public void updateUserScore(String userId, double score) {
-        String key = "leaderboard:users";
-        redisService.setAdd(key, new UserScore(userId, score));
+        redisService.setAdd("leaderboard", "users", new UserScore(userId, score));
         log.debug("Updated user score: userId={}, score={}", userId, score);
     }
 
@@ -202,8 +186,7 @@ public class RedisExampleService {
      * 獲取排行榜前N名
      */
     public List<UserScore> getTopUsers(int limit) {
-        String key = "leaderboard:users";
-        Set<UserScore> allScores = redisService.setMembers(key, UserScore.class);
+        Set<UserScore> allScores = redisService.setMembers("leaderboard", "users", UserScore.class);
 
         return allScores.stream()
             .sorted((a, b) -> Double.compare(b.getScore(), a.getScore()))
@@ -217,8 +200,7 @@ public class RedisExampleService {
      * 遞增頁面瀏覽量
      */
     public long incrementPageViews(String pageId) {
-        String key = "page:views:" + pageId;
-        return redisService.increment(key);
+        return redisService.increment("page_views", pageId);
     }
 
     /**
@@ -226,8 +208,7 @@ public class RedisExampleService {
      */
     public void batchIncrementPageViews(Map<String, Long> pageViews) {
         pageViews.forEach((pageId, count) -> {
-            String key = "page:views:" + pageId;
-            redisService.increment(key, count);
+            redisService.increment("page_views", pageId, count);
         });
         log.info("Batch incremented page views for {} pages", pageViews.size());
     }
@@ -236,9 +217,8 @@ public class RedisExampleService {
      * 獲取頁面瀏覽量
      */
     public long getPageViews(String pageId) {
-        String key = "page:views:" + pageId;
-        String value = redisService.get(key, String.class);
-        return value != null ? Long.parseLong(value) : 0;
+        Long value = redisService.get("page_views", pageId, Long.class);
+        return value != null ? value : 0;
     }
 
     // ==================== 緊急清理功能 ====================
@@ -247,14 +227,13 @@ public class RedisExampleService {
      * 清理過期的會話
      */
     public long cleanupExpiredSessions() {
-        String pattern = "session:*";
-        Set<String> sessionKeys = redisService.keys(pattern);
+        Set<String> sessionKeys = redisService.keys("user_session", "*");
 
         long cleanedCount = 0;
         for (String key : sessionKeys) {
-            Duration remaining = redisService.getExpire(key);
+            Duration remaining = redisService.getExpire("user_session", key);
             if (remaining == null || remaining.isNegative()) {
-                redisService.delete(key);
+                redisService.delete("user_session", key);
                 cleanedCount++;
             }
         }
@@ -267,8 +246,11 @@ public class RedisExampleService {
      * 清理特定用戶的所有緩存
      */
     public long cleanupUserCache(String userId) {
-        String pattern = "*:" + userId + ":*";
-        long deleted = redisService.deleteByPattern(pattern);
+        long deleted = 0;
+        // Clean up from different cache namespaces
+        deleted += redisService.deleteByPattern("user_session", userId + "*");
+        deleted += redisService.deleteByPattern("user_activity", userId + "*");
+        deleted += redisService.deleteByPattern("page_views", userId + "*");
         log.info("Cleaned up {} cache entries for user: {}", deleted, userId);
         return deleted;
     }

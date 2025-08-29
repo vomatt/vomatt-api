@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -16,15 +17,13 @@ import com.vomattapi.domain.member.repository.MemberRepository;
 import com.vomattapi.domain.member.repository.RefreshTokenRepository;
 
 @Service
+@RequiredArgsConstructor
 public class RefreshTokenService {
+    private final RefreshTokenRepository refreshTokenRepository;
+    private final MemberRepository memberRepository;
+
     @Value("${app.jwt.refreshExpiration}")
     private Long refreshTokenDurationMs;
-
-    @Autowired
-    private RefreshTokenRepository refreshTokenRepository;
-
-    @Autowired
-    private MemberRepository memberRepository;
 
     public Optional<RefreshToken> findByToken(String token) {
         return refreshTokenRepository.findByToken(token);

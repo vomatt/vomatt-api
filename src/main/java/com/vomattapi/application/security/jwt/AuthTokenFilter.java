@@ -36,6 +36,7 @@ public class AuthTokenFilter extends OncePerRequestFilter {
     private static final List<String> PUBLIC_PATHS = Arrays.asList(
         "/api/auth/signin",
         "/api/auth/signup",
+        "/api/auth/pre-signup",
         "/api/auth/refreshtoken",
         "/api/auth/generateVerifyCode",
         "/api/public/**",

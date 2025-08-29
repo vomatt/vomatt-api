@@ -3,6 +3,7 @@ package com.vomattapi.application.service;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -19,22 +20,13 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class MemberService {
-
-    @Autowired
-    private MemberRepository memberRepository;
-
-    @Autowired
-    private MemberActivityRepository activityRepository;
-
-    @Autowired
-    private PasswordEncoder passwordEncoder;
-
-    @Autowired
-    private RedisService redisService;
-
-    @Autowired
-    private CacheUtil cacheUtil;
+    private final MemberRepository memberRepository;
+    private final MemberActivityRepository activityRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final RedisService redisService;
+    private final CacheUtil cacheUtil;
 
     private static final int VERIFICATION_CODE_EXPIRY_MINUTES = 15;
     private static final int MAX_LOGIN_ATTEMPTS = 5;
@@ -223,4 +215,6 @@ public class MemberService {
     private Member findMemberByEmail(String email) {
         return memberRepository.findByEmail(email).orElse(null);
     }
+
+
 }

@@ -22,7 +22,7 @@ import com.vomattapi.application.dto.request.VoteRequest;
 import com.vomattapi.application.dto.response.MessageResponse;
 import com.vomattapi.application.dto.response.VoteResponse;
 import com.vomattapi.application.dto.response.VoteResultResponse;
-import com.vomattapi.application.security.services.MemberDetailsImpl;
+import com.vomattapi.application.security.services.UserDetailsImpl;
 import com.vomattapi.application.service.VoteService;
 import com.vomattapi.infrastructure.audit.Auditable;
 
@@ -59,9 +59,9 @@ public class VoteController {
     public ResponseEntity<VoteResponse> createVote(
             @Valid @RequestBody CreateVoteRequest request,
             Authentication authentication) {
-        MemberDetailsImpl memberDetails = (MemberDetailsImpl) authentication.getPrincipal();
-        VoteResponse response = voteService.createVote(request, memberDetails.getId());
-        log.info("Vote created: {} by user: {}", response.getId(), memberDetails.getUsername());
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        VoteResponse response = voteService.createVote(request, userDetails.getId());
+        log.info("Vote created: {} by user: {}", response.getId(), userDetails.getUsername());
         return ResponseEntity.ok(response);
     }
 
@@ -98,8 +98,8 @@ public class VoteController {
         @ApiResponse(responseCode = "403", description = "Forbidden")
     })
     public ResponseEntity<List<VoteResponse>> getMyVotes(Authentication authentication) {
-        MemberDetailsImpl memberDetails = (MemberDetailsImpl) authentication.getPrincipal();
-        List<VoteResponse> response = voteService.getVotesByCreator(memberDetails.getId());
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        List<VoteResponse> response = voteService.getVotesByCreator(userDetails.getId());
         return ResponseEntity.ok(response);
     }
 
@@ -120,10 +120,10 @@ public class VoteController {
             @Valid @RequestBody VoteRequest request,
             Authentication authentication,
             HttpServletRequest httpRequest) {
-        MemberDetailsImpl memberDetails = (MemberDetailsImpl) authentication.getPrincipal();
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
         String ipAddress = getClientIpAddress(httpRequest);
-        VoteResponse response = voteService.vote(voteId, request, memberDetails.getId(), ipAddress);
-        log.info("Member {} voted on vote {}", memberDetails.getUsername(), voteId);
+        VoteResponse response = voteService.vote(voteId, request, userDetails.getId(), ipAddress);
+        log.info("User {} voted on vote {}", userDetails.getUsername(), voteId);
         return ResponseEntity.ok(response);
     }
 
@@ -142,10 +142,10 @@ public class VoteController {
             @Parameter(description = "Option ID", required = true) 
             @PathVariable String optionId,
             Authentication authentication) {
-        MemberDetailsImpl memberDetails = (MemberDetailsImpl) authentication.getPrincipal();
-        VoteResponse response = voteService.removeVote(voteId, optionId, memberDetails.getId());
-        log.info("Member {} removed vote from option {} in vote {}", 
-                memberDetails.getUsername(), optionId, voteId);
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        VoteResponse response = voteService.removeVote(voteId, optionId, userDetails.getId());
+        log.info("User {} removed vote from option {} in vote {}", 
+                userDetails.getUsername(), optionId, voteId);
         return ResponseEntity.ok(response);
     }
 
@@ -175,9 +175,9 @@ public class VoteController {
             @Parameter(description = "Vote ID", required = true) 
             @PathVariable String voteId,
             Authentication authentication) {
-        MemberDetailsImpl memberDetails = (MemberDetailsImpl) authentication.getPrincipal();
-        boolean hasVoted = voteService.hasUserVoted(voteId, memberDetails.getId());
-        List<String> selectedOptions = voteService.getUserVoteOptions(voteId, memberDetails.getId());
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        boolean hasVoted = voteService.hasUserVoted(voteId, userDetails.getId());
+        List<String> selectedOptions = voteService.getUserVoteOptions(voteId, userDetails.getId());
         
         UserVoteStatusResponse response = new UserVoteStatusResponse();
         response.setHasVoted(hasVoted);
@@ -200,9 +200,9 @@ public class VoteController {
             @Parameter(description = "Vote ID", required = true) 
             @PathVariable String voteId,
             Authentication authentication) {
-        MemberDetailsImpl memberDetails = (MemberDetailsImpl) authentication.getPrincipal();
-        voteService.deactivateVote(voteId, memberDetails.getId());
-        log.info("Vote {} deactivated by creator {}", voteId, memberDetails.getUsername());
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        voteService.deactivateVote(voteId, userDetails.getId());
+        log.info("Vote {} deactivated by creator {}", voteId, userDetails.getUsername());
         return ResponseEntity.ok(new MessageResponse("Vote deactivated successfully"));
     }
 

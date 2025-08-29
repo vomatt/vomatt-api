@@ -56,7 +56,7 @@ public class VoteOption {
     private LocalDateTime createdAt;
 
     @OneToMany(mappedBy = "option", cascade = CascadeType.ALL, orphanRemoval = true)
-    private Set<MemberVote> memberVotes = new HashSet<>();
+    private Set<UserVote> userVotes = new HashSet<>();
 
     public VoteOption(String text, String description, Vote vote) {
         this.id = UUID.randomUUID().toString();
@@ -71,6 +71,6 @@ public class VoteOption {
     }
 
     public long getVoteCount() {
-        return memberVotes.size();
+        return userVotes.size();
     }
 }

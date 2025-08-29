@@ -37,7 +37,7 @@ public class VoteResultResponse {
     
     @Data
     public static class VoterResponse {
-        private String memberId;
+        private String userId;
         private String username;
         private LocalDateTime votedAt;
     }

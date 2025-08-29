@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
-import com.vomattapi.application.security.services.MemberDetailsImpl;
+import com.vomattapi.application.security.services.UserDetailsImpl;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -76,8 +76,8 @@ public class AuditAspect {
     
     private String[] getCurrentUserInfo() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.getPrincipal() instanceof MemberDetailsImpl) {
-            MemberDetailsImpl memberDetails = (MemberDetailsImpl) authentication.getPrincipal();
+        if (authentication != null && authentication.getPrincipal() instanceof UserDetailsImpl) {
+            UserDetailsImpl memberDetails = (UserDetailsImpl) authentication.getPrincipal();
             return new String[]{memberDetails.getId(), memberDetails.getUsername()};
         }
         return new String[]{null, null};

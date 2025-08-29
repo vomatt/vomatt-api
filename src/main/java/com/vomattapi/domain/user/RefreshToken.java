@@ -1,6 +1,4 @@
-package com.vomattapi.domain.member;
-
-import java.time.LocalDateTime;
+package com.vomattapi.domain.user;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -14,6 +12,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
+
 @Entity
 @Table(name = "refresh_tokens")
 @Data
@@ -25,21 +25,12 @@ public class RefreshToken {
     private Long id;
 
     @OneToOne
-    @JoinColumn(name = "member_id", referencedColumnName = "id")
-    private Member member;
+    @JoinColumn(name = "user_id", referencedColumnName = "id")
+    private User user;
 
     @Column(nullable = false, unique = true)
     private String token;
 
     @Column(nullable = false, name = "expiry_date")
     private LocalDateTime expiryDate;
-    
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-    public Member getMember() { return member; }
-    public void setMember(Member member) { this.member = member; }
-    public String getToken() { return token; }
-    public void setToken(String token) { this.token = token; }
-    public LocalDateTime getExpiryDate() { return expiryDate; }
-    public void setExpiryDate(LocalDateTime expiryDate) { this.expiryDate = expiryDate; }
 }

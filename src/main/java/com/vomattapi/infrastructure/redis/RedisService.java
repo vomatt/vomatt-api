@@ -13,11 +13,6 @@ public interface RedisService {
 
     // ==================== 單筆操作 ====================
     /**
-     * 根據 cache name 生成帶前綴的 key
-     */
-    String buildCacheKey(String cacheName, String key);
-
-    /**
      * 儲存鍵值對
      */
     void set(String cacheName, String key, Object value);
@@ -168,12 +163,12 @@ public interface RedisService {
     /**
      * Set 檢查元素是否存在
      */
-    boolean setIsMember(String cacheName, String key, Object value);
+    boolean setIsUser(String cacheName, String key, Object value);
 
     /**
      * Set 獲取所有元素
      */
-    <T> Set<T> setMembers(String cacheName, String key, Class<T> clazz);
+    <T> Set<T> setUsers(String cacheName, String key, Class<T> clazz);
 
     /**
      * Set 獲取大小

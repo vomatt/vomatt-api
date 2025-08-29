@@ -1,4 +1,4 @@
-package com.vomattapi.domain.member;
+package com.vomattapi.domain.user;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -29,7 +29,7 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 
 @Entity
-@Table(name = "members",
+@Table(name = "users",
         uniqueConstraints = {
                 @UniqueConstraint(columnNames = "username"),
                 @UniqueConstraint(columnNames = "email"),
@@ -40,7 +40,7 @@ import lombok.ToString;
 @AllArgsConstructor
 @ToString(exclude = {"roles", "preferences"})
 @EqualsAndHashCode(of = "id")
-public class Member {
+public class User {
     @Id
     private String id;
 
@@ -58,11 +58,11 @@ public class Member {
     private String phoneNumber;
 
     @Size(max = 120)
-    @Column(name = "verify_code")
-    private String verifyCode;
+    @Column(name = "verification_code")
+    private String verificationCode;
 
-    @Column(name = "verify_code_expiry")
-    private LocalDateTime verifyCodeExpiry;
+    @Column(name = "verification_code_expiry")
+    private LocalDateTime verificationCodeExpiry;
 
     @Column(name = "created_at")
     @CreationTimestamp
@@ -89,27 +89,27 @@ public class Member {
     private boolean active = true;
 
     @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(name = "member_roles",
-            joinColumns = @JoinColumn(name = "member_id"),
+    @JoinTable(name = "user_roles",
+            joinColumns = @JoinColumn(name = "user_id"),
             inverseJoinColumns = @JoinColumn(name = "role_id"))
     private Set<Role> roles = new HashSet<>();
 
-    @OneToMany(mappedBy = "member", cascade = CascadeType.ALL, orphanRemoval = true)
-    private Set<MemberPreference> preferences = new HashSet<>();
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<UserPreference> preferences = new HashSet<>();
 
     // Constructor for creating a new member
-    public Member(String username, String email, String password) {
+    public User(String username, String email, String verificationCode) {
         this.id = UUID.randomUUID().toString();
         this.username = username;
         this.email = email;
-        this.verifyCode = password;
+        this.verificationCode = verificationCode;
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
     }
     
     // Constructor for creating a new member with phone number
-    public Member(String username, String email, String phoneNumber, String password) {
-        this(username, email, password);
+    public User(String username, String email, String phoneNumber, String verificationCode) {
+        this(username, email, verificationCode);
         this.phoneNumber = phoneNumber;
     }
 
@@ -143,15 +143,15 @@ public class Member {
     // Methods for membership management
     public void addPoints(int points) {
         this.points += points;
-        updateMembershipLevel();
+        updateUsershipLevel();
     }
 
     public void deductPoints(int points) {
         this.points = Math.max(0, this.points - points);
-        updateMembershipLevel();
+        updateUsershipLevel();
     }
 
-    private void updateMembershipLevel() {
+    private void updateUsershipLevel() {
         if (points >= 10000) {
             this.membershipLevel = "PLATINUM";
         } else if (points >= 5000) {
@@ -162,22 +162,4 @@ public class Member {
             this.membershipLevel = "BASIC";
         }
     }
-    
-    // Getters and Setters for Lombok compatibility
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
-    public String getUsername() { return username; }
-    public void setUsername(String username) { this.username = username; }
-    public String getEmail() { return email; }
-    public void setEmail(String email) { this.email = email; }
-    public String getPhoneNumber() { return phoneNumber; }
-    public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
-    public String getVerifyCode() { return verifyCode; }
-    public void setVerifyCode(String verifyCode) { this.verifyCode = verifyCode; }
-    public Set<Role> getRoles() { return roles; }
-    public void setRoles(Set<Role> roles) { this.roles = roles; }
-    public int getLoginAttempts() { return loginAttempts; }
-    public void setLoginAttempts(int loginAttempts) { this.loginAttempts = loginAttempts; }
-    public boolean isActive() { return active; }
-    public void setActive(boolean active) { this.active = active; }
 }

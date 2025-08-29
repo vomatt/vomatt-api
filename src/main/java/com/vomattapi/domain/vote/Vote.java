@@ -5,10 +5,9 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
+import com.vomattapi.domain.user.User;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
-
-import com.vomattapi.domain.member.Member;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -49,7 +48,7 @@ public class Vote {
     @NotNull
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "creator_id")
-    private Member creator;
+    private User creator;
 
     @Column(name = "start_time")
     private LocalDateTime startTime;
@@ -84,9 +83,9 @@ public class Vote {
     private Set<VoteOption> options = new HashSet<>();
 
     @OneToMany(mappedBy = "vote", cascade = CascadeType.ALL, orphanRemoval = true)
-    private Set<MemberVote> memberVotes = new HashSet<>();
+    private Set<UserVote> userVotes = new HashSet<>();
 
-    public Vote(String title, String description, Member creator) {
+    public Vote(String title, String description, User creator) {
         this.id = UUID.randomUUID().toString();
         this.title = title;
         this.description = description;
@@ -96,7 +95,7 @@ public class Vote {
         this.updatedAt = LocalDateTime.now();
     }
 
-    public Vote(String title, String description, Member creator, LocalDateTime endTime) {
+    public Vote(String title, String description, User creator, LocalDateTime endTime) {
         this(title, description, creator);
         this.endTime = endTime;
     }
@@ -120,7 +119,7 @@ public class Vote {
     }
 
     public long getTotalVotes() {
-        return memberVotes.size();
+        return userVotes.size();
     }
 
     public void deactivate() {

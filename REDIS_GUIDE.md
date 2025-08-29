@@ -71,7 +71,7 @@ spring.data.redis.jedis.pool.max-wait=${REDIS_POOL_MAX_WAIT:3000}
 - **批量操作**: `multiSet()`, `multiGet()`, `multiDelete()`
 - **Hash 操作**: `hSet()`, `hGet()`, `hMultiSet()`, `hMultiGet()`
 - **List 操作**: `leftPush()`, `rightPush()`, `leftPop()`, `rightPop()`
-- **Set 操作**: `setAdd()`, `setRemove()`, `setMembers()`
+- **Set 操作**: `setAdd()`, `setRemove()`, `setUsers()`
 - **計數器操作**: `increment()`, `decrement()`
 - **模式匹配**: `keys()`, `deleteByPattern()`
 

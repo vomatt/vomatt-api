@@ -9,10 +9,10 @@ public class LoginRequest {
     private String email;
 
     @NotBlank
-    private String verifyCode;
+    private String verificationCode;
     
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
-    public String getVerifyCode() { return verifyCode; }
-    public void setVerifyCode(String verifyCode) { this.verifyCode = verifyCode; }
+    public String getVerificationCode() { return verificationCode; }
+    public void setVerificationCode(String verificationCode) { this.verificationCode = verificationCode; }
 }

@@ -1,18 +1,17 @@
-package com.vomattapi.domain.member.repository;
+package com.vomattapi.domain.user.repository;
 
-import java.util.Optional;
-
+import com.vomattapi.domain.user.RefreshToken;
+import com.vomattapi.domain.user.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.stereotype.Repository;
 
-import com.vomattapi.domain.member.Member;
-import com.vomattapi.domain.member.RefreshToken;
+import java.util.Optional;
 
 @Repository
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long> {
     Optional<RefreshToken> findByToken(String token);
 
     @Modifying
-    int deleteByMember(Member member);
+    int deleteByUser(User user);
 }

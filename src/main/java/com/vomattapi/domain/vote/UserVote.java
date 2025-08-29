@@ -1,11 +1,6 @@
 package com.vomattapi.domain.vote;
 
-import java.time.LocalDateTime;
-
-import org.hibernate.annotations.CreationTimestamp;
-
-import com.vomattapi.domain.member.Member;
-
+import com.vomattapi.domain.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -22,25 +17,28 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
+import org.hibernate.annotations.CreationTimestamp;
+
+import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "member_votes", uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"member_id", "vote_id", "option_id"})
+@Table(name = "user_votes", uniqueConstraints = {
+    @UniqueConstraint(columnNames = {"user_id", "vote_id", "option_id"})
 })
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@ToString(exclude = {"member", "vote", "option"})
+@ToString(exclude = {"user", "vote", "option"})
 @EqualsAndHashCode(of = "id")
-public class MemberVote {
+public class UserVote {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @NotNull
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "member_id")
-    private Member member;
+    @JoinColumn(name = "user_id")
+    private User user;
 
     @NotNull
     @ManyToOne(fetch = FetchType.LAZY)
@@ -59,15 +57,15 @@ public class MemberVote {
     @Column(name = "ip_address")
     private String ipAddress;
 
-    public MemberVote(Member member, Vote vote, VoteOption option) {
-        this.member = member;
+    public UserVote(User user, Vote vote, VoteOption option) {
+        this.user = user;
         this.vote = vote;
         this.option = option;
         this.votedAt = LocalDateTime.now();
     }
 
-    public MemberVote(Member member, Vote vote, VoteOption option, String ipAddress) {
-        this(member, vote, option);
+    public UserVote(User user, Vote vote, VoteOption option, String ipAddress) {
+        this(user, vote, option);
         this.ipAddress = ipAddress;
     }
 }

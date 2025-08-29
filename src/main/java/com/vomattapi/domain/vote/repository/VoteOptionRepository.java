@@ -17,6 +17,6 @@ public interface VoteOptionRepository extends JpaRepository<VoteOption, String> 
     @Query("SELECT vo FROM VoteOption vo WHERE vo.vote.id = :voteId ORDER BY vo.displayOrder ASC, vo.createdAt ASC")
     List<VoteOption> findByVoteIdOrderByDisplayOrder(@Param("voteId") String voteId);
     
-    @Query("SELECT COUNT(mv) FROM MemberVote mv WHERE mv.option.id = :optionId")
+    @Query("SELECT COUNT(mv) FROM UserVote mv WHERE mv.option.id = :optionId")
     long countVotesByOptionId(@Param("optionId") String optionId);
 }

@@ -290,7 +290,7 @@ docker run -p 8080:8080 \
 ### 新增自訂角色
 
 1. 更新 `ERole` 枚舉
-   - 在 `com.vomattapi.domain.member.ERole` 中添加新角色
+   - 在 `com.vomattapi.domain.user.ERole` 中添加新角色
    - 保持角色命名規則一致（ROLE_前綴）
 
 2. 在資料表 `roles` 中插入新角色

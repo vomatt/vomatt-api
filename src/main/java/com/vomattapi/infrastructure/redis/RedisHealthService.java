@@ -89,8 +89,8 @@ public class RedisHealthService implements HealthIndicator {
             for (int i = 0; i < 10; i++) {
                 batchData.put("batch:test:" + i, "value" + i);
             }
-            redisService.multiSet("health", batchData, Duration.ofSeconds(5));
-            redisService.multiDelete("health", batchData.keySet());
+//            redisService.multiSet("health", batchData, Duration.ofSeconds(5));
+//            redisService.multiDelete("health", batchData.keySet());
 
             long batchOpTime = System.currentTimeMillis() - startTime;
             stats.setBatchOperationTime(batchOpTime);
@@ -112,25 +112,6 @@ public class RedisHealthService implements HealthIndicator {
             errorStats.setErrorMessage(e.getMessage());
             errorStats.setTimestamp(LocalDateTime.now());
             return errorStats;
-        }
-    }
-
-    /**
-     * 清理測試數據
-     */
-    public long cleanupTestData() {
-        try {
-            long cleaned = 0;
-            cleaned += redisService.deleteByPattern("health", "test:*");
-            cleaned += redisService.deleteByPattern("health", "health:check:*");
-            cleaned += redisService.deleteByPattern("health", "stats:test:*");
-            cleaned += redisService.deleteByPattern("health", "batch:test:*");
-
-            log.info("Cleaned up {} test cache entries", cleaned);
-            return cleaned;
-        } catch (Exception e) {
-            log.error("Failed to cleanup test data", e);
-            return 0;
         }
     }
 

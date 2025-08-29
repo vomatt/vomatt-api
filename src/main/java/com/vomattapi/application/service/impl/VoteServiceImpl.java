@@ -20,12 +20,12 @@ import com.vomattapi.application.exception.UnauthorizedOperationException;
 import com.vomattapi.application.exception.VoteNotFoundException;
 import com.vomattapi.application.exception.VotingNotAllowedException;
 import com.vomattapi.application.service.VoteService;
-import com.vomattapi.domain.member.Member;
-import com.vomattapi.domain.member.repository.MemberRepository;
-import com.vomattapi.domain.vote.MemberVote;
+import com.vomattapi.domain.user.User;
+import com.vomattapi.domain.user.repository.UserRepository;
+import com.vomattapi.domain.vote.UserVote;
 import com.vomattapi.domain.vote.Vote;
 import com.vomattapi.domain.vote.VoteOption;
-import com.vomattapi.domain.vote.repository.MemberVoteRepository;
+import com.vomattapi.domain.vote.repository.UserVoteRepository;
 import com.vomattapi.domain.vote.repository.VoteOptionRepository;
 import com.vomattapi.domain.vote.repository.VoteRepository;
 import com.vomattapi.domain.vote.event.VoteCastEvent;
@@ -46,8 +46,8 @@ public class VoteServiceImpl implements VoteService {
 
     private final VoteRepository voteRepository;
     private final VoteOptionRepository voteOptionRepository;
-    private final MemberVoteRepository memberVoteRepository;
-    private final MemberRepository memberRepository;
+    private final UserVoteRepository memberVoteRepository;
+    private final UserRepository userRepository;
     private final VoteConfigurationProperties voteConfig;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -56,8 +56,8 @@ public class VoteServiceImpl implements VoteService {
         // Validate request
         validateCreateVoteRequest(request);
         
-        Member creator = memberRepository.findById(creatorId)
-            .orElseThrow(() -> new EntityNotFoundException("Member", creatorId));
+        User creator = userRepository.findById(creatorId)
+            .orElseThrow(() -> new EntityNotFoundException("User", creatorId));
 
         Vote vote = new Vote(request.getTitle(), request.getDescription(), creator, request.getEndTime());
         vote.setStartTime(request.getStartTime() != null ? request.getStartTime() : LocalDateTime.now());
@@ -125,11 +125,11 @@ public class VoteServiceImpl implements VoteService {
             throw new VotingNotAllowedException(voteId, "Voting period has ended or not started");
         }
 
-        Member member = memberRepository.findById(memberId)
-            .orElseThrow(() -> new EntityNotFoundException("Member", memberId));
+        User user = userRepository.findById(memberId)
+            .orElseThrow(() -> new EntityNotFoundException("User", memberId));
 
         if (!vote.isAllowMultipleChoices()) {
-            memberVoteRepository.deleteByMemberIdAndVoteId(memberId, voteId);
+            memberVoteRepository.deleteByUserIdAndVoteId(memberId, voteId);
             if (request.getOptionIds().size() > 1) {
                 throw new VotingNotAllowedException("Multiple choices not allowed for this vote");
             }
@@ -143,13 +143,13 @@ public class VoteServiceImpl implements VoteService {
                 throw new BusinessRuleViolationException("Option does not belong to this vote");
             }
 
-            if (!memberVoteRepository.existsByMemberIdAndVoteIdAndOptionId(memberId, voteId, optionId)) {
-                MemberVote memberVote = new MemberVote(member, vote, option, ipAddress);
-                memberVoteRepository.save(memberVote);
+            if (!memberVoteRepository.existsByUserIdAndVoteIdAndOptionId(memberId, voteId, optionId)) {
+                UserVote userVote = new UserVote(user, vote, option, ipAddress);
+                memberVoteRepository.save(userVote);
             }
         }
 
-        log.info("Member {} voted on vote {} with options {}", memberId, voteId, request.getOptionIds());
+        log.info("User {} voted on vote {} with options {}", memberId, voteId, request.getOptionIds());
         
         // Publish event
         eventPublisher.publishEvent(new VoteCastEvent(voteId, memberId, request.getOptionIds(), ipAddress));
@@ -166,8 +166,8 @@ public class VoteServiceImpl implements VoteService {
             throw new VotingNotAllowedException(voteId, "Voting period has ended or not started");
         }
 
-        memberVoteRepository.deleteByMemberIdAndVoteIdAndOptionId(memberId, voteId, optionId);
-        log.info("Member {} removed vote from option {} in vote {}", memberId, optionId, voteId);
+        memberVoteRepository.deleteByUserIdAndVoteIdAndOptionId(memberId, voteId, optionId);
+        log.info("User {} removed vote from option {} in vote {}", memberId, optionId, voteId);
         
         return convertToVoteResponse(voteRepository.findById(voteId).get());
     }
@@ -194,7 +194,7 @@ public class VoteServiceImpl implements VoteService {
         response.setVotingActive(vote.isVotingActive());
 
         List<String> uniqueVoterIds = memberVoteRepository.findByVoteId(voteId).stream()
-            .map(mv -> mv.getMember().getId())
+            .map(mv -> mv.getUser().getId())
             .distinct()
             .collect(Collectors.toList());
         response.setTotalParticipants(uniqueVoterIds.size());
@@ -215,11 +215,11 @@ public class VoteServiceImpl implements VoteService {
             optionResult.setPercentage(percentage);
 
             if (!vote.isAnonymous()) {
-                List<VoteResultResponse.VoterResponse> voters = option.getMemberVotes().stream()
+                List<VoteResultResponse.VoterResponse> voters = option.getUserVotes().stream()
                     .map(mv -> {
                         VoteResultResponse.VoterResponse voter = new VoteResultResponse.VoterResponse();
-                        voter.setMemberId(mv.getMember().getId());
-                        voter.setUsername(mv.getMember().getUsername());
+                        voter.setUserId(mv.getUser().getId());
+                        voter.setUsername(mv.getUser().getUsername());
                         voter.setVotedAt(mv.getVotedAt());
                         return voter;
                     })
@@ -239,13 +239,13 @@ public class VoteServiceImpl implements VoteService {
     @Override
     @Transactional(readOnly = true)
     public boolean hasUserVoted(String voteId, String memberId) {
-        return memberVoteRepository.existsByMemberIdAndVoteId(memberId, voteId);
+        return memberVoteRepository.existsByUserIdAndVoteId(memberId, voteId);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<String> getUserVoteOptions(String voteId, String memberId) {
-        return memberVoteRepository.findByMemberIdAndVoteId(memberId, voteId)
+        return memberVoteRepository.findByUserIdAndVoteId(memberId, voteId)
             .stream()
             .map(mv -> mv.getOption().getId())
             .collect(Collectors.toList());

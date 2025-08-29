@@ -25,7 +25,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import com.vomattapi.application.security.jwt.AuthEntryPointJwt;
 import com.vomattapi.application.security.jwt.AuthTokenFilter;
-import com.vomattapi.application.security.services.MemberDetailsServiceImpl;
+import com.vomattapi.application.security.services.UserDetailsServiceImpl;
 
 @Configuration
 @EnableWebSecurity
@@ -39,8 +39,9 @@ public class WebSecurityConfig {
         "/api/auth/signin",
         "/api/auth/signup",
         "/api/auth/pre-signup",
+        "/api/auth/resend-verification",
         "/api/auth/refreshtoken",
-        "/api/auth/generateVerifyCode",
+        "/api/auth/generateVerificationCode",
         "/api/public/**",
         "/swagger-ui/**",
         "/swagger-ui.html",
@@ -50,10 +51,10 @@ public class WebSecurityConfig {
         "/actuator/**"
     };
     
-    private final MemberDetailsServiceImpl userDetailsService;
+    private final UserDetailsServiceImpl userDetailsService;
     private final AuthEntryPointJwt unauthorizedHandler;
     
-    public WebSecurityConfig(MemberDetailsServiceImpl userDetailsService, AuthEntryPointJwt unauthorizedHandler) {
+    public WebSecurityConfig(UserDetailsServiceImpl userDetailsService, AuthEntryPointJwt unauthorizedHandler) {
         this.userDetailsService = userDetailsService;
         this.unauthorizedHandler = unauthorizedHandler;
     }

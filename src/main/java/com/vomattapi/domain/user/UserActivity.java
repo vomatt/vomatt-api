@@ -1,4 +1,4 @@
-package com.vomattapi.domain.member;
+package com.vomattapi.domain.user;
 
 import java.time.LocalDateTime;
 
@@ -16,18 +16,18 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "member_activities")
+@Table(name = "user_activities")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class MemberActivity {
+public class UserActivity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "member_id", nullable = false)
-    private Member member;
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
     @Column(name = "activity_type", nullable = false, length = 30)
     private String activityType;
@@ -44,8 +44,8 @@ public class MemberActivity {
     @Column(nullable = false)
     private LocalDateTime timestamp;
 
-    public MemberActivity(Member member, String activityType, String activityDescription, String ipAddress, String userAgent) {
-        this.member = member;
+    public UserActivity(User user, String activityType, String activityDescription, String ipAddress, String userAgent) {
+        this.user = user;
         this.activityType = activityType;
         this.activityDescription = activityDescription;
         this.ipAddress = ipAddress;

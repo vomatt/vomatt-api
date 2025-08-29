@@ -16,7 +16,7 @@ import org.springframework.util.AntPathMatcher;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import com.vomattapi.application.security.services.MemberDetailsServiceImpl;
+import com.vomattapi.application.security.services.UserDetailsServiceImpl;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -28,7 +28,7 @@ public class AuthTokenFilter extends OncePerRequestFilter {
     private JwtUtils jwtUtils;
 
     @Autowired
-    private MemberDetailsServiceImpl memberDetailsService;
+    private UserDetailsServiceImpl memberDetailsService;
 
     private static final Logger logger = LoggerFactory.getLogger(AuthTokenFilter.class);
 
@@ -37,8 +37,9 @@ public class AuthTokenFilter extends OncePerRequestFilter {
         "/api/auth/signin",
         "/api/auth/signup",
         "/api/auth/pre-signup",
+        "/api/auth/resend-verification",
         "/api/auth/refreshtoken",
-        "/api/auth/generateVerifyCode",
+        "/api/auth/generateVerificationCode",
         "/api/public/**",
         "/swagger-ui/**",
         "/swagger-ui.html",

@@ -8,12 +8,12 @@ import lombok.Data;
 public abstract class VoteEvent {
     
     protected final String voteId;
-    protected final String memberId;
+    protected final String userId;
     protected final LocalDateTime timestamp;
     
-    public VoteEvent(String voteId, String memberId) {
+    public VoteEvent(String voteId, String userId) {
         this.voteId = voteId;
-        this.memberId = memberId;
+        this.userId = userId;
         this.timestamp = LocalDateTime.now();
     }
 }

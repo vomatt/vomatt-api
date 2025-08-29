@@ -23,7 +23,7 @@ public class VoteEventListener {
     @Async
     public void handleVoteCreated(VoteCreatedEvent event) {
         log.info("Vote created event: voteId={}, creatorId={}, title={}, optionsCount={}", 
-                event.getVoteId(), event.getMemberId(), event.getTitle(), event.getOptionsCount());
+                event.getVoteId(), event.getUserId(), event.getTitle(), event.getOptionsCount());
         
         // Here you can add additional logic such as:
         // - Send notifications to subscribers
@@ -36,7 +36,7 @@ public class VoteEventListener {
     @Async
     public void handleVoteCast(VoteCastEvent event) {
         log.info("Vote cast event: voteId={}, voterId={}, optionsSelected={}, from={}", 
-                event.getVoteId(), event.getMemberId(), event.getOptionIds().size(), event.getIpAddress());
+                event.getVoteId(), event.getUserId(), event.getOptionIds().size(), event.getIpAddress());
         
         // Additional logic:
         // - Update real-time vote counters
@@ -49,7 +49,7 @@ public class VoteEventListener {
     @Async
     public void handleVoteDeactivated(VoteDeactivatedEvent event) {
         log.info("Vote deactivated event: voteId={}, deactivatedBy={}, reason={}", 
-                event.getVoteId(), event.getMemberId(), event.getReason());
+                event.getVoteId(), event.getUserId(), event.getReason());
         
         // Additional logic:
         // - Send final results to participants

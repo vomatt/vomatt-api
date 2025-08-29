@@ -1,4 +1,4 @@
-package com.vomattapi.domain.member;
+package com.vomattapi.domain.user;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -17,22 +17,22 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 
 @Entity
-@Table(name = "member_preferences", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"member_id", "preference_key"})
+@Table(name = "user_preferences", uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"user_id", "preference_key"})
 })
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@ToString(exclude = "member")
+@ToString(exclude = "user")
 @EqualsAndHashCode(of = "id")
-public class MemberPreference {
+public class UserPreference {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "member_id", nullable = false)
-    private Member member;
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
     @Column(name = "preference_key", nullable = false, length = 50)
     private String key;
@@ -40,8 +40,8 @@ public class MemberPreference {
     @Column(name = "preference_value")
     private String value;
 
-    public MemberPreference(Member member, String key, String value) {
-        this.member = member;
+    public UserPreference(User user, String key, String value) {
+        this.user = user;
         this.key = key;
         this.value = value;
     }

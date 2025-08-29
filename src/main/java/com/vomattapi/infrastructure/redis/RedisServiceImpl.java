@@ -14,7 +14,6 @@ import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.extern.slf4j.Slf4j;
@@ -35,13 +34,8 @@ public class RedisServiceImpl implements RedisService {
     // ==================== 單筆操作 ====================
 
     @Override
-    public String buildCacheKey(String cacheName, String key) {
-        return cacheName + ":" + key;
-    }
-
-    @Override
     public void set(String cacheName, String key, Object value) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             redisTemplate.opsForValue().set(cacheKey, value);
             log.debug("Redis SET: key={}", cacheKey);
@@ -53,7 +47,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public void set(String cacheName, String key, Object value, Duration timeout) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             redisTemplate.opsForValue().set(cacheKey, value, timeout);
             log.debug("Redis SET with timeout: key={}, timeout={}", cacheKey, timeout);
@@ -66,7 +60,7 @@ public class RedisServiceImpl implements RedisService {
     @Override
     @SuppressWarnings("unchecked")
     public <T> T get(String cacheName, String key, Class<T> clazz) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Object value = redisTemplate.opsForValue().get(cacheKey);
             if (value == null) {
@@ -87,7 +81,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public boolean delete(String cacheName, String key) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Boolean result = redisTemplate.delete(cacheKey);
             log.debug("Redis DELETE: key={}, result={}", cacheKey, result);
@@ -100,7 +94,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public boolean hasKey(String cacheName, String key) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Boolean result = redisTemplate.hasKey(cacheKey);
             return Boolean.TRUE.equals(result);
@@ -112,7 +106,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public boolean expire(String cacheName, String key, Duration timeout) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Boolean result = redisTemplate.expire(cacheKey, timeout);
             log.debug("Redis EXPIRE: key={}, timeout={}, result={}", cacheKey, timeout, result);
@@ -125,7 +119,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public Duration getExpire(String cacheName, String key) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Long expire = redisTemplate.getExpire(cacheKey, TimeUnit.SECONDS);
             return expire != null && expire > 0 ? Duration.ofSeconds(expire) : null;
@@ -139,12 +133,12 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public void multiSet(String cacheName, Map<String, Object> keyValueMap) {
-        Map<String, Object> cacheKeyValueMap = new HashMap<>();
-        keyValueMap.forEach((key, value) -> {
-            cacheKeyValueMap.put(buildCacheKey(cacheName, key), value);
-        });
         try {
-            redisTemplate.opsForValue().multiSet(cacheKeyValueMap);
+            Map<String, Object> cacheKeyMap = new HashMap<>();
+            keyValueMap.forEach((key, value) -> 
+                cacheKeyMap.put(CacheKeyUtil.buildKey(cacheName, key), value)
+            );
+            redisTemplate.opsForValue().multiSet(cacheKeyMap);
             log.debug("Redis MULTISET: count={}", keyValueMap.size());
         } catch (Exception e) {
             log.error("Redis MULTISET error: count={}, error={}", keyValueMap.size(), e.getMessage(), e);
@@ -158,7 +152,7 @@ public class RedisServiceImpl implements RedisService {
             // Redis 不支援批量設置過期時間，需要分別設置
             redisTemplate.executePipelined((RedisCallback<?>) connection -> {
                 keyValueMap.forEach((key, value) -> {
-                    String cacheKey = buildCacheKey(cacheName, key);
+                    String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
                     redisTemplate.opsForValue().set(cacheKey, value, timeout);
                 });
                 return null;
@@ -174,10 +168,10 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public <T> Map<String, T> multiGet(String cacheName, Set<String> keys, Class<T> clazz) {
-        Set<String> cacheKeys = keys.stream()
-                .map(key -> buildCacheKey(cacheName, key))
-                .collect(Collectors.toSet());
         try {
+            Set<String> cacheKeys = keys.stream()
+                .map(key -> CacheKeyUtil.buildKey(cacheName, key))
+                .collect(Collectors.toSet());
             List<Object> values = redisTemplate.opsForValue().multiGet(cacheKeys);
             Map<String, T> result = new HashMap<>();
 
@@ -207,10 +201,10 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public long multiDelete(String cacheName, Set<String> keys) {
-        Set<String> cacheKeys = keys.stream()
-                .map(key -> buildCacheKey(cacheName, key))
-                .collect(Collectors.toSet());
         try {
+            Set<String> cacheKeys = keys.stream()
+                .map(key -> CacheKeyUtil.buildKey(cacheName, key))
+                .collect(Collectors.toSet());
             Long result = redisTemplate.delete(cacheKeys);
             log.debug("Redis MULTIDELETE: requested={}, deleted={}", keys.size(), result);
             return result != null ? result : 0;
@@ -234,11 +228,11 @@ public class RedisServiceImpl implements RedisService {
         }
     }
 
-
+    // ==================== Hash 操作 ====================
 
     @Override
     public void hSet(String cacheName, String key, String hashKey, Object value) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             redisTemplate.opsForHash().put(cacheKey, hashKey, value);
             log.debug("Redis HSET: key={}, hashKey={}", cacheKey, hashKey);
@@ -251,7 +245,7 @@ public class RedisServiceImpl implements RedisService {
     @Override
     @SuppressWarnings("unchecked")
     public <T> T hGet(String cacheName, String key, String hashKey, Class<T> clazz) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Object value = redisTemplate.opsForHash().get(cacheKey, hashKey);
             if (value == null) {
@@ -272,7 +266,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public void hMultiSet(String cacheName, String key, Map<String, Object> hashMap) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             redisTemplate.opsForHash().putAll(cacheKey, hashMap);
             log.debug("Redis HMULTISET: key={}, count={}", cacheKey, hashMap.size());
@@ -284,7 +278,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public <T> Map<String, T> hMultiGet(String cacheName, String key, Set<String> hashKeys, Class<T> clazz) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             List<Object> values = redisTemplate.opsForHash()
                     .multiGet(cacheKey, (Collection<Object>) (Collection<?>) hashKeys);
@@ -315,7 +309,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public boolean hDelete(String cacheName, String key, String hashKey) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Long result = redisTemplate.opsForHash().delete(cacheKey, hashKey);
             return result != null && result > 0;
@@ -327,7 +321,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public <T> Map<String, T> hGetAll(String cacheName, String key, Class<T> clazz) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Map<Object, Object> entries = redisTemplate.opsForHash().entries(cacheKey);
             Map<String, T> result = new HashMap<>();
@@ -356,7 +350,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public long leftPush(String cacheName, String key, Object value) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Long result = redisTemplate.opsForList().leftPush(cacheKey, value);
             return result != null ? result : 0;
@@ -368,7 +362,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public long rightPush(String cacheName, String key, Object value) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Long result = redisTemplate.opsForList().rightPush(cacheKey, value);
             return result != null ? result : 0;
@@ -381,7 +375,7 @@ public class RedisServiceImpl implements RedisService {
     @Override
     @SuppressWarnings("unchecked")
     public <T> T leftPop(String cacheName, String key, Class<T> clazz) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Object value = redisTemplate.opsForList().leftPop(cacheKey);
             if (value == null) {
@@ -402,7 +396,7 @@ public class RedisServiceImpl implements RedisService {
     @Override
     @SuppressWarnings("unchecked")
     public <T> T rightPop(String cacheName, String key, Class<T> clazz) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Object value = redisTemplate.opsForList().rightPop(cacheKey);
             if (value == null) {
@@ -423,7 +417,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public long leftPushAll(String cacheName, String key, List<Object> values) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Long result = redisTemplate.opsForList().leftPushAll(cacheKey, values.toArray());
             return result != null ? result : 0;
@@ -435,7 +429,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public long rightPushAll(String cacheName, String key, List<Object> values) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Long result = redisTemplate.opsForList().rightPushAll(cacheKey, values.toArray());
             return result != null ? result : 0;
@@ -447,7 +441,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public <T> List<T> getRange(String cacheName, String key, long start, long end, Class<T> clazz) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             List<Object> values = redisTemplate.opsForList().range(cacheKey, start, end);
             if (values == null) {
@@ -469,7 +463,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public long getListSize(String cacheName, String key) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Long size = redisTemplate.opsForList().size(cacheKey);
             return size != null ? size : 0;
@@ -483,7 +477,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public long setAdd(String cacheName, String key, Object... values) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Long result = redisTemplate.opsForSet().add(cacheKey, values);
             return result != null ? result : 0;
@@ -495,7 +489,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public long setRemove(String cacheName, String key, Object... values) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Long result = redisTemplate.opsForSet().remove(cacheKey, values);
             return result != null ? result : 0;
@@ -506,8 +500,8 @@ public class RedisServiceImpl implements RedisService {
     }
 
     @Override
-    public boolean setIsMember(String cacheName, String key, Object value) {
-        String cacheKey = buildCacheKey(cacheName, key);
+    public boolean setIsUser(String cacheName, String key, Object value) {
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Boolean result = redisTemplate.opsForSet().isMember(cacheKey, value);
             return Boolean.TRUE.equals(result);
@@ -518,8 +512,8 @@ public class RedisServiceImpl implements RedisService {
     }
 
     @Override
-    public <T> Set<T> setMembers(String cacheName, String key, Class<T> clazz) {
-        String cacheKey = buildCacheKey(cacheName, key);
+    public <T> Set<T> setUsers(String cacheName, String key, Class<T> clazz) {
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Set<Object> members = redisTemplate.opsForSet().members(cacheKey);
             if (members == null) {
@@ -541,7 +535,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public long setSize(String cacheName, String key) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Long size = redisTemplate.opsForSet().size(cacheKey);
             return size != null ? size : 0;
@@ -555,7 +549,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public long increment(String cacheName, String key) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Long result = redisTemplate.opsForValue().increment(cacheKey);
             return result != null ? result : 0;
@@ -567,7 +561,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public long increment(String cacheName, String key, long delta) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Long result = redisTemplate.opsForValue().increment(cacheKey, delta);
             return result != null ? result : 0;
@@ -579,7 +573,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public long decrement(String cacheName, String key) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Long result = redisTemplate.opsForValue().decrement(cacheKey);
             return result != null ? result : 0;
@@ -591,7 +585,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public long decrement(String cacheName, String key, long delta) {
-        String cacheKey = buildCacheKey(cacheName, key);
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             Long result = redisTemplate.opsForValue().decrement(cacheKey, delta);
             return result != null ? result : 0;
@@ -605,7 +599,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public Set<String> keys(String cacheName, String pattern) {
-        String cachePattern = buildCacheKey(cacheName, pattern);
+        String cachePattern = CacheKeyUtil.buildPattern(cacheName, pattern);
         try {
             Set<String> keys = redisTemplate.keys(cachePattern);
             return keys != null ? keys : Set.of();
@@ -617,16 +611,16 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public long deleteByPattern(String cacheName, String pattern) {
+        String cachePattern = CacheKeyUtil.buildPattern(cacheName, pattern);
         try {
-            Set<String> keys = keys(cacheName, pattern);
-            if (keys.isEmpty()) {
+            Set<String> keys = redisTemplate.keys(cachePattern);
+            if (keys == null || keys.isEmpty()) {
                 return 0;
             }
-            // For deleteByPattern, we need to delete the actual cache keys, not build new ones
             Long result = redisTemplate.delete(keys);
             return result != null ? result : 0;
         } catch (Exception e) {
-            log.error("Redis DELETEBYPATTERN error: pattern={}, error={}", pattern, e.getMessage(), e);
+            log.error("Redis DELETEBYPATTERN error: pattern={}, error={}", cachePattern, e.getMessage(), e);
             return 0;
         }
     }

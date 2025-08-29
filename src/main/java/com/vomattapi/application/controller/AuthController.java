@@ -6,17 +6,18 @@ import com.vomattapi.application.dto.request.SignupRequest;
 import com.vomattapi.application.dto.request.TokenRefreshRequest;
 import com.vomattapi.application.dto.response.JwtResponse;
 import com.vomattapi.application.dto.response.MessageResponse;
+import com.vomattapi.application.dto.response.PreSignupErrorCode;
 import com.vomattapi.application.dto.response.PreSignupResponse;
 import com.vomattapi.application.dto.response.TokenRefreshResponse;
 import com.vomattapi.application.exception.TokenRefreshException;
 import com.vomattapi.application.security.jwt.JwtUtils;
-import com.vomattapi.application.security.services.MemberDetailsImpl;
+import com.vomattapi.application.security.services.UserDetailsImpl;
 import com.vomattapi.application.service.AuthService;
-import com.vomattapi.application.service.MemberService;
+import com.vomattapi.application.service.UserService;
 import com.vomattapi.application.service.PreSignupService;
 import com.vomattapi.application.service.RefreshTokenService;
 import com.vomattapi.application.service.SignupService;
-import com.vomattapi.domain.member.RefreshToken;
+import com.vomattapi.domain.user.RefreshToken;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -28,7 +29,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -56,7 +56,7 @@ public class AuthController {
     private final JwtUtils jwtUtils;
     private final RefreshTokenService refreshTokenService;
     private final AuthService authService;
-    private final MemberService memberService;
+    private final UserService userService;
     private final PreSignupService preSignupService;
     private final SignupService signupService;
 
@@ -70,10 +70,10 @@ public class AuthController {
     public ResponseEntity<?> authenticateUser(
             @Parameter(description = "登入請求，包含用戶名和密碼") @Valid @RequestBody LoginRequest loginRequest) {
         Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getVerifyCode()));
+                new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getVerificationCode()));
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
-        MemberDetailsImpl memberDetails = (MemberDetailsImpl) authentication.getPrincipal();
+        UserDetailsImpl memberDetails = (UserDetailsImpl) authentication.getPrincipal();
 
         String jwt = jwtUtils.generateJwtToken(authentication);
 
@@ -115,6 +115,33 @@ public class AuthController {
         }
     }
 
+    @PostMapping("/resend-verification")
+    @RateLimiter(name = "pre-signup")
+    @Operation(summary = "重發驗證碼", description = "重新發送預註冊驗證碼到指定郵箱")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "驗證碼重發成功", content = @Content(schema = @Schema(implementation = PreSignupResponse.class))),
+            @ApiResponse(responseCode = "400", description = "無效的郵箱或驗證已過期"),
+            @ApiResponse(responseCode = "429", description = "請求過於頻繁") })
+    public ResponseEntity<PreSignupResponse> resendVerificationCode(
+            @Parameter(description = "郵箱地址", required = true) @RequestParam(name = "email", required = true) String email) {
+        try {
+            log.info("Resend verification code request for email: {}", email);
+            
+            PreSignupResponse response = preSignupService.resendVerificationCode(email);
+            
+            if (response.isSuccess()) {
+                return ResponseEntity.ok(response);
+            } else {
+                return ResponseEntity.badRequest().body(response);
+            }
+            
+        } catch (Exception e) {
+            log.error("Resend verification code failed for email: {}", email, e);
+            return ResponseEntity.internalServerError()
+                    .body(PreSignupResponse.error(PreSignupErrorCode.INTERNAL_ERROR));
+        }
+    }
+
     @PostMapping("/signup")
     @Operation(summary = "會員註冊", description = "創建新會員帳戶")
     @ApiResponses({
@@ -142,7 +169,7 @@ public class AuthController {
         String requestRefreshToken = request.getRefreshToken();
 
         return refreshTokenService.findByToken(requestRefreshToken).map(refreshTokenService::verifyExpiration)
-                .map(RefreshToken::getMember).map(user -> {
+                .map(RefreshToken::getUser).map(user -> {
                     String token = jwtUtils.generateTokenFromUsername(user.getUsername());
                     return ResponseEntity.ok(new TokenRefreshResponse(token, requestRefreshToken));
                 })
@@ -156,22 +183,22 @@ public class AuthController {
             @ApiResponse(responseCode = "401", description = "未認證") })
     public ResponseEntity<?> logoutUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        MemberDetailsImpl memberDetails = (MemberDetailsImpl) authentication.getPrincipal();
+        UserDetailsImpl memberDetails = (UserDetailsImpl) authentication.getPrincipal();
         String userId = memberDetails.getId();
 
         refreshTokenService.deleteByUserId(userId);
         return ResponseEntity.ok(new MessageResponse("Log out successful!"));
     }
 
-    @GetMapping("/generateVerifyCode")
+    @GetMapping("/generateVerificationCode")
     @Operation(summary = "產生認證碼", description = "產生認證碼")
     @ApiResponses({ @ApiResponse(responseCode = "200", description = "登入成功") })
-    public ResponseEntity<?> generateVerifyCode(
+    public ResponseEntity<?> generateVerificationCode(
             @Parameter(description = "email") @RequestParam(name = "email", required = true) String email) {
-        log.info("generateVerifyCode for email: {}", email);
-        String verifyCode = authService.generateVerifyCode(email);
-        if (verifyCode != null) {
-            return ResponseEntity.ok(verifyCode);
+        log.info("generateVerificationCode for email: {}", email);
+        String verificationCode = authService.generateVerificationCode(email);
+        if (verificationCode != null) {
+            return ResponseEntity.ok(verificationCode);
         } else {
             return ResponseEntity.badRequest().body(new MessageResponse("Failed to generate verification code"));
         }

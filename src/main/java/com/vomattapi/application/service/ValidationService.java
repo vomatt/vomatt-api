@@ -1,0 +1,132 @@
+package com.vomattapi.application.service;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
+import com.vomattapi.application.dto.response.PreSignupErrorCode;
+import com.vomattapi.domain.user.repository.UserRepository;
+
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * Service responsible for validation logic
+ * Single responsibility: Validate data integrity and uniqueness
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class ValidationService {
+    private final UserRepository userRepository;
+
+    /**
+     * Validate if username is available for registration
+     */
+    public ValidationResult validateUsername(String username) {
+        log.debug("Validating username availability: {}", username);
+        
+        if (username == null || username.trim().isEmpty()) {
+            return ValidationResult.invalid(PreSignupErrorCode.USERNAME_EMPTY);
+        }
+        
+        if (username.length() < 3) {
+            return ValidationResult.invalid(PreSignupErrorCode.USERNAME_TOO_SHORT);
+        }
+        
+        if (username.length() > 20) {
+            return ValidationResult.invalid(PreSignupErrorCode.USERNAME_TOO_LONG);
+        }
+        
+        if (!username.matches("^[a-zA-Z0-9_]+$")) {
+            return ValidationResult.invalid(PreSignupErrorCode.USERNAME_INVALID_CHARS);
+        }
+        
+        if (userRepository.existsByUsername(username)) {
+            log.warn("Username validation failed: already exists: {}", username);
+            return ValidationResult.invalid(PreSignupErrorCode.USERNAME_EXISTS);
+        }
+        
+        return ValidationResult.valid();
+    }
+
+    /**
+     * Validate if email is available for registration
+     */
+    public ValidationResult validateEmail(String email) {
+        log.debug("Validating email availability: {}", email);
+        
+        if (email == null || email.trim().isEmpty()) {
+            return ValidationResult.invalid(PreSignupErrorCode.EMAIL_EMPTY);
+        }
+        
+        // Basic email format validation
+        if (!email.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
+            return ValidationResult.invalid(PreSignupErrorCode.EMAIL_INVALID_FORMAT);
+        }
+        
+        if (userRepository.existsByEmail(email)) {
+            log.warn("Email validation failed: already exists: {}", email);
+            return ValidationResult.invalid(PreSignupErrorCode.EMAIL_EXISTS);
+        }
+        
+        return ValidationResult.valid();
+    }
+
+    /**
+     * Validate both username and email for pre-signup
+     */
+    public ValidationResult validatePreSignupData(String username, String email) {
+        log.debug("Validating pre-signup data for username: {}, email: {}", username, email);
+        
+        ValidationResult usernameResult = validateUsername(username);
+        if (!usernameResult.isValid()) {
+            return usernameResult;
+        }
+        
+        ValidationResult emailResult = validateEmail(email);
+        if (!emailResult.isValid()) {
+            return emailResult;
+        }
+        
+        return ValidationResult.valid();
+    }
+
+    /**
+     * Validation result wrapper with error code support
+     */
+    public static class ValidationResult {
+        private final boolean valid;
+        private final String errorMessage;
+        private final PreSignupErrorCode errorCode;
+
+        private ValidationResult(boolean valid, String errorMessage, PreSignupErrorCode errorCode) {
+            this.valid = valid;
+            this.errorMessage = errorMessage;
+            this.errorCode = errorCode;
+        }
+
+        public static ValidationResult valid() {
+            return new ValidationResult(true, null, PreSignupErrorCode.SUCCESS);
+        }
+
+        public static ValidationResult invalid(PreSignupErrorCode errorCode) {
+            return new ValidationResult(false, errorCode.getDefaultMessage(), errorCode);
+        }
+
+        // Backward compatibility method
+        public static ValidationResult invalid(String errorMessage) {
+            return new ValidationResult(false, errorMessage, PreSignupErrorCode.INTERNAL_ERROR);
+        }
+
+        public boolean isValid() {
+            return valid;
+        }
+
+        public String getErrorMessage() {
+            return errorMessage;
+        }
+        
+        public PreSignupErrorCode getErrorCode() {
+            return errorCode;
+        }
+    }
+}

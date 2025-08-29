@@ -5,22 +5,21 @@ import java.util.Optional;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.vomattapi.application.exception.TokenRefreshException;
-import com.vomattapi.domain.member.Member;
-import com.vomattapi.domain.member.RefreshToken;
-import com.vomattapi.domain.member.repository.MemberRepository;
-import com.vomattapi.domain.member.repository.RefreshTokenRepository;
+import com.vomattapi.domain.user.User;
+import com.vomattapi.domain.user.RefreshToken;
+import com.vomattapi.domain.user.repository.UserRepository;
+import com.vomattapi.domain.user.repository.RefreshTokenRepository;
 
 @Service
 @RequiredArgsConstructor
 public class RefreshTokenService {
     private final RefreshTokenRepository refreshTokenRepository;
-    private final MemberRepository memberRepository;
+    private final UserRepository userRepository;
 
     @Value("${app.jwt.refreshExpiration}")
     private Long refreshTokenDurationMs;
@@ -33,13 +32,13 @@ public class RefreshTokenService {
     public RefreshToken createRefreshToken(String userId) {
         RefreshToken refreshToken = new RefreshToken();
 
-        Member member = memberRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Member not found with id: " + userId));
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found with id: " + userId));
 
         // Check if the member already has a refresh token - if so, delete it
-        refreshTokenRepository.deleteByMember(member);
+        refreshTokenRepository.deleteByUser(user);
 
-        refreshToken.setMember(member);
+        refreshToken.setUser(user);
         
         // Convert milliseconds to seconds and add to LocalDateTime
         long seconds = refreshTokenDurationMs / 1000;
@@ -63,8 +62,8 @@ public class RefreshTokenService {
 
     @Transactional
     public int deleteByUserId(String userId) {
-        Member member = memberRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Member not found with id: " + userId));
-        return refreshTokenRepository.deleteByMember(member);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found with id: " + userId));
+        return refreshTokenRepository.deleteByUser(user);
     }
 }

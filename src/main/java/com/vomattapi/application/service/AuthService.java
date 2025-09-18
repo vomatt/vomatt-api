@@ -19,6 +19,7 @@ public class AuthService {
     private final UserService userService;
     private final VerificationCodeService verificationCodeService;
     private final RedisService redisService;
+    private final EmailService emailService;
 
     /**
      * Generate and store verification code for existing user
@@ -38,6 +39,7 @@ public class AuthService {
             
             if (isChanged) {
                 log.debug("Verification code generated and stored for email: {}", email);
+                emailService.sendVerificationEmail(email, verificationCode);
                 return verificationCode;
             } else {
                 log.warn("Failed to update verification code for email: {}", email);

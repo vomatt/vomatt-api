@@ -56,8 +56,8 @@
 
         <p th:text="#{email.verification.greeting}">Hello,</p>
 
-        <p th:text="${isPreSignup} ? #{email.verification.pre.signup.message} : #{email.verification.login.message}">
-            Verification message
+        <p th:text="#{email.verification.pre.signup.message}">
+            Thank you for your interest in Vomatt. Please use the following verification code to complete your pre-signup verification:
         </p>
 
         <div class="verification-code" th:text="${verificationCode}">123456</div>

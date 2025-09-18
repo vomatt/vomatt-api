@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.MessageSource;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -15,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
+import java.util.Locale;
 
 /**
  * Gmail implementation of EmailService
@@ -26,6 +28,8 @@ import jakarta.mail.internet.MimeMessage;
 public class EmailServiceImpl implements EmailService {
     private final JavaMailSender mailSender;
     private final TemplateEngine templateEngine;
+    private final MessageSource messageSource;
+    private final LocaleService localeService;
 
     @Value("${app.email.from:noreply@vomatt.com}")
     private String fromEmail;
@@ -34,29 +38,67 @@ public class EmailServiceImpl implements EmailService {
     private boolean emailEnabled;
 
     /**
-     * Send email verification code using HTML template
+     * Send pre-signup email verification code using HTML template with auto-detected locale from request
+     */
+    @Override
+    public void sendPreSignupEmail(String to, String verificationCode) {
+        Locale requestLocale = localeService.getCurrentRequestLocale();
+        sendVerificationEmail(to, verificationCode, true, requestLocale);
+    }
+
+    /**
+     * Send pre-signup email verification code with custom locale
+     */
+    @Override
+    public void sendPreSignupEmail(String to, String verificationCode, Locale locale) {
+        sendVerificationEmail(to, verificationCode, true, locale);
+    }
+
+    /**
+     * Send email verification code using HTML template with auto-detected locale from request
      */
     @Override
     public void sendVerificationEmail(String to, String verificationCode) {
+        Locale requestLocale = localeService.getCurrentRequestLocale();
+        sendVerificationEmail(to, verificationCode, false, requestLocale);
+    }
+
+    /**
+     * Send verification email with custom locale
+     */
+    @Override
+    public void sendVerificationEmail(String to, String verificationCode, Locale locale) {
+        sendVerificationEmail(to, verificationCode, false, locale);
+    }
+
+    /**
+     * Private method to send verification email with i18n support
+     */
+    private void sendVerificationEmail(String to, String verificationCode, boolean isPreSignup, Locale locale) {
         try {
             MimeMessage mimeMessage = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, "utf-8");
-            
+
             helper.setFrom(fromEmail);
             helper.setTo(to);
-            helper.setSubject("Vomatt - 電子郵件驗證碼");
-            
-            // Create Thymeleaf context
-            Context context = new Context();
+
+            // Get localized subject
+            String subject = messageSource.getMessage("email.verification.subject", null, locale);
+            helper.setSubject(subject);
+
+            // Create Thymeleaf context with locale
+            Context context = new Context(locale);
             context.setVariable("verificationCode", verificationCode);
-            
-            // Process template
-            String htmlContent = templateEngine.process("email/email-verification", context);
+            context.setVariable("isPreSignup", isPreSignup);
+
+            // Choose appropriate template
+            String templateName = isPreSignup ? "email/pre-signup-email-verification" : "email/email-verification";
+            String htmlContent = templateEngine.process(templateName, context);
             helper.setText(htmlContent, true);
-            
+
             mailSender.send(mimeMessage);
-            log.info("Verification email sent successfully to: {}", to);
-            
+            log.info("Verification email ({}) sent successfully to: {}", isPreSignup ? "pre-signup" : "login", to);
+
         } catch (MessagingException | RuntimeException e) {
             log.error("Failed to send verification email to: {}", to, e);
             throw new RuntimeException("Failed to send verification email", e);

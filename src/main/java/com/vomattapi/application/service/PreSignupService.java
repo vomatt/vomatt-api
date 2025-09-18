@@ -56,8 +56,8 @@ public class PreSignupService {
             // Step 4: Store pre-signup data using email and username as keys
             storePreSignupData(request.getEmail(), request.getUsername(), verificationCode);
 
-            // Step 5: Send verification email
-            emailService.sendVerificationEmail(request.getEmail(), verificationCode);
+            // Step 5: Send pre-signup verification email
+            emailService.sendPreSignupEmail(request.getEmail(), verificationCode);
 
             log.info("Pre-signup successful for email: {}, username: {}", request.getEmail(), request.getUsername());
 
@@ -170,8 +170,8 @@ public class PreSignupService {
             // Update cache with new verification code
             storePreSignupData(email, username, newVerificationCode);
 
-            // Send new verification email
-            emailService.sendVerificationEmail(email, newVerificationCode);
+            // Send new pre-signup verification email
+            emailService.sendPreSignupEmail(email, newVerificationCode);
 
             log.info("Verification code resent successfully for email: {}", email);
             return PreSignupResponse.success(null, PRE_SIGNUP_EXPIRY.toMinutes());

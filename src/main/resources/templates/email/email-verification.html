@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>電子郵件驗證</title>
+    <title th:text="#{email.verification.title}">Email Verification</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -51,24 +51,26 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>電子郵件驗證</h1>
+            <h1 th:text="#{email.verification.title}">Email Verification</h1>
         </div>
-        
-        <p>您好，</p>
-        
-        <p>感謝您註冊Vomatt帳戶。請使用以下驗證碼完成您的電子郵件驗證：</p>
-        
+
+        <p th:text="#{email.verification.greeting}">Hello,</p>
+
+        <p th:text="${isPreSignup} ? #{email.verification.pre.signup.message} : #{email.verification.login.message}">
+            Verification message
+        </p>
+
         <div class="verification-code" th:text="${verificationCode}">123456</div>
-        
-        <p>此驗證碼將在10分鐘後失效。</p>
-        
-        <p>如果您沒有請求此驗證碼，請忽略此郵件。</p>
-        
-        <p>謝謝，<br>Vomatt團隊</p>
-        
+
+        <p th:text="#{email.verification.expiry}">This verification code will expire in 10 minutes.</p>
+
+        <p th:text="#{email.verification.ignore}">If you did not request this verification code, please ignore this email.</p>
+
+        <p th:utext="#{email.verification.signature}">Thank you,<br>Vomatt Team</p>
+
         <div class="footer">
-            <p>此郵件是自動發送的，請勿回復。</p>
-            <p>&copy; 2024 Vomatt. 版權所有。</p>
+            <p th:text="#{email.verification.footer.auto}">This email is sent automatically, please do not reply.</p>
+            <p th:text="#{email.verification.footer.copyright}">&copy; 2024 Vomatt. All rights reserved.</p>
         </div>
     </div>
 </body>

@@ -4,9 +4,10 @@ import com.vomattapi.application.dto.request.LoginRequest;
 import com.vomattapi.application.dto.request.PreSignupRequest;
 import com.vomattapi.application.dto.request.SignupRequest;
 import com.vomattapi.application.dto.request.TokenRefreshRequest;
+import com.vomattapi.application.dto.response.BaseResponse;
 import com.vomattapi.application.dto.response.JwtResponse;
 import com.vomattapi.application.dto.response.MessageResponse;
-import com.vomattapi.application.dto.response.PreSignupErrorCode;
+import com.vomattapi.application.dto.response.ErrorCode;
 import com.vomattapi.application.dto.response.PreSignupResponse;
 import com.vomattapi.application.dto.response.TokenRefreshResponse;
 import com.vomattapi.application.exception.TokenRefreshException;
@@ -15,6 +16,7 @@ import com.vomattapi.application.security.services.UserDetailsImpl;
 import com.vomattapi.application.service.AuthService;
 import com.vomattapi.application.service.UserService;
 import com.vomattapi.application.service.PreSignupService;
+import com.vomattapi.application.security.services.UserDetailsServiceImpl;
 import com.vomattapi.application.service.RefreshTokenService;
 import com.vomattapi.application.service.SignupService;
 import com.vomattapi.domain.user.RefreshToken;
@@ -57,34 +59,63 @@ public class AuthController {
     private final RefreshTokenService refreshTokenService;
     private final AuthService authService;
     private final UserService userService;
+    private final UserDetailsServiceImpl userDetailsService;
     private final PreSignupService preSignupService;
     private final SignupService signupService;
 
     @PostMapping("/signin")
     @RateLimiter(name = "login")
-    @Operation(summary = "會員登入", description = "使用用戶名和密碼登入系統")
+    @Operation(summary = "會員登入", description = "使用電子郵件和驗證碼登入系統")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "登入成功", content = @Content(schema = @Schema(implementation = JwtResponse.class))),
             @ApiResponse(responseCode = "401", description = "認證失敗"),
             @ApiResponse(responseCode = "429", description = "登入嘗試次數過多，請稍後再試") })
     public ResponseEntity<?> authenticateUser(
-            @Parameter(description = "登入請求，包含用戶名和密碼") @Valid @RequestBody LoginRequest loginRequest) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getVerificationCode()));
+            @Parameter(description = "登入請求，包含電子郵件和驗證碼") @Valid @RequestBody LoginRequest loginRequest) {
 
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-        UserDetailsImpl memberDetails = (UserDetailsImpl) authentication.getPrincipal();
+        try {
+            // Verify the verification code first
+            boolean isCodeValid = authService.verificationCode(loginRequest.getEmail(), loginRequest.getVerificationCode());
 
-        String jwt = jwtUtils.generateJwtToken(authentication);
+            if (!isCodeValid) {
+                log.warn("Invalid verification code for email: {}", loginRequest.getEmail());
+                return ResponseEntity.status(401).body(new BaseResponse(false, ErrorCode.INVALID_VERIFICATION_CODE.getCode()));
+            }
 
-        List<String> roles = memberDetails.getAuthorities().stream().map(item -> item.getAuthority())
+            // Find user by email
+            UserDetailsImpl userDetails = (UserDetailsImpl) userDetailsService.loadUserByEmail(loginRequest.getEmail());
+
+            if (userDetails == null) {
+                log.warn("User not found for email: {}", loginRequest.getEmail());
+                return ResponseEntity.status(401).body(new BaseResponse(false, ErrorCode.USER_NOT_FOUND.getCode()));
+            }
+
+            // Create authentication token manually since verification code is valid
+            Authentication authentication = new UsernamePasswordAuthenticationToken(
+                userDetails, null, userDetails.getAuthorities());
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+
+            // Generate JWT token
+            String jwt = jwtUtils.generateJwtToken(authentication);
+
+            // Get user roles
+            List<String> roles = userDetails.getAuthorities().stream()
+                .map(item -> item.getAuthority())
                 .collect(Collectors.toList());
 
-        RefreshToken refreshToken = refreshTokenService.createRefreshToken(memberDetails.getId());
+            // Create refresh token
+            RefreshToken refreshToken = refreshTokenService.createRefreshToken(userDetails.getId());
 
-        return ResponseEntity.ok(
-                new JwtResponse(jwt, refreshToken.getToken(), memberDetails.getId(), memberDetails.getUsername(),
-                        memberDetails.getEmail(), roles));
+            log.info("User signed in successfully: {}", loginRequest.getEmail());
+
+            return ResponseEntity.ok(
+                new JwtResponse(jwt, refreshToken.getToken(), userDetails.getId(),
+                    userDetails.getUsername(), userDetails.getEmail(), roles));
+
+        } catch (Exception e) {
+            log.error("Authentication failed for email: {}", loginRequest.getEmail(), e);
+            return ResponseEntity.status(401).body(new BaseResponse(false, ErrorCode.AUTHENTICATION_FAILED.getCode()));
+        }
     }
 
     @PostMapping("/pre-signup")
@@ -94,13 +125,13 @@ public class AuthController {
             @ApiResponse(responseCode = "200", description = "預註冊請求成功，驗證碼已發送", content = @Content(schema = @Schema(implementation = PreSignupResponse.class))),
             @ApiResponse(responseCode = "400", description = "用戶名或email已存在"),
             @ApiResponse(responseCode = "500", description = "內部伺服器錯誤") })
-    public ResponseEntity<PreSignupResponse> preSignup(
+    public ResponseEntity<BaseResponse> preSignup(
             @Parameter(description = "預註冊請求", required = true) @Valid @RequestBody PreSignupRequest request) {
         try {
             log.info("Pre-signup request received for email: {}, username: {}", request.getEmail(),
                     request.getUsername());
 
-            PreSignupResponse response = preSignupService.processPreSignup(request);
+            BaseResponse response = preSignupService.processPreSignup(request);
 
             if (response.isSuccess()) {
                 return ResponseEntity.ok(response);
@@ -111,23 +142,23 @@ public class AuthController {
         } catch (Exception e) {
             log.error("Pre-signup request failed for email: {}", request.getEmail(), e);
             return ResponseEntity.internalServerError()
-                    .body(new PreSignupResponse(false, "Internal server error", null, 0));
+                    .body(new BaseResponse(false, ErrorCode.INTERNAL_ERROR.getCode()));
         }
     }
 
     @PostMapping("/resend-verification")
-    @RateLimiter(name = "pre-signup")
+    @RateLimiter(name = "resend-verification")
     @Operation(summary = "重發驗證碼", description = "重新發送預註冊驗證碼到指定郵箱")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "驗證碼重發成功", content = @Content(schema = @Schema(implementation = PreSignupResponse.class))),
             @ApiResponse(responseCode = "400", description = "無效的郵箱或驗證已過期"),
             @ApiResponse(responseCode = "429", description = "請求過於頻繁") })
-    public ResponseEntity<PreSignupResponse> resendVerificationCode(
+    public ResponseEntity<BaseResponse> resendVerificationCode(
             @Parameter(description = "郵箱地址", required = true) @RequestParam(name = "email", required = true) String email) {
         try {
             log.info("Resend verification code request for email: {}", email);
             
-            PreSignupResponse response = preSignupService.resendVerificationCode(email);
+            BaseResponse response = preSignupService.resendVerificationCode(email);
             
             if (response.isSuccess()) {
                 return ResponseEntity.ok(response);
@@ -138,24 +169,25 @@ public class AuthController {
         } catch (Exception e) {
             log.error("Resend verification code failed for email: {}", email, e);
             return ResponseEntity.internalServerError()
-                    .body(PreSignupResponse.error(PreSignupErrorCode.INTERNAL_ERROR));
+                    .body(new BaseResponse(false, ErrorCode.INTERNAL_ERROR.getCode()));
         }
     }
 
     @PostMapping("/signup")
     @Operation(summary = "會員註冊", description = "創建新會員帳戶")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "註冊成功", content = @Content(schema = @Schema(implementation = MessageResponse.class))),
+            @ApiResponse(responseCode = "200", description = "註冊成功", content = @Content(schema = @Schema(implementation = BaseResponse.class))),
             @ApiResponse(responseCode = "400", description = "註冊資料無效，如用戶名已被使用") })
-    public ResponseEntity<?> registerUser(
+    public ResponseEntity<BaseResponse> registerUser(
             @Parameter(description = "註冊請求，包含用戶名、電子郵件、密碼等") @Valid @RequestBody SignupRequest signUpRequest) {
         // Delegate to SignupService
         var result = signupService.processSignup(signUpRequest);
+        BaseResponse response = new BaseResponse(result.isSuccess(), result.getErrorMessage());
 
         if (result.isSuccess()) {
-            return ResponseEntity.ok(result.toMessageResponse());
+            return ResponseEntity.ok(response);
         } else {
-            return ResponseEntity.badRequest().body(result.toMessageResponse());
+            return ResponseEntity.badRequest().body(response);
         }
     }
 
@@ -193,14 +225,14 @@ public class AuthController {
     @GetMapping("/generateVerificationCode")
     @Operation(summary = "產生認證碼", description = "產生認證碼")
     @ApiResponses({ @ApiResponse(responseCode = "200", description = "登入成功") })
-    public ResponseEntity<?> generateVerificationCode(
+    public ResponseEntity<BaseResponse> generateVerificationCode(
             @Parameter(description = "email") @RequestParam(name = "email", required = true) String email) {
-        log.info("generateVerificationCode for email: {}", email);
         String verificationCode = authService.generateVerificationCode(email);
+        log.info("generateVerificationCode for email: {}, verificationCode: {}", email, verificationCode);
         if (verificationCode != null) {
-            return ResponseEntity.ok(verificationCode);
+            return ResponseEntity.ok(new BaseResponse(true));
         } else {
-            return ResponseEntity.badRequest().body(new MessageResponse("Failed to generate verification code"));
+            return ResponseEntity.badRequest().body(new BaseResponse(false, ErrorCode.GENERATE_VERIFICATION_CODE_FAILED.getCode()));
         }
     }
 }

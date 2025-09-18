@@ -3,9 +3,11 @@ package com.vomattapi.application.dto.response;
 import java.util.List;
 
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
+@EqualsAndHashCode(callSuper = true)
 @Data
-public class JwtResponse {
+public class JwtResponse extends BaseResponse {
     private String token;
     private String type = "Bearer";
     private String refreshToken;
@@ -15,6 +17,7 @@ public class JwtResponse {
     private List<String> roles;
 
     public JwtResponse(String accessToken, String refreshToken, String id, String username, String email, List<String> roles) {
+        this.setSuccess(true);
         this.token = accessToken;
         this.refreshToken = refreshToken;
         this.id = id;

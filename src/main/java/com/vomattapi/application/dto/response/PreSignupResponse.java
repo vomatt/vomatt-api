@@ -19,13 +19,13 @@ public class PreSignupResponse {
     
     // Success response constructor
     public static PreSignupResponse success(String sessionKey, long expirationMinutes) {
-        return new PreSignupResponse(true, PreSignupErrorCode.SUCCESS.getDefaultMessage(), 
-                                   PreSignupErrorCode.SUCCESS.getCode(), sessionKey, expirationMinutes);
+        return new PreSignupResponse(true, ErrorCode.SUCCESS.getDefaultMessage(),
+                                   ErrorCode.SUCCESS.getCode(), sessionKey, expirationMinutes);
     }
     
     // Error response constructor  
-    public static PreSignupResponse error(PreSignupErrorCode errorCode) {
-        return new PreSignupResponse(false, errorCode.getDefaultMessage(), 
+    public static PreSignupResponse error(ErrorCode errorCode) {
+        return new PreSignupResponse(false, errorCode.getDefaultMessage(),
                                    errorCode.getCode(), null, 0);
     }
     
@@ -33,7 +33,7 @@ public class PreSignupResponse {
     public PreSignupResponse(boolean success, String message, String sessionKey, long expirationMinutes) {
         this.success = success;
         this.message = message;
-        this.errorCode = success ? PreSignupErrorCode.SUCCESS.getCode() : PreSignupErrorCode.INTERNAL_ERROR.getCode();
+        this.errorCode = success ? ErrorCode.SUCCESS.getCode() : ErrorCode.INTERNAL_ERROR.getCode();
         this.sessionKey = sessionKey;
         this.expirationMinutes = expirationMinutes;
     }

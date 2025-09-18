@@ -127,21 +127,41 @@ public class EmailServiceImpl implements EmailService {
     }
 
     /**
-     * Send welcome email to new member
+     * Send welcome email to new member using HTML template with i18n support
      */
     @Override
     public void sendWelcomeEmail(String to, String username) {
+        Locale requestLocale = localeService.getCurrentRequestLocale();
+        sendWelcomeEmail(to, username, requestLocale);
+    }
+
+    /**
+     * Send welcome email with custom locale
+     */
+    public void sendWelcomeEmail(String to, String username, Locale locale) {
         try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(fromEmail);
-            message.setTo(to);
-            message.setSubject("Welcome to Vomatt!");
-//            message.setText(buildWelcomeEmailBody(username));
-            
-            mailSender.send(message);
-            log.info("Welcome email sent successfully to: {}", to);
-            
-        } catch (Exception e) {
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, "utf-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(to);
+
+            // Get localized subject
+            String subject = messageSource.getMessage("email.welcome.subject", null, locale);
+            helper.setSubject(subject);
+
+            // Create Thymeleaf context with locale
+            Context context = new Context(locale);
+            context.setVariable("username", username);
+
+            // Process welcome email template
+            String htmlContent = templateEngine.process("email/welcome-email", context);
+            helper.setText(htmlContent, true);
+
+            mailSender.send(mimeMessage);
+            log.info("Welcome email sent successfully to: {} with locale: {}", to, locale);
+
+        } catch (MessagingException | RuntimeException e) {
             log.error("Failed to send welcome email to: {}", to, e);
             throw new RuntimeException("Failed to send welcome email", e);
         }

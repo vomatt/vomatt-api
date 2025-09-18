@@ -70,7 +70,7 @@ public class SignupService {
             emailService.sendWelcomeEmail(savedUser.getEmail(), savedUser.getUsername());
 
             log.info("Signup successful for member: {}", savedUser.getId());
-            return SignupResult.success("User registered successfully!");
+            return SignupResult.success();
 
         } catch (Exception e) {
             log.error("Signup failed for username: {}", signupRequest.getUsername(), e);
@@ -91,11 +91,11 @@ public class SignupService {
         }
 
         // Additional phone number validation if provided
-        if (signupRequest.getPhoneNumber() != null && !signupRequest.getPhoneNumber().trim().isEmpty()) {
-            if (userRepository.existsByPhoneNumber(signupRequest.getPhoneNumber())) {
-                return ValidationResult.invalid("Phone number is already in use!");
-            }
-        }
+//        if (signupRequest.getPhoneNumber() != null && !signupRequest.getPhoneNumber().trim().isEmpty()) {
+//            if (userRepository.existsByPhoneNumber(signupRequest.getPhoneNumber())) {
+//                return ValidationResult.invalid("Phone number is already in use!");
+//            }
+//        }
 
         return ValidationResult.valid();
     }
@@ -105,7 +105,7 @@ public class SignupService {
      */
     private User createUserFromRequest(SignupRequest signupRequest) {
         User user = new User(signupRequest.getUsername(), signupRequest.getEmail(),
-                signupRequest.getPhoneNumber(), passwordEncoder.encode(signupRequest.getVerificationCode()));
+                signupRequest.getPhoneNumber(), passwordEncoder.encode(signupRequest.getVerificationCode()), signupRequest.getFirstName(), signupRequest.getLastName());
 
         log.debug("Created member entity for username: {}", signupRequest.getUsername());
         return user;
@@ -196,7 +196,7 @@ public class SignupService {
             }
 
             log.info("Pre-signup verification successful for email: {}", signupRequest.getEmail());
-            return SignupResult.success("Verification successful");
+            return SignupResult.success();
             
         } catch (Exception e) {
             log.error("Error verifying pre-signup code for email: {}", signupRequest.getEmail(), e);
@@ -225,31 +225,31 @@ public class SignupService {
      */
     public static class SignupResult {
         private final boolean success;
-        private final String message;
+        private final String errorMessage;
 
-        private SignupResult(boolean success, String message) {
+        private SignupResult(boolean success, String errorMessage) {
             this.success = success;
-            this.message = message;
+            this.errorMessage = errorMessage;
         }
 
-        public static SignupResult success(String message) {
-            return new SignupResult(true, message);
+        public static SignupResult success() {
+            return new SignupResult(true, null);
         }
 
-        public static SignupResult failure(String message) {
-            return new SignupResult(false, message);
+        public static SignupResult failure(String errorMessage) {
+            return new SignupResult(false, errorMessage);
         }
 
         public boolean isSuccess() {
             return success;
         }
 
-        public String getMessage() {
-            return message;
+        public String getErrorMessage() {
+            return errorMessage;
         }
 
         public MessageResponse toMessageResponse() {
-            return new MessageResponse(message);
+            return new MessageResponse(errorMessage);
         }
     }
 }

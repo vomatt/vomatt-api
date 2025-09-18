@@ -7,7 +7,7 @@ import lombok.Getter;
  * messages
  */
 @Getter
-public enum PreSignupErrorCode {
+public enum ErrorCode {
 
     SUCCESS("SUCCESS", "Success"),
 
@@ -30,12 +30,18 @@ public enum PreSignupErrorCode {
     VERIFICATION_CODE_INVALID("VERIFICATION_CODE_INVALID", "Invalid or expired verification code"),
     VERIFICATION_CODE_EXPIRED("VERIFICATION_CODE_EXPIRED", "Verification code has expired"),
 
-    INTERNAL_ERROR("INTERNAL_ERROR", "Internal server error occurred");
+    INTERNAL_ERROR("INTERNAL_ERROR", "Internal server error occurred"),
+
+    GENERATE_VERIFICATION_CODE_FAILED("GENERATE_VERIFICATION_CODE_FAILED", "Failed to generate verification code"),
+    INVALID_VERIFICATION_CODE("INVALID_VERIFICATION_CODE", "Invalid verification code"),
+    USER_NOT_FOUND("USER_NOT_FOUND", "User not found"),
+    AUTHENTICATION_FAILED("AUTHENTICATION_FAILED", "Authentication failed");
+
 
     private final String code;
     private final String defaultMessage;
 
-    PreSignupErrorCode(String code, String defaultMessage) {
+    ErrorCode(String code, String defaultMessage) {
         this.code = code;
         this.defaultMessage = defaultMessage;
     }

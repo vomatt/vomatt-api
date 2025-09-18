@@ -88,6 +88,15 @@ public class User {
 
     private boolean active = true;
 
+    @Column(name = "first_name")
+    private String firstName;
+
+    @Column(name = "last_name")
+    private String lastName;
+
+    @Column(name = "location")
+    private String location;
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "user_roles",
             joinColumns = @JoinColumn(name = "user_id"),
@@ -108,9 +117,11 @@ public class User {
     }
     
     // Constructor for creating a new member with phone number
-    public User(String username, String email, String phoneNumber, String verificationCode) {
+    public User(String username, String email, String phoneNumber, String verificationCode, String firstName, String lastName) {
         this(username, email, verificationCode);
         this.phoneNumber = phoneNumber;
+        this.firstName = firstName;
+        this.lastName = lastName;
     }
 
     // Methods for account management

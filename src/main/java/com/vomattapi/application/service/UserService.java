@@ -193,7 +193,7 @@ public class UserService {
 
         user.setVerificationCode(passwordEncoder.encode(verificationCode));
         userRepository.save(user);
-        logActivity(user, "VERIFY_CODE_CHANGED", "Verification Code changed successfully");
+        logActivity(user, "verification_CODE_CHANGED", "Verification Code changed successfully");
 
         // 清除用戶緩存
         cacheUtil.evictUserCache(user.getId());

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>歡迎加入Vomatt</title>
+    <title th:text="#{email.welcome.title}">Welcome to Vomatt!</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -26,28 +26,32 @@
             margin-bottom: 20px;
         }
         .welcome-message {
-            font-size: 18px;
-            text-align: center;
+            background-color: #e8f5e8;
+            border-left: 4px solid #4caf50;
+            padding: 15px;
             margin: 20px 0;
+            border-radius: 4px;
         }
-        .button {
-            display: block;
-            width: 200px;
-            margin: 30px auto;
-            padding: 10px 20px;
-            background-color: #4285f4;
-            color: white;
-            text-align: center;
-            text-decoration: none;
+        .steps-list {
+            background-color: #f0f8ff;
             border-radius: 5px;
-            font-weight: bold;
-        }
-        .features {
+            padding: 15px;
             margin: 20px 0;
-            padding: 0;
         }
-        .features li {
-            margin-bottom: 10px;
+        .steps-list ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .steps-list li {
+            margin: 8px 0;
+            color: #2c5282;
+        }
+        .support-section {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 20px 0;
         }
         .footer {
             font-size: 12px;
@@ -57,39 +61,50 @@
             padding-top: 10px;
             border-top: 1px solid #ddd;
         }
+        h1 {
+            color: #2c5282;
+            margin-bottom: 10px;
+        }
+        h3 {
+            color: #2c5282;
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>歡迎加入Vomatt</h1>
+            <h1 th:text="#{email.welcome.title}">Welcome to Vomatt!</h1>
         </div>
-        
+
+        <p th:text="#{email.welcome.greeting(${username})}">Hello {username},</p>
+
         <div class="welcome-message">
-            <p>您好，<span th:text="${username}">用戶</span>！</p>
-            <p>感謝您註冊成為Vomatt的會員。</p>
+            <p th:text="#{email.welcome.message}">
+                Welcome to Vomatt! We're excited to have you join our community. Your account has been successfully created and you can now start exploring all the features we have to offer.
+            </p>
         </div>
-        
-        <p>我們很高興您成為我們社區的一份子。作為會員，您將享有以下優勢：</p>
-        
-        <ul class="features">
-            <li>獨家會員折扣</li>
-            <li>提前訪問新產品</li>
-            <li>專屬會員活動</li>
-            <li>專業客戶支援</li>
-        </ul>
-        
-        <a class="button" href="https://vomatt.com/account" target="_blank">查看您的帳戶</a>
-        
-        <p>如果您有任何問題或需要協助，請隨時與我們聯繫。</p>
-        
-        <p>再次感謝您的加入！</p>
-        
-        <p>敬上，<br>Vomatt團隊</p>
-        
+
+        <div class="steps-list">
+            <h3 th:text="#{email.welcome.getting.started}">Getting Started:</h3>
+            <ol>
+                <li th:text="#{email.welcome.step1}">Explore the platform and discover all available features</li>
+                <li th:text="#{email.welcome.step2}">Customize your profile to personalize your experience</li>
+                <li th:text="#{email.welcome.step3}">Connect with other members in the community</li>
+            </ol>
+        </div>
+
+        <div class="support-section">
+            <p th:text="#{email.welcome.support}">
+                If you have any questions or need assistance, our support team is here to help.
+            </p>
+        </div>
+
+        <p th:utext="#{email.welcome.signature}">Welcome aboard,<br>The Vomatt Team</p>
+
         <div class="footer">
-            <p>此郵件是自動發送的，請勿回復。</p>
-            <p>&copy; 2024 Vomatt. 版權所有。</p>
+            <p th:text="#{email.verification.footer.auto}">This email is sent automatically, please do not reply.</p>
+            <p th:text="#{email.verification.footer.copyright}">&copy; 2024 Vomatt. All rights reserved.</p>
         </div>
     </div>
 </body>

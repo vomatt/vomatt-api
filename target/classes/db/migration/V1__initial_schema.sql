@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS users (
     login_attempts INTEGER NOT NULL DEFAULT 0,
     locked_until TIMESTAMP,
     verification_code VARCHAR(64),
-    verify_code_expiry TIMESTAMP,
+    verification_code_expiry TIMESTAMP,
     points INTEGER NOT NULL DEFAULT 0,
     membership_level VARCHAR(20) NOT NULL DEFAULT 'BASIC',
     active BOOLEAN NOT NULL DEFAULT TRUE

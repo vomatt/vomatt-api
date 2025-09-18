@@ -26,4 +26,10 @@ public class SignupRequest {
     private String verificationCode;
 
     private Set<String> roles;
+
+    @NotBlank
+    private String firstName;
+
+    @NotBlank
+    private String lastName;
 }

@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.List;
 
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -55,13 +56,13 @@ public class AuthTokenFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
         String path = request.getRequestURI();
         String method = request.getMethod();
-        
+
         // 打印完整请求信息以进行调试
         logger.debug("====== REQUEST INFO START ======");
         logger.debug("Request path: {}", path);
         logger.debug("Request method: {}", method);
         logger.debug("Request query string: {}", request.getQueryString());
-        
+
         // 打印所有请求头
         logger.debug("Request headers:");
         Enumeration<String> headerNames = request.getHeaderNames();
@@ -75,7 +76,7 @@ public class AuthTokenFilter extends OncePerRequestFilter {
             logger.debug("  {} : {}", headerName, headerValue);
         }
         logger.debug("====== REQUEST INFO END ======");
-        
+
         // 如果是signup或signin等公开路径，直接放行
         for (String publicPath : PUBLIC_PATHS) {
             if (pathMatcher.match(publicPath, path)) {
@@ -83,7 +84,7 @@ public class AuthTokenFilter extends OncePerRequestFilter {
                 return true;
             }
         }
-        
+
         logger.debug("Path {} requires authentication", path);
         return false;
     }
@@ -95,7 +96,7 @@ public class AuthTokenFilter extends OncePerRequestFilter {
             if (!shouldNotFilter(request)) {
                 String jwt = parseJwt(request);
                 logger.debug("JWT token: {}", jwt != null ? "present" : "not present");
-                
+
                 if (jwt != null && jwtUtils.validateJwtToken(jwt)) {
                     String username = jwtUtils.getUserNameFromJwtToken(jwt);
                     logger.debug("Username from JWT: {}", username);
@@ -113,7 +114,7 @@ public class AuthTokenFilter extends OncePerRequestFilter {
                 }
             }
         } catch (Exception e) {
-            logger.error("Cannot set user authentication: {}", e.getMessage());
+            logger.error(ExceptionUtils.getStackTrace(e));
         }
 
         filterChain.doFilter(request, response);

@@ -32,7 +32,7 @@ public class AuthService {
             String verificationCode = verificationCodeService.generateVerificationCode();
             
             // Store in Redis with 10 minute expiration
-            redisService.set(CacheKeyUtil.buildKey("verify_code", email), verificationCode, Duration.ofMinutes(10));
+            redisService.set("verification_code", email, verificationCode, Duration.ofMinutes(10));
             
             // Update member's verification code (if needed for existing flow)
             boolean isChanged = userService.changeVerificationCode(email, verificationCode);
@@ -57,12 +57,12 @@ public class AuthService {
      */
     public boolean verificationCode(String email, String providedCode) {
         try {
-            String storedCode = redisService.get("verify_code", email, String.class);
+            String storedCode = redisService.get("verification_code", email, String.class);
             boolean isValid = storedCode != null && storedCode.equals(providedCode);
             
             if (isValid) {
                 // Clear the used verification code
-                redisService.delete("verify_code", email);
+                redisService.delete("verification_code", email);
                 log.info("Verification code verified successfully for email: {}", email);
             } else {
                 log.warn("Invalid verification code provided for email: {}", email);

@@ -40,4 +40,11 @@ public interface EmailService {
      * Send welcome email to new user
      */
     void sendWelcomeEmail(String to, String username);
+
+    /**
+     * Send welcome email with locale support
+     */
+    default void sendWelcomeEmail(String to, String username, Locale locale) {
+        sendWelcomeEmail(to, username);
+    }
 }

@@ -10,6 +10,7 @@ import com.vomattapi.application.dto.response.MessageResponse;
 import com.vomattapi.application.dto.response.ErrorCode;
 import com.vomattapi.application.dto.response.PreSignupResponse;
 import com.vomattapi.application.dto.response.TokenRefreshResponse;
+import com.vomattapi.application.exception.EntityNotFoundException;
 import com.vomattapi.application.exception.TokenRefreshException;
 import com.vomattapi.application.security.jwt.JwtUtils;
 import com.vomattapi.application.security.services.UserDetailsImpl;
@@ -224,15 +225,24 @@ public class AuthController {
 
     @GetMapping("/generateVerificationCode")
     @Operation(summary = "產生認證碼", description = "產生認證碼")
-    @ApiResponses({ @ApiResponse(responseCode = "200", description = "登入成功") })
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "認證碼生成成功"),
+        @ApiResponse(responseCode = "404", description = "用戶不存在"),
+        @ApiResponse(responseCode = "400", description = "認證碼生成失敗")
+    })
     public ResponseEntity<BaseResponse> generateVerificationCode(
             @Parameter(description = "email") @RequestParam(name = "email", required = true) String email) {
-        String verificationCode = authService.generateVerificationCode(email);
-        log.info("generateVerificationCode for email: {}, verificationCode: {}", email, verificationCode);
-        if (verificationCode != null) {
-            return ResponseEntity.ok(new BaseResponse(true));
-        } else {
-            return ResponseEntity.badRequest().body(new BaseResponse(false, ErrorCode.GENERATE_VERIFICATION_CODE_FAILED.getCode()));
+        try {
+            String verificationCode = authService.generateVerificationCode(email);
+            log.info("generateVerificationCode for email: {}, verificationCode: {}", email, verificationCode);
+            if (verificationCode != null) {
+                return ResponseEntity.ok(new BaseResponse(true));
+            } else {
+                return ResponseEntity.badRequest().body(new BaseResponse(false, ErrorCode.GENERATE_VERIFICATION_CODE_FAILED.getCode()));
+            }
+        } catch (EntityNotFoundException e) {
+            log.warn("User not found for email: {}", email);
+            return ResponseEntity.internalServerError().body(new BaseResponse(false, ErrorCode.USER_NOT_FOUND.getCode()));
         }
     }
 }

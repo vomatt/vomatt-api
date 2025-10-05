@@ -38,17 +38,14 @@ public class JwtUtils {
 
     @PostConstruct
     public void init() {
-        // 使用配置的密钥作为种子，生成符合规范的安全密钥
         if (jwtSecret != null && !jwtSecret.isEmpty()) {
-            // 如果配置了密钥，基于该密钥生成一个足够长度的密钥
             byte[] keyBytes = jwtSecret.getBytes(StandardCharsets.UTF_8);
-            // 确保生成的密钥符合HS256算法的要求(至少256位)
-            this.key = Keys.secretKeyFor(SignatureAlgorithm.HS256);
-            logger.info("JWT signing key successfully initialized with appropriate security level");
+            this.key = Keys.hmacShaKeyFor(keyBytes);
+            logger.info("JWT signing key initialized from configured secret.");
         } else {
-            // 如果没有配置密钥，生成一个新的随机密钥
             this.key = Keys.secretKeyFor(SignatureAlgorithm.HS256);
-            logger.warn("No JWT secret configured, generated a random key. Tokens will be invalidated on application restart.");
+            logger.warn(
+                    "No JWT secret configured, generated a random key. Tokens will be invalidated on application restart.");
         }
     }
 

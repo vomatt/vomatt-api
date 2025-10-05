@@ -90,13 +90,6 @@ public class SignupService {
             return basicValidation;
         }
 
-        // Additional phone number validation if provided
-//        if (signupRequest.getPhoneNumber() != null && !signupRequest.getPhoneNumber().trim().isEmpty()) {
-//            if (userRepository.existsByPhoneNumber(signupRequest.getPhoneNumber())) {
-//                return ValidationResult.invalid("Phone number is already in use!");
-//            }
-//        }
-
         return ValidationResult.valid();
     }
 

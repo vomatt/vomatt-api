@@ -5,12 +5,12 @@ import com.vomattapi.application.dto.response.BaseResponse;
 import com.vomattapi.application.dto.response.ErrorCode;
 import com.vomattapi.application.dto.response.PreSignupResponse;
 import com.vomattapi.application.service.ValidationService.ValidationResult;
+import com.vomattapi.infrastructure.constants.CacheConstants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -25,7 +25,6 @@ public class PreSignupService {
     private final ValidationService validationService;
     private final VerificationCodeService verificationCodeService;
     private final EmailService emailService;
-    private static final Duration PRE_SIGNUP_EXPIRY = Duration.ofMinutes(10);
 
     /**
      * Handle complete pre-signup flow Orchestrates validation, verification code generation, storage, and email
@@ -108,7 +107,7 @@ public class PreSignupService {
     private boolean isVerificationInProgress(String email, String username) {
         try {
             String key = email + ":" + username;
-            return verificationCodeService.hasVerificationData("pre_signup", key);
+            return verificationCodeService.hasVerificationData(CacheConstants.PRE_SIGNUP, key);
         } catch (Exception e) {
             log.error("Error checking verification status for email: {}", email, e);
             return false;
@@ -126,8 +125,8 @@ public class PreSignupService {
         preSignupData.put("createdAt", System.currentTimeMillis());
         preSignupData.put("type", "PRE_SIGNUP");
 
-        verificationCodeService.storeVerificationData("pre_signup", email + ":" + username, preSignupData,
-                PRE_SIGNUP_EXPIRY);
+        verificationCodeService.storeVerificationData(CacheConstants.PRE_SIGNUP, email + ":" + username, preSignupData,
+                CacheConstants.PRE_SIGNUP_TTL);
 
         log.debug("Stored pre-signup data for email: {} and username: {}", email, username);
     }
@@ -137,7 +136,7 @@ public class PreSignupService {
      */
     public Map<String, Object> getPreSignupDataByEmail(String email) {
         try {
-            return verificationCodeService.getVerificationData("pre_signup_email", email);
+            return verificationCodeService.getVerificationData(CacheConstants.PRE_SIGNUP_EMAIL, email);
         } catch (Exception e) {
             log.error("Error retrieving pre-signup data for email: {}", email, e);
             return null;
@@ -153,7 +152,7 @@ public class PreSignupService {
         try {
             // Check if pre-signup data exists
             Map<String, Object> preSignupData = getPreSignupDataByEmail(email);
-            Map<String, Map<String, Object>> preSignup = verificationCodeService.getAllCacheObjects("pre_signup", "*");
+            Map<String, Map<String, Object>> preSignup = verificationCodeService.getAllCacheObjects(CacheConstants.PRE_SIGNUP, "*");
             if (preSignupData == null || preSignupData.isEmpty()) {
                 log.warn("No pre-signup data found for email: {}", email);
                 return new BaseResponse(false, ErrorCode.VERIFICATION_CODE_EXPIRED.getCode());

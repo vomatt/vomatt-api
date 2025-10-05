@@ -24,15 +24,15 @@ public interface VoteService {
     
     List<VoteResponse> getVotesByCreator(String creatorId);
     
-    VoteResponse vote(String voteId, VoteRequest request, String memberId, String ipAddress);
-    
-    VoteResponse removeVote(String voteId, String optionId, String memberId);
-    
+    VoteResponse vote(String voteId, VoteRequest request, String userId, String ipAddress);
+
+    VoteResponse removeVote(String voteId, String optionId, String userId);
+
     VoteResultResponse getVoteResults(String voteId);
-    
-    boolean hasUserVoted(String voteId, String memberId);
-    
-    List<String> getUserVoteOptions(String voteId, String memberId);
+
+    boolean hasUserVoted(String voteId, String userId);
+
+    List<String> getUserVoteOptions(String voteId, String userId);
     
     VoteResponse deactivateVote(String voteId, String creatorId);
     

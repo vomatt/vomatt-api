@@ -20,13 +20,13 @@ import org.springframework.web.context.request.WebRequest;
 import com.vomattapi.application.dto.response.ApiResponse;
 import com.vomattapi.application.dto.response.ErrorResponse;
 
-@ControllerAdvice // 改用@ControllerAdvice而不是@RestControllerAdvice
+@ControllerAdvice
 public class GlobalExceptionHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     /**
-     * 处理Bean验证错误（如密码长度不足）
+     * Handle Bean validation errors (e.g., password length issues)
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
@@ -54,7 +54,7 @@ public class GlobalExceptionHandler {
     }
     
     /**
-     * 处理令牌刷新异常
+     * Handle token refresh exceptions
      */
     @ExceptionHandler(TokenRefreshException.class)
     @ResponseStatus(HttpStatus.FORBIDDEN)
@@ -163,17 +163,34 @@ public class GlobalExceptionHandler {
     }
     
     /**
-     * 处理所有其他异常
+     * Handle invalid verification code exceptions
+     */
+    @ExceptionHandler(InvalidVerificationCodeException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    @ResponseBody
+    public ResponseEntity<ApiResponse<Void>> handleInvalidVerificationCode(
+            InvalidVerificationCodeException ex, WebRequest request) {
+
+        logger.warn("Invalid verification code: {}", ex.getMessage());
+
+        ApiResponse<Void> response = ApiResponse.<Void>error("Invalid or expired verification code")
+                .withPath(request.getDescription(false));
+
+        return new ResponseEntity<>(response, HttpStatus.UNAUTHORIZED);
+    }
+
+    /**
+     * Handle all other unhandled exceptions
      */
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     @ResponseBody
     public ResponseEntity<ApiResponse<Void>> handleAllExceptions(Exception ex, WebRequest request) {
         logger.error("Unhandled exception", ex);
-        
+
         ApiResponse<Void> response = ApiResponse.<Void>error("An unexpected error occurred")
                 .withPath(request.getDescription(false));
-        
+
         return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 }

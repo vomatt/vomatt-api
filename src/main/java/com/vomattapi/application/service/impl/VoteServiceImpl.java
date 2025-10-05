@@ -46,7 +46,7 @@ public class VoteServiceImpl implements VoteService {
 
     private final VoteRepository voteRepository;
     private final VoteOptionRepository voteOptionRepository;
-    private final UserVoteRepository memberVoteRepository;
+    private final UserVoteRepository userVoteRepository;
     private final UserRepository userRepository;
     private final VoteConfigurationProperties voteConfig;
     private final ApplicationEventPublisher eventPublisher;
@@ -117,7 +117,7 @@ public class VoteServiceImpl implements VoteService {
     }
 
     @Override
-    public VoteResponse vote(String voteId, VoteRequest request, String memberId, String ipAddress) {
+    public VoteResponse vote(String voteId, VoteRequest request, String userId, String ipAddress) {
         Vote vote = voteRepository.findByIdAndIsActiveTrue(voteId)
             .orElseThrow(() -> new VoteNotFoundException(voteId));
 
@@ -125,11 +125,11 @@ public class VoteServiceImpl implements VoteService {
             throw new VotingNotAllowedException(voteId, "Voting period has ended or not started");
         }
 
-        User user = userRepository.findById(memberId)
-            .orElseThrow(() -> new EntityNotFoundException("User", memberId));
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new EntityNotFoundException("User", userId));
 
         if (!vote.isAllowMultipleChoices()) {
-            memberVoteRepository.deleteByUserIdAndVoteId(memberId, voteId);
+            userVoteRepository.deleteByUserIdAndVoteId(userId, voteId);
             if (request.getOptionIds().size() > 1) {
                 throw new VotingNotAllowedException("Multiple choices not allowed for this vote");
             }
@@ -143,22 +143,22 @@ public class VoteServiceImpl implements VoteService {
                 throw new BusinessRuleViolationException("Option does not belong to this vote");
             }
 
-            if (!memberVoteRepository.existsByUserIdAndVoteIdAndOptionId(memberId, voteId, optionId)) {
+            if (!userVoteRepository.existsByUserIdAndVoteIdAndOptionId(userId, voteId, optionId)) {
                 UserVote userVote = new UserVote(user, vote, option, ipAddress);
-                memberVoteRepository.save(userVote);
+                userVoteRepository.save(userVote);
             }
         }
 
-        log.info("User {} voted on vote {} with options {}", memberId, voteId, request.getOptionIds());
-        
+        log.info("User {} voted on vote {} with options {}", userId, voteId, request.getOptionIds());
+
         // Publish event
-        eventPublisher.publishEvent(new VoteCastEvent(voteId, memberId, request.getOptionIds(), ipAddress));
-        
+        eventPublisher.publishEvent(new VoteCastEvent(voteId, userId, request.getOptionIds(), ipAddress));
+
         return convertToVoteResponse(voteRepository.findById(voteId).get());
     }
 
     @Override
-    public VoteResponse removeVote(String voteId, String optionId, String memberId) {
+    public VoteResponse removeVote(String voteId, String optionId, String userId) {
         Vote vote = voteRepository.findByIdAndIsActiveTrue(voteId)
             .orElseThrow(() -> new VoteNotFoundException(voteId));
 
@@ -166,9 +166,9 @@ public class VoteServiceImpl implements VoteService {
             throw new VotingNotAllowedException(voteId, "Voting period has ended or not started");
         }
 
-        memberVoteRepository.deleteByUserIdAndVoteIdAndOptionId(memberId, voteId, optionId);
-        log.info("User {} removed vote from option {} in vote {}", memberId, optionId, voteId);
-        
+        userVoteRepository.deleteByUserIdAndVoteIdAndOptionId(userId, voteId, optionId);
+        log.info("User {} removed vote from option {} in vote {}", userId, optionId, voteId);
+
         return convertToVoteResponse(voteRepository.findById(voteId).get());
     }
 
@@ -193,7 +193,7 @@ public class VoteServiceImpl implements VoteService {
         response.setTotalVotes(vote.getTotalVotes());
         response.setVotingActive(vote.isVotingActive());
 
-        List<String> uniqueVoterIds = memberVoteRepository.findByVoteId(voteId).stream()
+        List<String> uniqueVoterIds = userVoteRepository.findByVoteId(voteId).stream()
             .map(mv -> mv.getUser().getId())
             .distinct()
             .collect(Collectors.toList());
@@ -238,14 +238,14 @@ public class VoteServiceImpl implements VoteService {
 
     @Override
     @Transactional(readOnly = true)
-    public boolean hasUserVoted(String voteId, String memberId) {
-        return memberVoteRepository.existsByUserIdAndVoteId(memberId, voteId);
+    public boolean hasUserVoted(String voteId, String userId) {
+        return userVoteRepository.existsByUserIdAndVoteId(userId, voteId);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<String> getUserVoteOptions(String voteId, String memberId) {
-        return memberVoteRepository.findByUserIdAndVoteId(memberId, voteId)
+    public List<String> getUserVoteOptions(String voteId, String userId) {
+        return userVoteRepository.findByUserIdAndVoteId(userId, voteId)
             .stream()
             .map(mv -> mv.getOption().getId())
             .collect(Collectors.toList());

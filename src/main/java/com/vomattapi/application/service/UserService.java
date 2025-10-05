@@ -29,11 +29,11 @@ public class UserService {
     private static final int ACCOUNT_LOCK_MINUTES = 30;
 
     /**
-     * Update member profile information
+     * Update user profile information
      */
     @Transactional
-    public User updateProfile(String memberId, String username, String email, String phoneNumber) {
-        User user = findUserById(memberId);
+    public User updateProfile(String userId, String username, String email, String phoneNumber) {
+        User user = findUserById(userId);
         
         boolean changed = false;
         
@@ -65,20 +65,19 @@ public class UserService {
             userRepository.save(user);
             logActivity(user, "PROFILE_UPDATED", "User profile updated");
 
-            // 清除用戶緩存
-            cacheUtil.evictUserCache(memberId);
-            log.debug("Evicted cache for user after profile update: {}", memberId);
+            cacheUtil.evictUserCache(userId);
+            log.debug("Evicted cache for user after profile update: {}", userId);
         }
         
         return user;
     }
 
     /**
-     * Change member password
+     * Change user password
      */
     @Transactional
-    public boolean changePassword(String memberId, String currentPassword, String newPassword) {
-        User user = findUserById(memberId);
+    public boolean changePassword(String userId, String currentPassword, String newPassword) {
+        User user = findUserById(userId);
         
         if (passwordEncoder.matches(currentPassword, user.getVerificationCode())) {
             user.setVerificationCode(passwordEncoder.encode(newPassword));
@@ -87,8 +86,8 @@ public class UserService {
             logActivity(user, "PASSWORD_CHANGED", "Password changed successfully");
 
             // 清除用戶緩存
-            cacheUtil.evictUserCache(memberId);
-            log.debug("Evicted cache for user after password change: {}", memberId);
+            cacheUtil.evictUserCache(userId);
+            log.debug("Evicted cache for user after password change: {}", userId);
 
             return true;
         } else {
@@ -120,61 +119,60 @@ public class UserService {
      * Record successful login
      */
     @Transactional
-    public void recordLogin(String memberId, String ipAddress, String userAgent) {
-        User user = findUserById(memberId);
+    public void recordLogin(String userId, String ipAddress, String userAgent) {
+        User user = findUserById(userId);
         user.recordLogin();
         userRepository.save(user);
-        
+
         logActivity(user, "LOGIN", "Successful login", ipAddress, userAgent);
 
-        // 清除用戶緩存以確保最新的登錄信息
-        cacheUtil.evictUserCache(memberId);
-        log.debug("Evicted cache for user after successful login: {}", memberId);
+        cacheUtil.evictUserCache(userId);
+        log.debug("Evicted cache for user after successful login: {}", userId);
     }
 
     /**
-     * Get member by ID with caching
+     * Get user by ID with caching
      */
-    public User getUserById(String memberId) {
-        return cacheUtil.cacheUserData(memberId, CacheUtil.CacheKeys.USER_PROFILE, User.class,
-            () -> findUserById(memberId));
+    public User getUserById(String userId) {
+        return cacheUtil.cacheUserData(userId, CacheUtil.CacheKeys.USER_PROFILE, User.class,
+            () -> findUserById(userId));
     }
 
     /**
-     * Get member by email with caching
+     * Get user by email with caching
      */
     public User getUserByEmail(String email) {
-        String cacheKey = "member:email:" + email;
+        String cacheKey = "user:email:" + email;
         return cacheUtil.getOrSet(cacheKey, User.class,
             () -> userRepository.findByEmail(email).orElse(null));
     }
 
     /**
-     * Get member by username with caching
+     * Get user by username with caching
      */
     public User getUserByUsername(String username) {
-        String cacheKey = "member:username:" + username;
+        String cacheKey = "user:username:" + username;
         return cacheUtil.getOrSet(cacheKey, User.class,
             () -> userRepository.findByUsername(username).orElse(null));
     }
 
     /**
-     * Helper method to find member by ID or throw exception
+     * Helper method to find user by ID or throw exception
      */
-    private User findUserById(String memberId) {
-        return userRepository.findById(memberId)
-                .orElseThrow(() -> new RuntimeException("User not found with id: " + memberId));
+    private User findUserById(String userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found with id: " + userId));
     }
 
     /**
-     * Log member activity
+     * Log user activity
      */
     private void logActivity(User user, String activityType, String description) {
         logActivity(user, activityType, description, null, null);
     }
 
     /**
-     * Log member activity with IP and user agent
+     * Log user activity with IP and user agent
      */
     private void logActivity(User user, String activityType, String description, String ipAddress, String userAgent) {
         UserActivity activity = new UserActivity(user, activityType, description, ipAddress, userAgent);

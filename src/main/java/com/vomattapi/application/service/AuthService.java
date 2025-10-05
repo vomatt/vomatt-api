@@ -2,13 +2,11 @@ package com.vomattapi.application.service;
 
 import com.vomattapi.application.exception.EntityNotFoundException;
 import com.vomattapi.domain.user.User;
-import com.vomattapi.infrastructure.redis.CacheKeyUtil;
+import com.vomattapi.infrastructure.constants.CacheConstants;
 import com.vomattapi.infrastructure.redis.RedisService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-
-import java.time.Duration;
 
 /**
  * Service responsible for authentication-related operations
@@ -40,10 +38,10 @@ public class AuthService {
             // Generate verification code
             String verificationCode = verificationCodeService.generateVerificationCode();
 
-            // Store in Redis with 10 minute expiration
-            redisService.set("verification_code", email, verificationCode, Duration.ofMinutes(10));
+            // Store in Redis with configured expiration
+            redisService.set(CacheConstants.VERIFICATION_CODE, email, verificationCode, CacheConstants.VERIFICATION_CODE_TTL);
 
-            // Update member's verification code (if needed for existing flow)
+            // Update user's verification code (if needed for existing flow)
             boolean isChanged = userService.changeVerificationCode(email, verificationCode);
 
             if (isChanged) {
@@ -66,12 +64,12 @@ public class AuthService {
      */
     public boolean verificationCode(String email, String providedCode) {
         try {
-            String storedCode = redisService.get("verification_code", email, String.class);
+            String storedCode = redisService.get(CacheConstants.VERIFICATION_CODE, email, String.class);
             boolean isValid = storedCode != null && storedCode.equals(providedCode);
-            
+
             if (isValid) {
                 // Clear the used verification code
-                redisService.delete("verification_code", email);
+                redisService.delete(CacheConstants.VERIFICATION_CODE, email);
                 log.info("Verification code verified successfully for email: {}", email);
             } else {
                 log.warn("Invalid verification code provided for email: {}", email);

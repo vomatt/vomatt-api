@@ -13,17 +13,17 @@ import com.vomattapi.domain.vote.UserVote;
 @Repository
 public interface UserVoteRepository extends JpaRepository<UserVote, Long> {
     
-    List<UserVote> findByUserIdAndVoteId(String memberId, String voteId);
-    
-    List<UserVote> findByUserId(String memberId);
-    
+    List<UserVote> findByUserIdAndVoteId(String userId, String voteId);
+
+    List<UserVote> findByUserId(String userId);
+
     List<UserVote> findByVoteId(String voteId);
-    
-    boolean existsByUserIdAndVoteId(String memberId, String voteId);
-    
-    boolean existsByUserIdAndVoteIdAndOptionId(String memberId, String voteId, String optionId);
-    
-    Optional<UserVote> findByUserIdAndVoteIdAndOptionId(String memberId, String voteId, String optionId);
+
+    boolean existsByUserIdAndVoteId(String userId, String voteId);
+
+    boolean existsByUserIdAndVoteIdAndOptionId(String userId, String voteId, String optionId);
+
+    Optional<UserVote> findByUserIdAndVoteIdAndOptionId(String userId, String voteId, String optionId);
     
     @Query("SELECT COUNT(mv) FROM UserVote mv WHERE mv.vote.id = :voteId")
     long countByVoteId(@Param("voteId") String voteId);
@@ -31,7 +31,7 @@ public interface UserVoteRepository extends JpaRepository<UserVote, Long> {
     @Query("SELECT COUNT(mv) FROM UserVote mv WHERE mv.option.id = :optionId")
     long countByOptionId(@Param("optionId") String optionId);
     
-    void deleteByUserIdAndVoteId(String memberId, String voteId);
-    
-    void deleteByUserIdAndVoteIdAndOptionId(String memberId, String voteId, String optionId);
+    void deleteByUserIdAndVoteId(String userId, String voteId);
+
+    void deleteByUserIdAndVoteIdAndOptionId(String userId, String voteId, String optionId);
 }

@@ -169,6 +169,40 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Handle vote not found exceptions
+     */
+    @ExceptionHandler(VoteNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    @ResponseBody
+    public ResponseEntity<ApiResponse<Void>> handleVoteNotFoundException(
+            VoteNotFoundException ex, WebRequest request) {
+
+        logger.warn("Vote not found: {}", ex.getMessage());
+
+        ApiResponse<Void> response = ApiResponse.<Void>error(ErrorCode.VOTE_NOT_FOUND, ex.getMessage())
+                .withPath(request.getDescription(false));
+
+        return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
+    }
+
+    /**
+     * Handle voting not allowed exceptions
+     */
+    @ExceptionHandler(VotingNotAllowedException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    @ResponseBody
+    public ResponseEntity<ApiResponse<Void>> handleVotingNotAllowedException(
+            VotingNotAllowedException ex, WebRequest request) {
+
+        logger.warn("Voting not allowed: {}", ex.getMessage());
+
+        ApiResponse<Void> response = ApiResponse.<Void>error(ErrorCode.VOTING_NOT_ALLOWED, ex.getMessage())
+                .withPath(request.getDescription(false));
+
+        return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+    }
+
+    /**
      * Handle all other unhandled exceptions
      */
     @ExceptionHandler(Exception.class)

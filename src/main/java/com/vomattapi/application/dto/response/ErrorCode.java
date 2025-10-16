@@ -46,7 +46,19 @@ public enum ErrorCode {
     BUSINESS_RULE_VIOLATION("BUSINESS_RULE_VIOLATION", "Business rule validation failed"),
     UNAUTHORIZED_OPERATION("UNAUTHORIZED_OPERATION", "You are not authorized to perform this operation"),
     ACCESS_DENIED("ACCESS_DENIED", "Access denied"),
-    INVALID_CREDENTIALS("INVALID_CREDENTIALS", "Invalid credentials provided");
+    INVALID_CREDENTIALS("INVALID_CREDENTIALS", "Invalid credentials provided"),
+
+    // Vote-specific errors
+    VOTE_NOT_FOUND("VOTE_NOT_FOUND", "Vote not found"),
+    VOTE_OPTION_NOT_FOUND("VOTE_OPTION_NOT_FOUND", "Vote option not found"),
+    VOTE_INSUFFICIENT_OPTIONS("VOTE_INSUFFICIENT_OPTIONS", "Minimum number of options required"),
+    VOTE_TOO_MANY_OPTIONS("VOTE_TOO_MANY_OPTIONS", "Maximum number of options exceeded"),
+    VOTE_INVALID_TIME("VOTE_INVALID_TIME", "Invalid vote time configuration"),
+    VOTE_EXPIRED("VOTE_EXPIRED", "Vote has expired"),
+    VOTE_NOT_STARTED("VOTE_NOT_STARTED", "Vote has not started yet"),
+    VOTING_NOT_ALLOWED("VOTING_NOT_ALLOWED", "Voting is not allowed"),
+    MULTIPLE_CHOICES_NOT_ALLOWED("MULTIPLE_CHOICES_NOT_ALLOWED", "Multiple choices not allowed for this vote"),
+    VOTE_OPTION_MISMATCH("VOTE_OPTION_MISMATCH", "Vote option does not belong to this vote");
 
 
     private final String code;

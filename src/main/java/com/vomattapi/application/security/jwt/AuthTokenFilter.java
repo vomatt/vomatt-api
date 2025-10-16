@@ -31,6 +31,9 @@ public class AuthTokenFilter extends OncePerRequestFilter {
     @Autowired
     private UserDetailsServiceImpl memberDetailsService;
 
+    @Autowired
+    private com.vomattapi.application.service.JwtBlacklistService jwtBlacklistService;
+
     private static final Logger logger = LoggerFactory.getLogger(AuthTokenFilter.class);
 
     // 定義不需要身份驗證的路徑，保持与WebSecurityConfig一致
@@ -39,7 +42,7 @@ public class AuthTokenFilter extends OncePerRequestFilter {
         "/api/auth/signup",
         "/api/auth/pre-signup",
         "/api/auth/resend-verification",
-        "/api/auth/refreshtoken",
+        "/api/auth/refreshToken",
         "/api/auth/generateVerificationCode",
         "/api/public/**",
         "/swagger-ui/**",
@@ -98,19 +101,25 @@ public class AuthTokenFilter extends OncePerRequestFilter {
                 logger.debug("JWT token: {}", jwt != null ? "present" : "not present");
 
                 if (jwt != null && jwtUtils.validateJwtToken(jwt)) {
-                    String username = jwtUtils.getUserNameFromJwtToken(jwt);
-                    logger.debug("Username from JWT: {}", username);
+                    // Check if token is blacklisted
+                    if (jwtBlacklistService.isTokenBlacklisted(jwt)) {
+                        logger.warn("Attempted to use blacklisted token");
+                        // Don't authenticate - token is invalidated
+                    } else {
+                        String username = jwtUtils.getUserNameFromJwtToken(jwt);
+                        logger.debug("Username from JWT: {}", username);
 
-                    UserDetails userDetails = memberDetailsService.loadUserByUsername(username);
-                    UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken(
-                                    userDetails,
-                                    null,
-                                    userDetails.getAuthorities());
-                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                        UserDetails userDetails = memberDetailsService.loadUserByUsername(username);
+                        UsernamePasswordAuthenticationToken authentication =
+                                new UsernamePasswordAuthenticationToken(
+                                        userDetails,
+                                        null,
+                                        userDetails.getAuthorities());
+                        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
-                    logger.debug("User authenticated successfully");
+                        SecurityContextHolder.getContext().setAuthentication(authentication);
+                        logger.debug("User authenticated successfully");
+                    }
                 }
             }
         } catch (Exception e) {

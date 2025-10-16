@@ -35,7 +35,18 @@ public enum ErrorCode {
     GENERATE_VERIFICATION_CODE_FAILED("GENERATE_VERIFICATION_CODE_FAILED", "Failed to generate verification code"),
     INVALID_VERIFICATION_CODE("INVALID_VERIFICATION_CODE", "Invalid verification code"),
     USER_NOT_FOUND("USER_NOT_FOUND", "User not found"),
-    AUTHENTICATION_FAILED("AUTHENTICATION_FAILED", "Authentication failed");
+    AUTHENTICATION_FAILED("AUTHENTICATION_FAILED", "Authentication failed"),
+
+    // Validation and token errors
+    VALIDATION_ERROR("VALIDATION_ERROR", "Request validation failed"),
+    TOKEN_REFRESH_FAILED("TOKEN_REFRESH_FAILED", "Token refresh failed"),
+
+    // General errors
+    ENTITY_NOT_FOUND("ENTITY_NOT_FOUND", "The requested entity was not found"),
+    BUSINESS_RULE_VIOLATION("BUSINESS_RULE_VIOLATION", "Business rule validation failed"),
+    UNAUTHORIZED_OPERATION("UNAUTHORIZED_OPERATION", "You are not authorized to perform this operation"),
+    ACCESS_DENIED("ACCESS_DENIED", "Access denied"),
+    INVALID_CREDENTIALS("INVALID_CREDENTIALS", "Invalid credentials provided");
 
 
     private final String code;

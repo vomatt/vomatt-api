@@ -63,6 +63,7 @@ public class AuthController {
     private final UserDetailsServiceImpl userDetailsService;
     private final PreSignupService preSignupService;
     private final SignupService signupService;
+    private final com.vomattapi.application.service.JwtBlacklistService jwtBlacklistService;
 
     @PostMapping("/signin")
     @RateLimiter(name = "login")
@@ -192,12 +193,12 @@ public class AuthController {
         }
     }
 
-    @PostMapping("/refreshtoken")
+    @PostMapping("/refreshToken")
     @Operation(summary = "刷新令牌", description = "使用刷新令牌獲取新的訪問令牌")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "令牌刷新成功", content = @Content(schema = @Schema(implementation = TokenRefreshResponse.class))),
             @ApiResponse(responseCode = "403", description = "刷新令牌無效或已過期") })
-    public ResponseEntity<?> refreshtoken(
+    public ResponseEntity<?> refreshToken(
             @Parameter(description = "刷新令牌請求") @Valid @RequestBody TokenRefreshRequest request) {
         String requestRefreshToken = request.getRefreshToken();
 
@@ -221,6 +222,49 @@ public class AuthController {
 
         refreshTokenService.deleteByUserId(userId);
         return ResponseEntity.ok(new MessageResponse("Log out successful!"));
+    }
+
+    @PostMapping("/force-expire-token")
+    @Operation(summary = "強制使JWT令牌過期", description = "立即使當前JWT令牌失效，並清除刷新令牌。用於安全登出或強制終止會話。")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "令牌已成功失效", content = @Content(schema = @Schema(implementation = com.vomattapi.application.dto.response.ApiResponse.class))),
+            @ApiResponse(responseCode = "401", description = "未認證或無效令牌") })
+    public ResponseEntity<com.vomattapi.application.dto.response.ApiResponse<Void>> forceExpireToken(
+            jakarta.servlet.http.HttpServletRequest request) {
+        try {
+            // Extract JWT from request header
+            String headerAuth = request.getHeader("Authorization");
+            if (headerAuth != null && headerAuth.startsWith("Bearer ")) {
+                String jwt = headerAuth.substring(7);
+
+                // Get remaining expiration time
+                long remainingMs = jwtUtils.getRemainingExpirationMs(jwt);
+
+                // Add token to blacklist
+                jwtBlacklistService.blacklistToken(jwt, remainingMs);
+
+                // Also delete refresh token for the user
+                Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+                if (authentication != null && authentication.getPrincipal() instanceof UserDetailsImpl) {
+                    UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+                    refreshTokenService.deleteByUserId(userDetails.getId());
+                }
+
+                log.info("JWT token forcefully expired");
+                return ResponseEntity.ok(
+                    com.vomattapi.application.dto.response.ApiResponse.<Void>success("Token successfully invalidated")
+                );
+            } else {
+                return ResponseEntity.status(401).body(
+                    com.vomattapi.application.dto.response.ApiResponse.<Void>error(ErrorCode.INVALID_CREDENTIALS, "No valid token found")
+                );
+            }
+        } catch (Exception e) {
+            log.error("Failed to force expire token", e);
+            return ResponseEntity.status(500).body(
+                com.vomattapi.application.dto.response.ApiResponse.<Void>error(ErrorCode.INTERNAL_ERROR)
+            );
+        }
     }
 
     @GetMapping("/generateVerificationCode")

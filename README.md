@@ -197,7 +197,7 @@ docker run -p 8080:8080 \
   - 驗證用戶名、電子郵件和手機號碼的唯一性
   - 自動分配基本用戶角色
 
-- `POST /api/auth/refreshtoken` - 刷新 JWT 令牌
+- `POST /api/auth/refreshToken` - 刷新 JWT 令牌
   - 使用刷新令牌獲取新的訪問令牌
   - 驗證刷新令牌的有效性和到期時間
 

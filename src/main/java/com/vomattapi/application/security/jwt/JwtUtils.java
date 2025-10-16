@@ -81,6 +81,21 @@ public class JwtUtils {
                 .getSubject();
     }
 
+    public Date getExpirationDateFromJwtToken(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(key)
+                .build()
+                .parseClaimsJws(token)
+                .getBody()
+                .getExpiration();
+    }
+
+    public long getRemainingExpirationMs(String token) {
+        Date expiration = getExpirationDateFromJwtToken(token);
+        long currentTime = System.currentTimeMillis();
+        return Math.max(0, expiration.getTime() - currentTime);
+    }
+
     public boolean validateJwtToken(String authToken) {
         try {
             Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(authToken);

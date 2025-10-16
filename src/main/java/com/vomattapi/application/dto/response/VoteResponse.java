@@ -6,7 +6,7 @@ import java.util.List;
 import lombok.Data;
 
 @Data
-public class VoteResponse {
+public class VoteResponse extends BaseResponse {
     
     private String id;
     private String title;

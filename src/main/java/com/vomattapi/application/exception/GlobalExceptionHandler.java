@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.context.request.WebRequest;
 
 import com.vomattapi.application.dto.response.ApiResponse;
-import com.vomattapi.application.dto.response.ErrorResponse;
+import com.vomattapi.application.dto.response.ErrorCode;
 
 @ControllerAdvice
 public class GlobalExceptionHandler {
@@ -31,26 +31,22 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     @ResponseBody
-    public ResponseEntity<ErrorResponse> handleValidationExceptions(
+    public ResponseEntity<ApiResponse<Map<String, String>>> handleValidationExceptions(
             MethodArgumentNotValidException ex, WebRequest request) {
-        
+
         Map<String, String> errors = new HashMap<>();
         ex.getBindingResult().getAllErrors().forEach(error -> {
             String fieldName = ((FieldError) error).getField();
             String errorMessage = error.getDefaultMessage();
             errors.put(fieldName, errorMessage);
         });
-        
+
         logger.debug("Validation error: {}", errors);
-        
-        ErrorResponse errorResponse = new ErrorResponse(
-                HttpStatus.BAD_REQUEST.value(),
-                "Validation failed",
-                errors,
-                request.getDescription(false)
-        );
-        
-        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+
+        ApiResponse<Map<String, String>> response = ApiResponse.<Map<String, String>>error(ErrorCode.VALIDATION_ERROR, errors)
+                .withPath(request.getDescription(false));
+
+        return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
     }
     
     /**
@@ -59,22 +55,15 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(TokenRefreshException.class)
     @ResponseStatus(HttpStatus.FORBIDDEN)
     @ResponseBody
-    public ResponseEntity<ErrorResponse> handleTokenRefreshException(
+    public ResponseEntity<ApiResponse<Void>> handleTokenRefreshException(
             TokenRefreshException ex, WebRequest request) {
-        
+
         logger.error("Token refresh error: {}", ex.getMessage());
-        
-        Map<String, String> errors = new HashMap<>();
-        errors.put("refreshToken", ex.getMessage());
-        
-        ErrorResponse errorResponse = new ErrorResponse(
-                HttpStatus.FORBIDDEN.value(),
-                "Token refresh failed",
-                errors,
-                request.getDescription(false)
-        );
-        
-        return new ResponseEntity<>(errorResponse, HttpStatus.FORBIDDEN);
+
+        ApiResponse<Void> response = ApiResponse.<Void>error(ErrorCode.TOKEN_REFRESH_FAILED, ex.getMessage())
+                .withPath(request.getDescription(false));
+
+        return new ResponseEntity<>(response, HttpStatus.FORBIDDEN);
     }
     
     /**
@@ -87,8 +76,8 @@ public class GlobalExceptionHandler {
             EntityNotFoundException ex, WebRequest request) {
         
         logger.warn("Entity not found: {}", ex.getMessage());
-        
-        ApiResponse<Void> response = ApiResponse.<Void>error(ex.getMessage())
+
+        ApiResponse<Void> response = ApiResponse.<Void>error(ErrorCode.ENTITY_NOT_FOUND, ex.getMessage())
                 .withPath(request.getDescription(false));
         
         return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
@@ -104,8 +93,8 @@ public class GlobalExceptionHandler {
             BusinessRuleViolationException ex, WebRequest request) {
         
         logger.warn("Business rule violation: {}", ex.getMessage());
-        
-        ApiResponse<Void> response = ApiResponse.<Void>error(ex.getMessage())
+
+        ApiResponse<Void> response = ApiResponse.<Void>error(ErrorCode.BUSINESS_RULE_VIOLATION, ex.getMessage())
                 .withPath(request.getDescription(false));
         
         return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
@@ -121,8 +110,8 @@ public class GlobalExceptionHandler {
             UnauthorizedOperationException ex, WebRequest request) {
         
         logger.warn("Unauthorized operation: {}", ex.getMessage());
-        
-        ApiResponse<Void> response = ApiResponse.<Void>error(ex.getMessage())
+
+        ApiResponse<Void> response = ApiResponse.<Void>error(ErrorCode.UNAUTHORIZED_OPERATION, ex.getMessage())
                 .withPath(request.getDescription(false));
         
         return new ResponseEntity<>(response, HttpStatus.FORBIDDEN);
@@ -138,8 +127,8 @@ public class GlobalExceptionHandler {
             AccessDeniedException ex, WebRequest request) {
         
         logger.warn("Access denied: {}", ex.getMessage());
-        
-        ApiResponse<Void> response = ApiResponse.<Void>error("Access denied")
+
+        ApiResponse<Void> response = ApiResponse.<Void>error(ErrorCode.ACCESS_DENIED)
                 .withPath(request.getDescription(false));
         
         return new ResponseEntity<>(response, HttpStatus.FORBIDDEN);
@@ -155,8 +144,8 @@ public class GlobalExceptionHandler {
             BadCredentialsException ex, WebRequest request) {
         
         logger.warn("Bad credentials: {}", ex.getMessage());
-        
-        ApiResponse<Void> response = ApiResponse.<Void>error("Invalid credentials")
+
+        ApiResponse<Void> response = ApiResponse.<Void>error(ErrorCode.INVALID_CREDENTIALS)
                 .withPath(request.getDescription(false));
         
         return new ResponseEntity<>(response, HttpStatus.UNAUTHORIZED);
@@ -173,7 +162,7 @@ public class GlobalExceptionHandler {
 
         logger.warn("Invalid verification code: {}", ex.getMessage());
 
-        ApiResponse<Void> response = ApiResponse.<Void>error("Invalid or expired verification code")
+        ApiResponse<Void> response = ApiResponse.<Void>error(ErrorCode.INVALID_VERIFICATION_CODE)
                 .withPath(request.getDescription(false));
 
         return new ResponseEntity<>(response, HttpStatus.UNAUTHORIZED);
@@ -188,7 +177,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleAllExceptions(Exception ex, WebRequest request) {
         logger.error("Unhandled exception", ex);
 
-        ApiResponse<Void> response = ApiResponse.<Void>error("An unexpected error occurred")
+        ApiResponse<Void> response = ApiResponse.<Void>error(ErrorCode.INTERNAL_ERROR)
                 .withPath(request.getDescription(false));
 
         return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);

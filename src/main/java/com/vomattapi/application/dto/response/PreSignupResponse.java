@@ -13,27 +13,27 @@ import lombok.NoArgsConstructor;
 public class PreSignupResponse {
     private boolean success;
     private String message;
-    private String errorCode; // Error code for frontend i18n
+    private String errorType; // Error type for frontend i18n
     private String sessionKey; // For tracking the pre-signup session
     private long expirationMinutes; // How long the verification code is valid
-    
+
     // Success response constructor
     public static PreSignupResponse success(String sessionKey, long expirationMinutes) {
-        return new PreSignupResponse(true, ErrorCode.SUCCESS.getDefaultMessage(),
-                                   ErrorCode.SUCCESS.getCode(), sessionKey, expirationMinutes);
+        return new PreSignupResponse(true, ErrorType.SUCCESS.getDefaultMessage(),
+                                   ErrorType.SUCCESS.getCode(), sessionKey, expirationMinutes);
     }
-    
-    // Error response constructor  
-    public static PreSignupResponse error(ErrorCode errorCode) {
-        return new PreSignupResponse(false, errorCode.getDefaultMessage(),
-                                   errorCode.getCode(), null, 0);
+
+    // Error response constructor
+    public static PreSignupResponse error(ErrorType errorType) {
+        return new PreSignupResponse(false, errorType.getDefaultMessage(),
+                                   errorType.getCode(), null, 0);
     }
-    
+
     // Backward compatibility constructor
     public PreSignupResponse(boolean success, String message, String sessionKey, long expirationMinutes) {
         this.success = success;
         this.message = message;
-        this.errorCode = success ? ErrorCode.SUCCESS.getCode() : ErrorCode.INTERNAL_ERROR.getCode();
+        this.errorType = success ? ErrorType.SUCCESS.getCode() : ErrorType.INTERNAL_ERROR.getCode();
         this.sessionKey = sessionKey;
         this.expirationMinutes = expirationMinutes;
     }

@@ -11,28 +11,28 @@ import lombok.Data;
 public class ApiResponse<T> {
 
     private boolean success;
-    private String errorCode;
+    private String errorType;
     private T data;
     private String message;
     private LocalDateTime timestamp;
     private String path;
-    
+
     public ApiResponse() {
         this.timestamp = LocalDateTime.now();
     }
-    
+
     public ApiResponse(boolean success, T data, String message) {
         this();
         this.success = success;
         this.data = data;
         this.message = message;
-        this.errorCode = success ? ErrorCode.SUCCESS.getCode() : null;
+        this.errorType = success ? ErrorType.SUCCESS.getCode() : null;
     }
 
-    public ApiResponse(boolean success, String errorCode, T data, String message) {
+    public ApiResponse(boolean success, String errorType, T data, String message) {
         this();
         this.success = success;
-        this.errorCode = errorCode;
+        this.errorType = errorType;
         this.data = data;
         this.message = message;
     }
@@ -40,44 +40,44 @@ public class ApiResponse<T> {
     // Success responses
     public static <T> ApiResponse<T> success(T data) {
         ApiResponse<T> response = new ApiResponse<>(true, data, null);
-        response.setErrorCode(ErrorCode.SUCCESS.getCode());
+        response.setErrorType(ErrorType.SUCCESS.getCode());
         return response;
     }
 
     public static <T> ApiResponse<T> success(T data, String message) {
         ApiResponse<T> response = new ApiResponse<>(true, data, message);
-        response.setErrorCode(ErrorCode.SUCCESS.getCode());
+        response.setErrorType(ErrorType.SUCCESS.getCode());
         return response;
     }
 
     public static <T> ApiResponse<T> success(String message) {
         ApiResponse<T> response = new ApiResponse<>(true, null, message);
-        response.setErrorCode(ErrorCode.SUCCESS.getCode());
+        response.setErrorType(ErrorType.SUCCESS.getCode());
         return response;
     }
 
-    // Error responses with ErrorCode enum
-    public static <T> ApiResponse<T> error(ErrorCode errorCode) {
-        return new ApiResponse<>(false, errorCode.getCode(), null, errorCode.getDefaultMessage());
+    // Error responses with ErrorType enum
+    public static <T> ApiResponse<T> error(ErrorType errorType) {
+        return new ApiResponse<>(false, errorType.getCode(), null, errorType.getDefaultMessage());
     }
 
-    public static <T> ApiResponse<T> error(ErrorCode errorCode, String customMessage) {
-        return new ApiResponse<>(false, errorCode.getCode(), null, customMessage);
+    public static <T> ApiResponse<T> error(ErrorType errorType, String customMessage) {
+        return new ApiResponse<>(false, errorType.getCode(), null, customMessage);
     }
 
-    public static <T> ApiResponse<T> error(ErrorCode errorCode, T data) {
-        return new ApiResponse<>(false, errorCode.getCode(), data, errorCode.getDefaultMessage());
+    public static <T> ApiResponse<T> error(ErrorType errorType, T data) {
+        return new ApiResponse<>(false, errorType.getCode(), data, errorType.getDefaultMessage());
     }
 
     // Legacy error responses (for backward compatibility)
     public static <T> ApiResponse<T> error(String message) {
-        return new ApiResponse<>(false, ErrorCode.INTERNAL_ERROR.getCode(), null, message);
+        return new ApiResponse<>(false, ErrorType.INTERNAL_ERROR.getCode(), null, message);
     }
 
     public static <T> ApiResponse<T> error(T data, String message) {
-        return new ApiResponse<>(false, ErrorCode.INTERNAL_ERROR.getCode(), data, message);
+        return new ApiResponse<>(false, ErrorType.INTERNAL_ERROR.getCode(), data, message);
     }
-    
+
     public ApiResponse<T> withPath(String path) {
         this.path = path;
         return this;

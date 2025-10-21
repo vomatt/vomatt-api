@@ -7,7 +7,7 @@ import com.vomattapi.application.dto.request.TokenRefreshRequest;
 import com.vomattapi.application.dto.response.BaseResponse;
 import com.vomattapi.application.dto.response.JwtResponse;
 import com.vomattapi.application.dto.response.MessageResponse;
-import com.vomattapi.application.dto.response.ErrorCode;
+import com.vomattapi.application.dto.response.ErrorType;
 import com.vomattapi.application.dto.response.PreSignupResponse;
 import com.vomattapi.application.dto.response.TokenRefreshResponse;
 import com.vomattapi.application.exception.EntityNotFoundException;
@@ -81,7 +81,7 @@ public class AuthController {
 
             if (!isCodeValid) {
                 log.warn("Invalid verification code for email: {}", loginRequest.getEmail());
-                return ResponseEntity.status(401).body(new BaseResponse(false, ErrorCode.INVALID_VERIFICATION_CODE.getCode()));
+                return ResponseEntity.status(401).body(new BaseResponse(false, ErrorType.INVALID_VERIFICATION_CODE.getCode()));
             }
 
             // Find user by email
@@ -89,7 +89,7 @@ public class AuthController {
 
             if (userDetails == null) {
                 log.warn("User not found for email: {}", loginRequest.getEmail());
-                return ResponseEntity.status(401).body(new BaseResponse(false, ErrorCode.USER_NOT_FOUND.getCode()));
+                return ResponseEntity.status(401).body(new BaseResponse(false, ErrorType.USER_NOT_FOUND.getCode()));
             }
 
             // Create authentication token manually since verification code is valid
@@ -116,7 +116,7 @@ public class AuthController {
 
         } catch (Exception e) {
             log.error("Authentication failed for email: {}", loginRequest.getEmail(), e);
-            return ResponseEntity.status(401).body(new BaseResponse(false, ErrorCode.AUTHENTICATION_FAILED.getCode()));
+            return ResponseEntity.status(401).body(new BaseResponse(false, ErrorType.AUTHENTICATION_FAILED.getCode()));
         }
     }
 
@@ -144,7 +144,7 @@ public class AuthController {
         } catch (Exception e) {
             log.error("Pre-signup request failed for email: {}", request.getEmail(), e);
             return ResponseEntity.internalServerError()
-                    .body(new BaseResponse(false, ErrorCode.INTERNAL_ERROR.getCode()));
+                    .body(new BaseResponse(false, ErrorType.INTERNAL_ERROR.getCode()));
         }
     }
 
@@ -171,7 +171,7 @@ public class AuthController {
         } catch (Exception e) {
             log.error("Resend verification code failed for email: {}", email, e);
             return ResponseEntity.internalServerError()
-                    .body(new BaseResponse(false, ErrorCode.INTERNAL_ERROR.getCode()));
+                    .body(new BaseResponse(false, ErrorType.INTERNAL_ERROR.getCode()));
         }
     }
 
@@ -192,12 +192,12 @@ public class AuthController {
             } else {
                 return ResponseEntity.badRequest().body(
                         com.vomattapi.application.dto.response.ApiResponse.<Void>error(
-                                result.getErrorCode(), result.getErrorMessage()));
+                                result.getErrorType(), result.getErrorMessage()));
             }
         } catch (Exception e) {
             log.error("Signup failed", e);
             return ResponseEntity.internalServerError().body(
-                    com.vomattapi.application.dto.response.ApiResponse.<Void>error(ErrorCode.INTERNAL_ERROR));
+                    com.vomattapi.application.dto.response.ApiResponse.<Void>error(ErrorType.INTERNAL_ERROR));
         }
     }
 
@@ -264,13 +264,13 @@ public class AuthController {
                 );
             } else {
                 return ResponseEntity.status(401).body(
-                    com.vomattapi.application.dto.response.ApiResponse.<Void>error(ErrorCode.INVALID_CREDENTIALS, "No valid token found")
+                    com.vomattapi.application.dto.response.ApiResponse.<Void>error(ErrorType.INVALID_CREDENTIALS, "No valid token found")
                 );
             }
         } catch (Exception e) {
             log.error("Failed to force expire token", e);
             return ResponseEntity.status(500).body(
-                com.vomattapi.application.dto.response.ApiResponse.<Void>error(ErrorCode.INTERNAL_ERROR)
+                com.vomattapi.application.dto.response.ApiResponse.<Void>error(ErrorType.INTERNAL_ERROR)
             );
         }
     }
@@ -290,11 +290,11 @@ public class AuthController {
             if (verificationCode != null) {
                 return ResponseEntity.ok(new BaseResponse(true));
             } else {
-                return ResponseEntity.badRequest().body(new BaseResponse(false, ErrorCode.GENERATE_VERIFICATION_CODE_FAILED.getCode()));
+                return ResponseEntity.badRequest().body(new BaseResponse(false, ErrorType.GENERATE_VERIFICATION_CODE_FAILED.getCode()));
             }
         } catch (EntityNotFoundException e) {
             log.warn("User not found for email: {}", email);
-            return ResponseEntity.internalServerError().body(new BaseResponse(false, ErrorCode.USER_NOT_FOUND.getCode()));
+            return ResponseEntity.internalServerError().body(new BaseResponse(false, ErrorType.USER_NOT_FOUND.getCode()));
         }
     }
 }

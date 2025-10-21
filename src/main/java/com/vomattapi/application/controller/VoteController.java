@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.vomattapi.application.dto.request.CreateVoteRequest;
 import com.vomattapi.application.dto.request.VoteRequest;
 import com.vomattapi.application.dto.response.ApiResponse;
-import com.vomattapi.application.dto.response.ErrorCode;
+import com.vomattapi.application.dto.response.ErrorType;
 import com.vomattapi.application.dto.response.MessageResponse;
 import com.vomattapi.application.dto.response.VoteResponse;
 import com.vomattapi.application.dto.response.VoteResultResponse;
@@ -70,7 +70,7 @@ public class VoteController {
         } catch (Exception e) {
             log.error("Failed to create vote", e);
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error(ErrorCode.BUSINESS_RULE_VIOLATION, e.getMessage()));
+                    .body(ApiResponse.error(ErrorType.BUSINESS_RULE_VIOLATION, e.getMessage()));
         }
     }
 
@@ -89,7 +89,7 @@ public class VoteController {
         } catch (Exception e) {
             log.error("Failed to get vote: {}", voteId, e);
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ApiResponse.error(ErrorCode.VOTE_NOT_FOUND, e.getMessage()));
+                    .body(ApiResponse.error(ErrorType.VOTE_NOT_FOUND, e.getMessage()));
         }
     }
 
@@ -106,7 +106,7 @@ public class VoteController {
         } catch (Exception e) {
             log.error("Failed to get active votes", e);
             return ResponseEntity.internalServerError()
-                    .body(ApiResponse.error(ErrorCode.INTERNAL_ERROR));
+                    .body(ApiResponse.error(ErrorType.INTERNAL_ERROR));
         }
     }
 
@@ -126,7 +126,7 @@ public class VoteController {
         } catch (Exception e) {
             log.error("Failed to get user votes", e);
             return ResponseEntity.internalServerError()
-                    .body(ApiResponse.error(ErrorCode.INTERNAL_ERROR));
+                    .body(ApiResponse.error(ErrorType.INTERNAL_ERROR));
         }
     }
 
@@ -156,7 +156,7 @@ public class VoteController {
         } catch (Exception e) {
             log.error("Failed to cast vote", e);
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error(ErrorCode.VOTING_NOT_ALLOWED, e.getMessage()));
+                    .body(ApiResponse.error(ErrorType.VOTING_NOT_ALLOWED, e.getMessage()));
         }
     }
 
@@ -184,7 +184,7 @@ public class VoteController {
         } catch (Exception e) {
             log.error("Failed to remove vote", e);
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error(ErrorCode.VOTING_NOT_ALLOWED, e.getMessage()));
+                    .body(ApiResponse.error(ErrorType.VOTING_NOT_ALLOWED, e.getMessage()));
         }
     }
 
@@ -203,7 +203,7 @@ public class VoteController {
         } catch (Exception e) {
             log.error("Failed to get vote results: {}", voteId, e);
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ApiResponse.error(ErrorCode.VOTE_NOT_FOUND, e.getMessage()));
+                    .body(ApiResponse.error(ErrorType.VOTE_NOT_FOUND, e.getMessage()));
         }
     }
 
@@ -233,7 +233,7 @@ public class VoteController {
         } catch (Exception e) {
             log.error("Failed to get vote status: {}", voteId, e);
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ApiResponse.error(ErrorCode.VOTE_NOT_FOUND, e.getMessage()));
+                    .body(ApiResponse.error(ErrorType.VOTE_NOT_FOUND, e.getMessage()));
         }
     }
 
@@ -259,7 +259,7 @@ public class VoteController {
         } catch (Exception e) {
             log.error("Failed to deactivate vote: {}", voteId, e);
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(ApiResponse.error(ErrorCode.UNAUTHORIZED_OPERATION, e.getMessage()));
+                    .body(ApiResponse.error(ErrorType.UNAUTHORIZED_OPERATION, e.getMessage()));
         }
     }
 

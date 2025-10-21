@@ -2,7 +2,7 @@ package com.vomattapi.application.service;
 
 import com.vomattapi.application.dto.request.PreSignupRequest;
 import com.vomattapi.application.dto.response.BaseResponse;
-import com.vomattapi.application.dto.response.ErrorCode;
+import com.vomattapi.application.dto.response.ErrorType;
 import com.vomattapi.application.dto.response.PreSignupResponse;
 import com.vomattapi.application.service.ValidationService.ValidationResult;
 import com.vomattapi.infrastructure.constants.CacheConstants;
@@ -38,7 +38,7 @@ public class PreSignupService {
             // Step 1: Check if verification already in progress
             if (isVerificationInProgress(request.getEmail(), request.getUsername())) {
                 log.warn("Verification already in progress for email: {}", request.getEmail());
-                return new BaseResponse(false, ErrorCode.VERIFICATION_PENDING.getCode());
+                return new BaseResponse(false, ErrorType.VERIFICATION_PENDING.getCode());
             }
 
             // Step 2: Validate username and email availability
@@ -47,7 +47,7 @@ public class PreSignupService {
 
             if (!validation.isValid()) {
                 log.warn("Pre-signup validation failed: {}", validation.getErrorMessage());
-                return new BaseResponse(false, validation.getErrorCode().getCode());
+                return new BaseResponse(false, validation.getErrorType().getCode());
             }
 
             // Step 3: Generate verification code
@@ -65,7 +65,7 @@ public class PreSignupService {
 
         } catch (Exception e) {
             log.error("Pre-signup processing failed for email: {}", request.getEmail(), e);
-            return new BaseResponse(false, ErrorCode.INTERNAL_ERROR.getCode());
+            return new BaseResponse(false, ErrorType.INTERNAL_ERROR.getCode());
         }
     }
 
@@ -155,13 +155,13 @@ public class PreSignupService {
             Map<String, Map<String, Object>> preSignup = verificationCodeService.getAllCacheObjects(CacheConstants.PRE_SIGNUP, "*");
             if (preSignupData == null || preSignupData.isEmpty()) {
                 log.warn("No pre-signup data found for email: {}", email);
-                return new BaseResponse(false, ErrorCode.VERIFICATION_CODE_EXPIRED.getCode());
+                return new BaseResponse(false, ErrorType.VERIFICATION_CODE_EXPIRED.getCode());
             }
 
             String username = (String) preSignupData.get("username");
             if (username == null) {
                 log.error("Username not found in pre-signup data for email: {}", email);
-                return new BaseResponse(false, ErrorCode.INTERNAL_ERROR.getCode());
+                return new BaseResponse(false, ErrorType.INTERNAL_ERROR.getCode());
             }
 
             // Generate new verification code
@@ -178,7 +178,7 @@ public class PreSignupService {
 
         } catch (Exception e) {
             log.error("Failed to resend verification code for email: {}", email, e);
-            return new BaseResponse(false, ErrorCode.EMAIL_SEND_FAILED.getCode());
+            return new BaseResponse(false, ErrorType.EMAIL_SEND_FAILED.getCode());
         }
     }
 

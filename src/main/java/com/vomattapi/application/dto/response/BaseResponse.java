@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class BaseResponse {
     private boolean success;
-    private String errorCode;
+    private String errorType;
 
     public BaseResponse(boolean success) {
         this.success = success;

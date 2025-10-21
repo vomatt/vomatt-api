@@ -178,18 +178,26 @@ public class AuthController {
     @PostMapping("/signup")
     @Operation(summary = "會員註冊", description = "創建新會員帳戶")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "註冊成功", content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+            @ApiResponse(responseCode = "200", description = "註冊成功", content = @Content(schema = @Schema(implementation = com.vomattapi.application.dto.response.ApiResponse.class))),
             @ApiResponse(responseCode = "400", description = "註冊資料無效，如用戶名已被使用") })
-    public ResponseEntity<BaseResponse> registerUser(
+    public ResponseEntity<com.vomattapi.application.dto.response.ApiResponse<Void>> registerUser(
             @Parameter(description = "註冊請求，包含用戶名、電子郵件、密碼等") @Valid @RequestBody SignupRequest signUpRequest) {
-        // Delegate to SignupService
-        var result = signupService.processSignup(signUpRequest);
-        BaseResponse response = new BaseResponse(result.isSuccess(), result.getErrorMessage());
+        try {
+            // Delegate to SignupService
+            var result = signupService.processSignup(signUpRequest);
 
-        if (result.isSuccess()) {
-            return ResponseEntity.ok(response);
-        } else {
-            return ResponseEntity.badRequest().body(response);
+            if (result.isSuccess()) {
+                return ResponseEntity.ok(
+                        com.vomattapi.application.dto.response.ApiResponse.<Void>success("User registered successfully!"));
+            } else {
+                return ResponseEntity.badRequest().body(
+                        com.vomattapi.application.dto.response.ApiResponse.<Void>error(
+                                result.getErrorCode(), result.getErrorMessage()));
+            }
+        } catch (Exception e) {
+            log.error("Signup failed", e);
+            return ResponseEntity.internalServerError().body(
+                    com.vomattapi.application.dto.response.ApiResponse.<Void>error(ErrorCode.INTERNAL_ERROR));
         }
     }
 

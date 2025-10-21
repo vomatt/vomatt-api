@@ -1,6 +1,7 @@
 package com.vomattapi.application.service;
 
 import com.vomattapi.application.dto.request.SignupRequest;
+import com.vomattapi.application.dto.response.ErrorCode;
 import com.vomattapi.application.dto.response.MessageResponse;
 import com.vomattapi.application.service.ValidationService.ValidationResult;
 import com.vomattapi.domain.user.ERole;
@@ -51,7 +52,7 @@ public class SignupService {
             ValidationResult validation = validateSignupData(signupRequest);
             if (!validation.isValid()) {
                 log.warn("Signup validation failed: {}", validation.getErrorMessage());
-                return SignupResult.failure(validation.getErrorMessage());
+                return SignupResult.failure(validation.getErrorCode(), validation.getErrorMessage());
             }
 
             // Step 3: Create member
@@ -74,7 +75,7 @@ public class SignupService {
 
         } catch (Exception e) {
             log.error("Signup failed for username: {}", signupRequest.getUsername(), e);
-            return SignupResult.failure("Registration failed due to internal error");
+            return SignupResult.failure(ErrorCode.INTERNAL_ERROR, "Registration failed due to internal error");
         }
     }
 
@@ -167,25 +168,25 @@ public class SignupService {
             
             if (preSignupData == null || preSignupData.isEmpty()) {
                 log.warn("No pre-signup data found for email: {}", signupRequest.getEmail());
-                return SignupResult.failure("Email verification required. Please complete pre-signup first.");
+                return SignupResult.failure(ErrorCode.VERIFICATION_CODE_EXPIRED, "Email verification required. Please complete pre-signup first.");
             }
 
             String cachedVerificationCode = (String) preSignupData.get("verificationCode");
             String cachedUsername = (String) preSignupData.get("username");
-            
+
             if (cachedVerificationCode == null) {
                 log.error("No verification code found in pre-signup data for email: {}", signupRequest.getEmail());
-                return SignupResult.failure("Invalid verification data. Please restart the signup process.");
+                return SignupResult.failure(ErrorCode.VERIFICATION_CODE_INVALID, "Invalid verification data. Please restart the signup process.");
             }
 
             if (!cachedVerificationCode.equals(signupRequest.getVerificationCode())) {
                 log.warn("Invalid verification code provided for email: {}", signupRequest.getEmail());
-                return SignupResult.failure("Invalid verification code.");
+                return SignupResult.failure(ErrorCode.INVALID_VERIFICATION_CODE, "Invalid verification code.");
             }
 
             if (!signupRequest.getUsername().equals(cachedUsername)) {
                 log.warn("Username mismatch. Expected: {}, Provided: {}", cachedUsername, signupRequest.getUsername());
-                return SignupResult.failure("Username does not match the pre-registered username.");
+                return SignupResult.failure(ErrorCode.VALIDATION_ERROR, "Username does not match the pre-registered username.");
             }
 
             log.info("Pre-signup verification successful for email: {}", signupRequest.getEmail());
@@ -193,7 +194,7 @@ public class SignupService {
             
         } catch (Exception e) {
             log.error("Error verifying pre-signup code for email: {}", signupRequest.getEmail(), e);
-            return SignupResult.failure("Verification failed due to internal error");
+            return SignupResult.failure(ErrorCode.INTERNAL_ERROR, "Verification failed due to internal error");
         }
     }
 
@@ -218,23 +219,29 @@ public class SignupService {
      */
     public static class SignupResult {
         private final boolean success;
+        private final ErrorCode errorCode;
         private final String errorMessage;
 
-        private SignupResult(boolean success, String errorMessage) {
+        private SignupResult(boolean success, ErrorCode errorCode, String errorMessage) {
             this.success = success;
+            this.errorCode = errorCode;
             this.errorMessage = errorMessage;
         }
 
         public static SignupResult success() {
-            return new SignupResult(true, null);
+            return new SignupResult(true, null, null);
         }
 
-        public static SignupResult failure(String errorMessage) {
-            return new SignupResult(false, errorMessage);
+        public static SignupResult failure(ErrorCode errorCode, String errorMessage) {
+            return new SignupResult(false, errorCode, errorMessage);
         }
 
         public boolean isSuccess() {
             return success;
+        }
+
+        public ErrorCode getErrorCode() {
+            return errorCode;
         }
 
         public String getErrorMessage() {

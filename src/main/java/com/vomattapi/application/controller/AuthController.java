@@ -1,6 +1,6 @@
 package com.vomattapi.application.controller;
 
-import com.vomattapi.application.dto.request.LoginRequest;
+import com.vomattapi.application.dto.request.SigninRequest;
 import com.vomattapi.application.dto.request.PreSignupRequest;
 import com.vomattapi.application.dto.request.SignupRequest;
 import com.vomattapi.application.dto.request.TokenRefreshRequest;
@@ -66,29 +66,29 @@ public class AuthController {
     private final com.vomattapi.application.service.JwtBlacklistService jwtBlacklistService;
 
     @PostMapping("/signin")
-    @RateLimiter(name = "login")
+    @RateLimiter(name = "signin")
     @Operation(summary = "會員登入", description = "使用電子郵件和驗證碼登入系統")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "登入成功", content = @Content(schema = @Schema(implementation = JwtResponse.class))),
             @ApiResponse(responseCode = "401", description = "認證失敗"),
             @ApiResponse(responseCode = "429", description = "登入嘗試次數過多，請稍後再試") })
-    public ResponseEntity<?> authenticateUser(
-            @Parameter(description = "登入請求，包含電子郵件和驗證碼") @Valid @RequestBody LoginRequest loginRequest) {
+    public ResponseEntity<?> signin(
+            @Parameter(description = "登入請求，包含電子郵件和驗證碼") @Valid @RequestBody SigninRequest signinRequest) {
 
         try {
             // Verify the verification code first
-            boolean isCodeValid = authService.verificationCode(loginRequest.getEmail(), loginRequest.getVerificationCode());
+            boolean isCodeValid = authService.verificationCode(signinRequest.getEmail(), signinRequest.getVerificationCode());
 
             if (!isCodeValid) {
-                log.warn("Invalid verification code for email: {}", loginRequest.getEmail());
+                log.warn("Invalid verification code for email: {}", signinRequest.getEmail());
                 return ResponseEntity.status(401).body(new BaseResponse(false, ErrorType.INVALID_VERIFICATION_CODE.getCode()));
             }
 
             // Find user by email
-            UserDetailsImpl userDetails = (UserDetailsImpl) userDetailsService.loadUserByEmail(loginRequest.getEmail());
+            UserDetailsImpl userDetails = (UserDetailsImpl) userDetailsService.loadUserByEmail(signinRequest.getEmail());
 
             if (userDetails == null) {
-                log.warn("User not found for email: {}", loginRequest.getEmail());
+                log.warn("User not found for email: {}", signinRequest.getEmail());
                 return ResponseEntity.status(401).body(new BaseResponse(false, ErrorType.USER_NOT_FOUND.getCode()));
             }
 
@@ -108,14 +108,14 @@ public class AuthController {
             // Create refresh token
             RefreshToken refreshToken = refreshTokenService.createRefreshToken(userDetails.getId());
 
-            log.info("User signed in successfully: {}", loginRequest.getEmail());
+            log.info("User signed in successfully: {}", signinRequest.getEmail());
 
             return ResponseEntity.ok(
                 new JwtResponse(jwt, refreshToken.getToken(), userDetails.getId(),
                     userDetails.getUsername(), userDetails.getEmail(), roles));
 
         } catch (Exception e) {
-            log.error("Authentication failed for email: {}", loginRequest.getEmail(), e);
+            log.error("Authentication failed for email: {}", signinRequest.getEmail(), e);
             return ResponseEntity.status(401).body(new BaseResponse(false, ErrorType.AUTHENTICATION_FAILED.getCode()));
         }
     }
@@ -180,15 +180,14 @@ public class AuthController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "註冊成功", content = @Content(schema = @Schema(implementation = com.vomattapi.application.dto.response.ApiResponse.class))),
             @ApiResponse(responseCode = "400", description = "註冊資料無效，如用戶名已被使用") })
-    public ResponseEntity<com.vomattapi.application.dto.response.ApiResponse<Void>> registerUser(
+    public ResponseEntity<?> registerUser(
             @Parameter(description = "註冊請求，包含用戶名、電子郵件、密碼等") @Valid @RequestBody SignupRequest signUpRequest) {
         try {
             // Delegate to SignupService
             var result = signupService.processSignup(signUpRequest);
-
             if (result.isSuccess()) {
-                return ResponseEntity.ok(
-                        com.vomattapi.application.dto.response.ApiResponse.<Void>success("User registered successfully!"));
+                String verificationCode = authService.generateVerificationCode(signUpRequest.getEmail());
+                return signin(new SigninRequest(signUpRequest.getEmail(), verificationCode));
             } else {
                 return ResponseEntity.badRequest().body(
                         com.vomattapi.application.dto.response.ApiResponse.<Void>error(

@@ -210,5 +210,24 @@ public class UserService {
         return userRepository.findByEmail(email).orElse(null);
     }
 
+    /**
+     * Delete user account
+     */
+    @Transactional
+    public void deleteUser(String userId) {
+        User user = findUserById(userId);
+
+        logActivity(user, "ACCOUNT_DELETED", "User account deleted");
+
+        // Evict all user-related caches
+        cacheUtil.evictUserCache(userId);
+        String emailCacheKey = "user:email:" + user.getEmail();
+        String usernameCacheKey = "user:username:" + user.getUsername();
+        cacheUtil.evict(emailCacheKey);
+        cacheUtil.evict(usernameCacheKey);
+
+        log.info("Deleting user account: {}", userId);
+        userRepository.delete(user);
+    }
 
 }

@@ -18,14 +18,18 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.vomattapi.application.dto.request.CreateCommentRequest;
 import com.vomattapi.application.dto.request.CreateVoteRequest;
+import com.vomattapi.application.dto.request.UpdateCommentRequest;
 import com.vomattapi.application.dto.request.VoteRequest;
 import com.vomattapi.application.dto.response.ApiResponse;
+import com.vomattapi.application.dto.response.CommentDto;
 import com.vomattapi.application.dto.response.ErrorType;
 import com.vomattapi.application.dto.response.MessageResponse;
 import com.vomattapi.application.dto.response.VoteResponse;
 import com.vomattapi.application.dto.response.VoteResultResponse;
 import com.vomattapi.application.security.services.UserDetailsImpl;
+import com.vomattapi.application.service.VoteCommentService;
 import com.vomattapi.application.service.VoteService;
 import com.vomattapi.infrastructure.audit.Auditable;
 
@@ -47,6 +51,7 @@ import lombok.extern.slf4j.Slf4j;
 @SecurityRequirement(name = "Bearer Authentication")
 public class VoteController {
     private final VoteService voteService;
+    private final VoteCommentService commentService;
 
     @PostMapping
     @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
@@ -280,10 +285,117 @@ public class VoteController {
     public static class UserVoteStatusResponse {
         private boolean hasVoted;
         private List<String> selectedOptions;
-        
+
         public boolean isHasVoted() { return hasVoted; }
         public void setHasVoted(boolean hasVoted) { this.hasVoted = hasVoted; }
         public List<String> getSelectedOptions() { return selectedOptions; }
         public void setSelectedOptions(List<String> selectedOptions) { this.selectedOptions = selectedOptions; }
+    }
+
+    // ========== Comment Endpoints ==========
+
+    @PostMapping("/{voteId}/comments")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    @Auditable(action = "CREATE", resourceType = "COMMENT")
+    @Operation(summary = "Create a comment", description = "Add a comment to a vote")
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Comment created successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid request"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Vote not found")
+    })
+    public ResponseEntity<ApiResponse<CommentDto>> createComment(
+            @Parameter(description = "Vote ID", required = true)
+            @PathVariable String voteId,
+            @Valid @RequestBody CreateCommentRequest request,
+            Authentication authentication) {
+        try {
+            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+            CommentDto response = commentService.createComment(voteId, userDetails.getId(), request);
+            log.info("Comment created on vote {} by user {}", voteId, userDetails.getUsername());
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(ApiResponse.success(response, "Comment created successfully"));
+        } catch (Exception e) {
+            log.error("Failed to create comment on vote: {}", voteId, e);
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error(ErrorType.BUSINESS_RULE_VIOLATION, e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{voteId}/comments")
+    @Operation(summary = "Get comments for a vote", description = "Retrieve all comments for a vote (paginated)")
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Comments retrieved successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Vote not found")
+    })
+    public ResponseEntity<ApiResponse<Page<CommentDto>>> getComments(
+            @Parameter(description = "Vote ID", required = true)
+            @PathVariable String voteId,
+            @PageableDefault(size = 20) Pageable pageable) {
+        try {
+            Page<CommentDto> response = commentService.getCommentsByVote(voteId, pageable);
+            return ResponseEntity.ok(ApiResponse.success(response));
+        } catch (Exception e) {
+            log.error("Failed to get comments for vote: {}", voteId, e);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error(ErrorType.VOTE_NOT_FOUND, e.getMessage()));
+        }
+    }
+
+    @PutMapping("/{voteId}/comments/{commentId}")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    @Auditable(action = "UPDATE", resourceType = "COMMENT")
+    @Operation(summary = "Update a comment", description = "Update comment content (only by comment owner)")
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Comment updated successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Forbidden - Only comment owner can update"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Comment not found")
+    })
+    public ResponseEntity<ApiResponse<CommentDto>> updateComment(
+            @Parameter(description = "Vote ID", required = true)
+            @PathVariable String voteId,
+            @Parameter(description = "Comment ID", required = true)
+            @PathVariable Long commentId,
+            @Valid @RequestBody UpdateCommentRequest request,
+            Authentication authentication) {
+        try {
+            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+            CommentDto response = commentService.updateComment(commentId, userDetails.getId(), request);
+            log.info("Comment {} updated by user {}", commentId, userDetails.getUsername());
+            return ResponseEntity.ok(ApiResponse.success(response, "Comment updated successfully"));
+        } catch (Exception e) {
+            log.error("Failed to update comment: {}", commentId, e);
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ApiResponse.error(ErrorType.UNAUTHORIZED_OPERATION, e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/{voteId}/comments/{commentId}")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    @Auditable(action = "DELETE", resourceType = "COMMENT")
+    @Operation(summary = "Delete a comment", description = "Delete a comment (soft delete, only by comment owner)")
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Comment deleted successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Forbidden - Only comment owner can delete"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Comment not found")
+    })
+    public ResponseEntity<ApiResponse<Void>> deleteComment(
+            @Parameter(description = "Vote ID", required = true)
+            @PathVariable String voteId,
+            @Parameter(description = "Comment ID", required = true)
+            @PathVariable Long commentId,
+            Authentication authentication) {
+        try {
+            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+            commentService.deleteComment(commentId, userDetails.getId());
+            log.info("Comment {} deleted by user {}", commentId, userDetails.getUsername());
+            return ResponseEntity.ok(ApiResponse.success("Comment deleted successfully"));
+        } catch (Exception e) {
+            log.error("Failed to delete comment: {}", commentId, e);
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ApiResponse.error(ErrorType.UNAUTHORIZED_OPERATION, e.getMessage()));
+        }
     }
 }

@@ -1,7 +1,10 @@
 package com.vomattapi.application.service;
 
+import com.vomattapi.application.dto.response.UserDto;
 import com.vomattapi.domain.user.User;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -228,6 +231,36 @@ public class UserService {
 
         log.info("Deleting user account: {}", userId);
         userRepository.delete(user);
+    }
+
+    /**
+     * Search users by username
+     */
+    @Transactional(readOnly = true)
+    public Page<UserDto> searchUsersByUsername(String username, Pageable pageable) {
+        log.debug("Searching users with username containing: {}", username);
+        Page<User> users = userRepository.searchByUsername(username, pageable);
+        return users.map(this::convertToUserDto);
+    }
+
+    /**
+     * Convert User entity to UserDto
+     */
+    private UserDto convertToUserDto(User user) {
+        UserDto dto = new UserDto();
+        dto.setId(user.getId());
+        dto.setUsername(user.getUsername());
+        dto.setEmail(user.getEmail());
+        dto.setPhoneNumber(user.getPhoneNumber());
+        dto.setFirstName(user.getFirstName());
+        dto.setLastName(user.getLastName());
+        dto.setLocation(user.getLocation());
+        dto.setPoints(user.getPoints());
+        dto.setMembershipLevel(user.getMembershipLevel());
+        dto.setActive(user.isActive());
+        dto.setCreatedAt(user.getCreatedAt());
+        dto.setLastLoginAt(user.getLastLoginAt());
+        return dto;
     }
 
 }

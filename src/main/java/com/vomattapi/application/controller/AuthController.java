@@ -95,7 +95,7 @@ public class AuthController {
             SecurityContextHolder.getContext().setAuthentication(authentication);
 
             // Generate JWT token
-            String jwt = "11";
+            String jwt = jwtUtils.generateJwtToken(authentication);
 
             // Get user roles
             List<String> roles = userDetails.getAuthorities().stream()

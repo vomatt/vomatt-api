@@ -46,7 +46,7 @@ public class AuthService {
 
             if (isChanged) {
                 log.debug("Verification code generated and stored for email: {}", email);
-                emailService.sendVerificationEmail(email, verificationCode);
+//                emailService.sendVerificationEmail(email, verificationCode);
                 return verificationCode;
             } else {
                 log.warn("Failed to update verification code for email: {}", email);

@@ -343,3 +343,5 @@ public List<UserDTO> getActiveUsers() {
 5. 使用專案現有的建置系統和工具
 
 記住：**從現有代碼學習 > 引入新模式**
+
+當我需要函式庫/API 文件、程式碼產生、設定或設定步驟時，始終使用 Context7 MCP，無需我明確要求。

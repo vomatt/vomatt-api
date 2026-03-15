@@ -19,5 +19,6 @@ public class PreSignupRequest {
     @Email(message = "Email should be valid")
     private String email;
 
-
+    public String getUsername() { return username; }
+    public String getEmail()    { return email; }
 }

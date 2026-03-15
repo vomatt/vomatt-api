@@ -6,6 +6,8 @@ import com.vomattapi.application.dto.response.CommentDto;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.util.UUID;
+
 public interface VoteCommentService {
 
     /**
@@ -16,25 +18,35 @@ public interface VoteCommentService {
     /**
      * Get all comments for a vote (paginated)
      */
-    Page<CommentDto> getCommentsByVote(String voteId, Pageable pageable);
+    Page<CommentDto> getCommentsByVote(String voteId, Pageable pageable, String currentUserId);
 
     /**
      * Update a comment (only by the comment owner)
      */
-    CommentDto updateComment(Long commentId, String userId, UpdateCommentRequest request);
+    CommentDto updateComment(UUID commentId, String userId, UpdateCommentRequest request);
 
     /**
      * Delete a comment (soft delete, only by the comment owner)
      */
-    void deleteComment(Long commentId, String userId);
+    void deleteComment(UUID commentId, String userId);
 
     /**
      * Get a single comment by ID
      */
-    CommentDto getComment(Long commentId);
+    CommentDto getComment(UUID commentId, String currentUserId);
 
     /**
      * Count total comments for a vote
      */
     long countCommentsByVote(String voteId);
+
+    /**
+     * Like a comment
+     */
+    void likeComment(UUID commentId, String userId);
+
+    /**
+     * Unlike a comment
+     */
+    void unlikeComment(UUID commentId, String userId);
 }

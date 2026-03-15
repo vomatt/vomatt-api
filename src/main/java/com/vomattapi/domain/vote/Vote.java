@@ -3,17 +3,14 @@ package com.vomattapi.domain.vote;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.UUID;
 
+import com.vomattapi.domain.common.BaseEntity;
 import com.vomattapi.domain.user.User;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
-import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
@@ -22,21 +19,19 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 import lombok.ToString;
 
 @Entity
 @Table(name = "votes")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @ToString(exclude = {"creator", "options", "memberVotes"})
-@EqualsAndHashCode(of = "id")
-public class Vote {
-    @Id
-    private String id;
+public class Vote extends BaseEntity {
 
     @NotBlank
     @Size(max = 200)
@@ -65,14 +60,6 @@ public class Vote {
     @Column(name = "is_anonymous")
     private boolean isAnonymous = false;
 
-    @Column(name = "created_at")
-    @CreationTimestamp
-    private LocalDateTime createdAt;
-
-    @Column(name = "updated_at")
-    @UpdateTimestamp
-    private LocalDateTime updatedAt;
-
     @Column(name = "is_public")
     private boolean isPublic = true;
 
@@ -86,13 +73,10 @@ public class Vote {
     private Set<UserVote> userVotes = new HashSet<>();
 
     public Vote(String title, String description, User creator) {
-        this.id = UUID.randomUUID().toString();
         this.title = title;
         this.description = description;
         this.creator = creator;
         this.startTime = LocalDateTime.now();
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
     }
 
     public Vote(String title, String description, User creator, LocalDateTime endTime) {

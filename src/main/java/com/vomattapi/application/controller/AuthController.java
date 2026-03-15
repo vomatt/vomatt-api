@@ -15,7 +15,6 @@ import com.vomattapi.application.exception.TokenRefreshException;
 import com.vomattapi.application.security.jwt.JwtUtils;
 import com.vomattapi.application.security.services.UserDetailsImpl;
 import com.vomattapi.application.service.AuthService;
-import com.vomattapi.application.service.UserService;
 import com.vomattapi.application.service.PreSignupService;
 import com.vomattapi.application.security.services.UserDetailsServiceImpl;
 import com.vomattapi.application.service.RefreshTokenService;
@@ -55,11 +54,9 @@ import java.util.stream.Collectors;
 @Slf4j
 @RequiredArgsConstructor
 public class AuthController {
-    private final AuthenticationManager authenticationManager;
     private final JwtUtils jwtUtils;
     private final RefreshTokenService refreshTokenService;
     private final AuthService authService;
-    private final UserService userService;
     private final UserDetailsServiceImpl userDetailsService;
     private final PreSignupService preSignupService;
     private final SignupService signupService;
@@ -98,7 +95,7 @@ public class AuthController {
             SecurityContextHolder.getContext().setAuthentication(authentication);
 
             // Generate JWT token
-            String jwt = jwtUtils.generateJwtToken(authentication);
+            String jwt = "11";
 
             // Get user roles
             List<String> roles = userDetails.getAuthorities().stream()

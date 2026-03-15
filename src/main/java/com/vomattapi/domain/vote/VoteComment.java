@@ -1,38 +1,29 @@
 package com.vomattapi.domain.vote;
 
+import com.vomattapi.domain.common.BaseEntity;
 import com.vomattapi.domain.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 import lombok.ToString;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
-
-import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "vote_comments")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @ToString(exclude = {"user", "vote"})
-@EqualsAndHashCode(of = "id")
-public class VoteComment {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+public class VoteComment extends BaseEntity {
 
     @NotNull
     @ManyToOne(fetch = FetchType.LAZY)
@@ -48,14 +39,6 @@ public class VoteComment {
     @Column(name = "content", columnDefinition = "TEXT")
     private String content;
 
-    @Column(name = "created_at")
-    @CreationTimestamp
-    private LocalDateTime createdAt;
-
-    @Column(name = "updated_at")
-    @UpdateTimestamp
-    private LocalDateTime updatedAt;
-
     @Column(name = "is_deleted")
     private boolean isDeleted = false;
 
@@ -63,25 +46,21 @@ public class VoteComment {
         this.vote = vote;
         this.user = user;
         this.content = content;
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
     }
 
     public void updateContent(String newContent) {
         this.content = newContent;
-        this.updatedAt = LocalDateTime.now();
     }
 
     public void softDelete() {
         this.isDeleted = true;
-        this.updatedAt = LocalDateTime.now();
     }
 
     public boolean canBeEditedBy(String userId) {
-        return this.user.getId().equals(userId) && !this.isDeleted;
+        return this.user.getId().toString().equals(userId) && !this.isDeleted;
     }
 
     public boolean canBeDeletedBy(String userId) {
-        return this.user.getId().equals(userId) && !this.isDeleted;
+        return this.user.getId().toString().equals(userId) && !this.isDeleted;
     }
 }

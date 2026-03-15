@@ -6,11 +6,14 @@ import com.vomattapi.application.dto.response.CommentDto;
 import com.vomattapi.application.exception.EntityNotFoundException;
 import com.vomattapi.application.exception.UnauthorizedOperationException;
 import com.vomattapi.application.exception.VoteNotFoundException;
+import com.vomattapi.application.mapper.CommentMapper;
 import com.vomattapi.application.service.VoteCommentService;
 import com.vomattapi.domain.user.User;
 import com.vomattapi.domain.user.repository.UserRepository;
+import com.vomattapi.domain.vote.CommentLike;
 import com.vomattapi.domain.vote.Vote;
 import com.vomattapi.domain.vote.VoteComment;
+import com.vomattapi.domain.vote.repository.CommentLikeRepository;
 import com.vomattapi.domain.vote.repository.VoteCommentRepository;
 import com.vomattapi.domain.vote.repository.VoteRepository;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +22,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -29,13 +34,15 @@ public class VoteCommentServiceImpl implements VoteCommentService {
     private final VoteCommentRepository commentRepository;
     private final VoteRepository voteRepository;
     private final UserRepository userRepository;
+    private final CommentLikeRepository commentLikeRepository;
+    private final CommentMapper commentMapper;
 
     @Override
     public CommentDto createComment(String voteId, String userId, CreateCommentRequest request) {
-        Vote vote = voteRepository.findById(voteId)
+        Vote vote = voteRepository.findById(UUID.fromString(voteId))
             .orElseThrow(() -> new VoteNotFoundException(voteId));
 
-        User user = userRepository.findById(userId)
+        User user = userRepository.findById(UUID.fromString(userId))
             .orElseThrow(() -> new EntityNotFoundException("User", userId));
 
         VoteComment comment = new VoteComment(vote, user, request.getContent());
@@ -48,17 +55,17 @@ public class VoteCommentServiceImpl implements VoteCommentService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<CommentDto> getCommentsByVote(String voteId, Pageable pageable) {
-        if (!voteRepository.existsById(voteId)) {
+    public Page<CommentDto> getCommentsByVote(String voteId, Pageable pageable, String currentUserId) {
+        if (!voteRepository.existsById(UUID.fromString(voteId))) {
             throw new VoteNotFoundException(voteId);
         }
 
-        Page<VoteComment> comments = commentRepository.findByVoteId(voteId, pageable);
-        return comments.map(this::convertToCommentDto);
+        Page<VoteComment> comments = commentRepository.findByVoteId(UUID.fromString(voteId), pageable);
+        return comments.map(comment -> convertToCommentDto(comment, currentUserId));
     }
 
     @Override
-    public CommentDto updateComment(Long commentId, String userId, UpdateCommentRequest request) {
+    public CommentDto updateComment(UUID commentId, String userId, UpdateCommentRequest request) {
         VoteComment comment = commentRepository.findByIdAndNotDeleted(commentId)
             .orElseThrow(() -> new EntityNotFoundException("Comment", commentId.toString()));
 
@@ -75,7 +82,7 @@ public class VoteCommentServiceImpl implements VoteCommentService {
     }
 
     @Override
-    public void deleteComment(Long commentId, String userId) {
+    public void deleteComment(UUID commentId, String userId) {
         VoteComment comment = commentRepository.findByIdAndNotDeleted(commentId)
             .orElseThrow(() -> new EntityNotFoundException("Comment", commentId.toString()));
 
@@ -91,33 +98,61 @@ public class VoteCommentServiceImpl implements VoteCommentService {
 
     @Override
     @Transactional(readOnly = true)
-    public CommentDto getComment(Long commentId) {
+    public CommentDto getComment(UUID commentId, String currentUserId) {
         VoteComment comment = commentRepository.findByIdAndNotDeleted(commentId)
             .orElseThrow(() -> new EntityNotFoundException("Comment", commentId.toString()));
 
-        return convertToCommentDto(comment);
+        return convertToCommentDto(comment, currentUserId);
     }
 
     @Override
     @Transactional(readOnly = true)
     public long countCommentsByVote(String voteId) {
-        if (!voteRepository.existsById(voteId)) {
+        if (!voteRepository.existsById(UUID.fromString(voteId))) {
             throw new VoteNotFoundException(voteId);
         }
 
-        return commentRepository.countByVoteId(voteId);
+        return commentRepository.countByVoteId(UUID.fromString(voteId));
+    }
+
+    @Override
+    public void likeComment(UUID commentId, String userId) {
+        VoteComment comment = commentRepository.findByIdAndNotDeleted(commentId)
+            .orElseThrow(() -> new EntityNotFoundException("Comment", commentId.toString()));
+
+        User user = userRepository.findById(UUID.fromString(userId))
+            .orElseThrow(() -> new EntityNotFoundException("User", userId));
+
+        UUID userUuid = UUID.fromString(userId);
+        if (commentLikeRepository.existsByCommentIdAndUserId(commentId, userUuid)) {
+            log.warn("User {} already liked comment {}", userId, commentId);
+            return;
+        }
+
+        CommentLike like = new CommentLike(comment, user);
+        commentLikeRepository.save(like);
+
+        log.info("User {} liked comment {}", userId, commentId);
+    }
+
+    @Override
+    public void unlikeComment(UUID commentId, String userId) {
+        commentRepository.findByIdAndNotDeleted(commentId)
+            .orElseThrow(() -> new EntityNotFoundException("Comment", commentId.toString()));
+
+        commentLikeRepository.deleteByCommentIdAndUserId(commentId, UUID.fromString(userId));
+
+        log.info("User {} unliked comment {}", userId, commentId);
     }
 
     private CommentDto convertToCommentDto(VoteComment comment) {
-        CommentDto dto = new CommentDto();
-        dto.setId(comment.getId());
-        dto.setVoteId(comment.getVote().getId());
-        dto.setUserId(comment.getUser().getId());
-        dto.setUsername(comment.getUser().getUsername());
-        dto.setContent(comment.getContent());
-        dto.setCreatedAt(comment.getCreatedAt());
-        dto.setUpdatedAt(comment.getUpdatedAt());
-        dto.setEdited(!comment.getCreatedAt().equals(comment.getUpdatedAt()));
-        return dto;
+        return convertToCommentDto(comment, null);
+    }
+
+    private CommentDto convertToCommentDto(VoteComment comment, String currentUserId) {
+        long likeCount = commentLikeRepository.countByCommentId(comment.getId());
+        boolean isLiked = currentUserId != null &&
+            commentLikeRepository.existsByCommentIdAndUserId(comment.getId(), UUID.fromString(currentUserId));
+        return commentMapper.toDto(comment, likeCount, isLiked);
     }
 }

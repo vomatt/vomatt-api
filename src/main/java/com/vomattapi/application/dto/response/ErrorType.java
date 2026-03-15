@@ -1,12 +1,9 @@
 package com.vomattapi.application.dto.response;
 
-import lombok.Getter;
-
 /**
  * Error codes for pre-signup operations to support i18n Frontend can use these codes to display localized error
  * messages
  */
-@Getter
 public enum ErrorType {
 
     SUCCESS("SUCCESS", "Success"),
@@ -68,4 +65,7 @@ public enum ErrorType {
         this.code = code;
         this.defaultMessage = defaultMessage;
     }
+
+    public String getCode()           { return code; }
+    public String getDefaultMessage() { return defaultMessage; }
 }

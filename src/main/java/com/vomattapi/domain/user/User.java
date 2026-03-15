@@ -1,18 +1,10 @@
 package com.vomattapi.domain.user;
 
-import java.time.LocalDateTime;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.UUID;
-
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
-
+import com.vomattapi.domain.common.BaseEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
-import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
@@ -26,8 +18,12 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-import lombok.ToString;
 
+import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
+
+@EqualsAndHashCode(callSuper = true)
 @Entity
 @Table(name = "users",
         uniqueConstraints = {
@@ -35,14 +31,10 @@ import lombok.ToString;
                 @UniqueConstraint(columnNames = "email"),
                 @UniqueConstraint(columnNames = "phone_number")
         })
-@Data
 @NoArgsConstructor
 @AllArgsConstructor
-@ToString(exclude = {"roles", "preferences"})
-@EqualsAndHashCode(of = "id")
-public class User {
-    @Id
-    private String id;
+@Data
+public class User extends BaseEntity {
 
     @NotBlank
     @Size(max = 50)
@@ -63,14 +55,6 @@ public class User {
 
     @Column(name = "verification_code_expiry")
     private LocalDateTime verificationCodeExpiry;
-
-    @Column(name = "created_at")
-    @CreationTimestamp
-    private LocalDateTime createdAt;
-
-    @Column(name = "updated_at")
-    @UpdateTimestamp
-    private LocalDateTime updatedAt;
 
     @Column(name = "last_login_at")
     private LocalDateTime lastLoginAt;
@@ -108,14 +92,11 @@ public class User {
 
     // Constructor for creating a new member
     public User(String username, String email, String verificationCode) {
-        this.id = UUID.randomUUID().toString();
         this.username = username;
         this.email = email;
         this.verificationCode = verificationCode;
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
     }
-    
+
     // Constructor for creating a new member with phone number
     public User(String username, String email, String phoneNumber, String verificationCode, String firstName, String lastName) {
         this(username, email, verificationCode);

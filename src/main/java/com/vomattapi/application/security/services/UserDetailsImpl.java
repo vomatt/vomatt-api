@@ -46,13 +46,16 @@ public class UserDetailsImpl implements UserDetails {
         this.authorities = authorities;
     }
 
+    public String getId()       { return id; }
+    public String getEmail()    { return email; }
+
     public static UserDetailsImpl build(User user) {
         List<GrantedAuthority> authorities = user.getRoles().stream()
                 .map(role -> new SimpleGrantedAuthority(role.getName().name()))
                 .collect(Collectors.toList());
 
         return new UserDetailsImpl(
-                user.getId(),
+                user.getId().toString(),
                 user.getUsername(),
                 user.getEmail(),
                 user.getVerificationCode(),

@@ -14,4 +14,7 @@ public class SigninRequest {
 
     @NotBlank
     private String verificationCode;
+
+    public String getEmail()            { return email; }
+    public String getVerificationCode() { return verificationCode; }
 }

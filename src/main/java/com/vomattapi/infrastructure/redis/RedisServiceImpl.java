@@ -40,8 +40,7 @@ public class RedisServiceImpl implements RedisService {
             redisTemplate.opsForValue().set(cacheKey, value);
             log.debug("Redis SET: key={}", cacheKey);
         } catch (Exception e) {
-            log.error("Redis SET error: key={}, error={}", cacheKey, e.getMessage(), e);
-            throw new RuntimeException("Redis set operation failed", e);
+            log.warn("Redis SET failed (Redis unavailable), key={}: {}", cacheKey, e.getMessage());
         }
     }
 
@@ -52,8 +51,7 @@ public class RedisServiceImpl implements RedisService {
             redisTemplate.opsForValue().set(cacheKey, value, timeout);
             log.debug("Redis SET with timeout: key={}, timeout={}", cacheKey, timeout);
         } catch (Exception e) {
-            log.error("Redis SET with timeout error: key={}, timeout={}, error={}", cacheKey, timeout, e.getMessage(), e);
-            throw new RuntimeException("Redis set with timeout operation failed", e);
+            log.warn("Redis SET(ttl) failed (Redis unavailable), key={}: {}", cacheKey, e.getMessage());
         }
     }
 
@@ -141,8 +139,7 @@ public class RedisServiceImpl implements RedisService {
             redisTemplate.opsForValue().multiSet(cacheKeyMap);
             log.debug("Redis MULTISET: count={}", keyValueMap.size());
         } catch (Exception e) {
-            log.error("Redis MULTISET error: count={}, error={}", keyValueMap.size(), e.getMessage(), e);
-            throw new RuntimeException("Redis multi set operation failed", e);
+            log.warn("Redis MULTISET failed (Redis unavailable), count={}: {}", keyValueMap.size(), e.getMessage());
         }
     }
 
@@ -160,9 +157,7 @@ public class RedisServiceImpl implements RedisService {
 
             log.debug("Redis MULTISET with timeout: count={}, timeout={}", keyValueMap.size(), timeout);
         } catch (Exception e) {
-            log.error("Redis MULTISET with timeout error: count={}, timeout={}, error={}", keyValueMap.size(), timeout,
-                    e.getMessage(), e);
-            throw new RuntimeException("Redis multi set with timeout operation failed", e);
+            log.warn("Redis MULTISET(ttl) failed (Redis unavailable), count={}: {}", keyValueMap.size(), e.getMessage());
         }
     }
 
@@ -237,8 +232,7 @@ public class RedisServiceImpl implements RedisService {
             redisTemplate.opsForHash().put(cacheKey, hashKey, value);
             log.debug("Redis HSET: key={}, hashKey={}", cacheKey, hashKey);
         } catch (Exception e) {
-            log.error("Redis HSET error: key={}, hashKey={}, error={}", cacheKey, hashKey, e.getMessage(), e);
-            throw new RuntimeException("Redis hash set operation failed", e);
+            log.warn("Redis HSET failed (Redis unavailable), key={}: {}", cacheKey, e.getMessage());
         }
     }
 
@@ -271,8 +265,7 @@ public class RedisServiceImpl implements RedisService {
             redisTemplate.opsForHash().putAll(cacheKey, hashMap);
             log.debug("Redis HMULTISET: key={}, count={}", cacheKey, hashMap.size());
         } catch (Exception e) {
-            log.error("Redis HMULTISET error: key={}, count={}, error={}", cacheKey, hashMap.size(), e.getMessage(), e);
-            throw new RuntimeException("Redis hash multi set operation failed", e);
+            log.warn("Redis HMULTISET failed (Redis unavailable), key={}: {}", cacheKey, e.getMessage());
         }
     }
 

@@ -1,6 +1,7 @@
 package com.vomattapi.application.controller;
 
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -26,6 +27,7 @@ import com.vomattapi.application.dto.response.ApiResponse;
 import com.vomattapi.application.dto.response.CommentDto;
 import com.vomattapi.application.dto.response.ErrorType;
 import com.vomattapi.application.dto.response.MessageResponse;
+import com.vomattapi.application.dto.response.UserVoteStatusResponse;
 import com.vomattapi.application.dto.response.VoteResponse;
 import com.vomattapi.application.dto.response.VoteResultResponse;
 import com.vomattapi.application.security.services.UserDetailsImpl;
@@ -41,15 +43,16 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestController
 @RequestMapping("/api/v1/votes")
 @RequiredArgsConstructor
-@Slf4j
 @Tag(name = "Vote", description = "Vote management APIs")
 @SecurityRequirement(name = "Bearer Authentication")
 public class VoteController {
+    private static final Logger log = LoggerFactory.getLogger(VoteController.class);
     private final VoteService voteService;
     private final VoteCommentService commentService;
 
@@ -227,12 +230,10 @@ public class VoteController {
             Authentication authentication) {
         try {
             UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-            boolean hasVoted = voteService.hasUserVoted(voteId, userDetails.getId());
-            List<String> selectedOptions = voteService.getUserVoteOptions(voteId, userDetails.getId());
 
             UserVoteStatusResponse response = new UserVoteStatusResponse();
-            response.setHasVoted(hasVoted);
-            response.setSelectedOptions(selectedOptions);
+            response.setHasVoted(voteService.hasUserVoted(voteId, userDetails.getId()));
+            response.setSelectedOptions(voteService.getUserVoteOptions(voteId, userDetails.getId()));
 
             return ResponseEntity.ok(ApiResponse.success(response));
         } catch (Exception e) {
@@ -282,17 +283,8 @@ public class VoteController {
         return request.getRemoteAddr();
     }
 
-    public static class UserVoteStatusResponse {
-        private boolean hasVoted;
-        private List<String> selectedOptions;
-
-        public boolean isHasVoted() { return hasVoted; }
-        public void setHasVoted(boolean hasVoted) { this.hasVoted = hasVoted; }
-        public List<String> getSelectedOptions() { return selectedOptions; }
-        public void setSelectedOptions(List<String> selectedOptions) { this.selectedOptions = selectedOptions; }
-    }
-
     // ========== Comment Endpoints ==========
+
 
     @PostMapping("/{voteId}/comments")
     @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
@@ -331,9 +323,16 @@ public class VoteController {
     public ResponseEntity<ApiResponse<Page<CommentDto>>> getComments(
             @Parameter(description = "Vote ID", required = true)
             @PathVariable String voteId,
-            @PageableDefault(size = 20) Pageable pageable) {
+            @PageableDefault(size = 20) Pageable pageable,
+            Authentication authentication) {
         try {
-            Page<CommentDto> response = commentService.getCommentsByVote(voteId, pageable);
+            String currentUserId = null;
+            if (authentication != null && authentication.getPrincipal() instanceof UserDetailsImpl) {
+                UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+                currentUserId = userDetails.getId();
+            }
+
+            Page<CommentDto> response = commentService.getCommentsByVote(voteId, pageable, currentUserId);
             return ResponseEntity.ok(ApiResponse.success(response));
         } catch (Exception e) {
             log.error("Failed to get comments for vote: {}", voteId, e);
@@ -356,7 +355,7 @@ public class VoteController {
             @Parameter(description = "Vote ID", required = true)
             @PathVariable String voteId,
             @Parameter(description = "Comment ID", required = true)
-            @PathVariable Long commentId,
+            @PathVariable UUID commentId,
             @Valid @RequestBody UpdateCommentRequest request,
             Authentication authentication) {
         try {
@@ -385,7 +384,7 @@ public class VoteController {
             @Parameter(description = "Vote ID", required = true)
             @PathVariable String voteId,
             @Parameter(description = "Comment ID", required = true)
-            @PathVariable Long commentId,
+            @PathVariable UUID commentId,
             Authentication authentication) {
         try {
             UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
@@ -396,6 +395,60 @@ public class VoteController {
             log.error("Failed to delete comment: {}", commentId, e);
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(ApiResponse.error(ErrorType.UNAUTHORIZED_OPERATION, e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{voteId}/comments/{commentId}/like")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    @Auditable(action = "LIKE", resourceType = "COMMENT")
+    @Operation(summary = "Like a comment", description = "Add a like to a comment")
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Comment liked successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Comment not found")
+    })
+    public ResponseEntity<ApiResponse<Void>> likeComment(
+            @Parameter(description = "Vote ID", required = true)
+            @PathVariable String voteId,
+            @Parameter(description = "Comment ID", required = true)
+            @PathVariable UUID commentId,
+            Authentication authentication) {
+        try {
+            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+            commentService.likeComment(commentId, userDetails.getId());
+            log.info("Comment {} liked by user {}", commentId, userDetails.getUsername());
+            return ResponseEntity.ok(ApiResponse.success("Comment liked successfully"));
+        } catch (Exception e) {
+            log.error("Failed to like comment: {}", commentId, e);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error(ErrorType.BUSINESS_RULE_VIOLATION, e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/{voteId}/comments/{commentId}/like")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    @Auditable(action = "UNLIKE", resourceType = "COMMENT")
+    @Operation(summary = "Unlike a comment", description = "Remove a like from a comment")
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Comment unliked successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Comment not found")
+    })
+    public ResponseEntity<ApiResponse<Void>> unlikeComment(
+            @Parameter(description = "Vote ID", required = true)
+            @PathVariable String voteId,
+            @Parameter(description = "Comment ID", required = true)
+            @PathVariable UUID commentId,
+            Authentication authentication) {
+        try {
+            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+            commentService.unlikeComment(commentId, userDetails.getId());
+            log.info("Comment {} unliked by user {}", commentId, userDetails.getUsername());
+            return ResponseEntity.ok(ApiResponse.success("Comment unliked successfully"));
+        } catch (Exception e) {
+            log.error("Failed to unlike comment: {}", commentId, e);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error(ErrorType.BUSINESS_RULE_VIOLATION, e.getMessage()));
         }
     }
 }

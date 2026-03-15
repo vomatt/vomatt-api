@@ -2,7 +2,6 @@ package com.vomattapi.domain.vote;
 
 import com.vomattapi.domain.common.BaseEntity;
 import com.vomattapi.domain.user.User;
-import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
@@ -17,31 +16,23 @@ import lombok.Setter;
 import lombok.ToString;
 
 @Entity
-@Table(name = "user_votes", uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"user_id", "vote_id", "option_id"})
+@Table(name = "comment_likes", uniqueConstraints = {
+    @UniqueConstraint(columnNames = {"comment_id", "user_id"})
 })
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@ToString(exclude = {"user", "vote", "option"})
-public class UserVote extends BaseEntity {
+@ToString(exclude = {"user", "comment"})
+public class CommentLike extends BaseEntity {
+
+    @NotNull
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "comment_id")
+    private VoteComment comment;
 
     @NotNull
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private User user;
-
-    @NotNull
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "vote_id")
-    private Vote vote;
-
-    @NotNull
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "option_id")
-    private VoteOption option;
-
-    @Column(name = "ip_address")
-    private String ipAddress;
 }

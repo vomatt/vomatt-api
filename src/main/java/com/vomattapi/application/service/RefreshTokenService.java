@@ -32,7 +32,7 @@ public class RefreshTokenService {
     public RefreshToken createRefreshToken(String userId) {
         RefreshToken refreshToken = new RefreshToken();
 
-        User user = userRepository.findById(userId)
+        User user = userRepository.findById(UUID.fromString(userId))
                 .orElseThrow(() -> new RuntimeException("User not found with id: " + userId));
 
         // Check if the member already has a refresh token - if so, delete it
@@ -62,7 +62,7 @@ public class RefreshTokenService {
 
     @Transactional
     public int deleteByUserId(String userId) {
-        User user = userRepository.findById(userId)
+        User user = userRepository.findById(UUID.fromString(userId))
                 .orElseThrow(() -> new RuntimeException("User not found with id: " + userId));
         return refreshTokenRepository.deleteByUser(user);
     }

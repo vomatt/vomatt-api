@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 @Data
 public class CommentDto {
 
-    private Long id;
+    private String id;
     private String voteId;
     private String userId;
     private String username;
@@ -15,4 +15,6 @@ public class CommentDto {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private boolean isEdited;
+    private long likeCount;
+    private boolean isLikedByCurrentUser;
 }

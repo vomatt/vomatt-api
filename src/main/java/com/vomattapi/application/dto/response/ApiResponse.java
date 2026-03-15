@@ -82,4 +82,15 @@ public class ApiResponse<T> {
         this.path = path;
         return this;
     }
+
+    public void setErrorType(String errorType)  { this.errorType = errorType; }
+    public String getErrorType()                { return errorType; }
+    public void setSuccess(boolean success)     { this.success = success; }
+    public boolean isSuccess()                  { return success; }
+    public T getData()                          { return data; }
+    public void setData(T data)                 { this.data = data; }
+    public String getMessage()                  { return message; }
+    public void setMessage(String message)      { this.message = message; }
+    public LocalDateTime getTimestamp()         { return timestamp; }
+    public String getPath()                     { return path; }
 }

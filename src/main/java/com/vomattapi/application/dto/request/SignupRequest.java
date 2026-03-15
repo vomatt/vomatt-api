@@ -32,4 +32,12 @@ public class SignupRequest {
 
     @NotBlank
     private String lastName;
+
+    public String getUsername()           { return username; }
+    public String getEmail()              { return email; }
+    public String getPhoneNumber()        { return phoneNumber; }
+    public String getVerificationCode()   { return verificationCode; }
+    public Set<String> getRoles()         { return roles; }
+    public String getFirstName()          { return firstName; }
+    public String getLastName()           { return lastName; }
 }

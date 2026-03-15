@@ -1,29 +1,24 @@
 package com.vomattapi.domain.user;
 
-import java.time.LocalDateTime;
-
+import com.vomattapi.domain.common.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "user_activities")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class UserActivity {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+public class UserActivity extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
@@ -40,16 +35,4 @@ public class UserActivity {
 
     @Column(name = "user_agent")
     private String userAgent;
-
-    @Column(nullable = false)
-    private LocalDateTime timestamp;
-
-    public UserActivity(User user, String activityType, String activityDescription, String ipAddress, String userAgent) {
-        this.user = user;
-        this.activityType = activityType;
-        this.activityDescription = activityDescription;
-        this.ipAddress = ipAddress;
-        this.userAgent = userAgent;
-        this.timestamp = LocalDateTime.now();
-    }
 }

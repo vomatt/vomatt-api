@@ -5,12 +5,13 @@ import com.vomattapi.application.dto.response.ErrorType;
 import com.vomattapi.application.dto.response.MessageResponse;
 import com.vomattapi.application.service.ValidationService.ValidationResult;
 import com.vomattapi.domain.user.ERole;
-import com.vomattapi.domain.user.User;
 import com.vomattapi.domain.user.Role;
-import com.vomattapi.domain.user.repository.UserRepository;
+import com.vomattapi.domain.user.User;
 import com.vomattapi.domain.user.repository.RoleRepository;
+import com.vomattapi.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,203 +21,196 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Service responsible for user registration workflow Single responsibility: Handle complete signup process
+ * 負責使用者註冊流程：
+ * 1. 驗證預註冊驗證碼（Pre-signup OTP）
+ * 2. 校驗欄位唯一性
+ * 3. 建立 User 並以 BCrypt 加密驗證碼存入 DB
+ * 4. 分配角色
+ * 5. 清除 cache、發送歡迎信
  */
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class SignupService {
+    private static final Logger log = LoggerFactory.getLogger(SignupService.class);
+
     private final ValidationService validationService;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
-    private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final VerificationCodeService verificationCodeService;
+    private final PasswordEncoder passwordEncoder;
 
-    /**
-     * Process complete signup workflow
-     */
     @Transactional
-    public SignupResult processSignup(SignupRequest signupRequest) {
-        log.info("Processing signup for username: {}, email: {}", signupRequest.getUsername(),
-                signupRequest.getEmail());
+    public SignupResult processSignup(SignupRequest request) {
+        log.info("Processing signup for username: {}, email: {}", request.getUsername(), request.getEmail());
 
         try {
-            // Step 1: Verification pre-signup verification code
-            SignupResult verificationResult = verifyPreSignupCode(signupRequest);
+            // Step 1: 驗證 pre-signup OTP
+            SignupResult verificationResult = verifyPreSignupCode(request);
             if (!verificationResult.isSuccess()) {
                 return verificationResult;
             }
 
-            // Step 2: Validate data
-            ValidationResult validation = validateSignupData(signupRequest);
+            // Step 2: 校驗唯一性（username / email）
+            ValidationResult validation = validateSignupData(request);
             if (!validation.isValid()) {
                 log.warn("Signup validation failed: {}", validation.getErrorMessage());
                 return SignupResult.failure(validation.getErrorType(), validation.getErrorMessage());
             }
 
-            // Step 3: Create member
-            User user = createUserFromRequest(signupRequest);
+            // Step 3: 建立 User（驗證碼 BCrypt 加密後存入）
+            User user = createUserFromRequest(request);
 
-            // Step 4: Assign roles
-            assignRolesToUser(user, signupRequest.getRoles());
+            // Step 4: 指派角色
+            assignRolesToUser(user, request.getRoles());
 
-            // Step 5: Save member
+            // Step 5: 儲存
             User savedUser = userRepository.save(user);
 
-            // Step 6: Clear pre-signup cache
-            clearPreSignupCache(signupRequest.getEmail(), signupRequest.getUsername());
+            // Step 6: 清除 pre-signup cache
+            clearPreSignupCache(request.getEmail(), request.getUsername());
 
-            // Step 7: Send welcome email
+            // Step 7: 發送歡迎信
             emailService.sendWelcomeEmail(savedUser.getEmail(), savedUser.getUsername());
 
-            log.info("Signup successful for member: {}", savedUser.getId());
+            log.info("Signup successful for user: {}", savedUser.getId());
             return SignupResult.success();
 
         } catch (Exception e) {
-            log.error("Signup failed for username: {}", signupRequest.getUsername(), e);
+            log.error("Signup failed for username: {}", request.getUsername(), e);
             return SignupResult.failure(ErrorType.INTERNAL_ERROR, "Registration failed due to internal error");
         }
     }
 
-    /**
-     * Validate signup data using ValidationService
-     */
-    private ValidationResult validateSignupData(SignupRequest signupRequest) {
-        // Validate username and email
-        ValidationResult basicValidation = validationService.validatePreSignupData(signupRequest.getUsername(),
-                signupRequest.getEmail());
+    // ─────────────────────────────────────────────────────────────────────────
+    // Public helpers
+    // ─────────────────────────────────────────────────────────────────────────
 
-        if (!basicValidation.isValid()) {
-            return basicValidation;
+    public boolean isUsernameAvailable(String username) {
+        return validationService.validateUsername(username).isValid();
+    }
+
+    public boolean isEmailAvailable(String email) {
+        return validationService.validateEmail(email).isValid();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Private helpers
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private ValidationResult validateSignupData(SignupRequest request) {
+        ValidationResult result = validationService.validatePreSignupData(request.getUsername(), request.getEmail());
+        if (!result.isValid()) {
+            return result;
         }
-
         return ValidationResult.valid();
     }
 
     /**
-     * Create member entity from signup request
+     * 建立 User entity，將驗證碼以 BCrypt 加密後存入 verification_code 欄位
+     * （verification_code 在登入時作為 Spring Security password 使用）
      */
-    private User createUserFromRequest(SignupRequest signupRequest) {
-        User user = new User(signupRequest.getUsername(), signupRequest.getEmail(),
-                signupRequest.getPhoneNumber(), passwordEncoder.encode(signupRequest.getVerificationCode()), signupRequest.getFirstName(), signupRequest.getLastName());
-
-        log.debug("Created member entity for username: {}", signupRequest.getUsername());
-        return user;
+    private User createUserFromRequest(SignupRequest request) {
+        String encodedVerificationCode = passwordEncoder.encode(request.getVerificationCode());
+        return new User(
+            request.getUsername(),
+            request.getEmail(),
+            request.getPhoneNumber(),
+            encodedVerificationCode,
+            request.getFirstName(),
+            request.getLastName()
+        );
     }
 
-    /**
-     * Assign roles to member based on request
-     */
     private void assignRolesToUser(User user, Set<String> strRoles) {
         Set<Role> roles = new HashSet<>();
 
         if (strRoles == null || strRoles.isEmpty()) {
-            // Default role
-            Role userRole = roleRepository.findByName(ERole.ROLE_USER)
-                    .orElseThrow(() -> new RuntimeException("Error: User Role is not found."));
-            roles.add(userRole);
+            roles.add(findRole(ERole.ROLE_USER));
         } else {
             strRoles.forEach(role -> {
                 switch (role) {
-                case "admin":
-                    Role adminRole = roleRepository.findByName(ERole.ROLE_ADMIN)
-                            .orElseThrow(() -> new RuntimeException("Error: Admin Role is not found."));
-                    roles.add(adminRole);
-                    break;
-                case "mod":
-                    Role modRole = roleRepository.findByName(ERole.ROLE_MODERATOR)
-                            .orElseThrow(() -> new RuntimeException("Error: Moderator Role is not found."));
-                    roles.add(modRole);
-                    break;
-                default:
-                    Role userRole = roleRepository.findByName(ERole.ROLE_USER)
-                            .orElseThrow(() -> new RuntimeException("Error: User Role is not found."));
-                    roles.add(userRole);
+                    case "admin" -> roles.add(findRole(ERole.ROLE_ADMIN));
+                    case "mod"   -> roles.add(findRole(ERole.ROLE_MODERATOR));
+                    default      -> roles.add(findRole(ERole.ROLE_USER));
                 }
             });
         }
 
         user.setRoles(roles);
-        log.debug("Assigned {} roles to member", roles.size());
+        log.debug("Assigned {} roles to user", roles.size());
+    }
+
+    private Role findRole(ERole roleEnum) {
+        return roleRepository.findByName(roleEnum)
+            .orElseThrow(() -> new RuntimeException("Role not found: " + roleEnum));
     }
 
     /**
-     * Check if username is available
+     * 驗證 pre-signup OTP：
+     * - 從 Redis cache 取出當初發送的驗證碼
+     * - 比對使用者提交的驗證碼與 username
      */
-    public boolean isUsernameAvailable(String username) {
-        ValidationResult result = validationService.validateUsername(username);
-        return result.isValid();
-    }
-
-    /**
-     * Check if email is available
-     */
-    public boolean isEmailAvailable(String email) {
-        ValidationResult result = validationService.validateEmail(email);
-        return result.isValid();
-    }
-
-    /**
-     * Verification pre-signup verification code
-     */
-    private SignupResult verifyPreSignupCode(SignupRequest signupRequest) {
+    private SignupResult verifyPreSignupCode(SignupRequest request) {
         try {
-            String key = signupRequest.getEmail() + ":" + signupRequest.getUsername();
-            // Get pre-signup data from cache
+            String key = request.getEmail() + ":" + request.getUsername();
             Map<String, Object> preSignupData = verificationCodeService.getVerificationData("pre_signup", key);
-            
+
             if (preSignupData == null || preSignupData.isEmpty()) {
-                log.warn("No pre-signup data found for email: {}", signupRequest.getEmail());
-                return SignupResult.failure(ErrorType.VERIFICATION_CODE_EXPIRED, "Email verification required. Please complete pre-signup first.");
+                log.warn("No pre-signup data found for email: {}", request.getEmail());
+                return SignupResult.failure(
+                    ErrorType.VERIFICATION_CODE_EXPIRED,
+                    "Email verification required. Please complete pre-signup first."
+                );
             }
 
-            String cachedVerificationCode = (String) preSignupData.get("verificationCode");
+            String cachedCode     = (String) preSignupData.get("verificationCode");
             String cachedUsername = (String) preSignupData.get("username");
 
-            if (cachedVerificationCode == null) {
-                log.error("No verification code found in pre-signup data for email: {}", signupRequest.getEmail());
-                return SignupResult.failure(ErrorType.VERIFICATION_CODE_INVALID, "Invalid verification data. Please restart the signup process.");
+            if (cachedCode == null) {
+                log.error("No verification code in pre-signup data for email: {}", request.getEmail());
+                return SignupResult.failure(
+                    ErrorType.VERIFICATION_CODE_INVALID,
+                    "Invalid verification data. Please restart the signup process."
+                );
             }
 
-            if (!cachedVerificationCode.equals(signupRequest.getVerificationCode())) {
-                log.warn("Invalid verification code provided for email: {}", signupRequest.getEmail());
+            if (!cachedCode.equals(request.getVerificationCode())) {
+                log.warn("Invalid verification code for email: {}", request.getEmail());
                 return SignupResult.failure(ErrorType.INVALID_VERIFICATION_CODE, "Invalid verification code.");
             }
 
-            if (!signupRequest.getUsername().equals(cachedUsername)) {
-                log.warn("Username mismatch. Expected: {}, Provided: {}", cachedUsername, signupRequest.getUsername());
-                return SignupResult.failure(ErrorType.VALIDATION_ERROR, "Username does not match the pre-registered username.");
+            if (!request.getUsername().equals(cachedUsername)) {
+                log.warn("Username mismatch. Expected: {}, Provided: {}", cachedUsername, request.getUsername());
+                return SignupResult.failure(
+                    ErrorType.VALIDATION_ERROR,
+                    "Username does not match the pre-registered username."
+                );
             }
 
-            log.info("Pre-signup verification successful for email: {}", signupRequest.getEmail());
+            log.info("Pre-signup verification successful for email: {}", request.getEmail());
             return SignupResult.success();
-            
+
         } catch (Exception e) {
-            log.error("Error verifying pre-signup code for email: {}", signupRequest.getEmail(), e);
+            log.error("Error verifying pre-signup code for email: {}", request.getEmail(), e);
             return SignupResult.failure(ErrorType.INTERNAL_ERROR, "Verification failed due to internal error");
         }
     }
 
-    /**
-     * Clear pre-signup cache data
-     */
     private void clearPreSignupCache(String email, String username) {
         try {
-            String key = email + ":" + username;
-            // Use Redis service to delete the cache keys directly
-            verificationCodeService.deleteVerificationData("pre_signup", key);
-            
-            log.debug("Cleared pre-signup cache for email: {} and username: {}", email, username);
+            verificationCodeService.deleteVerificationData("pre_signup", email + ":" + username);
+            log.debug("Cleared pre-signup cache for email: {}, username: {}", email, username);
         } catch (Exception e) {
-            log.error("Failed to clear pre-signup cache for email: {} and username: {}", email, username, e);
-            // Don't fail the signup if cache clearing fails
+            // cache 清除失敗不影響主流程
+            log.error("Failed to clear pre-signup cache for email: {}", email, e);
         }
     }
 
-    /**
-     * Signup result wrapper
-     */
+    // ─────────────────────────────────────────────────────────────────────────
+    // Result wrapper
+    // ─────────────────────────────────────────────────────────────────────────
+
     public static class SignupResult {
         private final boolean success;
         private final ErrorType errorType;
@@ -236,17 +230,9 @@ public class SignupService {
             return new SignupResult(false, errorType, errorMessage);
         }
 
-        public boolean isSuccess() {
-            return success;
-        }
-
-        public ErrorType getErrorType() {
-            return errorType;
-        }
-
-        public String getErrorMessage() {
-            return errorMessage;
-        }
+        public boolean isSuccess()       { return success; }
+        public ErrorType getErrorType()  { return errorType; }
+        public String getErrorMessage()  { return errorMessage; }
 
         public MessageResponse toMessageResponse() {
             return new MessageResponse(errorMessage);

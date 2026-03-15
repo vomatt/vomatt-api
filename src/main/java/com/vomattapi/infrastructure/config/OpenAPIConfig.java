@@ -19,14 +19,14 @@ import io.swagger.v3.oas.models.servers.Server;
 @Configuration
 public class OpenAPIConfig {
 
-    @Value("${app.openapi.dev-url:http://localhost:8080}")
+    @Value("${app.openapi.dev-url}")
     private String devUrl;
 
-    @Value("${app.openapi.prod-url:https://api.vomatt.com}")
+    @Value("${app.openapi.prod-url}")
     private String prodUrl;
 
     @Bean
-    public OpenAPI vomattOpenAPI() {
+    public OpenAPI vomattOpenAPI(@Value("${spring.profiles.active:dev}") String activeProfile) {
         Server devServer = new Server();
         devServer.setUrl(devUrl);
         devServer.setDescription("開發環境服務器");
@@ -61,10 +61,16 @@ public class OpenAPIConfig {
 
         SecurityRequirement securityRequirement = new SecurityRequirement().addList("bearerAuth");
 
+        List<Server> servers = "dev".equals(activeProfile)
+                ? List.of(new Server().url(devUrl).description("Development"),
+                new Server().url(prodUrl).description("Production"))
+                : List.of(new Server().url(prodUrl).description("Production"),
+                        new Server().url(devUrl).description("Development"));
+
         return new OpenAPI()
                 .components(new Components().addSecuritySchemes("bearerAuth", securityScheme))
                 .security(Arrays.asList(securityRequirement))
                 .info(info)
-                .servers(List.of(devServer, prodServer));
+                .servers(servers);
     }
 }

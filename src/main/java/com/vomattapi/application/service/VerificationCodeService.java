@@ -1,6 +1,7 @@
 package com.vomattapi.application.service;
 
 import com.vomattapi.infrastructure.redis.RedisService;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -221,6 +222,7 @@ public class VerificationCodeService {
     /**
      * Verification session data
      */
+    @Getter
     public static class VerificationSession {
         private final String sessionKey;
         private final String verificationCode;
@@ -235,22 +237,6 @@ public class VerificationCodeService {
             this.duration = duration;
         }
 
-        public String getSessionKey() {
-            return sessionKey;
-        }
-
-        public String getVerificationCode() {
-            return verificationCode;
-        }
-
-        public LocalDateTime getExpirationTime() {
-            return expirationTime;
-        }
-
-        public Duration getDuration() {
-            return duration;
-        }
-
         public long getExpirationMinutes() {
             return duration.toMinutes();
         }
@@ -259,6 +245,7 @@ public class VerificationCodeService {
     /**
      * Verification result wrapper
      */
+    @Getter
     public static class VerificationResult {
         private final boolean success;
         private final String errorMessage;
@@ -276,18 +263,6 @@ public class VerificationCodeService {
 
         public static VerificationResult failed(String errorMessage) {
             return new VerificationResult(false, errorMessage, null);
-        }
-
-        public boolean isSuccess() {
-            return success;
-        }
-
-        public String getErrorMessage() {
-            return errorMessage;
-        }
-
-        public Map<String, Object> getSessionData() {
-            return sessionData;
         }
     }
 }

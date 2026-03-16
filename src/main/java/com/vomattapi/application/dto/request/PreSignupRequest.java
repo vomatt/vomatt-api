@@ -18,7 +18,4 @@ public class PreSignupRequest {
     @Size(max = 50, message = "Email must not exceed 50 characters")
     @Email(message = "Email should be valid")
     private String email;
-
-    public String getUsername() { return username; }
-    public String getEmail()    { return email; }
 }

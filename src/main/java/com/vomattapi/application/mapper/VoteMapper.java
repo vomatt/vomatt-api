@@ -40,7 +40,7 @@ public class VoteMapper {
         resp.setDescription(option.getDescription());
         resp.setDisplayOrder(option.getDisplayOrder());
         resp.setCreatedAt(option.getCreatedAt());
-        resp.setVoteCount(option.getVoteCount());
+        resp.setVotes(option.getVoteCount());
         return resp;
     }
 

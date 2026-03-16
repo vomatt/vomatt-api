@@ -1,5 +1,6 @@
 package com.vomattapi.application.service;
 
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -93,6 +94,7 @@ public class ValidationService {
     /**
      * Validation result wrapper with error code support
      */
+    @Getter
     public static class ValidationResult {
         private final boolean valid;
         private final String errorMessage;
@@ -115,18 +117,6 @@ public class ValidationService {
         // Backward compatibility method
         public static ValidationResult invalid(String errorMessage) {
             return new ValidationResult(false, errorMessage, ErrorType.INTERNAL_ERROR);
-        }
-
-        public boolean isValid() {
-            return valid;
-        }
-
-        public String getErrorMessage() {
-            return errorMessage;
-        }
-
-        public ErrorType getErrorType() {
-            return errorType;
         }
     }
 }

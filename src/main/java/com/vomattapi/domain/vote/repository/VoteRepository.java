@@ -19,6 +19,10 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
 
     List<Vote> findByCreatorIdOrderByCreatedAtDesc(UUID creatorId);
 
+    Page<Vote> findByCreatorIdOrderByCreatedAtDesc(UUID creatorId, Pageable pageable);
+
+    long countByCreatorId(UUID creatorId);
+
     List<Vote> findByIsActiveTrueOrderByCreatedAtDesc();
 
     Page<Vote> findByIsActiveTrueOrderByCreatedAtDesc(Pageable pageable);

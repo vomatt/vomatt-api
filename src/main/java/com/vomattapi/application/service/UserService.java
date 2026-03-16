@@ -1,6 +1,8 @@
 package com.vomattapi.application.service;
 
+import com.vomattapi.application.dto.request.UpdateProfileRequest;
 import com.vomattapi.application.dto.response.UserDto;
+import com.vomattapi.application.dto.response.UserProfileResponse;
 import com.vomattapi.domain.user.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -26,4 +28,8 @@ public interface UserService {
     void deleteUser(String userId);
 
     Page<UserDto> searchUsersByUsername(String username, Pageable pageable);
+
+    UserProfileResponse getUserProfile(String username);
+
+    UserProfileResponse updateMyProfile(String userId, UpdateProfileRequest request);
 }

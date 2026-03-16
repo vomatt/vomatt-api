@@ -10,8 +10,8 @@ public class CommentDto {
     private String id;
     private String voteId;
     private String userId;
-    private String username;
-    private String content;
+    private String author;
+    private String text;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private boolean isEdited;

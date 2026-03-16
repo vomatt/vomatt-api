@@ -11,7 +11,7 @@ import lombok.Data;
 public class ApiResponse<T> {
 
     private boolean success;
-    private String errorType;
+    private String errorCode;
     private T data;
     private String message;
     private LocalDateTime timestamp;
@@ -26,13 +26,13 @@ public class ApiResponse<T> {
         this.success = success;
         this.data = data;
         this.message = message;
-        this.errorType = success ? ErrorType.SUCCESS.getCode() : null;
+        this.errorCode = success ? ErrorType.SUCCESS.getCode() : null;
     }
 
-    public ApiResponse(boolean success, String errorType, T data, String message) {
+    public ApiResponse(boolean success, String errorCode, T data, String message) {
         this();
         this.success = success;
-        this.errorType = errorType;
+        this.errorCode = errorCode;
         this.data = data;
         this.message = message;
     }
@@ -40,19 +40,19 @@ public class ApiResponse<T> {
     // Success responses
     public static <T> ApiResponse<T> success(T data) {
         ApiResponse<T> response = new ApiResponse<>(true, data, null);
-        response.setErrorType(ErrorType.SUCCESS.getCode());
+        response.setErrorCode(ErrorType.SUCCESS.getCode());
         return response;
     }
 
     public static <T> ApiResponse<T> success(T data, String message) {
         ApiResponse<T> response = new ApiResponse<>(true, data, message);
-        response.setErrorType(ErrorType.SUCCESS.getCode());
+        response.setErrorCode(ErrorType.SUCCESS.getCode());
         return response;
     }
 
     public static <T> ApiResponse<T> success(String message) {
         ApiResponse<T> response = new ApiResponse<>(true, null, message);
-        response.setErrorType(ErrorType.SUCCESS.getCode());
+        response.setErrorCode(ErrorType.SUCCESS.getCode());
         return response;
     }
 
@@ -82,15 +82,4 @@ public class ApiResponse<T> {
         this.path = path;
         return this;
     }
-
-    public void setErrorType(String errorType)  { this.errorType = errorType; }
-    public String getErrorType()                { return errorType; }
-    public void setSuccess(boolean success)     { this.success = success; }
-    public boolean isSuccess()                  { return success; }
-    public T getData()                          { return data; }
-    public void setData(T data)                 { this.data = data; }
-    public String getMessage()                  { return message; }
-    public void setMessage(String message)      { this.message = message; }
-    public LocalDateTime getTimestamp()         { return timestamp; }
-    public String getPath()                     { return path; }
 }

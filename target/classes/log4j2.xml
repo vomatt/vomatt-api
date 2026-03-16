@@ -9,17 +9,6 @@
         <Console name="console" target="SYSTEM_OUT">
             <PatternLayout pattern="${LOG_PATTERN}" />
         </Console>
-        
-        <!-- 可选的文件日志配置 -->
-        <RollingFile name="file" fileName="logs/app.log"
-                    filePattern="logs/app-%d{yyyy-MM-dd}-%i.log.gz">
-            <PatternLayout pattern="${LOG_PATTERN}" />
-            <Policies>
-                <SizeBasedTriggeringPolicy size="10 MB" />
-                <TimeBasedTriggeringPolicy />
-            </Policies>
-            <DefaultRolloverStrategy max="10" />
-        </RollingFile>
     </Appenders>
 
     <Loggers>

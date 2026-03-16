@@ -1,12 +1,16 @@
 package com.vomattapi.application.service.impl;
 
+import com.vomattapi.application.dto.request.UpdateProfileRequest;
 import com.vomattapi.application.dto.response.UserDto;
+import com.vomattapi.application.dto.response.UserProfileResponse;
 import com.vomattapi.application.mapper.UserMapper;
 import com.vomattapi.application.service.UserService;
 import com.vomattapi.domain.user.User;
 import com.vomattapi.domain.user.UserActivity;
 import com.vomattapi.domain.user.repository.UserActivityRepository;
 import com.vomattapi.domain.user.repository.UserRepository;
+import com.vomattapi.domain.vote.repository.UserVoteRepository;
+import com.vomattapi.domain.vote.repository.VoteRepository;
 import com.vomattapi.infrastructure.redis.CacheUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +32,8 @@ public class UserServiceImpl implements UserService {
     private final PasswordEncoder passwordEncoder;
     private final CacheUtil cacheUtil;
     private final UserMapper userMapper;
+    private final VoteRepository voteRepository;
+    private final UserVoteRepository userVoteRepository;
 
     private static final int MAX_LOGIN_ATTEMPTS = 5;
     private static final int ACCOUNT_LOCK_MINUTES = 30;
@@ -184,6 +190,39 @@ public class UserServiceImpl implements UserService {
         log.debug("Searching users with username containing: {}", username);
         return userRepository.searchByUsername(username, pageable)
             .map(userMapper::toDto);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public UserProfileResponse getUserProfile(String username) {
+        User user = userRepository.findByUsername(username)
+            .orElseThrow(() -> new RuntimeException("User not found: " + username));
+        int totalPolls = (int) voteRepository.countByCreatorId(user.getId());
+        int totalVotes = (int) userVoteRepository.countDistinctVoteByUserId(user.getId());
+        return new UserProfileResponse(
+            user.getUsername(),
+            user.getDisplayName(),
+            user.getBio(),
+            user.getCreatedAt(),
+            totalPolls,
+            totalVotes
+        );
+    }
+
+    @Override
+    @Transactional
+    public UserProfileResponse updateMyProfile(String userId, UpdateProfileRequest request) {
+        User user = findUserById(userId);
+        if (request.getDisplayName() != null) {
+            user.setDisplayName(request.getDisplayName());
+        }
+        if (request.getBio() != null) {
+            user.setBio(request.getBio());
+        }
+        userRepository.save(user);
+        cacheUtil.evictUserCache(userId);
+        log.debug("Evicted cache for user after profile update: {}", userId);
+        return getUserProfile(user.getUsername());
     }
 
     private User findUserById(String userId) {

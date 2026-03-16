@@ -81,6 +81,13 @@ public class User extends BaseEntity {
     @Column(name = "location")
     private String location;
 
+    @Size(max = 100)
+    @Column(name = "display_name")
+    private String displayName;
+
+    @Column(name = "bio", columnDefinition = "TEXT")
+    private String bio;
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "user_roles",
             joinColumns = @JoinColumn(name = "user_id"),

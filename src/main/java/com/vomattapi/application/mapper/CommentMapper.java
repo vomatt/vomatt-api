@@ -12,8 +12,8 @@ public class CommentMapper {
         dto.setId(comment.getId().toString());
         dto.setVoteId(comment.getVote().getId().toString());
         dto.setUserId(comment.getUser().getId().toString());
-        dto.setUsername(comment.getUser().getUsername());
-        dto.setContent(comment.getContent());
+        dto.setAuthor(comment.getUser().getUsername());
+        dto.setText(comment.getContent());
         dto.setCreatedAt(comment.getCreatedAt());
         dto.setUpdatedAt(comment.getUpdatedAt());
         dto.setEdited(!comment.getCreatedAt().equals(comment.getUpdatedAt()));

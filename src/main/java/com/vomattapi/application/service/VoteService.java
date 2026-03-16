@@ -23,6 +23,8 @@ public interface VoteService {
     Page<VoteResponse> getActiveVotes(Pageable pageable);
     
     List<VoteResponse> getVotesByCreator(String creatorId);
+
+    Page<VoteResponse> getVotesByCreator(String creatorId, Pageable pageable);
     
     VoteResponse vote(String voteId, VoteRequest request, String userId, String ipAddress);
 

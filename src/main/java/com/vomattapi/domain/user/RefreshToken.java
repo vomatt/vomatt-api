@@ -6,11 +6,17 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "refresh_tokens")
+@Getter
+@Setter
+@NoArgsConstructor
 public class RefreshToken extends BaseEntity {
 
     @OneToOne
@@ -23,25 +29,9 @@ public class RefreshToken extends BaseEntity {
     @Column(nullable = false, name = "expiry_date")
     private LocalDateTime expiryDate;
 
-    public RefreshToken() {}
-
     public RefreshToken(User user, String token, LocalDateTime expiryDate) {
         this.user = user;
         this.token = token;
         this.expiryDate = expiryDate;
-    }
-
-    public User getUser()                          { return user; }
-    public void setUser(User user)                 { this.user = user; }
-
-    public String getToken()                       { return token; }
-    public void setToken(String token)             { this.token = token; }
-
-    public LocalDateTime getExpiryDate()           { return expiryDate; }
-    public void setExpiryDate(LocalDateTime date)  { this.expiryDate = date; }
-
-    @Override
-    public String toString() {
-        return "RefreshToken{token='" + token + "', expiryDate=" + expiryDate + "}";
     }
 }

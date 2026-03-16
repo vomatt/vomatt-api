@@ -5,7 +5,7 @@ import lombok.Data;
 @Data
 public class BaseResponse {
     private boolean success;
-    private String errorType;
+    private String errorCode;
 
     public BaseResponse() {}
 
@@ -13,13 +13,8 @@ public class BaseResponse {
         this.success = success;
     }
 
-    public BaseResponse(boolean success, String errorType) {
+    public BaseResponse(boolean success, String errorCode) {
         this.success = success;
-        this.errorType = errorType;
+        this.errorCode = errorCode;
     }
-
-    public boolean isSuccess()              { return success; }
-    public void setSuccess(boolean success) { this.success = success; }
-    public String getErrorType()            { return errorType; }
-    public void setErrorType(String t)      { this.errorType = t; }
 }

@@ -117,6 +117,13 @@ public class VoteServiceImpl implements VoteService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Page<VoteResponse> getVotesByCreator(String creatorId, Pageable pageable) {
+        Page<Vote> votes = voteRepository.findByCreatorIdOrderByCreatedAtDesc(UUID.fromString(creatorId), pageable);
+        return votes.map(this::convertToVoteResponse);
+    }
+
+    @Override
     public VoteResponse vote(String voteId, VoteRequest request, String userId, String ipAddress) {
         Vote vote = voteRepository.findByIdAndIsActiveTrue(UUID.fromString(voteId))
             .orElseThrow(() -> new VoteNotFoundException(voteId));

@@ -35,4 +35,7 @@ public interface UserVoteRepository extends JpaRepository<UserVote, UUID> {
     void deleteByUserIdAndVoteId(UUID userId, UUID voteId);
 
     void deleteByUserIdAndVoteIdAndOptionId(UUID userId, UUID voteId, UUID optionId);
+
+    @Query("SELECT COUNT(DISTINCT uv.vote.id) FROM UserVote uv WHERE uv.user.id = :userId")
+    long countDistinctVoteByUserId(@Param("userId") UUID userId);
 }

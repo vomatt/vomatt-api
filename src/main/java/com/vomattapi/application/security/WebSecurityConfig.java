@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -65,6 +66,8 @@ public class WebSecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // 公開路由：認證相關
                 .requestMatchers("/api/auth/**").permitAll()
+                // 公開路由：用戶公開檔案（GET /{username}，@PreAuthorize 仍保護 /search 端點）
+                .requestMatchers(HttpMethod.GET, "/api/v1/users/*").permitAll()
                 // 公開路由：Swagger UI
                 .requestMatchers(
                     "/swagger-ui/**",

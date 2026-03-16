@@ -9,6 +9,7 @@ import com.vomattapi.domain.user.Role;
 import com.vomattapi.domain.user.User;
 import com.vomattapi.domain.user.repository.RoleRepository;
 import com.vomattapi.domain.user.repository.UserRepository;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -211,6 +212,7 @@ public class SignupService {
     // Result wrapper
     // ─────────────────────────────────────────────────────────────────────────
 
+    @Getter
     public static class SignupResult {
         private final boolean success;
         private final ErrorType errorType;
@@ -229,10 +231,6 @@ public class SignupService {
         public static SignupResult failure(ErrorType errorType, String errorMessage) {
             return new SignupResult(false, errorType, errorMessage);
         }
-
-        public boolean isSuccess()       { return success; }
-        public ErrorType getErrorType()  { return errorType; }
-        public String getErrorMessage()  { return errorMessage; }
 
         public MessageResponse toMessageResponse() {
             return new MessageResponse(errorMessage);

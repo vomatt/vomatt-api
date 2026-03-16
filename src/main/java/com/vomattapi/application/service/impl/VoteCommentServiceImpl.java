@@ -45,7 +45,7 @@ public class VoteCommentServiceImpl implements VoteCommentService {
         User user = userRepository.findById(UUID.fromString(userId))
             .orElseThrow(() -> new EntityNotFoundException("User", userId));
 
-        VoteComment comment = new VoteComment(vote, user, request.getContent());
+        VoteComment comment = new VoteComment(vote, user, request.getText());
         comment = commentRepository.save(comment);
 
         log.info("Comment created: {} on vote: {} by user: {}", comment.getId(), voteId, userId);
@@ -73,7 +73,7 @@ public class VoteCommentServiceImpl implements VoteCommentService {
             throw new UnauthorizedOperationException("update", "comment");
         }
 
-        comment.updateContent(request.getContent());
+        comment.updateContent(request.getText());
         comment = commentRepository.save(comment);
 
         log.info("Comment {} updated by user {}", commentId, userId);

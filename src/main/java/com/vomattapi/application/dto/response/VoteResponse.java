@@ -31,6 +31,6 @@ public class VoteResponse extends BaseResponse {
         private String description;
         private Integer displayOrder;
         private LocalDateTime createdAt;
-        private long voteCount;
+        private long votes;
     }
 }

@@ -1,11 +1,14 @@
 package com.vomattapi.application.controller;
 
+import com.vomattapi.application.dto.request.UpdateProfileRequest;
 import com.vomattapi.application.dto.response.ApiResponse;
 import com.vomattapi.application.dto.response.ErrorType;
 import com.vomattapi.application.dto.response.UserDto;
+import com.vomattapi.application.dto.response.UserProfileResponse;
 import com.vomattapi.application.security.services.UserDetailsImpl;
 import com.vomattapi.application.service.RefreshTokenService;
 import com.vomattapi.application.service.UserService;
+import jakarta.validation.Valid;
 import com.vomattapi.infrastructure.audit.Auditable;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -35,6 +38,47 @@ public class UserController {
 
     private final UserService userService;
     private final RefreshTokenService refreshTokenService;
+
+    @GetMapping("/{username}")
+    @Operation(summary = "Get user public profile", description = "Get a user's public profile by username")
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "User profile retrieved successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found")
+    })
+    public ResponseEntity<ApiResponse<UserProfileResponse>> getUserProfile(
+            @Parameter(description = "Username", required = true)
+            @PathVariable String username) {
+        try {
+            UserProfileResponse profile = userService.getUserProfile(username);
+            return ResponseEntity.ok(ApiResponse.success(profile));
+        } catch (RuntimeException e) {
+            log.warn("User profile not found for username: {}", username);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error(ErrorType.USER_NOT_FOUND, e.getMessage()));
+        }
+    }
+
+    @PatchMapping("/me")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    @Operation(summary = "Update my profile", description = "Update the authenticated user's display name and bio")
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Profile updated successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized")
+    })
+    public ResponseEntity<ApiResponse<UserProfileResponse>> updateMyProfile(
+            @Valid @RequestBody UpdateProfileRequest request,
+            Authentication authentication) {
+        try {
+            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+            UserProfileResponse profile = userService.updateMyProfile(userDetails.getId(), request);
+            log.info("Profile updated for user: {}", userDetails.getUsername());
+            return ResponseEntity.ok(ApiResponse.success(profile, "Profile updated successfully"));
+        } catch (Exception e) {
+            log.error("Failed to update profile", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error(ErrorType.INTERNAL_ERROR, e.getMessage()));
+        }
+    }
 
     @GetMapping("/search")
     @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")

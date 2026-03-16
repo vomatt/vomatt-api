@@ -1,6 +1,5 @@
 package com.vomattapi.application.controller;
 
-import java.util.List;
 import java.util.UUID;
 
 import org.springframework.data.domain.Page;
@@ -118,18 +117,20 @@ public class VoteController {
         }
     }
 
-    @GetMapping("/my-votes")
+    @GetMapping("/my")
     @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
-    @Operation(summary = "Get user's votes", description = "Retrieve votes created by the authenticated user")
+    @Operation(summary = "Get user's votes", description = "Retrieve votes created by the authenticated user (paginated)")
     @ApiResponses(value = {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "User votes retrieved successfully"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Forbidden")
     })
-    public ResponseEntity<ApiResponse<List<VoteResponse>>> getMyVotes(Authentication authentication) {
+    public ResponseEntity<ApiResponse<Page<VoteResponse>>> getMyVotes(
+            @PageableDefault(size = 20) Pageable pageable,
+            Authentication authentication) {
         try {
             UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-            List<VoteResponse> response = voteService.getVotesByCreator(userDetails.getId());
+            Page<VoteResponse> response = voteService.getVotesByCreator(userDetails.getId(), pageable);
             return ResponseEntity.ok(ApiResponse.success(response));
         } catch (Exception e) {
             log.error("Failed to get user votes", e);

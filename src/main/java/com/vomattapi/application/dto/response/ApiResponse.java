@@ -39,21 +39,15 @@ public class ApiResponse<T> {
 
     // Success responses
     public static <T> ApiResponse<T> success(T data) {
-        ApiResponse<T> response = new ApiResponse<>(true, data, null);
-        response.setErrorCode(ErrorType.SUCCESS.getCode());
-        return response;
+        return new ApiResponse<>(true, data, null);
     }
 
     public static <T> ApiResponse<T> success(T data, String message) {
-        ApiResponse<T> response = new ApiResponse<>(true, data, message);
-        response.setErrorCode(ErrorType.SUCCESS.getCode());
-        return response;
+        return new ApiResponse<>(true, data, message);
     }
 
     public static <T> ApiResponse<T> success(String message) {
-        ApiResponse<T> response = new ApiResponse<>(true, null, message);
-        response.setErrorCode(ErrorType.SUCCESS.getCode());
-        return response;
+        return new ApiResponse<>(true, null, message);
     }
 
     // Error responses with ErrorType enum

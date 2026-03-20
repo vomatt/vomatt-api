@@ -36,7 +36,7 @@ public class WebSecurityConfig {
 
     private final UserDetailsServiceImpl userDetailsService;
     private final AuthEntryPointJwt unauthorizedHandler;
-//    private final AuthTokenFilter authTokenFilter;
+    private final AuthTokenFilter authTokenFilter;
 
     @Bean
     public DaoAuthenticationProvider authenticationProvider() {
@@ -82,7 +82,7 @@ public class WebSecurityConfig {
             );
 
         http.authenticationProvider(authenticationProvider());
-//        http.addFilterBefore(authTokenFilter, UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(authTokenFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

@@ -27,19 +27,21 @@
         <url/>
     </scm>
     <properties>
-        <jwt.version>0.11.5</jwt.version>
-        <resilience4j.version>2.2.0</resilience4j.version>
-        <springdoc-openapi.version>2.8.15</springdoc-openapi.version>
-        <postgresql.version>42.7.7</postgresql.version>
         <!-- Java -->
         <java.version>21</java.version>
 
         <!-- Spring Cloud -->
         <spring-cloud.version>2025.0.1</spring-cloud.version>
-        <spring-cloud-alibaba.version>2025.0.0.0</spring-cloud-alibaba.version>
+
+        <!-- Security -->
+        <jwt.version>0.12.6</jwt.version>
+        <resilience4j.version>2.2.0</resilience4j.version>
+
+        <!-- API Docs -->
+        <springdoc-openapi.version>2.8.15</springdoc-openapi.version>
 
         <!-- Database -->
-        <mysql-connector.version>9.6.0</mysql-connector.version>
+        <postgresql.version>42.7.7</postgresql.version>
         <jedis.version>7.2.1</jedis.version>
 
         <!-- Code Generation -->
@@ -47,16 +49,8 @@
         <mapstruct.version>1.6.3</mapstruct.version>
         <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
 
-        <!-- Excel -->
-        <fastexcel.version>1.3.0</fastexcel.version>
-        <poi.version>5.5.1</poi.version>
-
         <!-- Utilities -->
         <uuid-generator.version>5.2.0</uuid-generator.version>
-
-
-        <!-- Security -->
-        <jwt.version>0.12.6</jwt.version>
     </properties>
     <dependencyManagement>
         <dependencies>

@@ -3,6 +3,7 @@ package com.vomattapi.application.service;
 import com.vomattapi.application.dto.request.SignupRequest;
 import com.vomattapi.application.dto.response.ErrorType;
 import com.vomattapi.application.dto.response.MessageResponse;
+import com.vomattapi.application.exception.EntityNotFoundException;
 import com.vomattapi.application.service.ValidationService.ValidationResult;
 import com.vomattapi.domain.user.ERole;
 import com.vomattapi.domain.user.Role;
@@ -132,7 +133,7 @@ public class SignupService {
 
     private Role findRole(ERole roleEnum) {
         return roleRepository.findByName(roleEnum)
-            .orElseThrow(() -> new RuntimeException("Role not found: " + roleEnum));
+            .orElseThrow(() -> new EntityNotFoundException("Role", roleEnum.name()));
     }
 
     /**

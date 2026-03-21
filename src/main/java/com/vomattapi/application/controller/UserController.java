@@ -5,6 +5,7 @@ import com.vomattapi.application.dto.response.ApiResponse;
 import com.vomattapi.application.dto.response.ErrorType;
 import com.vomattapi.application.dto.response.UserDto;
 import com.vomattapi.application.dto.response.UserProfileResponse;
+import com.vomattapi.application.exception.UnauthorizedOperationException;
 import com.vomattapi.application.security.services.UserDetailsImpl;
 import com.vomattapi.application.service.RefreshTokenService;
 import com.vomattapi.application.service.UserService;
@@ -21,7 +22,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -48,14 +48,8 @@ public class UserController {
     public ResponseEntity<ApiResponse<UserProfileResponse>> getUserProfile(
             @Parameter(description = "Username", required = true)
             @PathVariable String username) {
-        try {
-            UserProfileResponse profile = userService.getUserProfile(username);
-            return ResponseEntity.ok(ApiResponse.success(profile));
-        } catch (RuntimeException e) {
-            log.warn("User profile not found for username: {}", username);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ApiResponse.error(ErrorType.USER_NOT_FOUND, e.getMessage()));
-        }
+        UserProfileResponse profile = userService.getUserProfile(username);
+        return ResponseEntity.ok(ApiResponse.success(profile));
     }
 
     @PatchMapping("/me")
@@ -68,16 +62,10 @@ public class UserController {
     public ResponseEntity<ApiResponse<UserProfileResponse>> updateMyProfile(
             @Valid @RequestBody UpdateProfileRequest request,
             Authentication authentication) {
-        try {
-            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-            UserProfileResponse profile = userService.updateMyProfile(userDetails.getId(), request);
-            log.info("Profile updated for user: {}", userDetails.getUsername());
-            return ResponseEntity.ok(ApiResponse.success(profile, "Profile updated successfully"));
-        } catch (Exception e) {
-            log.error("Failed to update profile", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error(ErrorType.INTERNAL_ERROR, e.getMessage()));
-        }
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        UserProfileResponse profile = userService.updateMyProfile(userDetails.getId(), request);
+        log.info("Profile updated for user: {}", userDetails.getUsername());
+        return ResponseEntity.ok(ApiResponse.success(profile, "Profile updated successfully"));
     }
 
     @GetMapping("/search")
@@ -92,22 +80,13 @@ public class UserController {
             @Parameter(description = "Username to search for", required = true)
             @RequestParam String username,
             @PageableDefault(size = 20) Pageable pageable) {
-        try {
-            if (username == null || username.trim().isEmpty()) {
-                return ResponseEntity.badRequest()
-                        .body(ApiResponse.error(ErrorType.BUSINESS_RULE_VIOLATION,
-                                "Username parameter is required"));
-            }
-
-            Page<UserDto> users = userService.searchUsersByUsername(username.trim(), pageable);
-            log.info("User search completed for username: {}, found {} results",
-                    username, users.getTotalElements());
-            return ResponseEntity.ok(ApiResponse.success(users));
-        } catch (Exception e) {
-            log.error("Failed to search users with username: {}", username, e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error(ErrorType.INTERNAL_ERROR, e.getMessage()));
+        if (username == null || username.trim().isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error(ErrorType.BUSINESS_RULE_VIOLATION, "Username parameter is required"));
         }
+        Page<UserDto> users = userService.searchUsersByUsername(username.trim(), pageable);
+        log.info("User search completed for username: {}, found {} results", username, users.getTotalElements());
+        return ResponseEntity.ok(ApiResponse.success(users));
     }
 
     @DeleteMapping("/{userId}")
@@ -124,37 +103,20 @@ public class UserController {
             @Parameter(description = "User ID", required = true)
             @PathVariable String userId,
             Authentication authentication) {
-        try {
-            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
 
-            // Check if user is trying to delete their own account or is an admin
-            boolean isAdmin = userDetails.getAuthorities().stream()
-                    .anyMatch(auth -> auth.getAuthority().equals("ROLE_ADMIN"));
+        boolean isAdmin = userDetails.getAuthorities().stream()
+                .anyMatch(auth -> auth.getAuthority().equals("ROLE_ADMIN"));
 
-            if (!userDetails.getId().equals(userId) && !isAdmin) {
-                log.warn("User {} attempted to delete user {} without permission",
-                        userDetails.getId(), userId);
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(ApiResponse.error(ErrorType.UNAUTHORIZED_OPERATION,
-                                "You can only delete your own account"));
-            }
-
-            // Delete refresh tokens for this user
-            refreshTokenService.deleteByUserId(userId);
-
-            // Delete user account
-            userService.deleteUser(userId);
-
-            log.info("User {} deleted by {}", userId, userDetails.getUsername());
-            return ResponseEntity.ok(ApiResponse.success("User account deleted successfully"));
-        } catch (RuntimeException e) {
-            log.error("Failed to delete user: {}", userId, e);
-            if (e.getMessage().contains("not found")) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(ApiResponse.error(ErrorType.USER_NOT_FOUND, e.getMessage()));
-            }
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error(ErrorType.INTERNAL_ERROR, e.getMessage()));
+        if (!userDetails.getId().equals(userId) && !isAdmin) {
+            log.warn("User {} attempted to delete user {} without permission", userDetails.getId(), userId);
+            throw new UnauthorizedOperationException("delete", "user");
         }
+
+        refreshTokenService.deleteByUserId(userId);
+        userService.deleteUser(userId);
+
+        log.info("User {} deleted by {}", userId, userDetails.getUsername());
+        return ResponseEntity.ok(ApiResponse.success("User account deleted successfully"));
     }
 }

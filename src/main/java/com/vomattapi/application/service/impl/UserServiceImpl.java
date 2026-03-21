@@ -3,6 +3,7 @@ package com.vomattapi.application.service.impl;
 import com.vomattapi.application.dto.request.UpdateProfileRequest;
 import com.vomattapi.application.dto.response.UserDto;
 import com.vomattapi.application.dto.response.UserProfileResponse;
+import com.vomattapi.application.exception.EntityNotFoundException;
 import com.vomattapi.application.mapper.UserMapper;
 import com.vomattapi.application.service.UserService;
 import com.vomattapi.domain.user.User;
@@ -196,7 +197,7 @@ public class UserServiceImpl implements UserService {
     @Transactional(readOnly = true)
     public UserProfileResponse getUserProfile(String username) {
         User user = userRepository.findByUsername(username)
-            .orElseThrow(() -> new RuntimeException("User not found: " + username));
+            .orElseThrow(() -> new EntityNotFoundException("User", username));
         int totalPolls = (int) voteRepository.countByCreatorId(user.getId());
         int totalVotes = (int) userVoteRepository.countDistinctVoteByUserId(user.getId());
         return new UserProfileResponse(
@@ -227,7 +228,7 @@ public class UserServiceImpl implements UserService {
 
     private User findUserById(String userId) {
         return userRepository.findById(UUID.fromString(userId))
-            .orElseThrow(() -> new RuntimeException("User not found with id: " + userId));
+            .orElseThrow(() -> new EntityNotFoundException("User", userId));
     }
 
     private void logActivity(User user, String activityType, String description) {

@@ -4,17 +4,16 @@ import com.vomattapi.application.dto.request.SigninRequest;
 import com.vomattapi.application.dto.request.PreSignupRequest;
 import com.vomattapi.application.dto.request.SignupRequest;
 import com.vomattapi.application.dto.request.TokenRefreshRequest;
+import com.vomattapi.application.dto.response.ApiResponse;
 import com.vomattapi.application.dto.response.BaseResponse;
 import com.vomattapi.application.dto.response.JwtResponse;
-import com.vomattapi.application.dto.response.MessageResponse;
 import com.vomattapi.application.dto.response.ErrorType;
-import com.vomattapi.application.dto.response.PreSignupResponse;
 import com.vomattapi.application.dto.response.TokenRefreshResponse;
-import com.vomattapi.application.exception.EntityNotFoundException;
 import com.vomattapi.application.exception.TokenRefreshException;
 import com.vomattapi.application.security.jwt.JwtUtils;
 import com.vomattapi.application.security.services.UserDetailsImpl;
 import com.vomattapi.application.service.AuthService;
+import com.vomattapi.application.service.JwtBlacklistService;
 import com.vomattapi.application.service.PreSignupService;
 import com.vomattapi.application.security.services.UserDetailsServiceImpl;
 import com.vomattapi.application.service.RefreshTokenService;
@@ -25,9 +24,9 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -56,60 +55,52 @@ public class AuthController {
     private final UserDetailsServiceImpl userDetailsService;
     private final PreSignupService preSignupService;
     private final SignupService signupService;
-    private final com.vomattapi.application.service.JwtBlacklistService jwtBlacklistService;
+    private final JwtBlacklistService jwtBlacklistService;
 
     @PostMapping("/signin")
     @RateLimiter(name = "signin")
     @Operation(summary = "會員登入", description = "使用電子郵件和驗證碼登入系統")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "登入成功", content = @Content(schema = @Schema(implementation = JwtResponse.class))),
-            @ApiResponse(responseCode = "401", description = "認證失敗"),
-            @ApiResponse(responseCode = "429", description = "登入嘗試次數過多，請稍後再試") })
-    public ResponseEntity<?> signin(
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "登入成功",
+                    content = @Content(schema = @Schema(implementation = JwtResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "認證失敗"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "登入嘗試次數過多，請稍後再試") })
+    public ResponseEntity<ApiResponse<JwtResponse>> signin(
             @Parameter(description = "登入請求，包含電子郵件和驗證碼") @Valid @RequestBody SigninRequest signinRequest) {
-
         try {
-            // Verify the verification code first
             boolean isCodeValid = authService.verificationCode(signinRequest.getEmail(), signinRequest.getVerificationCode());
-
             if (!isCodeValid) {
                 log.warn("Invalid verification code for email: {}", signinRequest.getEmail());
-                return ResponseEntity.status(401).body(new BaseResponse(false, ErrorType.INVALID_VERIFICATION_CODE.getCode()));
+                return ResponseEntity.status(401)
+                        .body(ApiResponse.error(ErrorType.INVALID_VERIFICATION_CODE));
             }
 
-            // Find user by email
             UserDetailsImpl userDetails = (UserDetailsImpl) userDetailsService.loadUserByEmail(signinRequest.getEmail());
-
             if (userDetails == null) {
                 log.warn("User not found for email: {}", signinRequest.getEmail());
-                return ResponseEntity.status(401).body(new BaseResponse(false, ErrorType.USER_NOT_FOUND.getCode()));
+                return ResponseEntity.status(401)
+                        .body(ApiResponse.error(ErrorType.USER_NOT_FOUND));
             }
 
-            // Create authentication token manually since verification code is valid
             Authentication authentication = new UsernamePasswordAuthenticationToken(
-                userDetails, null, userDetails.getAuthorities());
+                    userDetails, null, userDetails.getAuthorities());
             SecurityContextHolder.getContext().setAuthentication(authentication);
 
-            // Generate JWT token
             String jwt = jwtUtils.generateJwtToken(authentication);
-
-            // Get user roles
             List<String> roles = userDetails.getAuthorities().stream()
-                .map(item -> item.getAuthority())
-                .collect(Collectors.toList());
-
-            // Create refresh token
+                    .map(item -> item.getAuthority())
+                    .collect(Collectors.toList());
             RefreshToken refreshToken = refreshTokenService.createRefreshToken(userDetails.getId());
 
             log.info("User signed in successfully: {}", signinRequest.getEmail());
-
-            return ResponseEntity.ok(
-                new JwtResponse(jwt, refreshToken.getToken(), userDetails.getId(),
-                    userDetails.getUsername(), userDetails.getEmail(), roles));
+            JwtResponse jwtResponse = new JwtResponse(jwt, refreshToken.getToken(), userDetails.getId(),
+                    userDetails.getUsername(), userDetails.getEmail(), roles);
+            return ResponseEntity.ok(ApiResponse.success(jwtResponse));
 
         } catch (Exception e) {
             log.error("Authentication failed for email: {}", signinRequest.getEmail(), e);
-            return ResponseEntity.status(401).body(new BaseResponse(false, ErrorType.AUTHENTICATION_FAILED.getCode()));
+            return ResponseEntity.status(401)
+                    .body(ApiResponse.error(ErrorType.AUTHENTICATION_FAILED));
         }
     }
 
@@ -117,27 +108,24 @@ public class AuthController {
     @RateLimiter(name = "pre-signup")
     @Operation(summary = "預註冊驗證", description = "檢查用戶名和email是否已存在，生成驗證碼並發送郵件")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "預註冊請求成功，驗證碼已發送", content = @Content(schema = @Schema(implementation = PreSignupResponse.class))),
-            @ApiResponse(responseCode = "400", description = "用戶名或email已存在"),
-            @ApiResponse(responseCode = "500", description = "內部伺服器錯誤") })
-    public ResponseEntity<BaseResponse> preSignup(
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "預註冊請求成功，驗證碼已發送"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "用戶名或email已存在"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "內部伺服器錯誤") })
+    public ResponseEntity<ApiResponse<Void>> preSignup(
             @Parameter(description = "預註冊請求", required = true) @Valid @RequestBody PreSignupRequest request) {
         try {
-            log.info("Pre-signup request received for email: {}, username: {}", request.getEmail(),
-                    request.getUsername());
-
+            log.info("Pre-signup request received for email: {}, username: {}", request.getEmail(), request.getUsername());
             BaseResponse response = preSignupService.processPreSignup(request);
-
             if (response.isSuccess()) {
-                return ResponseEntity.ok(response);
+                return ResponseEntity.ok(ApiResponse.success("Pre-signup successful. Please check your email."));
             } else {
-                return ResponseEntity.badRequest().body(response);
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error(ErrorType.BUSINESS_RULE_VIOLATION, response.getErrorCode()));
             }
-
         } catch (Exception e) {
             log.error("Pre-signup request failed for email: {}", request.getEmail(), e);
             return ResponseEntity.internalServerError()
-                    .body(new BaseResponse(false, ErrorType.INTERNAL_ERROR.getCode()));
+                    .body(ApiResponse.error(ErrorType.INTERNAL_ERROR));
         }
     }
 
@@ -145,42 +133,39 @@ public class AuthController {
     @RateLimiter(name = "resend-verification")
     @Operation(summary = "重發驗證碼", description = "重新發送預註冊驗證碼到指定郵箱")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "驗證碼重發成功", content = @Content(schema = @Schema(implementation = PreSignupResponse.class))),
-            @ApiResponse(responseCode = "400", description = "無效的郵箱或驗證已過期"),
-            @ApiResponse(responseCode = "429", description = "請求過於頻繁") })
-    public ResponseEntity<BaseResponse> resendVerificationCode(
-            @Parameter(description = "郵箱地址", required = true) @RequestParam(name = "email", required = true) String email) {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "驗證碼重發成功"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "無效的郵箱或驗證已過期"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "請求過於頻繁") })
+    public ResponseEntity<ApiResponse<Void>> resendVerificationCode(
+            @Parameter(description = "郵箱地址", required = true) @RequestParam(name = "email") String email) {
         try {
             log.info("Resend verification code request for email: {}", email);
-            
             BaseResponse response = preSignupService.resendVerificationCode(email);
-            
             if (response.isSuccess()) {
-                return ResponseEntity.ok(response);
+                return ResponseEntity.ok(ApiResponse.success("Verification code resent successfully."));
             } else {
-                return ResponseEntity.badRequest().body(response);
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error(ErrorType.BUSINESS_RULE_VIOLATION, response.getErrorCode()));
             }
-            
         } catch (Exception e) {
             log.error("Resend verification code failed for email: {}", email, e);
             return ResponseEntity.internalServerError()
-                    .body(new BaseResponse(false, ErrorType.INTERNAL_ERROR.getCode()));
+                    .body(ApiResponse.error(ErrorType.INTERNAL_ERROR));
         }
     }
 
     @PostMapping("/signup")
     @Operation(summary = "會員註冊", description = "創建新會員帳戶")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "註冊成功", content = @Content(schema = @Schema(implementation = com.vomattapi.application.dto.response.ApiResponse.class))),
-            @ApiResponse(responseCode = "400", description = "註冊資料無效，如用戶名已被使用") })
-    public ResponseEntity<?> registerUser(
-            @Parameter(description = "註冊請求，包含用戶名、電子郵件、密碼等") @Valid @RequestBody SignupRequest signUpRequest) {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "註冊成功"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "註冊資料無效，如用戶名已被使用") })
+    public ResponseEntity<ApiResponse<JwtResponse>> registerUser(
+            @Parameter(description = "註冊請求") @Valid @RequestBody SignupRequest signUpRequest) {
         try {
             var result = signupService.processSignup(signUpRequest);
             if (!result.isSuccess()) {
-                return ResponseEntity.badRequest().body(
-                        com.vomattapi.application.dto.response.ApiResponse.<Void>error(
-                                result.getErrorType(), result.getErrorMessage()));
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error(result.getErrorType(), result.getErrorMessage()));
             }
 
             // 直接產生 JWT + RefreshToken，不透過 signin() 以避免繞過 Rate Limiter
@@ -196,88 +181,77 @@ public class AuthController {
             RefreshToken refreshToken = refreshTokenService.createRefreshToken(userDetails.getId());
 
             log.info("User registered and signed in: {}", signUpRequest.getEmail());
-            return ResponseEntity.ok(
-                    new JwtResponse(jwt, refreshToken.getToken(), userDetails.getId(),
-                            userDetails.getUsername(), userDetails.getEmail(), roles));
+            JwtResponse jwtResponse = new JwtResponse(jwt, refreshToken.getToken(), userDetails.getId(),
+                    userDetails.getUsername(), userDetails.getEmail(), roles);
+            return ResponseEntity.ok(ApiResponse.success(jwtResponse, "Registration successful"));
 
         } catch (Exception e) {
             log.error("Signup failed", e);
-            return ResponseEntity.internalServerError().body(
-                    com.vomattapi.application.dto.response.ApiResponse.<Void>error(ErrorType.INTERNAL_ERROR));
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error(ErrorType.INTERNAL_ERROR));
         }
     }
 
     @PostMapping("/refreshToken")
     @Operation(summary = "刷新令牌", description = "使用刷新令牌獲取新的訪問令牌")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "令牌刷新成功", content = @Content(schema = @Schema(implementation = TokenRefreshResponse.class))),
-            @ApiResponse(responseCode = "403", description = "刷新令牌無效或已過期") })
-    public ResponseEntity<?> refreshToken(
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "令牌刷新成功"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "刷新令牌無效或已過期") })
+    public ResponseEntity<ApiResponse<TokenRefreshResponse>> refreshToken(
             @Parameter(description = "刷新令牌請求") @Valid @RequestBody TokenRefreshRequest request) {
         String requestRefreshToken = request.getRefreshToken();
-
-        return refreshTokenService.findByToken(requestRefreshToken).map(refreshTokenService::verifyExpiration)
-                .map(RefreshToken::getUser).map(user -> {
+        TokenRefreshResponse tokenResponse = refreshTokenService.findByToken(requestRefreshToken)
+                .map(refreshTokenService::verifyExpiration)
+                .map(RefreshToken::getUser)
+                .map(user -> {
                     String token = jwtUtils.generateTokenFromUsername(user.getUsername());
-                    return ResponseEntity.ok(new TokenRefreshResponse(token, requestRefreshToken));
+                    return new TokenRefreshResponse(token, requestRefreshToken);
                 })
                 .orElseThrow(() -> new TokenRefreshException(requestRefreshToken, "Refresh token is not in database!"));
+        return ResponseEntity.ok(ApiResponse.success(tokenResponse));
     }
 
     @PostMapping("/signout")
     @Operation(summary = "會員登出", description = "會員登出系統並清除刷新令牌")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "登出成功", content = @Content(schema = @Schema(implementation = MessageResponse.class))),
-            @ApiResponse(responseCode = "401", description = "未認證") })
-    public ResponseEntity<?> logoutUser() {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "登出成功"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未認證") })
+    public ResponseEntity<ApiResponse<Void>> logoutUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        UserDetailsImpl memberDetails = (UserDetailsImpl) authentication.getPrincipal();
-        String userId = memberDetails.getId();
-
-        refreshTokenService.deleteByUserId(userId);
-        return ResponseEntity.ok(new MessageResponse("Log out successful!"));
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        refreshTokenService.deleteByUserId(userDetails.getId());
+        log.info("User signed out: {}", userDetails.getUsername());
+        return ResponseEntity.ok(ApiResponse.success("Log out successful!"));
     }
 
     @PostMapping("/force-expire-token")
     @Operation(summary = "強制使JWT令牌過期", description = "立即使當前JWT令牌失效，並清除刷新令牌。用於安全登出或強制終止會話。")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "令牌已成功失效", content = @Content(schema = @Schema(implementation = com.vomattapi.application.dto.response.ApiResponse.class))),
-            @ApiResponse(responseCode = "401", description = "未認證或無效令牌") })
-    public ResponseEntity<com.vomattapi.application.dto.response.ApiResponse<Void>> forceExpireToken(
-            jakarta.servlet.http.HttpServletRequest request) {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "令牌已成功失效"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未認證或無效令牌") })
+    public ResponseEntity<ApiResponse<Void>> forceExpireToken(HttpServletRequest request) {
         try {
-            // Extract JWT from request header
             String headerAuth = request.getHeader("Authorization");
             if (headerAuth != null && headerAuth.startsWith("Bearer ")) {
                 String jwt = headerAuth.substring(7);
-
-                // Get remaining expiration time
                 long remainingMs = jwtUtils.getRemainingExpirationMs(jwt);
-
-                // Add token to blacklist
                 jwtBlacklistService.blacklistToken(jwt, remainingMs);
 
-                // Also delete refresh token for the user
                 Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-                if (authentication != null && authentication.getPrincipal() instanceof UserDetailsImpl) {
-                    UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+                if (authentication != null && authentication.getPrincipal() instanceof UserDetailsImpl userDetails) {
                     refreshTokenService.deleteByUserId(userDetails.getId());
                 }
 
                 log.info("JWT token forcefully expired");
-                return ResponseEntity.ok(
-                    com.vomattapi.application.dto.response.ApiResponse.<Void>success("Token successfully invalidated")
-                );
+                return ResponseEntity.ok(ApiResponse.success("Token successfully invalidated"));
             } else {
-                return ResponseEntity.status(401).body(
-                    com.vomattapi.application.dto.response.ApiResponse.<Void>error(ErrorType.INVALID_CREDENTIALS, "No valid token found")
-                );
+                return ResponseEntity.status(401)
+                        .body(ApiResponse.error(ErrorType.INVALID_CREDENTIALS, "No valid token found"));
             }
         } catch (Exception e) {
             log.error("Failed to force expire token", e);
-            return ResponseEntity.status(500).body(
-                com.vomattapi.application.dto.response.ApiResponse.<Void>error(ErrorType.INTERNAL_ERROR)
-            );
+            return ResponseEntity.status(500)
+                    .body(ApiResponse.error(ErrorType.INTERNAL_ERROR));
         }
     }
 
@@ -285,23 +259,20 @@ public class AuthController {
     @RateLimiter(name = "resend-verification")
     @Operation(summary = "產生認證碼", description = "產生認證碼並發送至指定 email")
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "認證碼生成成功"),
-        @ApiResponse(responseCode = "404", description = "用戶不存在"),
-        @ApiResponse(responseCode = "400", description = "認證碼生成失敗")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "認證碼生成成功"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "用戶不存在"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "認證碼生成失敗")
     })
-    public ResponseEntity<BaseResponse> generateVerificationCode(
-            @Parameter(description = "email") @RequestParam(name = "email", required = true) String email) {
-        try {
-            String verificationCode = authService.generateVerificationCode(email);
-            if (verificationCode != null) {
-                log.info("Verification code generated for email: {}", email);
-                return ResponseEntity.ok(new BaseResponse(true));
-            } else {
-                return ResponseEntity.badRequest().body(new BaseResponse(false, ErrorType.GENERATE_VERIFICATION_CODE_FAILED.getCode()));
-            }
-        } catch (EntityNotFoundException e) {
-            log.warn("User not found for email: {}", email);
-            return ResponseEntity.internalServerError().body(new BaseResponse(false, ErrorType.USER_NOT_FOUND.getCode()));
+    public ResponseEntity<ApiResponse<Void>> generateVerificationCode(
+            @Parameter(description = "email") @RequestParam(name = "email") String email) {
+        // EntityNotFoundException 由 GlobalExceptionHandler 處理並回傳 404
+        String verificationCode = authService.generateVerificationCode(email);
+        if (verificationCode != null) {
+            log.info("Verification code generated for email: {}", email);
+            return ResponseEntity.ok(ApiResponse.success("Verification code sent successfully."));
+        } else {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error(ErrorType.GENERATE_VERIFICATION_CODE_FAILED));
         }
     }
 }

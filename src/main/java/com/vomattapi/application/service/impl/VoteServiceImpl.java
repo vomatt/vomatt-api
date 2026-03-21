@@ -164,7 +164,8 @@ public class VoteServiceImpl implements VoteService {
 
         eventPublisher.publishEvent(new VoteCastEvent(voteId, userId, request.getOptionIds(), ipAddress));
 
-        return convertToVoteResponse(voteRepository.findById(UUID.fromString(voteId)).get());
+        return convertToVoteResponse(voteRepository.findById(UUID.fromString(voteId))
+            .orElseThrow(() -> new VoteNotFoundException(voteId)));
     }
 
     @Override
@@ -180,7 +181,8 @@ public class VoteServiceImpl implements VoteService {
             UUID.fromString(userId), UUID.fromString(voteId), UUID.fromString(optionId));
         log.info("User {} removed vote from option {} in vote {}", userId, optionId, voteId);
 
-        return convertToVoteResponse(voteRepository.findById(UUID.fromString(voteId)).get());
+        return convertToVoteResponse(voteRepository.findById(UUID.fromString(voteId))
+            .orElseThrow(() -> new VoteNotFoundException(voteId)));
     }
 
     @Override

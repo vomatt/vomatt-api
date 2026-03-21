@@ -24,8 +24,6 @@ import com.vomattapi.application.dto.request.UpdateCommentRequest;
 import com.vomattapi.application.dto.request.VoteRequest;
 import com.vomattapi.application.dto.response.ApiResponse;
 import com.vomattapi.application.dto.response.CommentDto;
-import com.vomattapi.application.dto.response.ErrorType;
-import com.vomattapi.application.dto.response.MessageResponse;
 import com.vomattapi.application.dto.response.UserVoteStatusResponse;
 import com.vomattapi.application.dto.response.VoteResponse;
 import com.vomattapi.application.dto.response.VoteResultResponse;
@@ -68,17 +66,11 @@ public class VoteController {
     public ResponseEntity<ApiResponse<VoteResponse>> createVote(
             @Valid @RequestBody CreateVoteRequest request,
             Authentication authentication) {
-        try {
-            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-            VoteResponse voteResponse = voteService.createVote(request, userDetails.getId());
-            log.info("Vote created: {} by user: {}", voteResponse.getId(), userDetails.getUsername());
-            return ResponseEntity.status(HttpStatus.CREATED)
-                    .body(ApiResponse.success(voteResponse, "Vote created successfully"));
-        } catch (Exception e) {
-            log.error("Failed to create vote", e);
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error(ErrorType.BUSINESS_RULE_VIOLATION, e.getMessage()));
-        }
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        VoteResponse voteResponse = voteService.createVote(request, userDetails.getId());
+        log.info("Vote created: {} by user: {}", voteResponse.getId(), userDetails.getUsername());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(voteResponse, "Vote created successfully"));
     }
 
     @GetMapping("/{voteId}")
@@ -90,14 +82,8 @@ public class VoteController {
     public ResponseEntity<ApiResponse<VoteResponse>> getVote(
             @Parameter(description = "Vote ID", required = true)
             @PathVariable String voteId) {
-        try {
-            VoteResponse response = voteService.getVote(voteId);
-            return ResponseEntity.ok(ApiResponse.success(response));
-        } catch (Exception e) {
-            log.error("Failed to get vote: {}", voteId, e);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ApiResponse.error(ErrorType.VOTE_NOT_FOUND, e.getMessage()));
-        }
+        VoteResponse response = voteService.getVote(voteId);
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @GetMapping
@@ -107,14 +93,8 @@ public class VoteController {
     })
     public ResponseEntity<ApiResponse<Page<VoteResponse>>> getActiveVotes(
             @PageableDefault(size = 20) Pageable pageable) {
-        try {
-            Page<VoteResponse> response = voteService.getActiveVotes(pageable);
-            return ResponseEntity.ok(ApiResponse.success(response));
-        } catch (Exception e) {
-            log.error("Failed to get active votes", e);
-            return ResponseEntity.internalServerError()
-                    .body(ApiResponse.error(ErrorType.INTERNAL_ERROR));
-        }
+        Page<VoteResponse> response = voteService.getActiveVotes(pageable);
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @GetMapping("/my")
@@ -128,15 +108,9 @@ public class VoteController {
     public ResponseEntity<ApiResponse<Page<VoteResponse>>> getMyVotes(
             @PageableDefault(size = 20) Pageable pageable,
             Authentication authentication) {
-        try {
-            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-            Page<VoteResponse> response = voteService.getVotesByCreator(userDetails.getId(), pageable);
-            return ResponseEntity.ok(ApiResponse.success(response));
-        } catch (Exception e) {
-            log.error("Failed to get user votes", e);
-            return ResponseEntity.internalServerError()
-                    .body(ApiResponse.error(ErrorType.INTERNAL_ERROR));
-        }
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        Page<VoteResponse> response = voteService.getVotesByCreator(userDetails.getId(), pageable);
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @PostMapping("/{voteId}/vote")
@@ -156,17 +130,11 @@ public class VoteController {
             @Valid @RequestBody VoteRequest request,
             Authentication authentication,
             HttpServletRequest httpRequest) {
-        try {
-            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-            String ipAddress = getClientIpAddress(httpRequest);
-            VoteResponse response = voteService.vote(voteId, request, userDetails.getId(), ipAddress);
-            log.info("User {} voted on vote {}", userDetails.getUsername(), voteId);
-            return ResponseEntity.ok(ApiResponse.success(response, "Vote cast successfully"));
-        } catch (Exception e) {
-            log.error("Failed to cast vote", e);
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error(ErrorType.VOTING_NOT_ALLOWED, e.getMessage()));
-        }
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        String ipAddress = getClientIpAddress(httpRequest);
+        VoteResponse response = voteService.vote(voteId, request, userDetails.getId(), ipAddress);
+        log.info("User {} voted on vote {}", userDetails.getUsername(), voteId);
+        return ResponseEntity.ok(ApiResponse.success(response, "Vote cast successfully"));
     }
 
     @DeleteMapping("/{voteId}/vote/{optionId}")
@@ -184,17 +152,11 @@ public class VoteController {
             @Parameter(description = "Option ID", required = true)
             @PathVariable String optionId,
             Authentication authentication) {
-        try {
-            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-            VoteResponse response = voteService.removeVote(voteId, optionId, userDetails.getId());
-            log.info("User {} removed vote from option {} in vote {}",
-                    userDetails.getUsername(), optionId, voteId);
-            return ResponseEntity.ok(ApiResponse.success(response, "Vote removed successfully"));
-        } catch (Exception e) {
-            log.error("Failed to remove vote", e);
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error(ErrorType.VOTING_NOT_ALLOWED, e.getMessage()));
-        }
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        VoteResponse response = voteService.removeVote(voteId, optionId, userDetails.getId());
+        log.info("User {} removed vote from option {} in vote {}",
+                userDetails.getUsername(), optionId, voteId);
+        return ResponseEntity.ok(ApiResponse.success(response, "Vote removed successfully"));
     }
 
     @GetMapping("/{voteId}/results")
@@ -206,14 +168,8 @@ public class VoteController {
     public ResponseEntity<ApiResponse<VoteResultResponse>> getVoteResults(
             @Parameter(description = "Vote ID", required = true)
             @PathVariable String voteId) {
-        try {
-            VoteResultResponse response = voteService.getVoteResults(voteId);
-            return ResponseEntity.ok(ApiResponse.success(response));
-        } catch (Exception e) {
-            log.error("Failed to get vote results: {}", voteId, e);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ApiResponse.error(ErrorType.VOTE_NOT_FOUND, e.getMessage()));
-        }
+        VoteResultResponse response = voteService.getVoteResults(voteId);
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @GetMapping("/{voteId}/my-vote-status")
@@ -229,19 +185,11 @@ public class VoteController {
             @Parameter(description = "Vote ID", required = true)
             @PathVariable String voteId,
             Authentication authentication) {
-        try {
-            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-
-            UserVoteStatusResponse response = new UserVoteStatusResponse();
-            response.setHasVoted(voteService.hasUserVoted(voteId, userDetails.getId()));
-            response.setSelectedOptions(voteService.getUserVoteOptions(voteId, userDetails.getId()));
-
-            return ResponseEntity.ok(ApiResponse.success(response));
-        } catch (Exception e) {
-            log.error("Failed to get vote status: {}", voteId, e);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ApiResponse.error(ErrorType.VOTE_NOT_FOUND, e.getMessage()));
-        }
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        UserVoteStatusResponse response = new UserVoteStatusResponse();
+        response.setHasVoted(voteService.hasUserVoted(voteId, userDetails.getId()));
+        response.setSelectedOptions(voteService.getUserVoteOptions(voteId, userDetails.getId()));
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @PutMapping("/{voteId}/deactivate")
@@ -258,16 +206,10 @@ public class VoteController {
             @Parameter(description = "Vote ID", required = true)
             @PathVariable String voteId,
             Authentication authentication) {
-        try {
-            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-            voteService.deactivateVote(voteId, userDetails.getId());
-            log.info("Vote {} deactivated by creator {}", voteId, userDetails.getUsername());
-            return ResponseEntity.ok(ApiResponse.success("Vote deactivated successfully"));
-        } catch (Exception e) {
-            log.error("Failed to deactivate vote: {}", voteId, e);
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(ApiResponse.error(ErrorType.UNAUTHORIZED_OPERATION, e.getMessage()));
-        }
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        voteService.deactivateVote(voteId, userDetails.getId());
+        log.info("Vote {} deactivated by creator {}", voteId, userDetails.getUsername());
+        return ResponseEntity.ok(ApiResponse.success("Vote deactivated successfully"));
     }
 
     private String getClientIpAddress(HttpServletRequest request) {
@@ -275,17 +217,14 @@ public class VoteController {
         if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
             return xForwardedFor.split(",")[0].trim();
         }
-        
         String xRealIp = request.getHeader("X-Real-IP");
         if (xRealIp != null && !xRealIp.isEmpty()) {
             return xRealIp;
         }
-        
         return request.getRemoteAddr();
     }
 
     // ========== Comment Endpoints ==========
-
 
     @PostMapping("/{voteId}/comments")
     @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
@@ -302,17 +241,11 @@ public class VoteController {
             @PathVariable String voteId,
             @Valid @RequestBody CreateCommentRequest request,
             Authentication authentication) {
-        try {
-            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-            CommentDto response = commentService.createComment(voteId, userDetails.getId(), request);
-            log.info("Comment created on vote {} by user {}", voteId, userDetails.getUsername());
-            return ResponseEntity.status(HttpStatus.CREATED)
-                    .body(ApiResponse.success(response, "Comment created successfully"));
-        } catch (Exception e) {
-            log.error("Failed to create comment on vote: {}", voteId, e);
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error(ErrorType.BUSINESS_RULE_VIOLATION, e.getMessage()));
-        }
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        CommentDto response = commentService.createComment(voteId, userDetails.getId(), request);
+        log.info("Comment created on vote {} by user {}", voteId, userDetails.getUsername());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(response, "Comment created successfully"));
     }
 
     @GetMapping("/{voteId}/comments")
@@ -326,20 +259,12 @@ public class VoteController {
             @PathVariable String voteId,
             @PageableDefault(size = 20) Pageable pageable,
             Authentication authentication) {
-        try {
-            String currentUserId = null;
-            if (authentication != null && authentication.getPrincipal() instanceof UserDetailsImpl) {
-                UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-                currentUserId = userDetails.getId();
-            }
-
-            Page<CommentDto> response = commentService.getCommentsByVote(voteId, pageable, currentUserId);
-            return ResponseEntity.ok(ApiResponse.success(response));
-        } catch (Exception e) {
-            log.error("Failed to get comments for vote: {}", voteId, e);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ApiResponse.error(ErrorType.VOTE_NOT_FOUND, e.getMessage()));
+        String currentUserId = null;
+        if (authentication != null && authentication.getPrincipal() instanceof UserDetailsImpl userDetails) {
+            currentUserId = userDetails.getId();
         }
+        Page<CommentDto> response = commentService.getCommentsByVote(voteId, pageable, currentUserId);
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @PutMapping("/{voteId}/comments/{commentId}")
@@ -359,16 +284,10 @@ public class VoteController {
             @PathVariable UUID commentId,
             @Valid @RequestBody UpdateCommentRequest request,
             Authentication authentication) {
-        try {
-            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-            CommentDto response = commentService.updateComment(commentId, userDetails.getId(), request);
-            log.info("Comment {} updated by user {}", commentId, userDetails.getUsername());
-            return ResponseEntity.ok(ApiResponse.success(response, "Comment updated successfully"));
-        } catch (Exception e) {
-            log.error("Failed to update comment: {}", commentId, e);
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(ApiResponse.error(ErrorType.UNAUTHORIZED_OPERATION, e.getMessage()));
-        }
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        CommentDto response = commentService.updateComment(commentId, userDetails.getId(), request);
+        log.info("Comment {} updated by user {}", commentId, userDetails.getUsername());
+        return ResponseEntity.ok(ApiResponse.success(response, "Comment updated successfully"));
     }
 
     @DeleteMapping("/{voteId}/comments/{commentId}")
@@ -387,16 +306,10 @@ public class VoteController {
             @Parameter(description = "Comment ID", required = true)
             @PathVariable UUID commentId,
             Authentication authentication) {
-        try {
-            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-            commentService.deleteComment(commentId, userDetails.getId());
-            log.info("Comment {} deleted by user {}", commentId, userDetails.getUsername());
-            return ResponseEntity.ok(ApiResponse.success("Comment deleted successfully"));
-        } catch (Exception e) {
-            log.error("Failed to delete comment: {}", commentId, e);
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(ApiResponse.error(ErrorType.UNAUTHORIZED_OPERATION, e.getMessage()));
-        }
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        commentService.deleteComment(commentId, userDetails.getId());
+        log.info("Comment {} deleted by user {}", commentId, userDetails.getUsername());
+        return ResponseEntity.ok(ApiResponse.success("Comment deleted successfully"));
     }
 
     @PostMapping("/{voteId}/comments/{commentId}/like")
@@ -414,16 +327,10 @@ public class VoteController {
             @Parameter(description = "Comment ID", required = true)
             @PathVariable UUID commentId,
             Authentication authentication) {
-        try {
-            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-            commentService.likeComment(commentId, userDetails.getId());
-            log.info("Comment {} liked by user {}", commentId, userDetails.getUsername());
-            return ResponseEntity.ok(ApiResponse.success("Comment liked successfully"));
-        } catch (Exception e) {
-            log.error("Failed to like comment: {}", commentId, e);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ApiResponse.error(ErrorType.BUSINESS_RULE_VIOLATION, e.getMessage()));
-        }
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        commentService.likeComment(commentId, userDetails.getId());
+        log.info("Comment {} liked by user {}", commentId, userDetails.getUsername());
+        return ResponseEntity.ok(ApiResponse.success("Comment liked successfully"));
     }
 
     @DeleteMapping("/{voteId}/comments/{commentId}/like")
@@ -441,15 +348,9 @@ public class VoteController {
             @Parameter(description = "Comment ID", required = true)
             @PathVariable UUID commentId,
             Authentication authentication) {
-        try {
-            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-            commentService.unlikeComment(commentId, userDetails.getId());
-            log.info("Comment {} unliked by user {}", commentId, userDetails.getUsername());
-            return ResponseEntity.ok(ApiResponse.success("Comment unliked successfully"));
-        } catch (Exception e) {
-            log.error("Failed to unlike comment: {}", commentId, e);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ApiResponse.error(ErrorType.BUSINESS_RULE_VIOLATION, e.getMessage()));
-        }
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        commentService.unlikeComment(commentId, userDetails.getId());
+        log.info("Comment {} unliked by user {}", commentId, userDetails.getUsername());
+        return ResponseEntity.ok(ApiResponse.success("Comment unliked successfully"));
     }
 }

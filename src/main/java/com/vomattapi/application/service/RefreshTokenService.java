@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.vomattapi.application.exception.EntityNotFoundException;
 import com.vomattapi.application.exception.TokenRefreshException;
 import com.vomattapi.domain.user.User;
 import com.vomattapi.domain.user.RefreshToken;
@@ -33,7 +34,7 @@ public class RefreshTokenService {
         RefreshToken refreshToken = new RefreshToken();
 
         User user = userRepository.findById(UUID.fromString(userId))
-                .orElseThrow(() -> new RuntimeException("User not found with id: " + userId));
+                .orElseThrow(() -> new EntityNotFoundException("User", userId));
 
         // Check if the member already has a refresh token - if so, delete it
         refreshTokenRepository.deleteByUser(user);
@@ -63,7 +64,7 @@ public class RefreshTokenService {
     @Transactional
     public int deleteByUserId(String userId) {
         User user = userRepository.findById(UUID.fromString(userId))
-                .orElseThrow(() -> new RuntimeException("User not found with id: " + userId));
+                .orElseThrow(() -> new EntityNotFoundException("User", userId));
         return refreshTokenRepository.deleteByUser(user);
     }
 }

@@ -76,8 +76,12 @@ public class WebSecurityConfig {
                     "/v3/api-docs/**",
                     "/v3/api-docs.yaml"
                 ).permitAll()
+                // 公開路由：標籤（GET）
+                .requestMatchers(HttpMethod.GET, "/api/v1/tags", "/api/v1/tags/**").permitAll()
                 // 公開路由：Actuator health check
                 .requestMatchers("/actuator/health").permitAll()
+                // 管理端點需要認證
+                .requestMatchers("/api/v1/admin/**").authenticated()
                 // 其餘路由需要認證
                 .anyRequest().authenticated()
             );

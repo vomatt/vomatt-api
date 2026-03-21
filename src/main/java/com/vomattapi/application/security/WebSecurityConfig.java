@@ -69,6 +69,8 @@ public class WebSecurityConfig {
                 .requestMatchers("/api/v1/auth/**").permitAll()
                 // 公開路由：用戶公開檔案（GET /{username}，@PreAuthorize 仍保護 /search 端點）
                 .requestMatchers(HttpMethod.GET, "/api/v1/users/*").permitAll()
+                // 公開路由：標籤 GET 端點
+                .requestMatchers(HttpMethod.GET, "/api/v1/tags", "/api/v1/tags/**").permitAll()
                 // 公開路由：Swagger UI
                 .requestMatchers(
                     "/swagger-ui/**",
@@ -78,6 +80,8 @@ public class WebSecurityConfig {
                 ).permitAll()
                 // 公開路由：Actuator health check
                 .requestMatchers("/actuator/health").permitAll()
+                // 需要認證的路由：後台管理
+                .requestMatchers("/api/v1/admin/**").authenticated()
                 // 其餘路由需要認證
                 .anyRequest().authenticated()
             );

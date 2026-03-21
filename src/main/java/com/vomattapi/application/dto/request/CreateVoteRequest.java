@@ -2,6 +2,7 @@ package com.vomattapi.application.dto.request;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -28,7 +29,10 @@ public class CreateVoteRequest {
     private boolean allowMultipleChoices = false;
     
     private boolean isAnonymous = false;
-    
+
+    @Size(max = 5, message = "最多選擇 5 個標籤")
+    private List<UUID> tagIds;
+
     @Data
     public static class VoteOptionRequest {
         

@@ -21,6 +21,8 @@ public interface VoteService {
     List<VoteResponse> getActiveVotes();
     
     Page<VoteResponse> getActiveVotes(Pageable pageable);
+
+    Page<VoteResponse> getActiveVotesByTag(String tagSlug, Pageable pageable);
     
     List<VoteResponse> getVotesByCreator(String creatorId);
 

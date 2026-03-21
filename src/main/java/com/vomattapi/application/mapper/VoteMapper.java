@@ -1,5 +1,6 @@
 package com.vomattapi.application.mapper;
 
+import com.vomattapi.application.dto.response.TagDto;
 import com.vomattapi.application.dto.response.VoteResponse;
 import com.vomattapi.application.dto.response.VoteResultResponse;
 import com.vomattapi.domain.vote.Vote;
@@ -39,6 +40,18 @@ public class VoteMapper {
         response.setOptions(options.stream()
                 .map(opt -> toOptionResponse(opt, optionCounts.getOrDefault(opt.getId(), 0L)))
                 .collect(Collectors.toList()));
+        List<TagDto> tagDtos = (vote.getTags() != null)
+                ? vote.getTags().stream()
+                        .map(tag -> new TagDto(
+                                tag.getId().toString(),
+                                tag.getName(),
+                                tag.getSlug(),
+                                tag.getDescription(),
+                                tag.getDisplayOrder(),
+                                tag.getUsageCount()))
+                        .toList()
+                : List.of();
+        response.setTags(tagDtos);
         return response;
     }
 

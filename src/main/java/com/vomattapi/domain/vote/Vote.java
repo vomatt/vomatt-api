@@ -12,6 +12,8 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
@@ -30,7 +32,7 @@ import lombok.ToString;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@ToString(exclude = {"creator", "options", "memberVotes"})
+@ToString(exclude = {"creator", "options", "memberVotes", "tags"})
 public class Vote extends BaseEntity {
 
     @NotBlank
@@ -72,6 +74,14 @@ public class Vote extends BaseEntity {
     @OneToMany(mappedBy = "vote", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<UserVote> userVotes = new HashSet<>();
 
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "vote_tags",
+        joinColumns = @JoinColumn(name = "vote_id"),
+        inverseJoinColumns = @JoinColumn(name = "tag_id")
+    )
+    private Set<Tag> tags = new HashSet<>();
+
     public Vote(String title, String description, User creator) {
         this.title = title;
         this.description = description;
@@ -90,6 +100,10 @@ public class Vote extends BaseEntity {
         if (startTime != null && now.isBefore(startTime)) return false;
         if (endTime != null && now.isAfter(endTime)) return false;
         return true;
+    }
+
+    public void addTag(Tag tag) {
+        this.tags.add(tag);
     }
 
     public void addOption(VoteOption option) {

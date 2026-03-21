@@ -1,7 +1,5 @@
 package com.vomattapi.application.dto.request;
 
-import java.util.Set;
-
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -24,8 +22,6 @@ public class SignupRequest {
     @NotBlank
     @Size(min = 6, max = 6)
     private String verificationCode;
-
-    private Set<String> roles;
 
     @NotBlank
     private String firstName;

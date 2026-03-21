@@ -32,12 +32,9 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.CrossOrigin;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -47,7 +44,6 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.stream.Collectors;
 
-@CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 @RequestMapping("/api/auth")
 @Tag(name = "認證", description = "認證相關的API，包括登入、註冊、刷新令牌和登出")
@@ -180,16 +176,30 @@ public class AuthController {
     public ResponseEntity<?> registerUser(
             @Parameter(description = "註冊請求，包含用戶名、電子郵件、密碼等") @Valid @RequestBody SignupRequest signUpRequest) {
         try {
-            // Delegate to SignupService
             var result = signupService.processSignup(signUpRequest);
-            if (result.isSuccess()) {
-                String verificationCode = authService.generateVerificationCode(signUpRequest.getEmail());
-                return signin(new SigninRequest(signUpRequest.getEmail(), verificationCode));
-            } else {
+            if (!result.isSuccess()) {
                 return ResponseEntity.badRequest().body(
                         com.vomattapi.application.dto.response.ApiResponse.<Void>error(
                                 result.getErrorType(), result.getErrorMessage()));
             }
+
+            // 直接產生 JWT + RefreshToken，不透過 signin() 以避免繞過 Rate Limiter
+            UserDetailsImpl userDetails = (UserDetailsImpl) userDetailsService.loadUserByEmail(signUpRequest.getEmail());
+            Authentication authentication = new UsernamePasswordAuthenticationToken(
+                    userDetails, null, userDetails.getAuthorities());
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+
+            String jwt = jwtUtils.generateJwtToken(authentication);
+            List<String> roles = userDetails.getAuthorities().stream()
+                    .map(item -> item.getAuthority())
+                    .collect(Collectors.toList());
+            RefreshToken refreshToken = refreshTokenService.createRefreshToken(userDetails.getId());
+
+            log.info("User registered and signed in: {}", signUpRequest.getEmail());
+            return ResponseEntity.ok(
+                    new JwtResponse(jwt, refreshToken.getToken(), userDetails.getId(),
+                            userDetails.getUsername(), userDetails.getEmail(), roles));
+
         } catch (Exception e) {
             log.error("Signup failed", e);
             return ResponseEntity.internalServerError().body(
@@ -271,8 +281,9 @@ public class AuthController {
         }
     }
 
-    @GetMapping("/generateVerificationCode")
-    @Operation(summary = "產生認證碼", description = "產生認證碼")
+    @PostMapping("/generateVerificationCode")
+    @RateLimiter(name = "resend-verification")
+    @Operation(summary = "產生認證碼", description = "產生認證碼並發送至指定 email")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "認證碼生成成功"),
         @ApiResponse(responseCode = "404", description = "用戶不存在"),
@@ -282,8 +293,8 @@ public class AuthController {
             @Parameter(description = "email") @RequestParam(name = "email", required = true) String email) {
         try {
             String verificationCode = authService.generateVerificationCode(email);
-            log.info("generateVerificationCode for email: {}, verificationCode: {}", email, verificationCode);
             if (verificationCode != null) {
+                log.info("Verification code generated for email: {}", email);
                 return ResponseEntity.ok(new BaseResponse(true));
             } else {
                 return ResponseEntity.badRequest().body(new BaseResponse(false, ErrorType.GENERATE_VERIFICATION_CODE_FAILED.getCode()));

@@ -1,7 +1,6 @@
 package com.vomattapi.application.security;
 
 import java.util.Arrays;
-import java.util.List;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -25,6 +24,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import com.vomattapi.application.security.jwt.AuthEntryPointJwt;
 import com.vomattapi.application.security.jwt.AuthTokenFilter;
 import com.vomattapi.application.security.services.UserDetailsServiceImpl;
+import com.vomattapi.infrastructure.config.SecurityConfigurationProperties;
 
 import lombok.RequiredArgsConstructor;
 
@@ -37,6 +37,7 @@ public class WebSecurityConfig {
     private final UserDetailsServiceImpl userDetailsService;
     private final AuthEntryPointJwt unauthorizedHandler;
     private final AuthTokenFilter authTokenFilter;
+    private final SecurityConfigurationProperties securityProperties;
 
     @Bean
     public DaoAuthenticationProvider authenticationProvider() {
@@ -90,7 +91,7 @@ public class WebSecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of("*"));
+        configuration.setAllowedOrigins(securityProperties.getCorsAllowedOrigins());
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Requested-With"));
         configuration.setAllowCredentials(true);

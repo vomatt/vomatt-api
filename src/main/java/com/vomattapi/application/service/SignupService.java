@@ -62,8 +62,8 @@ public class SignupService {
             // Step 3: 建立 User（驗證碼 BCrypt 加密後存入）
             User user = createUserFromRequest(request);
 
-            // Step 4: 指派角色
-            assignRolesToUser(user, request.getRoles());
+            // Step 4: 指派角色（新用戶固定為 ROLE_USER）
+            assignRolesToUser(user);
 
             // Step 5: 儲存
             User savedUser = userRepository.save(user);
@@ -123,23 +123,11 @@ public class SignupService {
         );
     }
 
-    private void assignRolesToUser(User user, Set<String> strRoles) {
+    private void assignRolesToUser(User user) {
         Set<Role> roles = new HashSet<>();
-
-        if (strRoles == null || strRoles.isEmpty()) {
-            roles.add(findRole(ERole.ROLE_USER));
-        } else {
-            strRoles.forEach(role -> {
-                switch (role) {
-                    case "admin" -> roles.add(findRole(ERole.ROLE_ADMIN));
-                    case "mod"   -> roles.add(findRole(ERole.ROLE_MODERATOR));
-                    default      -> roles.add(findRole(ERole.ROLE_USER));
-                }
-            });
-        }
-
+        roles.add(findRole(ERole.ROLE_USER));
         user.setRoles(roles);
-        log.debug("Assigned {} roles to user", roles.size());
+        log.debug("Assigned ROLE_USER to new user");
     }
 
     private Role findRole(ERole roleEnum) {

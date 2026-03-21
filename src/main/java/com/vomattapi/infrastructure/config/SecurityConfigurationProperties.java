@@ -1,6 +1,7 @@
 package com.vomattapi.infrastructure.config;
 
 import java.time.Duration;
+import java.util.List;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
@@ -11,7 +12,8 @@ import lombok.Data;
 @Component
 @Data
 public class SecurityConfigurationProperties {
-    
+
+    private List<String> corsAllowedOrigins = List.of("http://localhost:3000");
     private Jwt jwt = new Jwt();
     private RateLimit rateLimit = new RateLimit();
     private Session session = new Session();

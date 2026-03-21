@@ -55,7 +55,7 @@ public class UserDetailsImpl implements UserDetails {
                 user.getId().toString(),
                 user.getUsername(),
                 user.getEmail(),
-                user.getVerificationCode(),
+                user.getCredential(),
                 user.isActive(),
                 authorities);
     }

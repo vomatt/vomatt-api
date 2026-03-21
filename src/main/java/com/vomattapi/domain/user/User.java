@@ -52,8 +52,8 @@ public class User extends BaseEntity {
     private String phoneNumber;
 
     @Size(max = 120)
-    @Column(name = "verification_code")
-    private String verificationCode;
+    @Column(name = "credential")
+    private String credential;
 
     @Column(name = "verification_code_expiry")
     private LocalDateTime verificationCodeExpiry;
@@ -100,15 +100,15 @@ public class User extends BaseEntity {
     private Set<UserPreference> preferences = new HashSet<>();
 
     // Constructor for creating a new member
-    public User(String username, String email, String verificationCode) {
+    public User(String username, String email, String credential) {
         this.username = username;
         this.email = email;
-        this.verificationCode = verificationCode;
+        this.credential = credential;
     }
 
     // Constructor for creating a new member with phone number
-    public User(String username, String email, String phoneNumber, String verificationCode, String firstName, String lastName) {
-        this(username, email, verificationCode);
+    public User(String username, String email, String phoneNumber, String credential, String firstName, String lastName) {
+        this(username, email, credential);
         this.phoneNumber = phoneNumber;
         this.firstName = firstName;
         this.lastName = lastName;

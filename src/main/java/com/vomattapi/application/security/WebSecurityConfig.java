@@ -66,7 +66,7 @@ public class WebSecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 // 公開路由：認證相關
-                .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers("/api/v1/auth/**").permitAll()
                 // 公開路由：用戶公開檔案（GET /{username}，@PreAuthorize 仍保護 /search 端點）
                 .requestMatchers(HttpMethod.GET, "/api/v1/users/*").permitAll()
                 // 公開路由：Swagger UI

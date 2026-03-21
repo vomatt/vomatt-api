@@ -1,7 +1,9 @@
 package com.vomattapi.application.service.impl;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -188,17 +190,16 @@ public class VoteServiceImpl implements VoteService {
     @Override
     @Transactional(readOnly = true)
     public VoteResultResponse getVoteResults(String voteId) {
-        Vote vote = voteRepository.findById(UUID.fromString(voteId))
+        UUID voteUuid = UUID.fromString(voteId);
+        Vote vote = voteRepository.findById(voteUuid)
             .orElseThrow(() -> new VoteNotFoundException(voteId));
 
-        UUID voteUuid = UUID.fromString(voteId);
-        int totalParticipants = (int) userVoteRepository.findByVoteId(voteUuid).stream()
-            .map(mv -> mv.getUser().getId())
-            .distinct()
-            .count();
-
+        int totalParticipants = (int) userVoteRepository.countDistinctUserByVoteId(voteUuid);
+        long totalVoteCount = userVoteRepository.countByVoteId(voteUuid);
+        Map<UUID, Long> optionCounts = buildOptionCountMap(voteUuid);
         List<VoteOption> options = voteOptionRepository.findByVoteIdOrderByDisplayOrder(voteUuid);
-        return voteMapper.toResultResponse(vote, options, totalParticipants);
+
+        return voteMapper.toResultResponse(vote, options, totalParticipants, optionCounts, totalVoteCount);
     }
 
     @Override
@@ -247,8 +248,19 @@ public class VoteServiceImpl implements VoteService {
     }
 
     private VoteResponse convertToVoteResponse(Vote vote) {
-        List<VoteOption> options = voteOptionRepository.findByVoteIdOrderByDisplayOrder(vote.getId());
-        return voteMapper.toResponse(vote, options);
+        UUID voteId = vote.getId();
+        List<VoteOption> options = voteOptionRepository.findByVoteIdOrderByDisplayOrder(voteId);
+        Map<UUID, Long> optionCounts = buildOptionCountMap(voteId);
+        long totalVoteCount = userVoteRepository.countByVoteId(voteId);
+        return voteMapper.toResponse(vote, options, optionCounts, totalVoteCount);
+    }
+
+    private Map<UUID, Long> buildOptionCountMap(UUID voteId) {
+        Map<UUID, Long> map = new HashMap<>();
+        for (Object[] row : userVoteRepository.countByOptionGroupedForVote(voteId)) {
+            map.put((UUID) row[0], (Long) row[1]);
+        }
+        return map;
     }
 
     private void validateCreateVoteRequest(CreateVoteRequest request) {

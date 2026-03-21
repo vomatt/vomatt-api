@@ -38,4 +38,10 @@ public interface UserVoteRepository extends JpaRepository<UserVote, UUID> {
 
     @Query("SELECT COUNT(DISTINCT uv.vote.id) FROM UserVote uv WHERE uv.user.id = :userId")
     long countDistinctVoteByUserId(@Param("userId") UUID userId);
+
+    @Query("SELECT COUNT(DISTINCT uv.user.id) FROM UserVote uv WHERE uv.vote.id = :voteId")
+    long countDistinctUserByVoteId(@Param("voteId") UUID voteId);
+
+    @Query("SELECT uv.option.id, COUNT(uv) FROM UserVote uv WHERE uv.vote.id = :voteId GROUP BY uv.option.id")
+    List<Object[]> countByOptionGroupedForVote(@Param("voteId") UUID voteId);
 }

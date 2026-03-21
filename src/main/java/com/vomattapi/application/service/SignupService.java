@@ -109,16 +109,16 @@ public class SignupService {
     }
 
     /**
-     * 建立 User entity，將驗證碼以 BCrypt 加密後存入 verification_code 欄位
-     * （verification_code 在登入時作為 Spring Security password 使用）
+     * 建立 User entity，將驗證碼以 BCrypt 加密後存入 credential 欄位
+     * （credential 在登入時作為 Spring Security password 使用）
      */
     private User createUserFromRequest(SignupRequest request) {
-        String encodedVerificationCode = passwordEncoder.encode(request.getVerificationCode());
+        String encodedCredential = passwordEncoder.encode(request.getVerificationCode());
         return new User(
             request.getUsername(),
             request.getEmail(),
             request.getPhoneNumber(),
-            encodedVerificationCode,
+            encodedCredential,
             request.getFirstName(),
             request.getLastName()
         );

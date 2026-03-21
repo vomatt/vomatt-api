@@ -8,12 +8,19 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Component
 public class VoteMapper {
 
-    public VoteResponse toResponse(Vote vote, List<VoteOption> options) {
+    /**
+     * @param optionCounts 預取的 Map<optionId, voteCount>，避免 N+1 lazy load
+     * @param totalVoteCount 預取的總投票數，避免觸發 userVotes 集合 lazy load
+     */
+    public VoteResponse toResponse(Vote vote, List<VoteOption> options,
+                                   Map<UUID, Long> optionCounts, long totalVoteCount) {
         VoteResponse response = new VoteResponse();
         response.setId(vote.getId().toString());
         response.setTitle(vote.getTitle());
@@ -27,24 +34,33 @@ public class VoteMapper {
         response.setAnonymous(vote.isAnonymous());
         response.setCreatedAt(vote.getCreatedAt());
         response.setUpdatedAt(vote.getUpdatedAt());
-        response.setTotalVotes(vote.getTotalVotes());
+        response.setTotalVotes(totalVoteCount);
         response.setVotingActive(vote.isVotingActive());
-        response.setOptions(options.stream().map(this::toOptionResponse).collect(Collectors.toList()));
+        response.setOptions(options.stream()
+                .map(opt -> toOptionResponse(opt, optionCounts.getOrDefault(opt.getId(), 0L)))
+                .collect(Collectors.toList()));
         return response;
     }
 
-    public VoteResponse.VoteOptionResponse toOptionResponse(VoteOption option) {
+    public VoteResponse.VoteOptionResponse toOptionResponse(VoteOption option, long voteCount) {
         VoteResponse.VoteOptionResponse resp = new VoteResponse.VoteOptionResponse();
         resp.setId(option.getId().toString());
         resp.setText(option.getText());
         resp.setDescription(option.getDescription());
         resp.setDisplayOrder(option.getDisplayOrder());
         resp.setCreatedAt(option.getCreatedAt());
-        resp.setVotes(option.getVoteCount());
+        resp.setVotes(voteCount);
         return resp;
     }
 
-    public VoteResultResponse toResultResponse(Vote vote, List<VoteOption> options, int totalParticipants) {
+    /**
+     * @param optionCounts 預取的 Map<optionId, voteCount>
+     * @param totalVoteCount 預取的總投票數
+     */
+    public VoteResultResponse toResultResponse(Vote vote, List<VoteOption> options,
+                                               int totalParticipants,
+                                               Map<UUID, Long> optionCounts,
+                                               long totalVoteCount) {
         VoteResultResponse response = new VoteResultResponse();
         response.setId(vote.getId().toString());
         response.setTitle(vote.getTitle());
@@ -57,27 +73,28 @@ public class VoteMapper {
         response.setAllowMultipleChoices(vote.isAllowMultipleChoices());
         response.setAnonymous(vote.isAnonymous());
         response.setCreatedAt(vote.getCreatedAt());
-        response.setTotalVotes(vote.getTotalVotes());
+        response.setTotalVotes(totalVoteCount);
         response.setVotingActive(vote.isVotingActive());
         response.setTotalParticipants(totalParticipants);
 
         List<VoteResultResponse.VoteOptionResultResponse> optionResults = options.stream()
-            .map(option -> toOptionResultResponse(option, vote.getTotalVotes(), vote.isAnonymous()))
+            .map(opt -> toOptionResultResponse(opt, totalVoteCount, vote.isAnonymous(),
+                    optionCounts.getOrDefault(opt.getId(), 0L)))
             .collect(Collectors.toList());
         response.setOptions(optionResults);
         return response;
     }
 
     public VoteResultResponse.VoteOptionResultResponse toOptionResultResponse(
-            VoteOption option, long totalVotes, boolean isAnonymous) {
+            VoteOption option, long totalVotes, boolean isAnonymous, long voteCount) {
         VoteResultResponse.VoteOptionResultResponse result = new VoteResultResponse.VoteOptionResultResponse();
         result.setId(option.getId().toString());
         result.setText(option.getText());
         result.setDescription(option.getDescription());
         result.setDisplayOrder(option.getDisplayOrder());
-        result.setVoteCount(option.getVoteCount());
+        result.setVoteCount(voteCount);
 
-        double percentage = totalVotes > 0 ? (double) option.getVoteCount() / totalVotes * 100 : 0.0;
+        double percentage = totalVotes > 0 ? (double) voteCount / totalVotes * 100 : 0.0;
         result.setPercentage(percentage);
 
         if (!isAnonymous) {

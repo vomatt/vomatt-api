@@ -44,7 +44,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/v1/auth")
 @Tag(name = "認證", description = "認證相關的API，包括登入、註冊、刷新令牌和登出")
 @Slf4j
 @RequiredArgsConstructor

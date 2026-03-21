@@ -85,12 +85,12 @@ public class UserServiceImpl implements UserService {
     public boolean changePassword(String userId, String currentPassword, String newPassword) {
         User user = findUserById(userId);
 
-        if (!passwordEncoder.matches(currentPassword, user.getVerificationCode())) {
+        if (!passwordEncoder.matches(currentPassword, user.getCredential())) {
             logActivity(user, "PASSWORD_CHANGE_FAILED", "Invalid current password");
             return false;
         }
 
-        user.setVerificationCode(passwordEncoder.encode(newPassword));
+        user.setCredential(passwordEncoder.encode(newPassword));
         userRepository.save(user);
 
         logActivity(user, "PASSWORD_CHANGED", "Password changed successfully");
@@ -159,7 +159,7 @@ public class UserServiceImpl implements UserService {
             return false;
         }
 
-        user.setVerificationCode(passwordEncoder.encode(verificationCode));
+        user.setCredential(passwordEncoder.encode(verificationCode));
         userRepository.save(user);
         logActivity(user, "VERIFICATION_CODE_CHANGED", "Verification code updated");
 

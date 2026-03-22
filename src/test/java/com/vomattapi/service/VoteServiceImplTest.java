@@ -11,9 +11,11 @@ import com.vomattapi.application.exception.VotingNotAllowedException;
 import com.vomattapi.application.mapper.VoteMapper;
 import com.vomattapi.application.service.impl.VoteServiceImpl;
 import com.vomattapi.domain.user.User;
+import com.vomattapi.domain.vote.Tag;
 import com.vomattapi.domain.vote.UserVote;
 import com.vomattapi.domain.vote.Vote;
 import com.vomattapi.domain.vote.VoteOption;
+import com.vomattapi.domain.vote.repository.TagRepository;
 import com.vomattapi.domain.vote.repository.UserVoteRepository;
 import com.vomattapi.domain.vote.repository.VoteOptionRepository;
 import com.vomattapi.domain.vote.event.VoteCreatedEvent;
@@ -36,6 +38,7 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -52,6 +55,7 @@ class VoteServiceImplTest {
     @Mock VoteOptionRepository voteOptionRepository;
     @Mock UserVoteRepository userVoteRepository;
     @Mock UserRepository userRepository;
+    @Mock TagRepository tagRepository;
     @Mock VoteConfigurationProperties voteConfig;
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock VoteMapper voteMapper;
@@ -319,6 +323,96 @@ class VoteServiceImplTest {
     void shouldDelegateHasUserVotedToRepository() {
         when(userVoteRepository.existsByUserIdAndVoteId(userId, voteId)).thenReturn(true);
         assertThat(voteService.hasUserVoted(voteId.toString(), userId.toString())).isTrue();
+    }
+
+    // ─── createVote with tags ─────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("createVote with tags")
+    class CreateVoteWithTags {
+
+        @Test
+        @DisplayName("應該在建立投票時關聯標籤並更新 usageCount")
+        void shouldCreateVoteWithTags() {
+            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
+            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
+            when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+            when(voteRepository.save(any(Vote.class))).thenAnswer(inv -> {
+                Vote v = inv.getArgument(0);
+                v.setId(UUID.randomUUID());
+                return v;
+            });
+
+            UUID tagId = UUID.randomUUID();
+            Tag tag = new Tag("Tech", "tech", "Technology", 1);
+            tag.setId(tagId);
+            when(tagRepository.findAllByIdIn(Set.of(tagId))).thenReturn(List.of(tag));
+            when(voteOptionRepository.findByVoteIdOrderByDisplayOrder(any())).thenReturn(Collections.emptyList());
+            when(userVoteRepository.countByOptionGroupedForVote(any())).thenReturn(Collections.emptyList());
+            when(userVoteRepository.countByVoteId(any())).thenReturn(0L);
+            when(voteMapper.toResponse(any(), any(), any(), anyLong())).thenReturn(new VoteResponse());
+
+            CreateVoteRequest request = new CreateVoteRequest();
+            request.setTitle("Tag Vote");
+            request.setOptions(List.of(buildOption("A"), buildOption("B")));
+            request.setTagIds(List.of(tagId));
+
+            voteService.createVote(request, userId.toString());
+
+            verify(tagRepository).findAllByIdIn(Set.of(tagId));
+            verify(tagRepository).incrementUsageCount(Set.of(tagId));
+        }
+
+        @Test
+        @DisplayName("應該在 tagIds 包含不存在的 ID 時拋出異常")
+        void shouldThrowWhenTagIdNotFound() {
+            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
+            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
+            when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+            UUID tagId1 = UUID.randomUUID();
+            UUID tagId2 = UUID.randomUUID();
+            // Only return one tag when two are requested
+            Tag tag = new Tag("Tech", "tech", "Technology", 1);
+            tag.setId(tagId1);
+            when(tagRepository.findAllByIdIn(Set.of(tagId1, tagId2))).thenReturn(List.of(tag));
+
+            CreateVoteRequest request = new CreateVoteRequest();
+            request.setTitle("Tag Vote");
+            request.setOptions(List.of(buildOption("A"), buildOption("B")));
+            request.setTagIds(List.of(tagId1, tagId2));
+
+            assertThatThrownBy(() -> voteService.createVote(request, userId.toString()))
+                    .isInstanceOf(BusinessRuleViolationException.class)
+                    .hasMessageContaining("部分標籤 ID 不存在");
+        }
+
+        @Test
+        @DisplayName("應該在不帶 tagIds 時正常建立投票")
+        void shouldCreateVoteWithoutTags() {
+            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
+            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
+            when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+            when(voteRepository.save(any(Vote.class))).thenAnswer(inv -> {
+                Vote v = inv.getArgument(0);
+                v.setId(UUID.randomUUID());
+                return v;
+            });
+            when(voteOptionRepository.findByVoteIdOrderByDisplayOrder(any())).thenReturn(Collections.emptyList());
+            when(userVoteRepository.countByOptionGroupedForVote(any())).thenReturn(Collections.emptyList());
+            when(userVoteRepository.countByVoteId(any())).thenReturn(0L);
+            when(voteMapper.toResponse(any(), any(), any(), anyLong())).thenReturn(new VoteResponse());
+
+            CreateVoteRequest request = new CreateVoteRequest();
+            request.setTitle("No Tag Vote");
+            request.setOptions(List.of(buildOption("A"), buildOption("B")));
+            // tagIds not set (null)
+
+            voteService.createVote(request, userId.toString());
+
+            verify(tagRepository, never()).findAllByIdIn(any());
+            verify(tagRepository, never()).incrementUsageCount(any());
+        }
     }
 
     // ─── helpers ──────────────────────────────────────────────────────────────

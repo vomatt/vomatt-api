@@ -23,6 +23,7 @@ public class VoteResponse extends BaseResponse {
     private long totalVotes;
     private boolean isVotingActive;
     private List<VoteOptionResponse> options;
+    private List<TagDto> tags;
     
     @Data
     public static class VoteOptionResponse {

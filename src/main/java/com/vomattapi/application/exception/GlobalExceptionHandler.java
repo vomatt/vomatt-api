@@ -5,6 +5,7 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -16,6 +17,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.context.request.WebRequest;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 import com.vomattapi.application.dto.response.ApiResponse;
 import com.vomattapi.application.dto.response.ErrorType;
@@ -200,6 +203,26 @@ public class GlobalExceptionHandler {
                 .withPath(request.getDescription(false));
 
         return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+    }
+
+    /**
+     * Handle resource conflict exceptions (e.g., duplicate name/slug)
+     */
+    @ExceptionHandler(ResourceConflictException.class)
+    public ResponseEntity<ApiResponse<Void>> handleResourceConflict(ResourceConflictException ex, HttpServletRequest request) {
+        logger.warn("資源衝突: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(ErrorType.BUSINESS_RULE_VIOLATION, ex.getMessage()));
+    }
+
+    /**
+     * Handle data integrity violation exceptions (e.g., unique constraint violations)
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(DataIntegrityViolationException ex, HttpServletRequest request) {
+        logger.error("資料完整性衝突: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(ErrorType.BUSINESS_RULE_VIOLATION, "資料操作衝突，請檢查是否有關聯資料"));
     }
 
     /**

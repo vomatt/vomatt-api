@@ -80,7 +80,7 @@ public class WebSecurityConfig {
                 ).permitAll()
                 // 公開路由：Actuator health check
                 .requestMatchers("/actuator/health").permitAll()
-                // 需要認證的路由：後台管理
+                // 管理端點需要認證
                 .requestMatchers("/api/v1/admin/**").authenticated()
                 // 其餘路由需要認證
                 .anyRequest().authenticated()

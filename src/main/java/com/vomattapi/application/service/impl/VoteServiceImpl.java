@@ -2,8 +2,10 @@ package com.vomattapi.application.service.impl;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -25,9 +27,11 @@ import com.vomattapi.application.mapper.VoteMapper;
 import com.vomattapi.application.service.VoteService;
 import com.vomattapi.domain.user.User;
 import com.vomattapi.domain.user.repository.UserRepository;
+import com.vomattapi.domain.vote.Tag;
 import com.vomattapi.domain.vote.UserVote;
 import com.vomattapi.domain.vote.Vote;
 import com.vomattapi.domain.vote.VoteOption;
+import com.vomattapi.domain.vote.repository.TagRepository;
 import com.vomattapi.domain.vote.repository.UserVoteRepository;
 import com.vomattapi.domain.vote.repository.VoteOptionRepository;
 import com.vomattapi.domain.vote.repository.VoteRepository;
@@ -51,6 +55,7 @@ public class VoteServiceImpl implements VoteService {
     private final VoteOptionRepository voteOptionRepository;
     private final UserVoteRepository userVoteRepository;
     private final UserRepository userRepository;
+    private final TagRepository tagRepository;
     private final VoteConfigurationProperties voteConfig;
     private final ApplicationEventPublisher eventPublisher;
     private final VoteMapper voteMapper;
@@ -67,6 +72,15 @@ public class VoteServiceImpl implements VoteService {
         vote.setAllowMultipleChoices(request.isAllowMultipleChoices());
         vote.setAnonymous(request.isAnonymous());
 
+        if (request.getTagIds() != null && !request.getTagIds().isEmpty()) {
+            Set<UUID> tagUUIDs = new HashSet<>(request.getTagIds());
+            List<Tag> tags = tagRepository.findAllByIdIn(tagUUIDs);
+            if (tags.size() != tagUUIDs.size()) {
+                throw new BusinessRuleViolationException("部分標籤 ID 不存在");
+            }
+            tags.forEach(vote::addTag);
+        }
+
         vote = voteRepository.save(vote);
 
         for (int i = 0; i < request.getOptions().size(); i++) {
@@ -78,6 +92,10 @@ public class VoteServiceImpl implements VoteService {
 
         vote = voteRepository.save(vote);
         log.info("Vote created: {} by user: {}", vote.getId(), creatorId);
+
+        if (request.getTagIds() != null && !request.getTagIds().isEmpty()) {
+            tagRepository.incrementUsageCount(new HashSet<>(request.getTagIds()));
+        }
 
         eventPublisher.publishEvent(new VoteCreatedEvent(
             vote.getId().toString(), creatorId, vote.getTitle(), vote.getDescription(), vote.getOptions().size()));
@@ -106,6 +124,13 @@ public class VoteServiceImpl implements VoteService {
     @Transactional(readOnly = true)
     public Page<VoteResponse> getActiveVotes(Pageable pageable) {
         Page<Vote> votes = voteRepository.findActiveVotesAtTime(LocalDateTime.now(), pageable);
+        return votes.map(this::convertToVoteResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<VoteResponse> getActiveVotesByTag(String tagSlug, Pageable pageable) {
+        Page<Vote> votes = voteRepository.findByTagSlugAndIsActiveTrue(tagSlug, pageable);
         return votes.map(this::convertToVoteResponse);
     }
 

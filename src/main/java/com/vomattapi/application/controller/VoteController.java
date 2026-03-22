@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -85,9 +86,15 @@ public class VoteController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Active votes retrieved successfully")
     })
     public ResponseEntity<ApiResponse<Page<VoteResponse>>> getActiveVotes(
-            @PageableDefault(size = 20) Pageable pageable) {
-        Page<VoteResponse> response = voteService.getActiveVotes(pageable);
-        return ResponseEntity.ok(ApiResponse.success(response));
+            @PageableDefault(size = 20) Pageable pageable,
+            @RequestParam(required = false) String tag) {
+        Page<VoteResponse> votes;
+        if (tag != null && !tag.isBlank()) {
+            votes = voteService.getActiveVotesByTag(tag, pageable);
+        } else {
+            votes = voteService.getActiveVotes(pageable);
+        }
+        return ResponseEntity.ok(ApiResponse.success(votes));
     }
 
     @GetMapping("/my")

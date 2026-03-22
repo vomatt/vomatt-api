@@ -71,6 +71,8 @@ public class WebSecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/users/*").permitAll()
                 // 公開路由：標籤 GET 端點
                 .requestMatchers(HttpMethod.GET, "/api/v1/tags", "/api/v1/tags/**").permitAll()
+                // 公開路由：投票瀏覽 GET 端點（列表、詳情、結果）
+                .requestMatchers(HttpMethod.GET, "/api/v1/votes").permitAll()
                 // 公開路由：Swagger UI
                 .requestMatchers(
                     "/swagger-ui/**",

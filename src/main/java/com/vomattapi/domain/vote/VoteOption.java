@@ -46,6 +46,10 @@ public class VoteOption extends BaseEntity {
     @Column(name = "display_order")
     private Integer displayOrder = 0;
 
+    @Size(max = 500)
+    @Column(name = "image_url")
+    private String imageUrl;
+
     @OneToMany(mappedBy = "option", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<UserVote> userVotes = new HashSet<>();
 

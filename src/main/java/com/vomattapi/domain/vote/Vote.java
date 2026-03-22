@@ -10,6 +10,8 @@ import com.vomattapi.domain.user.User;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
@@ -67,6 +69,10 @@ public class Vote extends BaseEntity {
 
     @Column(name = "max_choices")
     private Integer maxChoices = 1;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "vote_type", nullable = false)
+    private VoteType voteType = VoteType.STANDARD;
 
     @OneToMany(mappedBy = "vote", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<VoteOption> options = new HashSet<>();

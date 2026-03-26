@@ -17,14 +17,14 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.vomattapi.application.dto.request.CreateVoteRequest;
-import com.vomattapi.application.dto.request.VoteRequest;
-import com.vomattapi.application.dto.response.ApiResponse;
-import com.vomattapi.application.dto.response.UserVoteStatusResponse;
-import com.vomattapi.application.dto.response.VoteResponse;
-import com.vomattapi.application.dto.response.VoteResultResponse;
-import com.vomattapi.application.security.services.UserDetailsImpl;
-import com.vomattapi.application.service.VoteService;
+import com.vomattapi.application.dto.vote.CreateVoteRequest;
+import com.vomattapi.application.dto.vote.VoteRequest;
+import com.vomattapi.application.dto.common.ApiResponse;
+import com.vomattapi.application.dto.vote.UserVoteStatusResponse;
+import com.vomattapi.application.dto.vote.VoteResponse;
+import com.vomattapi.application.dto.vote.VoteResultResponse;
+import com.vomattapi.infrastructure.security.services.UserDetailsImpl;
+import com.vomattapi.application.service.vote.VoteService;
 import com.vomattapi.infrastructure.audit.Auditable;
 
 import io.swagger.v3.oas.annotations.Operation;

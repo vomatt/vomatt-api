@@ -1,8 +1,8 @@
 package com.vomattapi.application.mapper;
 
-import com.vomattapi.application.dto.response.TagDto;
-import com.vomattapi.application.dto.response.VoteResponse;
-import com.vomattapi.application.dto.response.VoteResultResponse;
+import com.vomattapi.application.dto.tag.TagDto;
+import com.vomattapi.application.dto.vote.VoteResponse;
+import com.vomattapi.application.dto.vote.VoteResultResponse;
 import com.vomattapi.domain.vote.Vote;
 import com.vomattapi.domain.vote.VoteOption;
 import org.springframework.stereotype.Component;

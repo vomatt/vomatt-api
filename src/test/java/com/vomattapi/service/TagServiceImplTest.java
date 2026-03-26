@@ -1,12 +1,12 @@
 package com.vomattapi.service;
 
-import com.vomattapi.application.dto.request.CreateTagRequest;
-import com.vomattapi.application.dto.request.UpdateTagRequest;
-import com.vomattapi.application.dto.response.TagDto;
+import com.vomattapi.application.dto.tag.CreateTagRequest;
+import com.vomattapi.application.dto.tag.UpdateTagRequest;
+import com.vomattapi.application.dto.tag.TagDto;
 import com.vomattapi.application.exception.BusinessRuleViolationException;
 import com.vomattapi.application.exception.EntityNotFoundException;
 import com.vomattapi.application.exception.ResourceConflictException;
-import com.vomattapi.application.service.impl.TagServiceImpl;
+import com.vomattapi.application.service.tag.TagServiceImpl;
 import com.vomattapi.domain.vote.Tag;
 import com.vomattapi.domain.vote.repository.TagRepository;
 import org.junit.jupiter.api.DisplayName;

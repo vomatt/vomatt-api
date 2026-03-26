@@ -1,8 +1,8 @@
 package com.vomattapi.application.controller;
 
-import com.vomattapi.application.dto.response.ApiResponse;
-import com.vomattapi.application.dto.response.TagDto;
-import com.vomattapi.application.service.TagService;
+import com.vomattapi.application.dto.common.ApiResponse;
+import com.vomattapi.application.dto.tag.TagDto;
+import com.vomattapi.application.service.tag.TagService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;

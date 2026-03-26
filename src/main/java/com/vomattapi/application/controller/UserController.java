@@ -1,14 +1,14 @@
 package com.vomattapi.application.controller;
 
-import com.vomattapi.application.dto.request.UpdateProfileRequest;
-import com.vomattapi.application.dto.response.ApiResponse;
-import com.vomattapi.application.dto.response.ErrorType;
-import com.vomattapi.application.dto.response.UserDto;
-import com.vomattapi.application.dto.response.UserProfileResponse;
+import com.vomattapi.application.dto.user.UpdateProfileRequest;
+import com.vomattapi.application.dto.common.ApiResponse;
+import com.vomattapi.application.dto.common.ErrorType;
+import com.vomattapi.application.dto.user.UserDto;
+import com.vomattapi.application.dto.user.UserProfileResponse;
 import com.vomattapi.application.exception.UnauthorizedOperationException;
-import com.vomattapi.application.security.services.UserDetailsImpl;
-import com.vomattapi.application.service.RefreshTokenService;
-import com.vomattapi.application.service.UserService;
+import com.vomattapi.infrastructure.security.services.UserDetailsImpl;
+import com.vomattapi.application.service.auth.RefreshTokenService;
+import com.vomattapi.application.service.user.UserService;
 import jakarta.validation.Valid;
 import com.vomattapi.infrastructure.audit.Auditable;
 import io.swagger.v3.oas.annotations.Operation;

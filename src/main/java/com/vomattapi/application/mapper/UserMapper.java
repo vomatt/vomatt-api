@@ -1,6 +1,6 @@
 package com.vomattapi.application.mapper;
 
-import com.vomattapi.application.dto.response.UserDto;
+import com.vomattapi.application.dto.user.UserDto;
 import com.vomattapi.domain.user.User;
 import org.springframework.stereotype.Component;
 

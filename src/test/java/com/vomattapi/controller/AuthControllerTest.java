@@ -2,17 +2,17 @@ package com.vomattapi.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vomattapi.application.controller.AuthController;
-import com.vomattapi.application.dto.request.SigninRequest;
-import com.vomattapi.application.dto.request.SignupRequest;
-import com.vomattapi.application.dto.response.JwtResponse;
-import com.vomattapi.application.security.jwt.JwtUtils;
-import com.vomattapi.application.security.services.UserDetailsImpl;
-import com.vomattapi.application.security.services.UserDetailsServiceImpl;
-import com.vomattapi.application.service.AuthService;
-import com.vomattapi.application.service.JwtBlacklistService;
-import com.vomattapi.application.service.PreSignupService;
-import com.vomattapi.application.service.RefreshTokenService;
-import com.vomattapi.application.service.SignupService;
+import com.vomattapi.application.dto.auth.SigninRequest;
+import com.vomattapi.application.dto.auth.SignupRequest;
+import com.vomattapi.application.dto.auth.JwtResponse;
+import com.vomattapi.infrastructure.security.jwt.JwtUtils;
+import com.vomattapi.infrastructure.security.services.UserDetailsImpl;
+import com.vomattapi.infrastructure.security.services.UserDetailsServiceImpl;
+import com.vomattapi.application.service.auth.AuthService;
+import com.vomattapi.application.service.auth.JwtBlacklistService;
+import com.vomattapi.application.service.auth.PreSignupService;
+import com.vomattapi.application.service.auth.RefreshTokenService;
+import com.vomattapi.application.service.auth.SignupService;
 import com.vomattapi.domain.user.RefreshToken;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -132,7 +132,7 @@ class AuthControllerTest {
         void shouldReturn400WhenVerificationExpired() throws Exception {
             when(signupService.processSignup(any()))
                     .thenReturn(SignupService.SignupResult.failure(
-                            com.vomattapi.application.dto.response.ErrorType.VERIFICATION_CODE_EXPIRED,
+                            com.vomattapi.application.dto.common.ErrorType.VERIFICATION_CODE_EXPIRED,
                             "Verification expired"));
 
             SignupRequest request = buildValidSignupRequest();

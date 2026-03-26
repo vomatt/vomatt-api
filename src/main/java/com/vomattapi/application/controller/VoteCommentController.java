@@ -18,12 +18,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.vomattapi.application.dto.request.CreateCommentRequest;
-import com.vomattapi.application.dto.request.UpdateCommentRequest;
-import com.vomattapi.application.dto.response.ApiResponse;
-import com.vomattapi.application.dto.response.CommentDto;
-import com.vomattapi.application.security.services.UserDetailsImpl;
-import com.vomattapi.application.service.VoteCommentService;
+import com.vomattapi.application.dto.vote.CreateCommentRequest;
+import com.vomattapi.application.dto.vote.UpdateCommentRequest;
+import com.vomattapi.application.dto.common.ApiResponse;
+import com.vomattapi.application.dto.vote.CommentDto;
+import com.vomattapi.infrastructure.security.services.UserDetailsImpl;
+import com.vomattapi.application.service.vote.VoteCommentService;
 import com.vomattapi.infrastructure.audit.Auditable;
 
 import io.swagger.v3.oas.annotations.Operation;

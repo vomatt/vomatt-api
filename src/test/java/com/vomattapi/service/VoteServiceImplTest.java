@@ -1,15 +1,15 @@
 package com.vomattapi.service;
 
-import com.vomattapi.application.dto.request.CreateVoteRequest;
-import com.vomattapi.application.dto.request.VoteRequest;
-import com.vomattapi.application.dto.response.VoteResponse;
+import com.vomattapi.application.dto.vote.CreateVoteRequest;
+import com.vomattapi.application.dto.vote.VoteRequest;
+import com.vomattapi.application.dto.vote.VoteResponse;
 import com.vomattapi.application.exception.BusinessRuleViolationException;
 import com.vomattapi.application.exception.EntityNotFoundException;
 import com.vomattapi.application.exception.UnauthorizedOperationException;
 import com.vomattapi.application.exception.VoteNotFoundException;
 import com.vomattapi.application.exception.VotingNotAllowedException;
 import com.vomattapi.application.mapper.VoteMapper;
-import com.vomattapi.application.service.impl.VoteServiceImpl;
+import com.vomattapi.application.service.vote.VoteServiceImpl;
 import com.vomattapi.domain.user.User;
 import com.vomattapi.domain.vote.Tag;
 import com.vomattapi.domain.vote.UserVote;

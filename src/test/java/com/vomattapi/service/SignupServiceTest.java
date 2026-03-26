@@ -1,12 +1,12 @@
 package com.vomattapi.service;
 
-import com.vomattapi.application.dto.request.SignupRequest;
-import com.vomattapi.application.dto.response.ErrorType;
-import com.vomattapi.application.service.EmailService;
-import com.vomattapi.application.service.SignupService;
-import com.vomattapi.application.service.ValidationService;
-import com.vomattapi.application.service.ValidationService.ValidationResult;
-import com.vomattapi.application.service.VerificationCodeService;
+import com.vomattapi.application.dto.auth.SignupRequest;
+import com.vomattapi.application.dto.common.ErrorType;
+import com.vomattapi.application.service.shared.EmailService;
+import com.vomattapi.application.service.auth.SignupService;
+import com.vomattapi.application.service.auth.ValidationService;
+import com.vomattapi.application.service.auth.ValidationService.ValidationResult;
+import com.vomattapi.application.service.auth.VerificationCodeService;
 import com.vomattapi.domain.user.ERole;
 import com.vomattapi.domain.user.Role;
 import com.vomattapi.domain.user.User;

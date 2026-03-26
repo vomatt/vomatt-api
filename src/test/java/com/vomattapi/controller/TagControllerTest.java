@@ -2,8 +2,8 @@ package com.vomattapi.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vomattapi.application.controller.TagController;
-import com.vomattapi.application.dto.response.TagDto;
-import com.vomattapi.application.service.TagService;
+import com.vomattapi.application.dto.tag.TagDto;
+import com.vomattapi.application.service.tag.TagService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -54,9 +54,9 @@ class TagControllerTest {
 
     @MockBean TagService tagService;
     // AuthTokenFilter 依賴的元件
-    @MockBean com.vomattapi.application.security.jwt.JwtUtils jwtUtils;
-    @MockBean com.vomattapi.application.security.services.UserDetailsServiceImpl userDetailsService;
-    @MockBean com.vomattapi.application.service.JwtBlacklistService jwtBlacklistService;
+    @MockBean com.vomattapi.infrastructure.security.jwt.JwtUtils jwtUtils;
+    @MockBean com.vomattapi.infrastructure.security.services.UserDetailsServiceImpl userDetailsService;
+    @MockBean com.vomattapi.application.service.auth.JwtBlacklistService jwtBlacklistService;
 
     private TagDto buildTagDto(String id, String name) {
         TagDto dto = new TagDto();

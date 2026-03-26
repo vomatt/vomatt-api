@@ -1,6 +1,6 @@
 package com.vomattapi.application.mapper;
 
-import com.vomattapi.application.dto.response.CommentDto;
+import com.vomattapi.application.dto.vote.CommentDto;
 import com.vomattapi.domain.vote.VoteComment;
 import org.springframework.stereotype.Component;
 

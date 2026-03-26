@@ -2,10 +2,10 @@ package com.vomattapi.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vomattapi.application.controller.VoteController;
-import com.vomattapi.application.dto.request.CreateVoteRequest;
-import com.vomattapi.application.dto.response.VoteResponse;
+import com.vomattapi.application.dto.vote.CreateVoteRequest;
+import com.vomattapi.application.dto.vote.VoteResponse;
 import com.vomattapi.application.exception.VoteNotFoundException;
-import com.vomattapi.application.service.VoteService;
+import com.vomattapi.application.service.vote.VoteService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -24,7 +24,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.web.SecurityFilterChain;
-import com.vomattapi.application.security.services.UserDetailsImpl;
+import com.vomattapi.infrastructure.security.services.UserDetailsImpl;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -67,9 +67,9 @@ class VoteControllerTest {
 
     @MockBean VoteService voteService;
     // AuthTokenFilter 是 @Component 需要這些依賴才能被 Spring 建立（雖然 TestSecurityConfig 不使用它）
-    @MockBean com.vomattapi.application.security.jwt.JwtUtils jwtUtils;
-    @MockBean com.vomattapi.application.security.services.UserDetailsServiceImpl userDetailsService;
-    @MockBean com.vomattapi.application.service.JwtBlacklistService jwtBlacklistService;
+    @MockBean com.vomattapi.infrastructure.security.jwt.JwtUtils jwtUtils;
+    @MockBean com.vomattapi.infrastructure.security.services.UserDetailsServiceImpl userDetailsService;
+    @MockBean com.vomattapi.application.service.auth.JwtBlacklistService jwtBlacklistService;
 
     // ─── GET /api/v1/votes ────────────────────────────────────────────────────
 

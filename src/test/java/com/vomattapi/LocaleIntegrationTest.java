@@ -1,6 +1,6 @@
 package com.vomattapi;
 
-import com.vomattapi.application.service.LocaleService;
+import com.vomattapi.application.service.shared.LocaleService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureWebMvc;

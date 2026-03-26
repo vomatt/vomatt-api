@@ -20,8 +20,8 @@ import org.springframework.web.context.request.WebRequest;
 
 import jakarta.servlet.http.HttpServletRequest;
 
-import com.vomattapi.application.dto.response.ApiResponse;
-import com.vomattapi.application.dto.response.ErrorType;
+import com.vomattapi.application.dto.common.ApiResponse;
+import com.vomattapi.application.dto.common.ErrorType;
 
 @ControllerAdvice
 public class GlobalExceptionHandler {

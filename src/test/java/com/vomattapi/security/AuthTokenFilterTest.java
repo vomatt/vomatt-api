@@ -1,10 +1,10 @@
 package com.vomattapi.security;
 
-import com.vomattapi.application.security.jwt.AuthTokenFilter;
-import com.vomattapi.application.security.jwt.JwtUtils;
-import com.vomattapi.application.security.services.UserDetailsImpl;
-import com.vomattapi.application.security.services.UserDetailsServiceImpl;
-import com.vomattapi.application.service.JwtBlacklistService;
+import com.vomattapi.infrastructure.security.jwt.AuthTokenFilter;
+import com.vomattapi.infrastructure.security.jwt.JwtUtils;
+import com.vomattapi.infrastructure.security.services.UserDetailsImpl;
+import com.vomattapi.infrastructure.security.services.UserDetailsServiceImpl;
+import com.vomattapi.application.service.auth.JwtBlacklistService;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;

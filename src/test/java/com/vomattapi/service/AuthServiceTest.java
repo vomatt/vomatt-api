@@ -1,10 +1,10 @@
 package com.vomattapi.service;
 
 import com.vomattapi.application.exception.EntityNotFoundException;
-import com.vomattapi.application.service.AuthService;
-import com.vomattapi.application.service.EmailService;
-import com.vomattapi.application.service.UserService;
-import com.vomattapi.application.service.VerificationCodeService;
+import com.vomattapi.application.service.auth.AuthService;
+import com.vomattapi.application.service.shared.EmailService;
+import com.vomattapi.application.service.user.UserService;
+import com.vomattapi.application.service.auth.VerificationCodeService;
 import com.vomattapi.domain.user.User;
 import com.vomattapi.infrastructure.constants.CacheConstants;
 import com.vomattapi.infrastructure.redis.RedisService;

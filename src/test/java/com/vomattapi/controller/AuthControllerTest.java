@@ -5,15 +5,14 @@ import com.vomattapi.application.controller.AuthController;
 import com.vomattapi.application.dto.auth.SigninRequest;
 import com.vomattapi.application.dto.auth.SignupRequest;
 import com.vomattapi.application.dto.auth.JwtResponse;
+import com.vomattapi.application.exception.InvalidVerificationCodeException;
 import com.vomattapi.infrastructure.security.jwt.JwtUtils;
-import com.vomattapi.infrastructure.security.services.UserDetailsImpl;
-import com.vomattapi.infrastructure.security.services.UserDetailsServiceImpl;
 import com.vomattapi.application.service.auth.AuthService;
+import com.vomattapi.application.service.auth.AuthSessionService;
 import com.vomattapi.application.service.auth.JwtBlacklistService;
 import com.vomattapi.application.service.auth.PreSignupService;
 import com.vomattapi.application.service.auth.RefreshTokenService;
 import com.vomattapi.application.service.auth.SignupService;
-import com.vomattapi.domain.user.RefreshToken;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -26,17 +25,16 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -61,12 +59,14 @@ class AuthControllerTest {
     @Autowired ObjectMapper objectMapper;
 
     @MockBean AuthService authService;
+    @MockBean AuthSessionService authSessionService;
     @MockBean RefreshTokenService refreshTokenService;
     @MockBean PreSignupService preSignupService;
     @MockBean SignupService signupService;
     @MockBean JwtUtils jwtUtils;
     @MockBean JwtBlacklistService jwtBlacklistService;
-    @MockBean UserDetailsServiceImpl userDetailsService;
+    // AuthTokenFilter 是 @Component，需要 mock 其依賴才能建立 Spring context
+    @MockBean com.vomattapi.infrastructure.security.services.UserDetailsServiceImpl userDetailsService;
 
     // ─── POST /api/v1/auth/signin ─────────────────────────────────────────────
 
@@ -77,7 +77,8 @@ class AuthControllerTest {
         @Test
         @DisplayName("驗證碼無效時應回傳 401")
         void shouldReturn401WhenCodeInvalid() throws Exception {
-            when(authService.verificationCode("user@test.com", "wrong")).thenReturn(false);
+            doThrow(new InvalidVerificationCodeException("Invalid code"))
+                    .when(authService).verifyCode("user@test.com", "wrong");
 
             SigninRequest request = new SigninRequest("user@test.com", "wrong");
             mockMvc.perform(post("/api/v1/auth/signin")
@@ -89,18 +90,12 @@ class AuthControllerTest {
         @Test
         @DisplayName("驗證碼正確且用戶存在時應回傳 200 和 JWT")
         void shouldReturn200WithJwtWhenSuccess() throws Exception {
-            when(authService.verificationCode("user@test.com", "123456")).thenReturn(true);
+            doNothing().when(authService).verifyCode("user@test.com", "123456");
 
-            UserDetailsImpl userDetails = new UserDetailsImpl(
-                    "user-id", "testuser", "user@test.com", "pw",
-                    true, List.of(new SimpleGrantedAuthority("ROLE_USER")));
-            when(userDetailsService.loadUserByEmail("user@test.com")).thenReturn(userDetails);
-            when(jwtUtils.generateJwtToken(any())).thenReturn("jwt-token");
-
-            RefreshToken refreshToken = new RefreshToken();
-            refreshToken.setToken("refresh-token");
-            refreshToken.setExpiryDate(LocalDateTime.now().plusDays(7));
-            when(refreshTokenService.createRefreshToken("user-id")).thenReturn(refreshToken);
+            JwtResponse jwtResponse = new JwtResponse(
+                    "jwt-token", "refresh-token", "user-id", "testuser", "user@test.com",
+                    List.of("ROLE_USER"));
+            when(authSessionService.createAuthenticatedSession("user@test.com")).thenReturn(jwtResponse);
 
             SigninRequest request = new SigninRequest("user@test.com", "123456");
             mockMvc.perform(post("/api/v1/auth/signin")
@@ -149,16 +144,10 @@ class AuthControllerTest {
             when(signupService.processSignup(any()))
                     .thenReturn(SignupService.SignupResult.success());
 
-            UserDetailsImpl userDetails = new UserDetailsImpl(
-                    "user-id", "newuser", "new@test.com", "pw",
-                    true, List.of(new SimpleGrantedAuthority("ROLE_USER")));
-            when(userDetailsService.loadUserByEmail("new@test.com")).thenReturn(userDetails);
-            when(jwtUtils.generateJwtToken(any())).thenReturn("new-jwt");
-
-            RefreshToken refreshToken = new RefreshToken();
-            refreshToken.setToken("new-refresh");
-            refreshToken.setExpiryDate(LocalDateTime.now().plusDays(7));
-            when(refreshTokenService.createRefreshToken("user-id")).thenReturn(refreshToken);
+            JwtResponse jwtResponse = new JwtResponse(
+                    "new-jwt", "new-refresh", "user-id", "newuser", "new@test.com",
+                    List.of("ROLE_USER"));
+            when(authSessionService.createAuthenticatedSession("new@test.com")).thenReturn(jwtResponse);
 
             SignupRequest request = buildValidSignupRequest();
             mockMvc.perform(post("/api/v1/auth/signup")

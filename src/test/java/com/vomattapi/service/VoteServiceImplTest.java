@@ -6,7 +6,6 @@ import com.vomattapi.application.dto.vote.VoteResponse;
 import com.vomattapi.application.exception.BusinessRuleViolationException;
 import com.vomattapi.application.exception.EntityNotFoundException;
 import com.vomattapi.application.exception.UnauthorizedOperationException;
-import com.vomattapi.application.exception.VoteNotFoundException;
 import com.vomattapi.application.exception.VotingNotAllowedException;
 import com.vomattapi.application.mapper.VoteMapper;
 import com.vomattapi.application.service.vote.VoteServiceImpl;
@@ -199,11 +198,11 @@ class VoteServiceImplTest {
     class GetVoteTests {
 
         @Test
-        @DisplayName("應該在找不到投票時拋出 VoteNotFoundException")
+        @DisplayName("應該在找不到投票時拋出 EntityNotFoundException")
         void shouldThrowWhenVoteNotFound() {
             when(voteRepository.findById(voteId)).thenReturn(Optional.empty());
             assertThatThrownBy(() -> voteService.getVote(voteId.toString()))
-                    .isInstanceOf(VoteNotFoundException.class);
+                    .isInstanceOf(EntityNotFoundException.class);
         }
 
         @Test
@@ -235,7 +234,7 @@ class VoteServiceImplTest {
             request.setOptionIds(List.of(UUID.randomUUID().toString()));
 
             assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1"))
-                    .isInstanceOf(VoteNotFoundException.class);
+                    .isInstanceOf(EntityNotFoundException.class);
         }
 
         @Test

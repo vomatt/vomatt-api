@@ -21,7 +21,6 @@ import com.vomattapi.application.dto.vote.VoteResultResponse;
 import com.vomattapi.application.exception.BusinessRuleViolationException;
 import com.vomattapi.application.exception.EntityNotFoundException;
 import com.vomattapi.application.exception.UnauthorizedOperationException;
-import com.vomattapi.application.exception.VoteNotFoundException;
 import com.vomattapi.application.exception.VotingNotAllowedException;
 import com.vomattapi.application.mapper.VoteMapper;
 import com.vomattapi.application.service.vote.VoteService;
@@ -107,7 +106,7 @@ public class VoteServiceImpl implements VoteService {
     @Transactional(readOnly = true)
     public VoteResponse getVote(String voteId) {
         Vote vote = voteRepository.findById(UUID.fromString(voteId))
-            .orElseThrow(() -> new VoteNotFoundException(voteId));
+            .orElseThrow(() -> new EntityNotFoundException("Vote", voteId));
         return convertToVoteResponse(vote);
     }
 
@@ -153,7 +152,7 @@ public class VoteServiceImpl implements VoteService {
     @Override
     public VoteResponse vote(String voteId, VoteRequest request, String userId, String ipAddress) {
         Vote vote = voteRepository.findByIdAndIsActiveTrue(UUID.fromString(voteId))
-            .orElseThrow(() -> new VoteNotFoundException(voteId));
+            .orElseThrow(() -> new EntityNotFoundException("Vote", voteId));
 
         if (!vote.isVotingActive()) {
             throw new VotingNotAllowedException(voteId, "Voting period has ended or not started");
@@ -192,13 +191,13 @@ public class VoteServiceImpl implements VoteService {
         eventPublisher.publishEvent(new VoteCastEvent(voteId, userId, request.getOptionIds(), ipAddress));
 
         return convertToVoteResponse(voteRepository.findById(UUID.fromString(voteId))
-            .orElseThrow(() -> new VoteNotFoundException(voteId)));
+            .orElseThrow(() -> new EntityNotFoundException("Vote", voteId)));
     }
 
     @Override
     public VoteResponse removeVote(String voteId, String optionId, String userId) {
         Vote vote = voteRepository.findByIdAndIsActiveTrue(UUID.fromString(voteId))
-            .orElseThrow(() -> new VoteNotFoundException(voteId));
+            .orElseThrow(() -> new EntityNotFoundException("Vote", voteId));
 
         if (!vote.isVotingActive()) {
             throw new VotingNotAllowedException(voteId, "Voting period has ended or not started");
@@ -209,7 +208,7 @@ public class VoteServiceImpl implements VoteService {
         log.info("User {} removed vote from option {} in vote {}", userId, optionId, voteId);
 
         return convertToVoteResponse(voteRepository.findById(UUID.fromString(voteId))
-            .orElseThrow(() -> new VoteNotFoundException(voteId)));
+            .orElseThrow(() -> new EntityNotFoundException("Vote", voteId)));
     }
 
     @Override
@@ -217,7 +216,7 @@ public class VoteServiceImpl implements VoteService {
     public VoteResultResponse getVoteResults(String voteId) {
         UUID voteUuid = UUID.fromString(voteId);
         Vote vote = voteRepository.findById(voteUuid)
-            .orElseThrow(() -> new VoteNotFoundException(voteId));
+            .orElseThrow(() -> new EntityNotFoundException("Vote", voteId));
 
         int totalParticipants = (int) userVoteRepository.countDistinctUserByVoteId(voteUuid);
         long totalVoteCount = userVoteRepository.countByVoteId(voteUuid);
@@ -245,7 +244,7 @@ public class VoteServiceImpl implements VoteService {
     @Override
     public VoteResponse deactivateVote(String voteId, String creatorId) {
         Vote vote = voteRepository.findById(UUID.fromString(voteId))
-            .orElseThrow(() -> new VoteNotFoundException(voteId));
+            .orElseThrow(() -> new EntityNotFoundException("Vote", voteId));
 
         if (!vote.getCreator().getId().toString().equals(creatorId)) {
             throw new UnauthorizedOperationException("deactivate", "vote");

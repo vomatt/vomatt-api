@@ -1,6 +1,8 @@
 package com.vomattapi.application.service.auth;
 
+import com.vomattapi.application.exception.BusinessRuleViolationException;
 import com.vomattapi.application.exception.EntityNotFoundException;
+import com.vomattapi.application.exception.InvalidVerificationCodeException;
 import com.vomattapi.application.service.shared.EmailService;
 import com.vomattapi.application.service.user.UserService;
 import com.vomattapi.domain.user.User;
@@ -24,63 +26,46 @@ public class AuthService {
     private final EmailService emailService;
 
     /**
-     * Generate and store verification code for existing user
+     * 產生並儲存驗證碼（僅限已存在的使用者）
+     * @throws EntityNotFoundException 使用者不存在
+     * @throws BusinessRuleViolationException 驗證碼更新失敗
      */
     public String generateVerificationCode(String email) {
         log.info("Generating verify code for email: {}", email);
 
-        // Check if user exists first
         User user = userService.getUserByEmail(email);
         if (user == null) {
-            log.warn("User not found for email: {}", email);
             throw new EntityNotFoundException("User", email);
         }
 
-        try {
-            // Generate verification code
-            String verificationCode = verificationCodeService.generateVerificationCode();
+        String verificationCode = verificationCodeService.generateVerificationCode();
 
-            // Store in Redis with configured expiration
-            redisService.set(CacheConstants.VERIFICATION_CODE, email, verificationCode, CacheConstants.VERIFICATION_CODE_TTL);
+        redisService.set(CacheConstants.VERIFICATION_CODE, email, verificationCode, CacheConstants.VERIFICATION_CODE_TTL);
 
-            // Update user's verification code (if needed for existing flow)
-            boolean isChanged = userService.changeVerificationCode(email, verificationCode);
-
-            if (isChanged) {
-                log.debug("Verification code generated and stored for email: {}", email);
-                emailService.sendVerificationEmail(email, verificationCode);
-                return verificationCode;
-            } else {
-                log.warn("Failed to update verification code for email: {}", email);
-                return null;
-            }
-
-        } catch (Exception e) {
-            log.error("Error generating verify code for email: {}", email, e);
-            return null;
+        boolean isChanged = userService.changeVerificationCode(email, verificationCode);
+        if (!isChanged) {
+            log.warn("Failed to update verification code for email: {}", email);
+            throw new BusinessRuleViolationException("Failed to update verification code");
         }
+
+        log.debug("Verification code generated and stored for email: {}", email);
+        emailService.sendVerificationEmail(email, verificationCode);
+        return verificationCode;
     }
-    
-    /**
-     * Verification the code for an email
-     */
-    public boolean verificationCode(String email, String providedCode) {
-        try {
-            String storedCode = redisService.get(CacheConstants.VERIFICATION_CODE, email, String.class);
-            boolean isValid = storedCode != null && storedCode.equals(providedCode);
 
-            if (isValid) {
-                // Clear the used verification code
-                redisService.delete(CacheConstants.VERIFICATION_CODE, email);
-                log.info("Verification code verified successfully for email: {}", email);
-            } else {
-                log.warn("Invalid verification code provided for email: {}", email);
-            }
-            
-            return isValid;
-        } catch (Exception e) {
-            log.error("Error verifying code for email: {}", email, e);
-            return false;
+    /**
+     * 驗證 email 對應的驗證碼
+     * @throws InvalidVerificationCodeException 驗證碼無效或已過期
+     */
+    public void verifyCode(String email, String providedCode) {
+        String storedCode = redisService.get(CacheConstants.VERIFICATION_CODE, email, String.class);
+
+        if (storedCode == null || !storedCode.equals(providedCode)) {
+            log.warn("Invalid verification code provided for email: {}", email);
+            throw new InvalidVerificationCodeException("Invalid or expired verification code for email: " + email);
         }
+
+        redisService.delete(CacheConstants.VERIFICATION_CODE, email);
+        log.info("Verification code verified successfully for email: {}", email);
     }
 }

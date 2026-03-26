@@ -5,7 +5,6 @@ import com.vomattapi.application.dto.vote.UpdateCommentRequest;
 import com.vomattapi.application.dto.vote.CommentDto;
 import com.vomattapi.application.exception.EntityNotFoundException;
 import com.vomattapi.application.exception.UnauthorizedOperationException;
-import com.vomattapi.application.exception.VoteNotFoundException;
 import com.vomattapi.application.mapper.CommentMapper;
 import com.vomattapi.application.service.vote.VoteCommentService;
 import com.vomattapi.domain.user.User;
@@ -40,7 +39,7 @@ public class VoteCommentServiceImpl implements VoteCommentService {
     @Override
     public CommentDto createComment(String voteId, String userId, CreateCommentRequest request) {
         Vote vote = voteRepository.findById(UUID.fromString(voteId))
-            .orElseThrow(() -> new VoteNotFoundException(voteId));
+            .orElseThrow(() -> new EntityNotFoundException("Vote", voteId));
 
         User user = userRepository.findById(UUID.fromString(userId))
             .orElseThrow(() -> new EntityNotFoundException("User", userId));
@@ -57,7 +56,7 @@ public class VoteCommentServiceImpl implements VoteCommentService {
     @Transactional(readOnly = true)
     public Page<CommentDto> getCommentsByVote(String voteId, Pageable pageable, String currentUserId) {
         if (!voteRepository.existsById(UUID.fromString(voteId))) {
-            throw new VoteNotFoundException(voteId);
+            throw new EntityNotFoundException("Vote", voteId);
         }
 
         Page<VoteComment> comments = commentRepository.findByVoteId(UUID.fromString(voteId), pageable);
@@ -109,7 +108,7 @@ public class VoteCommentServiceImpl implements VoteCommentService {
     @Transactional(readOnly = true)
     public long countCommentsByVote(String voteId) {
         if (!voteRepository.existsById(UUID.fromString(voteId))) {
-            throw new VoteNotFoundException(voteId);
+            throw new EntityNotFoundException("Vote", voteId);
         }
 
         return commentRepository.countByVoteId(UUID.fromString(voteId));

@@ -1,6 +1,8 @@
 package com.vomattapi.service;
 
+import com.vomattapi.application.exception.BusinessRuleViolationException;
 import com.vomattapi.application.exception.EntityNotFoundException;
+import com.vomattapi.application.exception.InvalidVerificationCodeException;
 import com.vomattapi.application.service.auth.AuthService;
 import com.vomattapi.application.service.shared.EmailService;
 import com.vomattapi.application.service.user.UserService;
@@ -18,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -65,69 +68,65 @@ class AuthServiceTest {
         }
 
         @Test
-        @DisplayName("應該在 changeVerificationCode 失敗時回傳 null")
-        void shouldReturnNullWhenUpdateFails() {
+        @DisplayName("應該在 changeVerificationCode 失敗時拋出 BusinessRuleViolationException")
+        void shouldThrowWhenUpdateFails() {
             User user = new User();
             when(userService.getUserByEmail("user@test.com")).thenReturn(user);
             when(verificationCodeService.generateVerificationCode()).thenReturn("123456");
             when(userService.changeVerificationCode("user@test.com", "123456")).thenReturn(false);
 
-            String result = authService.generateVerificationCode("user@test.com");
-
-            assertThat(result).isNull();
+            assertThatThrownBy(() -> authService.generateVerificationCode("user@test.com"))
+                    .isInstanceOf(BusinessRuleViolationException.class);
             verify(emailService, never()).sendVerificationEmail(any(), any());
         }
     }
 
-    // ─── verificationCode ─────────────────────────────────────────────────────
+    // ─── verifyCode ───────────────────────────────────────────────────────────
 
     @Nested
-    @DisplayName("verificationCode")
+    @DisplayName("verifyCode")
     class VerifyCodeTests {
 
         @Test
-        @DisplayName("應該在驗證碼正確時回傳 true 並刪除 Redis 中的紀錄")
-        void shouldReturnTrueAndDeleteOnValidCode() {
+        @DisplayName("應該在驗證碼正確時成功並刪除 Redis 中的紀錄")
+        void shouldSucceedAndDeleteOnValidCode() {
             when(redisService.get(CacheConstants.VERIFICATION_CODE, "user@test.com", String.class))
                     .thenReturn("123456");
 
-            boolean result = authService.verificationCode("user@test.com", "123456");
-
-            assertThat(result).isTrue();
+            assertThatCode(() -> authService.verifyCode("user@test.com", "123456"))
+                    .doesNotThrowAnyException();
             verify(redisService).delete(CacheConstants.VERIFICATION_CODE, "user@test.com");
         }
 
         @Test
-        @DisplayName("應該在驗證碼錯誤時回傳 false")
-        void shouldReturnFalseOnInvalidCode() {
+        @DisplayName("應該在驗證碼錯誤時拋出 InvalidVerificationCodeException")
+        void shouldThrowOnInvalidCode() {
             when(redisService.get(CacheConstants.VERIFICATION_CODE, "user@test.com", String.class))
                     .thenReturn("123456");
 
-            boolean result = authService.verificationCode("user@test.com", "999999");
-
-            assertThat(result).isFalse();
+            assertThatThrownBy(() -> authService.verifyCode("user@test.com", "999999"))
+                    .isInstanceOf(InvalidVerificationCodeException.class);
             verify(redisService, never()).delete(any(), any());
         }
 
         @Test
-        @DisplayName("應該在 Redis 中無驗證碼時回傳 false")
-        void shouldReturnFalseWhenNoCodeInRedis() {
+        @DisplayName("應該在 Redis 中無驗證碼時拋出 InvalidVerificationCodeException")
+        void shouldThrowWhenNoCodeInRedis() {
             when(redisService.get(CacheConstants.VERIFICATION_CODE, "user@test.com", String.class))
                     .thenReturn(null);
 
-            boolean result = authService.verificationCode("user@test.com", "123456");
-
-            assertThat(result).isFalse();
+            assertThatThrownBy(() -> authService.verifyCode("user@test.com", "123456"))
+                    .isInstanceOf(InvalidVerificationCodeException.class);
         }
 
         @Test
-        @DisplayName("應該在 Redis 發生例外時回傳 false（不拋出）")
-        void shouldReturnFalseWhenRedisThrows() {
+        @DisplayName("應該在 Redis 發生例外時直接拋出（不吞掉）")
+        void shouldPropagateWhenRedisThrows() {
             when(redisService.get(any(), any(), any())).thenThrow(new RuntimeException("Redis down"));
 
-            boolean result = authService.verificationCode("user@test.com", "123456");
-
-            assertThat(result).isFalse();
+            assertThatThrownBy(() -> authService.verifyCode("user@test.com", "123456"))
+                    .isInstanceOf(RuntimeException.class)
+                    .hasMessage("Redis down");
         }
     }
 }

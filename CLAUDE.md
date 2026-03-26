@@ -35,21 +35,24 @@
 | Build | Maven                             |
 | 資料庫 | Postgre                           |
 
-### 專案結構
+### 專案結構（DDD 三層架構）
 ```
-src/main/java/com/company/project/
-├── config/              # 配置類
-├── controller/          # REST API (控制器層)
-├── service/             # 業務邏輯 (服務層)
-│   └── impl/           # 服務實現
-├── repository/          # 資料訪問層 (JPA Repository)
-├── entity/              # 實體類
-├── dto/                 # 數據傳輸物件
-│   ├── request/        # 請求 DTO
-│   └── response/       # 響應 DTO
-├── mapper/              # DTO 轉換器
-├── exception/           # 自定義異常
-└── util/                # 工具類
+src/main/java/com/vomattapi/
+├── application/                # 應用層：Controller、Service、DTO、Mapper、Exception
+│   ├── controller/            # REST API 端點
+│   ├── dto/                   # 依 domain 分群：auth/, common/, tag/, user/, vote/
+│   ├── exception/             # 自定義異常 + GlobalExceptionHandler
+│   ├── mapper/                # MapStruct DTO↔Entity 轉換
+│   └── service/               # 依 domain 分群：auth/, user/, vote/, tag/, shared/
+├── domain/                    # 領域層：Entity、Repository Interface、Domain Event
+│   ├── common/               # BaseEntity（UUIDv7 主鍵）
+│   ├── user/                 # User, Role, RefreshToken + repository/
+│   └── vote/                 # Vote, VoteOption, UserVote, Tag + event/ + repository/
+└── infrastructure/            # 基礎設施層：Config、Security、Redis、Audit
+    ├── audit/                # AOP 審計日誌
+    ├── config/               # Spring 配置類
+    ├── redis/                # Redis 快取服務
+    └── security/             # Spring Security + JWT
 ```
 
 ### 命名規範

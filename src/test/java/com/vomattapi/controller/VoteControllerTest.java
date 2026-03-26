@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vomattapi.application.controller.VoteController;
 import com.vomattapi.application.dto.vote.CreateVoteRequest;
 import com.vomattapi.application.dto.vote.VoteResponse;
-import com.vomattapi.application.exception.VoteNotFoundException;
+import com.vomattapi.application.exception.EntityNotFoundException;
 import com.vomattapi.application.service.vote.VoteService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -118,7 +118,7 @@ class VoteControllerTest {
         @DisplayName("投票不存在時應回傳 404")
         void shouldReturn404WhenNotFound() throws Exception {
             String voteId = UUID.randomUUID().toString();
-            when(voteService.getVote(voteId)).thenThrow(new VoteNotFoundException(voteId));
+            when(voteService.getVote(voteId)).thenThrow(new EntityNotFoundException("Vote", voteId));
 
             mockMvc.perform(get("/api/v1/votes/{voteId}", voteId))
                     .andExpect(status().isNotFound());

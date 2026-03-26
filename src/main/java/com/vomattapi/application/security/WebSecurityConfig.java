@@ -65,8 +65,20 @@ public class WebSecurityConfig {
             .exceptionHandling(ex -> ex.authenticationEntryPoint(unauthorizedHandler))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                // 公開路由：認證相關
-                .requestMatchers("/api/v1/auth/**").permitAll()
+                // 公開路由：認證相關（不需要 Token）
+                .requestMatchers(
+                    "/api/v1/auth/signin",
+                    "/api/v1/auth/pre-signup",
+                    "/api/v1/auth/signup",
+                    "/api/v1/auth/resend-verification",
+                    "/api/v1/auth/refreshToken",
+                    "/api/v1/auth/generateVerificationCode"
+                ).permitAll()
+                // 需認證路由：登出相關
+                .requestMatchers(
+                    "/api/v1/auth/signout",
+                    "/api/v1/auth/force-expire-token"
+                ).authenticated()
                 // 公開路由：用戶公開檔案（GET /{username}，@PreAuthorize 仍保護 /search 端點）
                 .requestMatchers(HttpMethod.GET, "/api/v1/users/*").permitAll()
                 // 公開路由：標籤 GET 端點

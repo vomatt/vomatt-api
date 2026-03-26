@@ -150,14 +150,15 @@ public class PreSignupService {
         log.info("Resending verification code for email: {}", email);
 
         try {
-            // Check if pre-signup data exists
-            Map<String, Object> preSignupData = getPreSignupDataByEmail(email);
-            Map<String, Map<String, Object>> preSignup = verificationCodeService.getAllCacheObjects(CacheConstants.PRE_SIGNUP, "*");
-            if (preSignupData == null || preSignupData.isEmpty()) {
+            // 以 email 為前綴搜尋 pre_signup:{email}:* 的資料
+            Map<String, Map<String, Object>> preSignupMap = verificationCodeService.getAllCacheObjects(
+                    CacheConstants.PRE_SIGNUP, email + ":*");
+            if (preSignupMap == null || preSignupMap.isEmpty()) {
                 log.warn("No pre-signup data found for email: {}", email);
                 return new BaseResponse(false, ErrorType.VERIFICATION_CODE_EXPIRED.getCode());
             }
 
+            Map<String, Object> preSignupData = preSignupMap.values().iterator().next();
             String username = (String) preSignupData.get("username");
             if (username == null) {
                 log.error("Username not found in pre-signup data for email: {}", email);

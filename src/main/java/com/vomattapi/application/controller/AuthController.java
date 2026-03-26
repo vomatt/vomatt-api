@@ -31,6 +31,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -212,6 +213,7 @@ public class AuthController {
     }
 
     @PostMapping("/signout")
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "會員登出", description = "會員登出系統並清除刷新令牌")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "登出成功"),
@@ -225,6 +227,7 @@ public class AuthController {
     }
 
     @PostMapping("/force-expire-token")
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "強制使JWT令牌過期", description = "立即使當前JWT令牌失效，並清除刷新令牌。用於安全登出或強制終止會話。")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "令牌已成功失效"),

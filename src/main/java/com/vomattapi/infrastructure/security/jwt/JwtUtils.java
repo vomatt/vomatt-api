@@ -38,15 +38,17 @@ public class JwtUtils {
 
     @PostConstruct
     public void init() {
-        if (jwtSecret != null && !jwtSecret.isEmpty()) {
-            byte[] keyBytes = jwtSecret.getBytes(StandardCharsets.UTF_8);
-            this.key = Keys.hmacShaKeyFor(keyBytes);
-            logger.info("JWT signing key initialized from configured secret.");
-        } else {
-            this.key = Jwts.SIG.HS256.key().build();
-            logger.warn(
-                    "No JWT secret configured, generated a random key. Tokens will be invalidated on application restart.");
+        if (jwtSecret == null || jwtSecret.isBlank()) {
+            throw new IllegalStateException(
+                "JWT_SECRET 環境變數未設定。請設定至少 32 字元的隨機密鑰。");
         }
+        if (jwtSecret.length() < 32) {
+            throw new IllegalStateException(
+                "JWT_SECRET 長度不足（目前 " + jwtSecret.length() + " 字元），請使用至少 32 字元的密鑰。");
+        }
+        byte[] keyBytes = jwtSecret.getBytes(StandardCharsets.UTF_8);
+        this.key = Keys.hmacShaKeyFor(keyBytes);
+        logger.info("JWT signing key initialized from configured secret.");
     }
 
     public String generateJwtToken(Authentication authentication) {

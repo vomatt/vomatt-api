@@ -86,11 +86,9 @@ class VoteServiceImplTest {
     // ─── helper ───────────────────────────────────────────────────────────────
 
     private VoteResponse stubConvertToVoteResponse(Vote v) {
-        when(voteOptionRepository.findByVoteIdOrderByDisplayOrder(v.getId()))
-                .thenReturn(Collections.emptyList());
+        when(voteRepository.findByIdWithOptions(v.getId())).thenReturn(Optional.of(v));
         when(userVoteRepository.countByOptionGroupedForVote(v.getId()))
                 .thenReturn(Collections.emptyList());
-        when(userVoteRepository.countByVoteId(v.getId())).thenReturn(0L);
         VoteResponse response = new VoteResponse();
         when(voteMapper.toResponse(eq(v), any(), any(), eq(0L))).thenReturn(response);
         return response;
@@ -179,9 +177,7 @@ class VoteServiceImplTest {
             request.setOptions(List.of(buildOption("Red"), buildOption("Blue")));
 
             VoteResponse expected = new VoteResponse();
-            when(voteOptionRepository.findByVoteIdOrderByDisplayOrder(any())).thenReturn(Collections.emptyList());
             when(userVoteRepository.countByOptionGroupedForVote(any())).thenReturn(Collections.emptyList());
-            when(userVoteRepository.countByVoteId(any())).thenReturn(0L);
             when(voteMapper.toResponse(any(), any(), any(), anyLong())).thenReturn(expected);
 
             VoteResponse result = voteService.createVote(request, userId.toString());
@@ -346,9 +342,7 @@ class VoteServiceImplTest {
             Tag tag = new Tag("Tech", "tech", "Technology", 1);
             tag.setId(tagId);
             when(tagRepository.findAllByIdIn(Set.of(tagId))).thenReturn(List.of(tag));
-            when(voteOptionRepository.findByVoteIdOrderByDisplayOrder(any())).thenReturn(Collections.emptyList());
             when(userVoteRepository.countByOptionGroupedForVote(any())).thenReturn(Collections.emptyList());
-            when(userVoteRepository.countByVoteId(any())).thenReturn(0L);
             when(voteMapper.toResponse(any(), any(), any(), anyLong())).thenReturn(new VoteResponse());
 
             CreateVoteRequest request = new CreateVoteRequest();
@@ -397,9 +391,7 @@ class VoteServiceImplTest {
                 v.setId(UUID.randomUUID());
                 return v;
             });
-            when(voteOptionRepository.findByVoteIdOrderByDisplayOrder(any())).thenReturn(Collections.emptyList());
             when(userVoteRepository.countByOptionGroupedForVote(any())).thenReturn(Collections.emptyList());
-            when(userVoteRepository.countByVoteId(any())).thenReturn(0L);
             when(voteMapper.toResponse(any(), any(), any(), anyLong())).thenReturn(new VoteResponse());
 
             CreateVoteRequest request = new CreateVoteRequest();

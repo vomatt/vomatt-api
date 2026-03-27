@@ -45,6 +45,9 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
     @Query("SELECT v FROM Vote v LEFT JOIN FETCH v.tags WHERE v.id = :id")
     Optional<Vote> findByIdWithTags(@Param("id") UUID id);
 
+    @Query("SELECT v FROM Vote v LEFT JOIN FETCH v.options WHERE v.id = :id")
+    Optional<Vote> findByIdWithOptions(@Param("id") UUID id);
+
     @Query("SELECT v FROM Vote v JOIN v.tags t WHERE t.slug = :tagSlug AND v.isActive = true ORDER BY v.createdAt DESC")
     Page<Vote> findByTagSlugAndIsActiveTrue(@Param("tagSlug") String tagSlug, Pageable pageable);
 }

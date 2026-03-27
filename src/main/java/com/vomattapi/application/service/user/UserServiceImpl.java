@@ -9,9 +9,8 @@ import com.vomattapi.application.service.user.UserService;
 import com.vomattapi.domain.user.User;
 import com.vomattapi.domain.user.UserActivity;
 import com.vomattapi.domain.user.repository.UserActivityRepository;
+import com.vomattapi.domain.user.repository.UserProfileProjection;
 import com.vomattapi.domain.user.repository.UserRepository;
-import com.vomattapi.domain.vote.repository.UserVoteRepository;
-import com.vomattapi.domain.vote.repository.VoteRepository;
 import com.vomattapi.infrastructure.redis.CacheUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,8 +32,6 @@ public class UserServiceImpl implements UserService {
     private final PasswordEncoder passwordEncoder;
     private final CacheUtil cacheUtil;
     private final UserMapper userMapper;
-    private final VoteRepository voteRepository;
-    private final UserVoteRepository userVoteRepository;
 
     private static final int MAX_LOGIN_ATTEMPTS = 5;
     private static final int ACCOUNT_LOCK_MINUTES = 30;
@@ -196,17 +193,16 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(readOnly = true)
     public UserProfileResponse getUserProfile(String username) {
-        User user = userRepository.findByUsername(username)
+        // 使用 Projection 一次查詢取得 profile 與統計數字，避免 N+1
+        UserProfileProjection projection = userRepository.findProfileByUsername(username)
             .orElseThrow(() -> new EntityNotFoundException("User", username));
-        int totalPolls = (int) voteRepository.countByCreatorId(user.getId());
-        int totalVotes = (int) userVoteRepository.countDistinctVoteByUserId(user.getId());
         return new UserProfileResponse(
-            user.getUsername(),
-            user.getDisplayName(),
-            user.getBio(),
-            user.getCreatedAt(),
-            totalPolls,
-            totalVotes
+            projection.getUsername(),
+            projection.getDisplayName(),
+            projection.getBio(),
+            projection.getCreatedAt(),
+            projection.getTotalPolls().intValue(),
+            projection.getTotalVotes().intValue()
         );
     }
 

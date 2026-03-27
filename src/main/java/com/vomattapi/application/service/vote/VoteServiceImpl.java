@@ -1,7 +1,7 @@
 package com.vomattapi.application.service.vote;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +30,7 @@ import com.vomattapi.domain.vote.Tag;
 import com.vomattapi.domain.vote.UserVote;
 import com.vomattapi.domain.vote.Vote;
 import com.vomattapi.domain.vote.VoteOption;
+import com.vomattapi.domain.vote.repository.OptionVoteCount;
 import com.vomattapi.domain.vote.repository.TagRepository;
 import com.vomattapi.domain.vote.repository.UserVoteRepository;
 import com.vomattapi.domain.vote.repository.VoteOptionRepository;
@@ -273,18 +274,22 @@ public class VoteServiceImpl implements VoteService {
 
     private VoteResponse convertToVoteResponse(Vote vote) {
         UUID voteId = vote.getId();
-        List<VoteOption> options = voteOptionRepository.findByVoteIdOrderByDisplayOrder(voteId);
+        // 使用 JOIN FETCH 避免額外查詢 options
+        Vote voteWithOptions = voteRepository.findByIdWithOptions(voteId).orElse(vote);
+        // Set 轉排序後的 List，維持 displayOrder 順序
+        List<VoteOption> options = voteWithOptions.getOptions().stream()
+            .sorted(Comparator.comparingInt(VoteOption::getDisplayOrder))
+            .collect(Collectors.toList());
         Map<UUID, Long> optionCounts = buildOptionCountMap(voteId);
-        long totalVoteCount = userVoteRepository.countByVoteId(voteId);
-        return voteMapper.toResponse(vote, options, optionCounts, totalVoteCount);
+        // 由 optionCounts 加總，避免再次查詢總票數
+        long totalVoteCount = optionCounts.values().stream().mapToLong(Long::longValue).sum();
+        return voteMapper.toResponse(voteWithOptions, options, optionCounts, totalVoteCount);
     }
 
     private Map<UUID, Long> buildOptionCountMap(UUID voteId) {
-        Map<UUID, Long> map = new HashMap<>();
-        for (Object[] row : userVoteRepository.countByOptionGroupedForVote(voteId)) {
-            map.put((UUID) row[0], (Long) row[1]);
-        }
-        return map;
+        return userVoteRepository.countByOptionGroupedForVote(voteId)
+            .stream()
+            .collect(Collectors.toMap(OptionVoteCount::getOptionId, OptionVoteCount::getCount));
     }
 
     private void validateCreateVoteRequest(CreateVoteRequest request) {

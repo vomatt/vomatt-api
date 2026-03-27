@@ -12,6 +12,8 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.vomattapi.domain.user.User;
+import com.vomattapi.domain.vote.UserVote;
+import com.vomattapi.domain.vote.Vote;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, UUID> {
@@ -38,4 +40,17 @@ public interface UserRepository extends JpaRepository<User, UUID> {
      */
     @Query("SELECT u FROM User u WHERE LOWER(u.username) = LOWER(:username) AND u.active = true")
     List<User> findByUsernameIgnoreCase(@Param("username") String username);
+
+    /**
+     * 一次查詢取得 User profile 與統計數字（避免 N+1）
+     */
+    @Query("SELECT u.username AS username, u.displayName AS displayName, u.bio AS bio, " +
+           "u.createdAt AS createdAt, " +
+           "COUNT(DISTINCT v.id) AS totalPolls, COUNT(DISTINCT uv.id) AS totalVotes " +
+           "FROM User u " +
+           "LEFT JOIN Vote v ON v.creator.id = u.id " +
+           "LEFT JOIN UserVote uv ON uv.user.id = u.id " +
+           "WHERE u.username = :username " +
+           "GROUP BY u.username, u.displayName, u.bio, u.createdAt")
+    Optional<UserProfileProjection> findProfileByUsername(@Param("username") String username);
 }

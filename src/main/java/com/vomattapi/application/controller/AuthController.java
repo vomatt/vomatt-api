@@ -1,5 +1,6 @@
 package com.vomattapi.application.controller;
 
+import com.vomattapi.application.dto.auth.EmailRequest;
 import com.vomattapi.application.dto.auth.SigninRequest;
 import com.vomattapi.application.dto.auth.PreSignupRequest;
 import com.vomattapi.application.dto.auth.SignupRequest;
@@ -37,7 +38,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -98,7 +98,8 @@ public class AuthController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "無效的郵箱或驗證已過期"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "請求過於頻繁") })
     public ResponseEntity<ApiResponse<Void>> resendVerificationCode(
-            @Parameter(description = "郵箱地址", required = true) @RequestParam(name = "email") String email) {
+            @Parameter(description = "郵箱地址", required = true) @Valid @RequestBody EmailRequest request) {
+        String email = request.getEmail();
         log.info("Resend verification code request for email: {}", email);
         BaseResponse response = preSignupService.resendVerificationCode(email);
         if (response.isSuccess()) {
@@ -195,7 +196,8 @@ public class AuthController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "認證碼生成失敗")
     })
     public ResponseEntity<ApiResponse<Void>> generateVerificationCode(
-            @Parameter(description = "email") @RequestParam(name = "email") String email) {
+            @Parameter(description = "email") @Valid @RequestBody EmailRequest request) {
+        String email = request.getEmail();
         // EntityNotFoundException / BusinessRuleViolationException 由 GlobalExceptionHandler 處理
         authService.generateVerificationCode(email);
         log.info("Verification code generated for email: {}", email);

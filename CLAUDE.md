@@ -38,21 +38,74 @@
 ### 專案結構（DDD 三層架構）
 ```
 src/main/java/com/vomattapi/
-├── application/                # 應用層：Controller、Service、DTO、Mapper、Exception
-│   ├── controller/            # REST API 端點
-│   ├── dto/                   # 依 domain 分群：auth/, common/, tag/, user/, vote/
-│   ├── exception/             # 自定義異常 + GlobalExceptionHandler
-│   ├── mapper/                # MapStruct DTO↔Entity 轉換
-│   └── service/               # 依 domain 分群：auth/, user/, vote/, tag/, shared/
-├── domain/                    # 領域層：Entity、Repository Interface、Domain Event
-│   ├── common/               # BaseEntity（UUIDv7 主鍵）
-│   ├── user/                 # User, Role, RefreshToken + repository/
-│   └── vote/                 # Vote, VoteOption, UserVote, Tag + event/ + repository/
-└── infrastructure/            # 基礎設施層：Config、Security、Redis、Audit
-    ├── audit/                # AOP 審計日誌
-    ├── config/               # Spring 配置類
-    ├── redis/                # Redis 快取服務
-    └── security/             # Spring Security + JWT
+├── application/
+│   ├── controller/
+│   │   ├── AuthController.java
+│   │   ├── UserController.java
+│   │   ├── VoteController.java
+│   │   ├── VoteCommentController.java
+│   │   ├── TagController.java
+│   │   └── AdminTagController.java
+│   ├── dto/
+│   │   ├── auth/              # JwtResponse, SigninRequest, SignupRequest, PreSignupRequest/Response, TokenRefresh*
+│   │   ├── common/            # ApiResponse, BaseResponse, ErrorResponse, ErrorType, MessageResponse
+│   │   ├── tag/               # TagDto, CreateTagRequest, UpdateTagRequest
+│   │   ├── user/              # UserDto, UserProfileResponse, UpdateProfileRequest
+│   │   └── vote/              # VoteRequest/Response/ResultResponse, CommentDto, CreateVoteRequest, UserVoteStatusResponse
+│   ├── exception/
+│   │   ├── GlobalExceptionHandler.java
+│   │   ├── BusinessRuleViolationException.java
+│   │   ├── EntityNotFoundException.java
+│   │   ├── InvalidVerificationCodeException.java
+│   │   ├── ResourceConflictException.java
+│   │   ├── TokenRefreshException.java
+│   │   ├── UnauthorizedOperationException.java
+│   │   └── VotingNotAllowedException.java
+│   ├── mapper/
+│   │   ├── VoteMapper.java
+│   │   ├── CommentMapper.java
+│   │   └── UserMapper.java
+│   └── service/
+│       ├── auth/              # AuthService, AuthSessionService, PreSignupService, SignupService,
+│       │                      # RefreshTokenService, JwtBlacklistService, ValidationService, VerificationCodeService
+│       ├── shared/            # EmailService/Impl/NoOp, SmsService/NoOp, LocaleService
+│       ├── tag/               # TagService, TagServiceImpl
+│       ├── user/              # UserService, UserServiceImpl
+│       └── vote/              # VoteService/Impl, VoteCommentService/Impl, VoteEventListener
+├── domain/
+│   ├── common/
+│   │   └── BaseEntity.java    # UUID v7 主鍵
+│   ├── user/
+│   │   ├── User.java
+│   │   ├── Role.java
+│   │   ├── ERole.java
+│   │   ├── RefreshToken.java
+│   │   ├── UserActivity.java
+│   │   ├── UserPreference.java
+│   │   └── repository/        # UserRepository, RoleRepository, RefreshTokenRepository, UserActivityRepository
+│   └── vote/
+│       ├── Vote.java
+│       ├── VoteOption.java
+│       ├── VoteType.java      # STANDARD, IMAGE, RANKING, RATING
+│       ├── UserVote.java
+│       ├── VoteComment.java
+│       ├── CommentLike.java
+│       ├── Tag.java
+│       ├── event/             # VoteEvent, VoteCastEvent, VoteCreatedEvent, VoteDeactivatedEvent
+│       └── repository/        # VoteRepository, VoteOptionRepository, UserVoteRepository,
+│                              # VoteCommentRepository, CommentLikeRepository, TagRepository
+└── infrastructure/
+    ├── audit/                 # Auditable, AuditAspect (AOP), AuditLog, AuditLogRepository, AuditService
+    ├── config/                # ApplicationConfigurationProperties, SecurityConfigurationProperties,
+    │                          # VoteConfigurationProperties, AsyncConfig, RedisConfig,
+    │                          # OpenAPIConfig, ThymeleafConfig, InternationalizationConfig
+    ├── constants/             # CacheConstants
+    ├── generator/             # UUIDv7Generator
+    ├── redis/                 # RedisService/Impl, CacheUtil, CacheKeyUtil
+    └── security/
+        ├── WebSecurityConfig.java
+        ├── jwt/               # JwtUtils, AuthTokenFilter, AuthEntryPointJwt
+        └── services/          # UserDetailsImpl, UserDetailsServiceImpl
 ```
 
 ### 命名規範

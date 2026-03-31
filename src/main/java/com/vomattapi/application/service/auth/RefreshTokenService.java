@@ -29,7 +29,7 @@ public class RefreshTokenService {
         return refreshTokenRepository.findByToken(token);
     }
 
-    @Transactional // 添加事务注解确保删除操作在事务上下文中执行
+    @Transactional
     public RefreshToken createRefreshToken(String userId) {
         RefreshToken refreshToken = new RefreshToken();
 

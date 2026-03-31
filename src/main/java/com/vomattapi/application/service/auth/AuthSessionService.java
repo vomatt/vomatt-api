@@ -39,7 +39,7 @@ public class AuthSessionService {
         String jwt = jwtUtils.generateJwtToken(authentication);
         List<String> roles = userDetails.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
-                .collect(Collectors.toList());
+                .toList();
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(userDetails.getId());
 
         return new JwtResponse(jwt, refreshToken.getToken(), userDetails.getId(),

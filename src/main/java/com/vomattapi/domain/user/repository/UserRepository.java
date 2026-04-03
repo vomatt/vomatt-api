@@ -44,13 +44,16 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     /**
      * 一次查詢取得 User profile 與統計數字（避免 N+1）
      */
-    @Query("SELECT u.username AS username, u.displayName AS displayName, u.bio AS bio, " +
-           "u.createdAt AS createdAt, " +
+    @Query("SELECT u.id AS id, u.username AS username, u.displayName AS displayName, u.bio AS bio, " +
+           "u.createdAt AS createdAt, u.email AS email, u.firstName AS firstName, " +
+           "u.lastName AS lastName, u.location AS location, u.points AS points, " +
+           "u.membershipLevel AS membershipLevel, " +
            "COUNT(DISTINCT v.id) AS totalPolls, COUNT(DISTINCT uv.id) AS totalVotes " +
            "FROM User u " +
            "LEFT JOIN Vote v ON v.creator.id = u.id " +
            "LEFT JOIN UserVote uv ON uv.user.id = u.id " +
            "WHERE u.username = :username " +
-           "GROUP BY u.username, u.displayName, u.bio, u.createdAt")
+           "GROUP BY u.id, u.username, u.displayName, u.bio, u.createdAt, " +
+           "u.email, u.firstName, u.lastName, u.location, u.points, u.membershipLevel")
     Optional<UserProfileProjection> findProfileByUsername(@Param("username") String username);
 }

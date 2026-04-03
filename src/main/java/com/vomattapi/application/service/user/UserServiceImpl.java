@@ -1,14 +1,18 @@
 package com.vomattapi.application.service.user;
 
+import com.vomattapi.application.dto.user.MyProfileResponse;
 import com.vomattapi.application.dto.user.UpdateProfileRequest;
 import com.vomattapi.application.dto.user.UserDto;
 import com.vomattapi.application.dto.user.UserProfileResponse;
 import com.vomattapi.application.exception.EntityNotFoundException;
 import com.vomattapi.application.mapper.UserMapper;
 import com.vomattapi.application.service.user.UserService;
+import com.vomattapi.application.service.user.VisibilityField;
 import com.vomattapi.domain.user.User;
 import com.vomattapi.domain.user.UserActivity;
+import com.vomattapi.domain.user.UserPreference;
 import com.vomattapi.domain.user.repository.UserActivityRepository;
+import com.vomattapi.domain.user.repository.UserPreferenceRepository;
 import com.vomattapi.domain.user.repository.UserProfileProjection;
 import com.vomattapi.domain.user.repository.UserRepository;
 import com.vomattapi.infrastructure.redis.CacheUtil;
@@ -20,7 +24,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -28,6 +36,7 @@ import java.util.UUID;
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
+    private final UserPreferenceRepository preferenceRepository;
     private final UserActivityRepository activityRepository;
     private final PasswordEncoder passwordEncoder;
     private final CacheUtil cacheUtil;
@@ -196,14 +205,55 @@ public class UserServiceImpl implements UserService {
         // 使用 Projection 一次查詢取得 profile 與統計數字，避免 N+1
         UserProfileProjection projection = userRepository.findProfileByUsername(username)
             .orElseThrow(() -> new EntityNotFoundException("User", username));
-        return new UserProfileResponse(
-            projection.getUsername(),
-            projection.getDisplayName(),
-            projection.getBio(),
-            projection.getCreatedAt(),
-            projection.getTotalPolls().intValue(),
-            projection.getTotalVotes().intValue()
+
+        // 查詢目標使用者的顯示設定
+        Map<String, Boolean> visibility = loadVisibilitySettings(projection.getId());
+        return userMapper.toPublicProfileResponse(projection, visibility);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public MyProfileResponse getMyProfile(String userId) {
+        User user = findUserById(userId);
+
+        // 使用 projection 取得統計數字
+        UserProfileProjection projection = userRepository.findProfileByUsername(user.getUsername())
+            .orElseThrow(() -> new EntityNotFoundException("User", userId));
+
+        Map<String, Boolean> visibility = loadVisibilitySettings(UUID.fromString(userId));
+        return userMapper.toMyProfileResponse(
+                user,
+                projection.getTotalPolls().intValue(),
+                projection.getTotalVotes().intValue(),
+                visibility
         );
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Boolean> updateVisibility(String userId, Map<String, Boolean> visibility) {
+        User user = findUserById(userId);
+        UUID userUuid = user.getId();
+
+        for (Map.Entry<String, Boolean> entry : visibility.entrySet()) {
+            // 只處理合法的欄位名稱，忽略未知欄位
+            VisibilityField.fromFieldName(entry.getKey()).ifPresent(field -> {
+                String prefKey = field.preferenceKey();
+                UserPreference pref = preferenceRepository.findByUserIdAndKey(userUuid, prefKey)
+                        .orElseGet(() -> {
+                            UserPreference newPref = new UserPreference();
+                            newPref.setUser(user);
+                            newPref.setKey(prefKey);
+                            return newPref;
+                        });
+                pref.setValue(entry.getValue().toString());
+                preferenceRepository.save(pref);
+            });
+        }
+
+        cacheUtil.evictUserCache(userId);
+        log.info("Visibility settings updated for user: {}", userId);
+        return loadVisibilitySettings(userUuid);
     }
 
     @Override
@@ -220,6 +270,25 @@ public class UserServiceImpl implements UserService {
         cacheUtil.evictUserCache(userId);
         log.debug("Evicted cache for user after profile update: {}", userId);
         return getUserProfile(user.getUsername());
+    }
+
+    /**
+     * 載入使用者的欄位顯示設定，預設所有可控欄位為 false（隱藏）
+     */
+    private Map<String, Boolean> loadVisibilitySettings(UUID userId) {
+        // 初始化所有欄位為 false
+        Map<String, Boolean> settings = Arrays.stream(VisibilityField.values())
+                .collect(Collectors.toMap(VisibilityField::getFieldName, f -> false));
+
+        // 從資料庫載入已設定的值
+        List<UserPreference> prefs = preferenceRepository
+                .findByUserIdAndKeyStartingWith(userId, VisibilityField.getPreferencePrefix());
+        for (UserPreference pref : prefs) {
+            String fieldName = VisibilityField.extractFieldName(pref.getKey());
+            settings.put(fieldName, Boolean.parseBoolean(pref.getValue()));
+        }
+
+        return settings;
     }
 
     private User findUserById(String userId) {

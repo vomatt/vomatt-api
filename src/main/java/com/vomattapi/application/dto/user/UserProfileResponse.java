@@ -8,5 +8,12 @@ public record UserProfileResponse(
         String bio,
         LocalDateTime joinedAt,
         int totalPolls,
-        int totalVotes
+        int totalVotes,
+        // 可控制顯示的欄位 — 隱藏時為 null
+        String email,
+        String firstName,
+        String lastName,
+        String location,
+        Integer points,
+        String membershipLevel
 ) {}

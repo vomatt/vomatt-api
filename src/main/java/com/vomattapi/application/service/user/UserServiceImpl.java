@@ -201,13 +201,13 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional(readOnly = true)
-    public UserProfileResponse getUserProfile(String username) {
+    public UserProfileResponse getUserProfile(String username, boolean isVisibility) {
         // 使用 Projection 一次查詢取得 profile 與統計數字，避免 N+1
         UserProfileProjection projection = userRepository.findProfileByUsername(username)
             .orElseThrow(() -> new EntityNotFoundException("User", username));
 
         // 查詢目標使用者的顯示設定
-        Map<String, Boolean> visibility = loadVisibilitySettings(projection.getId());
+        Map<String, Boolean> visibility = loadVisibilitySettings(projection.getId(), isVisibility);
         return userMapper.toPublicProfileResponse(projection, visibility);
     }
 
@@ -220,7 +220,7 @@ public class UserServiceImpl implements UserService {
         UserProfileProjection projection = userRepository.findProfileByUsername(user.getUsername())
             .orElseThrow(() -> new EntityNotFoundException("User", userId));
 
-        Map<String, Boolean> visibility = loadVisibilitySettings(UUID.fromString(userId));
+        Map<String, Boolean> visibility = loadVisibilitySettings(UUID.fromString(userId), false);
         return userMapper.toMyProfileResponse(
                 user,
                 projection.getTotalPolls().intValue(),
@@ -253,7 +253,7 @@ public class UserServiceImpl implements UserService {
 
         cacheUtil.evictUserCache(userId);
         log.info("Visibility settings updated for user: {}", userId);
-        return loadVisibilitySettings(userUuid);
+        return loadVisibilitySettings(userUuid, true);
     }
 
     @Override
@@ -269,16 +269,16 @@ public class UserServiceImpl implements UserService {
         userRepository.save(user);
         cacheUtil.evictUserCache(userId);
         log.debug("Evicted cache for user after profile update: {}", userId);
-        return getUserProfile(user.getUsername());
+        return getUserProfile(user.getUsername(), true);
     }
 
     /**
      * 載入使用者的欄位顯示設定，預設所有可控欄位為 false（隱藏）
      */
-    private Map<String, Boolean> loadVisibilitySettings(UUID userId) {
+    private Map<String, Boolean> loadVisibilitySettings(UUID userId, boolean isVisibility) {
         // 初始化所有欄位為 false
         Map<String, Boolean> settings = Arrays.stream(VisibilityField.values())
-                .collect(Collectors.toMap(VisibilityField::getFieldName, f -> false));
+                .collect(Collectors.toMap(VisibilityField::getFieldName, f -> isVisibility));
 
         // 從資料庫載入已設定的值
         List<UserPreference> prefs = preferenceRepository

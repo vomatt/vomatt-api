@@ -55,9 +55,7 @@ public class OpenAPIConfig {
         SecurityScheme securityScheme = new SecurityScheme()
                 .type(SecurityScheme.Type.HTTP)
                 .scheme("bearer")
-                .bearerFormat("JWT")
-                .in(SecurityScheme.In.HEADER)
-                .name("Authorization");
+                .bearerFormat("JWT");
 
         SecurityRequirement securityRequirement = new SecurityRequirement().addList("bearerAuth");
 

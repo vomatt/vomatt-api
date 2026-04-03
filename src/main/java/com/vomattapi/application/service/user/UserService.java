@@ -32,7 +32,7 @@ public interface UserService {
 
     Page<UserDto> searchUsersByUsername(String username, Pageable pageable);
 
-    UserProfileResponse getUserProfile(String username);
+    UserProfileResponse getUserProfile(String username, boolean isVisibility);
 
     UserProfileResponse updateMyProfile(String userId, UpdateProfileRequest request);
 

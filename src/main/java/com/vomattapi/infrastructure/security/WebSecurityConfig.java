@@ -1,7 +1,10 @@
 package com.vomattapi.infrastructure.security;
 
-import java.util.Arrays;
-
+import com.vomattapi.infrastructure.config.SecurityConfigurationProperties;
+import com.vomattapi.infrastructure.security.jwt.AuthEntryPointJwt;
+import com.vomattapi.infrastructure.security.jwt.AuthTokenFilter;
+import com.vomattapi.infrastructure.security.services.UserDetailsServiceImpl;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -21,12 +24,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import com.vomattapi.infrastructure.security.jwt.AuthEntryPointJwt;
-import com.vomattapi.infrastructure.security.jwt.AuthTokenFilter;
-import com.vomattapi.infrastructure.security.services.UserDetailsServiceImpl;
-import com.vomattapi.infrastructure.config.SecurityConfigurationProperties;
-
-import lombok.RequiredArgsConstructor;
+import java.util.Arrays;
 
 @Configuration
 @EnableWebSecurity
@@ -41,10 +39,7 @@ public class WebSecurityConfig {
 
     @Bean
     public DaoAuthenticationProvider authenticationProvider() {
-        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
-        authProvider.setUserDetailsService(userDetailsService);
-        authProvider.setPasswordEncoder(passwordEncoder());
-        return authProvider;
+        return new DaoAuthenticationProvider(userDetailsService);
     }
 
     @Bean
@@ -59,46 +54,26 @@ public class WebSecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http
-            .csrf(AbstractHttpConfigurer::disable)
-            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .exceptionHandling(ex -> ex.authenticationEntryPoint(unauthorizedHandler))
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(auth -> auth
-                // 公開路由：認證相關（不需要 Token）
-                .requestMatchers(
-                    "/api/v1/auth/signin",
-                    "/api/v1/auth/pre-signup",
-                    "/api/v1/auth/signup",
-                    "/api/v1/auth/resend-verification",
-                    "/api/v1/auth/refreshToken",
-                    "/api/v1/auth/generateVerificationCode"
-                ).permitAll()
-                // 需認證路由：登出相關
-                .requestMatchers(
-                    "/api/v1/auth/signout",
-                    "/api/v1/auth/force-expire-token"
-                ).authenticated()
-                // 公開路由：用戶公開檔案（GET /{username}，@PreAuthorize 仍保護 /search 端點）
-                .requestMatchers(HttpMethod.GET, "/api/v1/users/*").permitAll()
-                // 公開路由：標籤 GET 端點
-                .requestMatchers(HttpMethod.GET, "/api/v1/tags", "/api/v1/tags/**").permitAll()
-                // 公開路由：投票瀏覽 GET 端點（列表、詳情、結果）
-                .requestMatchers(HttpMethod.GET, "/api/v1/votes").permitAll()
-                // 公開路由：Swagger UI
-                .requestMatchers(
-                    "/swagger-ui/**",
-                    "/swagger-ui.html",
-                    "/v3/api-docs/**",
-                    "/v3/api-docs.yaml"
-                ).permitAll()
-                // 公開路由：Actuator health check
-                .requestMatchers("/actuator/health").permitAll()
-                // 管理端點需要認證
-                .requestMatchers("/api/v1/admin/**").authenticated()
-                // 其餘路由需要認證
-                .anyRequest().authenticated()
-            );
+        http.csrf(AbstractHttpConfigurer::disable).cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(unauthorizedHandler))
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth
+                        // Public: auth endpoints that require no token
+                        .requestMatchers(SecurityEndpoints.PUBLIC_AUTH).permitAll()
+                        // Authenticated: auth endpoints that require a valid token
+                        .requestMatchers(SecurityEndpoints.AUTHENTICATED_AUTH).authenticated()
+                        // Public GET: tags, votes (fine-grained checks via @PreAuthorize)
+                        .requestMatchers(HttpMethod.GET, SecurityEndpoints.PUBLIC_GET).permitAll()
+                        // Public GET: user public profile by username only (/me and /search require auth)
+                        .requestMatchers(HttpMethod.GET, SecurityEndpoints.PUBLIC_GET_USER_PROFILE).permitAll()
+                        // Public: Swagger UI & OpenAPI docs
+                        .requestMatchers(SecurityEndpoints.PUBLIC_SWAGGER).permitAll()
+                        // Public: Actuator health check
+                        .requestMatchers(SecurityEndpoints.PUBLIC_ACTUATOR).permitAll()
+                        // Authenticated: admin endpoints (role enforced via @PreAuthorize)
+                        .requestMatchers(SecurityEndpoints.AUTHENTICATED_ADMIN).authenticated()
+                        // All other requests require authentication
+                        .anyRequest().authenticated());
 
         http.authenticationProvider(authenticationProvider());
         http.addFilterBefore(authTokenFilter, UsernamePasswordAuthenticationFilter.class);

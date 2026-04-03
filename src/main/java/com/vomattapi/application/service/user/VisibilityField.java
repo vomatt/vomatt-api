@@ -15,6 +15,8 @@ public enum VisibilityField {
     LAST_NAME("lastName"),
     LOCATION("location"),
     POINTS("points"),
+    DISPLAY_NAME("displayName"),
+    BIO("bio"),
     MEMBERSHIP_LEVEL("membershipLevel");
 
     private final String fieldName;

@@ -35,7 +35,6 @@ import java.util.Map;
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
 @Tag(name = "User", description = "User management APIs")
-@SecurityRequirement(name = "Bearer Authentication")
 public class UserController {
 
     private static final Logger log = LoggerFactory.getLogger(UserController.class);
@@ -80,7 +79,7 @@ public class UserController {
     public ResponseEntity<ApiResponse<UserProfileResponse>> getUserProfile(
             @Parameter(description = "Username", required = true)
             @PathVariable String username) {
-        UserProfileResponse profile = userService.getUserProfile(username);
+        UserProfileResponse profile = userService.getUserProfile(username, false);
         return ResponseEntity.ok(ApiResponse.success(profile));
     }
 

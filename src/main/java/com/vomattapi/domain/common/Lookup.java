@@ -19,7 +19,7 @@ import java.util.List;
  * 字典表實體
  */
 @Entity
-@Table(name = "template_lookup")
+@Table(name = "lookup")
 @Data
 @NoArgsConstructor
 public class Lookup extends BaseEntity {

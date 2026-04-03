@@ -1,5 +1,5 @@
 -- 字典表（通用 key-value 配置，支援 JSON 值與階層結構）
-CREATE TABLE IF NOT EXISTS template_lookup (
+CREATE TABLE IF NOT EXISTS lookup (
     id UUID PRIMARY KEY,
     lookup_type VARCHAR(50) NOT NULL,
     lookup_key VARCHAR(50) NOT NULL,
@@ -16,10 +16,10 @@ CREATE TABLE IF NOT EXISTS template_lookup (
 );
 
 -- 依 type + is_active 加速公開查詢
-CREATE INDEX idx_lookup_type_active ON template_lookup (lookup_type, is_active);
+CREATE INDEX idx_lookup_type_active ON lookup (lookup_type, is_active);
 
 -- 依父節點查詢子項目
-CREATE INDEX idx_lookup_parent ON template_lookup (parent_type, parent_key);
+CREATE INDEX idx_lookup_parent ON lookup (parent_type, parent_key);
 
 -- 前端用字典查詢
-CREATE INDEX idx_lookup_frontend ON template_lookup (frontend_using, is_active);
+CREATE INDEX idx_lookup_frontend ON lookup (frontend_using, is_active);

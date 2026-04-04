@@ -154,7 +154,7 @@ public class UserServiceImpl implements UserService {
     }
 
     /**
-     * 將驗證碼加密後更新至 DB，用於登入用途（OTP 轉存為 BCrypt hash）
+     * Update verification code to DB after encryption, for login purposes (OTP stored as BCrypt hash)
      */
     @Override
     @Transactional
@@ -202,11 +202,11 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(readOnly = true)
     public UserProfileResponse getUserProfile(String username, boolean isVisibility) {
-        // 使用 Projection 一次查詢取得 profile 與統計數字，避免 N+1
+        // Use Projection to fetch profile and statistics in one query, avoiding N+1
         UserProfileProjection projection = userRepository.findProfileByUsername(username)
             .orElseThrow(() -> new EntityNotFoundException("User", username));
 
-        // 查詢目標使用者的顯示設定
+        // Query target user's visibility settings
         Map<String, Boolean> visibility = loadVisibilitySettings(projection.getId(), isVisibility);
         return userMapper.toPublicProfileResponse(projection, visibility);
     }
@@ -216,7 +216,7 @@ public class UserServiceImpl implements UserService {
     public MyProfileResponse getMyProfile(String userId) {
         User user = findUserById(userId);
 
-        // 使用 projection 取得統計數字
+        // Use projection to fetch statistics
         UserProfileProjection projection = userRepository.findProfileByUsername(user.getUsername())
             .orElseThrow(() -> new EntityNotFoundException("User", userId));
 
@@ -236,7 +236,7 @@ public class UserServiceImpl implements UserService {
         UUID userUuid = user.getId();
 
         for (Map.Entry<String, Boolean> entry : visibility.entrySet()) {
-            // 只處理合法的欄位名稱，忽略未知欄位
+            // Only process valid field names, ignore unknown fields
             VisibilityField.fromFieldName(entry.getKey()).ifPresent(field -> {
                 String prefKey = field.preferenceKey();
                 UserPreference pref = preferenceRepository.findByUserIdAndKey(userUuid, prefKey)
@@ -273,14 +273,14 @@ public class UserServiceImpl implements UserService {
     }
 
     /**
-     * 載入使用者的欄位顯示設定，預設所有可控欄位為 false（隱藏）
+     * Load user's field visibility settings, default all controllable fields to false (hidden)
      */
     private Map<String, Boolean> loadVisibilitySettings(UUID userId, boolean isVisibility) {
-        // 初始化所有欄位為 false
+        // Initialize all fields to false
         Map<String, Boolean> settings = Arrays.stream(VisibilityField.values())
                 .collect(Collectors.toMap(VisibilityField::getFieldName, f -> isVisibility));
 
-        // 從資料庫載入已設定的值
+        // Load configured values from database
         List<UserPreference> prefs = preferenceRepository
                 .findByUserIdAndKeyStartingWith(userId, VisibilityField.getPreferencePrefix());
         for (UserPreference pref : prefs) {

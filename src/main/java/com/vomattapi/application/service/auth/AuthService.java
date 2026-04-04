@@ -26,9 +26,9 @@ public class AuthService {
     private final EmailService emailService;
 
     /**
-     * 產生並儲存驗證碼（僅限已存在的使用者）
-     * @throws EntityNotFoundException 使用者不存在
-     * @throws BusinessRuleViolationException 驗證碼更新失敗
+     * Generate and store verification code (only for existing users)
+     * @throws EntityNotFoundException User does not exist
+     * @throws BusinessRuleViolationException Verification code update failed
      */
     public String generateVerificationCode(String email) {
         log.info("Generating verify code for email: {}", email);
@@ -54,8 +54,8 @@ public class AuthService {
     }
 
     /**
-     * 驗證 email 對應的驗證碼
-     * @throws InvalidVerificationCodeException 驗證碼無效或已過期
+     * Verify verification code for email
+     * @throws InvalidVerificationCodeException Verification code is invalid or expired
      */
     public void verifyCode(String email, String providedCode) {
         String storedCode = redisService.get(CacheConstants.VERIFICATION_CODE, email, String.class);

@@ -37,12 +37,12 @@ public interface UserService {
     UserProfileResponse updateMyProfile(String userId, UpdateProfileRequest request);
 
     /**
-     * 取得認證使用者自己的完整個人資料
+     * Get authenticated user's complete profile
      */
     MyProfileResponse getMyProfile(String userId);
 
     /**
-     * 更新欄位顯示設定
+     * Update field visibility settings
      */
     Map<String, Boolean> updateVisibility(String userId, Map<String, Boolean> visibility);
 }

@@ -45,7 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("AdminTagController")
 class AdminTagControllerTest {
 
-    /** 測試用簡化安全設定：CSRF 停用，所有路徑開放（由 @PreAuthorize 控制存取） */
+    /** Simplified security configuration for testing: CSRF disabled, all paths allowed (access controlled by @PreAuthorize) */
     @TestConfiguration
     @EnableMethodSecurity
     static class TestSecurityConfig {
@@ -71,7 +71,7 @@ class AdminTagControllerTest {
     @Autowired ObjectMapper objectMapper;
 
     @MockBean TagService tagService;
-    // AuthTokenFilter 依賴的元件
+    // Components required by AuthTokenFilter
     @MockBean com.vomattapi.infrastructure.security.jwt.JwtUtils jwtUtils;
     @MockBean com.vomattapi.infrastructure.security.services.UserDetailsServiceImpl userDetailsService;
     @MockBean com.vomattapi.application.service.auth.JwtBlacklistService jwtBlacklistService;
@@ -92,7 +92,7 @@ class AdminTagControllerTest {
     class CreateTagTests {
 
         @Test
-        @DisplayName("ADMIN 角色應能建立標籤並回傳 200")
+        @DisplayName("ADMIN role should be able to create tag and return 200")
         void shouldReturn200WhenAdmin() throws Exception {
             TagDto created = buildTagDto("new-id", "Science");
             when(tagService.createTag(any(CreateTagRequest.class))).thenReturn(created);
@@ -107,7 +107,7 @@ class AdminTagControllerTest {
                     .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
-                    .andExpect(jsonPath("$.message").value("標籤建立成功"))
+                    .andExpect(jsonPath("$.message").value("Tag created successfully"))
                     .andExpect(jsonPath("$.data.name").value("Science"));
         }
 
@@ -139,10 +139,10 @@ class AdminTagControllerTest {
         }
 
         @Test
-        @DisplayName("請求體驗證失敗時應回傳 400")
+        @DisplayName("Should return 400 when request body validation fails")
         void shouldReturn400WhenInvalidRequest() throws Exception {
             CreateTagRequest request = new CreateTagRequest();
-            // name 為空，應觸發 @NotBlank 驗證
+            // name is empty, should trigger @NotBlank validation
 
             mockMvc.perform(post("/api/v1/admin/tags")
                     .with(csrf())
@@ -160,7 +160,7 @@ class AdminTagControllerTest {
     class UpdateTagTests {
 
         @Test
-        @DisplayName("ADMIN 角色應能更新標籤並回傳 200")
+        @DisplayName("ADMIN role should be able to update tag and return 200")
         void shouldReturn200WhenAdmin() throws Exception {
             String tagId = "existing-tag-id";
             TagDto updated = buildTagDto(tagId, "Updated Science");
@@ -176,12 +176,12 @@ class AdminTagControllerTest {
                     .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
-                    .andExpect(jsonPath("$.message").value("標籤更新成功"))
+                    .andExpect(jsonPath("$.message").value("Tag updated successfully"))
                     .andExpect(jsonPath("$.data.id").value(tagId));
         }
 
         @Test
-        @DisplayName("USER 角色應被拒絕並回傳 403")
+        @DisplayName("USER role should be rejected and return 403")
         void shouldReturn403WhenUser() throws Exception {
             UpdateTagRequest request = new UpdateTagRequest();
             request.setName("Updated Science");
@@ -195,10 +195,10 @@ class AdminTagControllerTest {
         }
 
         @Test
-        @DisplayName("請求體驗證失敗時應回傳 400")
+        @DisplayName("Should return 400 when request body validation fails")
         void shouldReturn400WhenInvalidRequest() throws Exception {
             UpdateTagRequest request = new UpdateTagRequest();
-            // name 為空，應觸發 @NotBlank 驗證
+            // name is empty, should trigger @NotBlank validation
 
             mockMvc.perform(put("/api/v1/admin/tags/{tagId}", "some-id")
                     .with(csrf())
@@ -216,7 +216,7 @@ class AdminTagControllerTest {
     class DeleteTagTests {
 
         @Test
-        @DisplayName("ADMIN 角色應能刪除標籤並回傳 200")
+        @DisplayName("ADMIN role should be able to delete tag and return 200")
         void shouldReturn200WhenAdmin() throws Exception {
             String tagId = "tag-to-delete";
             doNothing().when(tagService).deleteTag(tagId);
@@ -226,11 +226,11 @@ class AdminTagControllerTest {
                     .with(user(adminUser())))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
-                    .andExpect(jsonPath("$.message").value("標籤刪除成功"));
+                    .andExpect(jsonPath("$.message").value("Tag deleted successfully"));
         }
 
         @Test
-        @DisplayName("USER 角色應被拒絕並回傳 403")
+        @DisplayName("USER role should be rejected and return 403")
         void shouldReturn403WhenUser() throws Exception {
             mockMvc.perform(delete("/api/v1/admin/tags/{tagId}", "some-id")
                     .with(csrf())
@@ -239,7 +239,7 @@ class AdminTagControllerTest {
         }
 
         @Test
-        @DisplayName("未認證請求應被拒絕並回傳 403")
+        @DisplayName("Unauthenticated request should be rejected and return 403")
         void shouldReturn403WhenUnauthenticated() throws Exception {
             mockMvc.perform(delete("/api/v1/admin/tags/{tagId}", "some-id")
                     .with(csrf()))

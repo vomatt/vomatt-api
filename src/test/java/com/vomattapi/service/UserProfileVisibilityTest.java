@@ -29,7 +29,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("使用者個人資料顯示設定")
+@DisplayName("User Profile Visibility Settings")
 class UserProfileVisibilityTest {
 
     @Mock

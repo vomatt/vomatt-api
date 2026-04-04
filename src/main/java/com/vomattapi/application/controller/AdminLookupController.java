@@ -20,50 +20,50 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/admin/lookups")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
-@Tag(name = "Admin - Lookup", description = "字典表管理 API（Admin）")
+@Tag(name = "Admin - Lookup", description = "Dictionary management APIs (Admin)")
 public class AdminLookupController {
 
     private final LookupService lookupService;
 
     @PostMapping
-    @Operation(summary = "建立字典項目")
+    @Operation(summary = "Create Dictionary Item")
     public ResponseEntity<ApiResponse<LookupDto>> create(
             @Valid @RequestBody CreateLookupRequest request) {
         LookupDto result = lookupService.create(request);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success(result, "字典項目建立成功"));
+                .body(ApiResponse.success(result, "Dictionary item created successfully"));
     }
 
     @PutMapping("/{id}")
-    @Operation(summary = "更新字典項目")
+    @Operation(summary = "Update Dictionary Item")
     public ResponseEntity<ApiResponse<LookupDto>> update(
-            @Parameter(description = "字典 ID", required = true) @PathVariable String id,
+            @Parameter(description = "Dictionary ID", required = true) @PathVariable String id,
             @Valid @RequestBody UpdateLookupRequest request) {
         LookupDto result = lookupService.update(id, request);
-        return ResponseEntity.ok(ApiResponse.success(result, "字典項目更新成功"));
+        return ResponseEntity.ok(ApiResponse.success(result, "Dictionary item updated successfully"));
     }
 
     @PatchMapping("/{id}/activate")
-    @Operation(summary = "啟用字典項目")
+    @Operation(summary = "Activate Dictionary Item")
     public ResponseEntity<ApiResponse<Void>> activate(
-            @Parameter(description = "字典 ID", required = true) @PathVariable String id) {
+            @Parameter(description = "Dictionary ID", required = true) @PathVariable String id) {
         lookupService.activate(id);
-        return ResponseEntity.ok(ApiResponse.success(null, "字典項目已啟用"));
+        return ResponseEntity.ok(ApiResponse.success(null, "Dictionary item activated"));
     }
 
     @PatchMapping("/{id}/deactivate")
-    @Operation(summary = "停用字典項目（軟刪除）")
+    @Operation(summary = "Deactivate Dictionary Item (Soft Delete)")
     public ResponseEntity<ApiResponse<Void>> deactivate(
-            @Parameter(description = "字典 ID", required = true) @PathVariable String id) {
+            @Parameter(description = "Dictionary ID", required = true) @PathVariable String id) {
         lookupService.deactivate(id);
-        return ResponseEntity.ok(ApiResponse.success(null, "字典項目已停用"));
+        return ResponseEntity.ok(ApiResponse.success(null, "Dictionary item deactivated"));
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "刪除字典項目（硬刪除）")
+    @Operation(summary = "Delete Dictionary Item (Hard Delete)")
     public ResponseEntity<ApiResponse<Void>> delete(
-            @Parameter(description = "字典 ID", required = true) @PathVariable String id) {
+            @Parameter(description = "Dictionary ID", required = true) @PathVariable String id) {
         lookupService.delete(id);
-        return ResponseEntity.ok(ApiResponse.success(null, "字典項目已刪除"));
+        return ResponseEntity.ok(ApiResponse.success(null, "Dictionary item deleted"));
     }
 }

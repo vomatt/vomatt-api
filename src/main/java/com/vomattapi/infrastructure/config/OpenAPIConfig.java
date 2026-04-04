@@ -29,11 +29,11 @@ public class OpenAPIConfig {
     public OpenAPI vomattOpenAPI(@Value("${spring.profiles.active:dev}") String activeProfile) {
         Server devServer = new Server();
         devServer.setUrl(devUrl);
-        devServer.setDescription("開發環境服務器");
+        devServer.setDescription("Development Environment Server");
 
         Server prodServer = new Server();
         prodServer.setUrl(prodUrl);
-        prodServer.setDescription("生產環境服務器");
+        prodServer.setDescription("Production Environment Server");
 
         Contact contact = new Contact();
         contact.setName("Vomatt");
@@ -46,7 +46,7 @@ public class OpenAPIConfig {
 
         Info info = new Info()
                 .title("Vomatt REST API")
-                .description("Vomatt會員系統 API 文檔，提供會員管理、身份驗證等功能。")
+                .description("Vomatt Member System API Documentation, providing member management, authentication and other features.")
                 .version("1.0")
                 .contact(contact)
                 .license(mitLicense);

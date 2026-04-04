@@ -24,12 +24,12 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 負責使用者註冊流程：
- * 1. 驗證預註冊驗證碼（Pre-signup OTP）
- * 2. 校驗欄位唯一性
- * 3. 建立 User 並以 BCrypt 加密驗證碼存入 DB
- * 4. 分配角色
- * 5. 清除 cache、發送歡迎信
+ * Responsible for user registration flow:
+ * 1. Verify pre-signup verification code (Pre-signup OTP)
+ * 2. Validate field uniqueness
+ * 3. Create User and store BCrypt-encrypted verification code in DB
+ * 4. Assign roles
+ * 5. Clear cache and send welcome email
  */
 @Service
 @RequiredArgsConstructor
@@ -138,9 +138,9 @@ public class SignupService {
     }
 
     /**
-     * 驗證 pre-signup OTP：
-     * - 從 Redis cache 取出當初發送的驗證碼
-     * - 比對使用者提交的驗證碼與 username
+     * Verify pre-signup OTP:
+     * - Retrieve the verification code sent from Redis cache
+     * - Compare the user-submitted verification code with username
      */
     private SignupResult verifyPreSignupCode(SignupRequest request) {
         try {

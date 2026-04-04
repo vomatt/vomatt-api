@@ -34,26 +34,26 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 驗證 AuthController 端點的安全規則：
- * - 公開端點（signin, signup 等）不需要 Token → 安全層放行，由業務邏輯處理
- * - 需認證端點（signout, force-expire-token）未登入時 → 安全層攔截回傳 401
+ * Verify security rules for AuthController endpoints:
+ * - Public endpoints (signin, signup, etc.) do not require Token → Security layer passes, handled by business logic
+ * - Authenticated endpoints (signout, force-expire-token) without login → Security layer intercepts and returns 401
  *
- * 區分安全層 401 與業務邏輯 401 的方式：
- * - 安全層 401 回傳 {"status":401,"error":"Unauthorized"}
- * - 業務邏輯回傳 {"success":false,"errorCode":"..."} → 表示安全層已通過
+ * How to distinguish between security layer 401 and business logic 401:
+ * - Security layer 401 returns {"status":401,"error":"Unauthorized"}
+ * - Business logic returns {"success":false,"errorCode":"..."} → indicates security layer passed
  */
 @WebMvcTest(AuthController.class)
 @Import(AuthEndpointSecurityTest.SecurityTestConfig.class)
 @ActiveProfiles("test")
-@DisplayName("AuthController 端點安全規則")
+@DisplayName("AuthController endpoint security rules")
 class AuthEndpointSecurityTest {
 
-    /** 安全層攔截時回傳的固定錯誤訊息 */
+    /** Fixed error message returned when security layer intercepts */
     private static final String SECURITY_BLOCKED_ERROR = "Unauthorized";
 
     /**
-     * 與 WebSecurityConfig 同步的安全規則（不含 JWT Filter）。
-     * 若 WebSecurityConfig 的 auth 路由變更，此處也需同步更新。
+     * Security rules synchronized with WebSecurityConfig (JWT Filter not included).
+     * If WebSecurityConfig auth routes change, this must be updated accordingly.
      */
     @TestConfiguration
     @EnableMethodSecurity
@@ -70,7 +70,7 @@ class AuthEndpointSecurityTest {
                     }
                 ))
                 .authorizeHttpRequests(auth -> auth
-                    // 與 WebSecurityConfig 同步：公開路由
+                    // Synchronized with WebSecurityConfig: public routes
                     .requestMatchers(
                         "/api/v1/auth/signin",
                         "/api/v1/auth/pre-signup",
@@ -79,7 +79,7 @@ class AuthEndpointSecurityTest {
                         "/api/v1/auth/refreshToken",
                         "/api/v1/auth/generateVerificationCode"
                     ).permitAll()
-                    // 與 WebSecurityConfig 同步：需認證路由
+                    // Synchronized with WebSecurityConfig: authenticated routes
                     .requestMatchers(
                         "/api/v1/auth/signout",
                         "/api/v1/auth/force-expire-token"
@@ -101,14 +101,14 @@ class AuthEndpointSecurityTest {
     @MockBean JwtBlacklistService jwtBlacklistService;
     @MockBean UserDetailsServiceImpl userDetailsService;
 
-    // ─── 需認證端點：未登入應被安全層攔截 ──────────────────────────────────
+    // ─── Authenticated endpoints: unauthenticated requests should be intercepted by security layer ──────────────────────────────────
 
     @Nested
-    @DisplayName("需認證端點 - 未帶 Token")
+    @DisplayName("Authenticated endpoints - without Token")
     class AuthenticatedEndpointsWithoutToken {
 
         @Test
-        @DisplayName("POST /signout 未登入應被安全層攔截回傳 401")
+        @DisplayName("POST /signout unauthenticated should be intercepted by security layer and return 401")
         void shouldReturn401WhenSignoutWithoutToken() throws Exception {
             mockMvc.perform(post("/api/v1/auth/signout").with(csrf()))
                     .andExpect(status().isUnauthorized())
@@ -116,7 +116,7 @@ class AuthEndpointSecurityTest {
         }
 
         @Test
-        @DisplayName("POST /force-expire-token 未登入應被安全層攔截回傳 401")
+        @DisplayName("POST /force-expire-token unauthenticated should be intercepted by security layer and return 401")
         void shouldReturn401WhenForceExpireWithoutToken() throws Exception {
             mockMvc.perform(post("/api/v1/auth/force-expire-token").with(csrf()))
                     .andExpect(status().isUnauthorized())
@@ -124,40 +124,40 @@ class AuthEndpointSecurityTest {
         }
     }
 
-    // ─── 需認證端點：已登入應可存取 ──────────────────────────────────────
+    // ─── Authenticated endpoints: authenticated users should be able to access ──────────────────────────────────────
 
     @Nested
-    @DisplayName("需認證端點 - 已登入")
+    @DisplayName("Authenticated endpoints - with valid authentication")
     class AuthenticatedEndpointsWithToken {
 
         @Test
         @WithMockUser
-        @DisplayName("POST /signout 已登入安全層應放行")
+        @DisplayName("POST /signout authenticated user should pass security layer")
         void shouldPassSecurityWhenSignoutWithToken() throws Exception {
-            // 安全層放行後，業務邏輯可能因 mock 回傳錯誤，但不會是安全層的 "Unauthorized"
+            // After security layer passes, business logic may fail due to mock, but not with security layer's "Unauthorized"
             mockMvc.perform(post("/api/v1/auth/signout").with(csrf()))
                     .andExpect(jsonPath("$.error").doesNotExist());
         }
 
         @Test
         @WithMockUser
-        @DisplayName("POST /force-expire-token 已登入安全層應放行")
+        @DisplayName("POST /force-expire-token authenticated user should pass security layer")
         void shouldPassSecurityWhenForceExpireWithToken() throws Exception {
             mockMvc.perform(post("/api/v1/auth/force-expire-token").with(csrf()))
                     .andExpect(jsonPath("$.error").doesNotExist());
         }
     }
 
-    // ─── 公開端點：安全層應放行 ──────────────────────────────────────────
+    // ─── Public endpoints: security layer should allow access ──────────────────────────────────────────
 
     @Nested
-    @DisplayName("公開端點 - 不需要 Token")
+    @DisplayName("Public endpoints - no Token required")
     class PublicEndpoints {
 
         @Test
-        @DisplayName("POST /signin 安全層應放行（業務邏輯可能回傳 401 但非安全攔截）")
+        @DisplayName("POST /signin security layer should allow access (business logic may return 401 but not security intercept)")
         void shouldPassSecurityForSignin() throws Exception {
-            // 安全層放行，業務邏輯因驗證碼無效回傳 401，但 body 含 errorCode 而非 "error":"Unauthorized"
+            // Security layer allows access, business logic returns 401 due to invalid code, but body has errorCode not "error":"Unauthorized"
             mockMvc.perform(post("/api/v1/auth/signin")
                             .with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
@@ -166,7 +166,7 @@ class AuthEndpointSecurityTest {
         }
 
         @Test
-        @DisplayName("POST /signup 安全層應放行")
+        @DisplayName("POST /signup security layer should allow access")
         void shouldPassSecurityForSignup() throws Exception {
             mockMvc.perform(post("/api/v1/auth/signup")
                             .with(csrf())
@@ -176,7 +176,7 @@ class AuthEndpointSecurityTest {
         }
 
         @Test
-        @DisplayName("POST /refreshToken 安全層應放行")
+        @DisplayName("POST /refreshToken security layer should allow access")
         void shouldPassSecurityForRefreshToken() throws Exception {
             mockMvc.perform(post("/api/v1/auth/refreshToken")
                             .with(csrf())
@@ -186,7 +186,7 @@ class AuthEndpointSecurityTest {
         }
 
         @Test
-        @DisplayName("POST /generateVerificationCode 安全層應放行")
+        @DisplayName("POST /generateVerificationCode security layer should allow access")
         void shouldPassSecurityForGenerateVerificationCode() throws Exception {
             mockMvc.perform(post("/api/v1/auth/generateVerificationCode")
                             .with(csrf())

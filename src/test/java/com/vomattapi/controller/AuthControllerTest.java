@@ -44,7 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("AuthController")
 class AuthControllerTest {
 
-    /** 測試用簡化安全設定：CSRF 停用，所有路徑開放 */
+    /** Simplified security configuration for testing: CSRF disabled, all paths allowed */
     @TestConfiguration
     static class TestSecurityConfig {
         @Bean
@@ -65,7 +65,7 @@ class AuthControllerTest {
     @MockBean SignupService signupService;
     @MockBean JwtUtils jwtUtils;
     @MockBean JwtBlacklistService jwtBlacklistService;
-    // AuthTokenFilter 是 @Component，需要 mock 其依賴才能建立 Spring context
+    // AuthTokenFilter is a @Component, need to mock its dependencies to create Spring context
     @MockBean com.vomattapi.infrastructure.security.services.UserDetailsServiceImpl userDetailsService;
 
     // ─── POST /api/v1/auth/signin ─────────────────────────────────────────────
@@ -75,7 +75,7 @@ class AuthControllerTest {
     class SigninTests {
 
         @Test
-        @DisplayName("驗證碼無效時應回傳 401")
+        @DisplayName("Should return 401 when verification code is invalid")
         void shouldReturn401WhenCodeInvalid() throws Exception {
             doThrow(new InvalidVerificationCodeException("Invalid code"))
                     .when(authService).verifyCode("user@test.com", "wrong");
@@ -88,7 +88,7 @@ class AuthControllerTest {
         }
 
         @Test
-        @DisplayName("驗證碼正確且用戶存在時應回傳 200 和 JWT")
+        @DisplayName("Should return 200 with JWT when verification code is correct")
         void shouldReturn200WithJwtWhenSuccess() throws Exception {
             doNothing().when(authService).verifyCode("user@test.com", "123456");
 
@@ -107,7 +107,7 @@ class AuthControllerTest {
         }
 
         @Test
-        @DisplayName("請求格式無效時應回傳 400")
+        @DisplayName("Should return 400 when request format is invalid")
         void shouldReturn400OnInvalidRequestBody() throws Exception {
             mockMvc.perform(post("/api/v1/auth/signin")
                     .contentType(MediaType.APPLICATION_JSON)
@@ -123,7 +123,7 @@ class AuthControllerTest {
     class SignupTests {
 
         @Test
-        @DisplayName("驗證碼過期時應回傳 400")
+        @DisplayName("Should return 400 when verification code has expired")
         void shouldReturn400WhenVerificationExpired() throws Exception {
             when(signupService.processSignup(any()))
                     .thenReturn(SignupService.SignupResult.failure(
@@ -139,7 +139,7 @@ class AuthControllerTest {
         }
 
         @Test
-        @DisplayName("成功註冊時應回傳 200 和 JWT")
+        @DisplayName("Should return 200 with JWT on successful registration")
         void shouldReturn200WithJwtOnSuccess() throws Exception {
             when(signupService.processSignup(any()))
                     .thenReturn(SignupService.SignupResult.success());

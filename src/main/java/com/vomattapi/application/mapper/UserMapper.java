@@ -30,7 +30,7 @@ public class UserMapper {
     }
 
     /**
-     * 將 User entity 轉為個人資料回應（包含所有欄位）
+     * Convert User entity to profile response (including all fields)
      */
     public MyProfileResponse toMyProfileResponse(User user, int totalPolls, int totalVotes,
                                                   Map<String, Boolean> visibilitySettings) {
@@ -56,7 +56,7 @@ public class UserMapper {
     }
 
     /**
-     * 將 Projection 轉為公開資料回應，根據 visibility 遮罩欄位
+     * Convert Projection to public profile response, mask fields based on visibility settings
      */
     public UserProfileResponse toPublicProfileResponse(UserProfileProjection projection,
                                                         Map<String, Boolean> visibility) {

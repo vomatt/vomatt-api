@@ -33,13 +33,13 @@ public class TagServiceImpl implements TagService {
         String name = request.getName().trim();
 
         if (tagRepository.existsByName(name)) {
-            throw new BusinessRuleViolationException("標籤名稱已存在: " + name);
+            throw new BusinessRuleViolationException("Tag name already exists: " + name);
         }
 
         String slug = resolveSlug(request.getSlug(), name);
 
         if (tagRepository.existsBySlug(slug)) {
-            throw new BusinessRuleViolationException("Slug 已存在: " + slug);
+            throw new BusinessRuleViolationException("Slug already exists: " + slug);
         }
 
         Tag tag = new Tag(name, slug, request.getDescription(), request.getDisplayOrder());
@@ -59,13 +59,13 @@ public class TagServiceImpl implements TagService {
         String name = request.getName().trim();
 
         if (tagRepository.existsByNameAndIdNot(name, id)) {
-            throw new BusinessRuleViolationException("標籤名稱已存在: " + name);
+            throw new BusinessRuleViolationException("Tag name already exists: " + name);
         }
 
         String slug = resolveSlug(request.getSlug(), name);
 
         if (tagRepository.existsBySlugAndIdNot(slug, id)) {
-            throw new BusinessRuleViolationException("Slug 已存在: " + slug);
+            throw new BusinessRuleViolationException("Slug already exists: " + slug);
         }
 
         tag.update(name, slug, request.getDescription(), request.getDisplayOrder());
@@ -83,7 +83,7 @@ public class TagServiceImpl implements TagService {
                 .orElseThrow(() -> new EntityNotFoundException("Tag", tagId));
 
         if (tagRepository.isTagReferencedByVotes(id)) {
-            throw new ResourceConflictException("無法刪除已被投票引用的標籤: " + tagId);
+            throw new ResourceConflictException("Cannot delete tag that is referenced by votes: " + tagId);
         }
 
         tagRepository.delete(tag);

@@ -65,12 +65,12 @@ class LookupServiceTest {
     class GetActiveByTypeTests {
 
         @Test
-        @DisplayName("應該只回傳 isActive=true 的項目")
+        @DisplayName("Should return only isActive=true items")
         void shouldReturnActiveItemsByType() {
             Lookup active = buildLookup("CITY", "TPE", true, false);
             LookupDto dto = buildDto("CITY", "TPE");
 
-            // CacheUtil 直接執行 supplier（模擬 cache miss）
+            // CacheUtil directly executes supplier (simulate cache miss)
             when(cacheUtil.getOrSet(eq("lookup:type:CITY"), eq(Object.class), any(), any()))
                     .thenAnswer(inv -> inv.<java.util.function.Supplier<?>>getArgument(2).get());
             when(lookupRepository.findByLookupTypeAndIsActiveTrueOrderBySeqAsc("CITY"))
@@ -91,7 +91,7 @@ class LookupServiceTest {
     class GetByTypeAndKeyTests {
 
         @Test
-        @DisplayName("應該回傳指定 type/key 的項目")
+        @DisplayName("Should return item for specific type/key")
         void shouldReturnItemByTypeAndKey() {
             Lookup lookup = buildLookup("CITY", "TPE", true, false);
             LookupDto dto = buildDto("CITY", "TPE");
@@ -106,7 +106,7 @@ class LookupServiceTest {
         }
 
         @Test
-        @DisplayName("應該在找不到時拋出 EntityNotFoundException")
+        @DisplayName("Should throw EntityNotFoundException when not found")
         void shouldThrowWhenNotFound() {
             when(lookupRepository.findByLookupTypeAndLookupKey("CITY", "UNKNOWN"))
                     .thenReturn(Optional.empty());
@@ -123,7 +123,7 @@ class LookupServiceTest {
     class GetChildrenByParentTests {
 
         @Test
-        @DisplayName("應該回傳指定父節點的子項目")
+        @DisplayName("Should return child items of specified parent node")
         void shouldReturnChildrenByParent() {
             Lookup child = buildLookup("DISTRICT", "ZHONGSHAN", true, false);
             child.setParentType("CITY");
@@ -150,7 +150,7 @@ class LookupServiceTest {
     class GetFrontendLookupsTests {
 
         @Test
-        @DisplayName("應該依 type 分組回傳前端字典")
+        @DisplayName("Should return frontend dictionaries grouped by type")
         void shouldGroupByTypeForFrontend() {
             Lookup l1 = buildLookup("CITY", "TPE", true, true);
             Lookup l2 = buildLookup("CITY", "KHH", true, true);
@@ -178,7 +178,7 @@ class LookupServiceTest {
     class CreateTests {
 
         @Test
-        @DisplayName("應該成功建立新字典項目")
+        @DisplayName("Should successfully create new dictionary item")
         void shouldCreateLookup() {
             CreateLookupRequest req = new CreateLookupRequest();
             req.setLookupType("CITY");
@@ -199,7 +199,7 @@ class LookupServiceTest {
         }
 
         @Test
-        @DisplayName("應該在 type/key 重複時拋出例外")
+        @DisplayName("Should throw exception when type/key already exists")
         void shouldThrowWhenTypeKeyAlreadyExists() {
             CreateLookupRequest req = new CreateLookupRequest();
             req.setLookupType("CITY");
@@ -210,7 +210,7 @@ class LookupServiceTest {
 
             assertThatThrownBy(() -> lookupService.create(req))
                     .isInstanceOf(BusinessRuleViolationException.class)
-                    .hasMessageContaining("字典項目已存在");
+                    .hasMessageContaining("Dictionary item already exists");
         }
     }
 
@@ -221,7 +221,7 @@ class LookupServiceTest {
     class DeactivateTests {
 
         @Test
-        @DisplayName("應該只改 isActive 為 false，不刪除資料")
+        @DisplayName("Should only change isActive to false, not delete data")
         void shouldDeactivateWithoutDeleting() {
             Lookup lookup = buildLookup("CITY", "TPE", true, false);
 
@@ -242,7 +242,7 @@ class LookupServiceTest {
     class DeleteTests {
 
         @Test
-        @DisplayName("應該在找不到 ID 時拋出例外")
+        @DisplayName("Should throw exception when ID not found")
         void shouldThrowWhenIdNotFound() {
             UUID randomId = UUID.randomUUID();
             when(lookupRepository.findById(randomId)).thenReturn(Optional.empty());

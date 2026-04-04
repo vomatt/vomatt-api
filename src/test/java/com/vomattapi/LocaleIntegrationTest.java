@@ -27,8 +27,8 @@ public class LocaleIntegrationTest {
 
     @Test
     public void testLocaleDetectionFromAcceptLanguageHeader() {
-        // Spring MVC 的 LocaleResolver 會將 request locale 設定到 LocaleContextHolder
-        // 這裡模擬此行為，設定 English locale
+        // Spring MVC's LocaleResolver sets request locale to LocaleContextHolder
+        // Simulate this behavior by setting English locale
         LocaleContextHolder.setLocale(Locale.ENGLISH);
 
         Locale detectedLocale = localeService.getCurrentRequestLocale();
@@ -40,7 +40,7 @@ public class LocaleIntegrationTest {
 
     @Test
     public void testLocaleDetectionWithChineseHeader() {
-        // 模擬 Spring MVC LocaleResolver 設定繁中 locale
+        // Simulate Spring MVC LocaleResolver setting Traditional Chinese locale
         LocaleContextHolder.setLocale(Locale.TRADITIONAL_CHINESE);
 
         Locale detectedLocale = localeService.getCurrentRequestLocale();
@@ -52,28 +52,28 @@ public class LocaleIntegrationTest {
 
     @Test
     public void testDefaultLocaleWhenNoRequest() {
-        // 清除所有 locale 與 request context，service 應回傳預設繁中
+        // Clear all locale and request context, service should return default Traditional Chinese
         RequestContextHolder.resetRequestAttributes();
         LocaleContextHolder.setLocale(Locale.ROOT);
 
         Locale detectedLocale = localeService.getCurrentRequestLocale();
 
-        // 預設為繁中，驗證語言代碼
+        // Default is Traditional Chinese, verify language code
         assertEquals("zh", detectedLocale.getLanguage());
         assertTrue(localeService.isChineseLocale());
     }
 
     @Test
     public void testLocaleServiceFallbackBehavior() {
-        // 清除 locale context，讓 getLocaleFromRequest(null) 回傳預設值
+        // Clear locale context, let getLocaleFromRequest(null) return default value
         LocaleContextHolder.setLocale(Locale.ROOT);
 
         Locale locale = localeService.getLocaleFromRequest(null);
 
-        // 預設回傳繁中
+        // Default return Traditional Chinese
         assertEquals("zh", locale.getLanguage());
 
-        // 無 Accept-Language header 的 request，MockHttpServletRequest 預設 locale 為 en
+        // Request without Accept-Language header, MockHttpServletRequest defaults to en locale
         MockHttpServletRequest request = new MockHttpServletRequest();
         locale = localeService.getLocaleFromRequest(request);
         assertNotNull(locale);

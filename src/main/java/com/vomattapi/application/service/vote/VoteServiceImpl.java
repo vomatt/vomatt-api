@@ -76,7 +76,7 @@ public class VoteServiceImpl implements VoteService {
             Set<UUID> tagUUIDs = new HashSet<>(request.getTagIds());
             List<Tag> tags = tagRepository.findAllByIdIn(tagUUIDs);
             if (tags.size() != tagUUIDs.size()) {
-                throw new BusinessRuleViolationException("部分標籤 ID 不存在");
+                throw new BusinessRuleViolationException("Some tag IDs do not exist");
             }
             tags.forEach(vote::addTag);
         }
@@ -274,14 +274,14 @@ public class VoteServiceImpl implements VoteService {
 
     private VoteResponse convertToVoteResponse(Vote vote) {
         UUID voteId = vote.getId();
-        // 使用 JOIN FETCH 避免額外查詢 options
+        // Use JOIN FETCH to avoid additional queries for options
         Vote voteWithOptions = voteRepository.findByIdWithOptions(voteId).orElse(vote);
-        // Set 轉排序後的 List，維持 displayOrder 順序
+        // Convert Set to sorted List, maintaining displayOrder
         List<VoteOption> options = voteWithOptions.getOptions().stream()
             .sorted(Comparator.comparingInt(VoteOption::getDisplayOrder))
             .toList();
         Map<UUID, Long> optionCounts = buildOptionCountMap(voteId);
-        // 由 optionCounts 加總，避免再次查詢總票數
+        // Sum from optionCounts to avoid querying total vote count again
         long totalVoteCount = optionCounts.values().stream().mapToLong(Long::longValue).sum();
         return voteMapper.toResponse(voteWithOptions, options, optionCounts, totalVoteCount);
     }

@@ -7,7 +7,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 可控制顯示的個人資料欄位
+ * Controllable personal profile fields for visibility settings
  */
 public enum VisibilityField {
     EMAIL("email"),
@@ -36,21 +36,21 @@ public enum VisibilityField {
     }
 
     /**
-     * 偏好設定的 key，如 "visibility.email"
+     * Preference setting key, e.g., "visibility.email"
      */
     public String preferenceKey() {
         return PREFERENCE_PREFIX + fieldName;
     }
 
     /**
-     * 從欄位名稱查找對應的 VisibilityField
+     * Find the corresponding VisibilityField from field name
      */
     public static Optional<VisibilityField> fromFieldName(String fieldName) {
         return Optional.ofNullable(BY_FIELD_NAME.get(fieldName));
     }
 
     /**
-     * 從偏好設定 key 解析欄位名稱（去除 "visibility." 前綴）
+     * Extract field name from preference key (remove "visibility." prefix)
      */
     public static String extractFieldName(String preferenceKey) {
         return preferenceKey.startsWith(PREFERENCE_PREFIX)

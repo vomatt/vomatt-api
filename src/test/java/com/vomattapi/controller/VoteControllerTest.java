@@ -45,7 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("VoteController")
 class VoteControllerTest {
 
-    /** 測試用簡化安全設定：CSRF 停用，所有路徑開放（由 @PreAuthorize 控制存取） */
+    /** Simplified security configuration for testing: CSRF disabled, all paths allowed (access controlled by @PreAuthorize) */
     @TestConfiguration
     @EnableMethodSecurity
     static class TestSecurityConfig {
@@ -66,7 +66,7 @@ class VoteControllerTest {
     @Autowired ObjectMapper objectMapper;
 
     @MockBean VoteService voteService;
-    // AuthTokenFilter 是 @Component 需要這些依賴才能被 Spring 建立（雖然 TestSecurityConfig 不使用它）
+    // AuthTokenFilter is a @Component, needs these dependencies to be created by Spring (though TestSecurityConfig doesn't use it)
     @MockBean com.vomattapi.infrastructure.security.jwt.JwtUtils jwtUtils;
     @MockBean com.vomattapi.infrastructure.security.services.UserDetailsServiceImpl userDetailsService;
     @MockBean com.vomattapi.application.service.auth.JwtBlacklistService jwtBlacklistService;
@@ -78,7 +78,7 @@ class VoteControllerTest {
     class GetActiveVotesTests {
 
         @Test
-        @DisplayName("應該回傳 200 和投票列表")
+        @DisplayName("Should return 200 and list of votes")
         void shouldReturn200WithVoteList() throws Exception {
             VoteResponse vote = new VoteResponse();
             vote.setId(UUID.randomUUID().toString());
@@ -100,7 +100,7 @@ class VoteControllerTest {
     class GetVoteTests {
 
         @Test
-        @DisplayName("找到投票時應回傳 200")
+        @DisplayName("Should return 200 when vote is found")
         void shouldReturn200WhenFound() throws Exception {
             String voteId = UUID.randomUUID().toString();
             VoteResponse vote = new VoteResponse();
@@ -115,7 +115,7 @@ class VoteControllerTest {
         }
 
         @Test
-        @DisplayName("投票不存在時應回傳 404")
+        @DisplayName("Should return 404 when vote does not exist")
         void shouldReturn404WhenNotFound() throws Exception {
             String voteId = UUID.randomUUID().toString();
             when(voteService.getVote(voteId)).thenThrow(new EntityNotFoundException("Vote", voteId));
@@ -132,9 +132,9 @@ class VoteControllerTest {
     class CreateVoteTests {
 
         @Test
-        @DisplayName("未認證請求應被拒絕（4xx）")
+        @DisplayName("Unauthenticated request should be rejected (4xx)")
         void shouldReturn4xxWhenUnauthenticated() throws Exception {
-            // 未認證：若 @PreAuthorize 生效則回傳 403，否則因 body 驗證失敗回傳 400
+            // Unauthenticated: if @PreAuthorize is effective, returns 403, otherwise returns 400 due to body validation failure
             mockMvc.perform(post("/api/v1/votes").with(csrf())
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("{}"))
@@ -142,7 +142,7 @@ class VoteControllerTest {
         }
 
         @Test
-        @DisplayName("認證用戶應能建立投票並回傳 201")
+        @DisplayName("Authenticated user should be able to create vote and return 201")
         void shouldReturn201WhenAuthenticated() throws Exception {
             VoteResponse created = new VoteResponse();
             created.setId(UUID.randomUUID().toString());
@@ -175,14 +175,14 @@ class VoteControllerTest {
     class GetMyVotesTests {
 
         @Test
-        @DisplayName("未認證請求應被 @PreAuthorize 拒絕（403）")
+        @DisplayName("Unauthenticated request should be rejected by @PreAuthorize (403)")
         void shouldReturn403WhenUnauthenticated() throws Exception {
             mockMvc.perform(get("/api/v1/votes/my"))
                     .andExpect(status().isForbidden());
         }
 
         @Test
-        @DisplayName("認證用戶應能取得自己的投票")
+        @DisplayName("Authenticated user should be able to retrieve their own votes")
         void shouldReturnUserVotesWhenAuthenticated() throws Exception {
             when(voteService.getVotesByCreator(anyString(), any(Pageable.class)))
                     .thenReturn(Page.empty());

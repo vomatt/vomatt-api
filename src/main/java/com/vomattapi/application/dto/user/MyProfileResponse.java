@@ -4,7 +4,7 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 /**
- * 個人資料回應 — 認證使用者查詢自己時回傳所有欄位
+ * Profile response — return all fields when authenticated user queries their own profile
  */
 public record MyProfileResponse(
         String id,

@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
- * 建立字典項目請求
+ * Create dictionary item request
  */
 @Data
 public class CreateLookupRequest {

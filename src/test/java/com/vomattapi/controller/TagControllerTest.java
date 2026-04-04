@@ -37,7 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("TagController")
 class TagControllerTest {
 
-    /** 測試用簡化安全設定：CSRF 停用，所有路徑開放（公開端點不需認證） */
+    /** Simplified security configuration for testing: CSRF disabled, all paths allowed (public endpoints require no authentication) */
     @TestConfiguration
     @EnableMethodSecurity
     static class TestSecurityConfig {
@@ -53,7 +53,7 @@ class TagControllerTest {
     @Autowired ObjectMapper objectMapper;
 
     @MockBean TagService tagService;
-    // AuthTokenFilter 依賴的元件
+    // Components required by AuthTokenFilter
     @MockBean com.vomattapi.infrastructure.security.jwt.JwtUtils jwtUtils;
     @MockBean com.vomattapi.infrastructure.security.services.UserDetailsServiceImpl userDetailsService;
     @MockBean com.vomattapi.application.service.auth.JwtBlacklistService jwtBlacklistService;
@@ -74,7 +74,7 @@ class TagControllerTest {
     class GetAllTagsTests {
 
         @Test
-        @DisplayName("應該回傳 200 和所有標籤列表")
+        @DisplayName("Should return 200 and list of all tags")
         void shouldReturn200WithTagList() throws Exception {
             TagDto tag1 = buildTagDto("id-1", "Science");
             TagDto tag2 = buildTagDto("id-2", "Politics");
@@ -89,7 +89,7 @@ class TagControllerTest {
         }
 
         @Test
-        @DisplayName("無標籤時應回傳空列表")
+        @DisplayName("Should return empty list when there are no tags")
         void shouldReturnEmptyListWhenNoTags() throws Exception {
             when(tagService.getAllTags()).thenReturn(List.of());
 
@@ -108,7 +108,7 @@ class TagControllerTest {
     class GetPopularTagsTests {
 
         @Test
-        @DisplayName("應該回傳 200 和分頁熱門標籤")
+        @DisplayName("Should return 200 and paginated popular tags")
         void shouldReturn200WithPopularTagsPage() throws Exception {
             TagDto tag = buildTagDto("id-1", "Trending");
             Page<TagDto> page = new PageImpl<>(List.of(tag));
@@ -122,7 +122,7 @@ class TagControllerTest {
         }
 
         @Test
-        @DisplayName("無熱門標籤時應回傳空分頁")
+        @DisplayName("Should return empty page when there are no popular tags")
         void shouldReturnEmptyPageWhenNoPopularTags() throws Exception {
             when(tagService.getPopularTags(any(Pageable.class))).thenReturn(Page.empty());
 

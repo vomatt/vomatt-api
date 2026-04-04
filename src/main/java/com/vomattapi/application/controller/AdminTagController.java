@@ -31,29 +31,29 @@ public class AdminTagController {
     private final TagService tagService;
 
     @PostMapping
-    @Operation(summary = "建立標籤", description = "管理員建立新標籤")
+    @Operation(summary = "Create Tag", description = "Admin creates a new tag")
     public ResponseEntity<ApiResponse<TagDto>> createTag(
             @Valid @RequestBody CreateTagRequest request) {
         TagDto tag = tagService.createTag(request);
-        return ResponseEntity.ok(ApiResponse.success(tag, "標籤建立成功"));
+        return ResponseEntity.ok(ApiResponse.success(tag, "Tag created successfully"));
     }
 
     @PutMapping("/{tagId}")
-    @Operation(summary = "更新標籤", description = "管理員更新現有標籤")
+    @Operation(summary = "Update Tag", description = "Admin updates an existing tag")
     public ResponseEntity<ApiResponse<TagDto>> updateTag(
-            @Parameter(description = "標籤 ID", required = true)
+            @Parameter(description = "Tag ID", required = true)
             @PathVariable String tagId,
             @Valid @RequestBody UpdateTagRequest request) {
         TagDto tag = tagService.updateTag(tagId, request);
-        return ResponseEntity.ok(ApiResponse.success(tag, "標籤更新成功"));
+        return ResponseEntity.ok(ApiResponse.success(tag, "Tag updated successfully"));
     }
 
     @DeleteMapping("/{tagId}")
-    @Operation(summary = "刪除標籤", description = "管理員刪除標籤")
+    @Operation(summary = "Delete Tag", description = "Admin deletes a tag")
     public ResponseEntity<ApiResponse<Void>> deleteTag(
-            @Parameter(description = "標籤 ID", required = true)
+            @Parameter(description = "Tag ID", required = true)
             @PathVariable String tagId) {
         tagService.deleteTag(tagId);
-        return ResponseEntity.ok(ApiResponse.success(null, "標籤刪除成功"));
+        return ResponseEntity.ok(ApiResponse.success(null, "Tag deleted successfully"));
     }
 }

@@ -42,7 +42,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/auth")
-@Tag(name = "認證", description = "認證相關的API，包括登入、註冊、刷新令牌和登出")
+@Tag(name = "Authentication", description = "Authentication-related APIs including sign in, sign up, refresh token and sign out")
 @Slf4j
 @RequiredArgsConstructor
 public class AuthController {
@@ -56,15 +56,15 @@ public class AuthController {
 
     @PostMapping("/signin")
     @RateLimiter(name = "signin")
-    @Operation(summary = "會員登入", description = "使用電子郵件和驗證碼登入系統")
+    @Operation(summary = "Member Sign In", description = "Sign in to the system using email and verification code")
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "登入成功",
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Sign in successful",
                     content = @Content(schema = @Schema(implementation = JwtResponse.class))),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "認證失敗"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "登入嘗試次數過多，請稍後再試") })
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Authentication failed"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "Too many sign in attempts, please try again later") })
     public ResponseEntity<ApiResponse<JwtResponse>> signin(
-            @Parameter(description = "登入請求，包含電子郵件和驗證碼") @Valid @RequestBody SigninRequest signinRequest) {
-        // 驗證碼無效時拋出 InvalidVerificationCodeException，由 GlobalExceptionHandler 處理
+            @Parameter(description = "Sign in request containing email and verification code") @Valid @RequestBody SigninRequest signinRequest) {
+        // When verification code is invalid, InvalidVerificationCodeException is thrown and handled by GlobalExceptionHandler
         authService.verifyCode(signinRequest.getEmail(), signinRequest.getVerificationCode());
 
         JwtResponse jwtResponse = authSessionService.createAuthenticatedSession(signinRequest.getEmail());
@@ -74,13 +74,13 @@ public class AuthController {
 
     @PostMapping("/pre-signup")
     @RateLimiter(name = "pre-signup")
-    @Operation(summary = "預註冊驗證", description = "檢查用戶名和email是否已存在，生成驗證碼並發送郵件")
+    @Operation(summary = "Pre-signup Verification", description = "Check if username and email already exist, generate verification code and send email")
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "預註冊請求成功，驗證碼已發送"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "用戶名或email已存在"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "內部伺服器錯誤") })
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Pre-signup request successful, verification code sent"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Username or email already exists"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "Internal server error") })
     public ResponseEntity<ApiResponse<Void>> preSignup(
-            @Parameter(description = "預註冊請求", required = true) @Valid @RequestBody PreSignupRequest request) {
+            @Parameter(description = "Pre-signup request", required = true) @Valid @RequestBody PreSignupRequest request) {
         log.info("Pre-signup request received for email: {}, username: {}", request.getEmail(), request.getUsername());
         BaseResponse response = preSignupService.processPreSignup(request);
         if (response.isSuccess()) {
@@ -92,13 +92,13 @@ public class AuthController {
 
     @PostMapping("/resend-verification")
     @RateLimiter(name = "resend-verification")
-    @Operation(summary = "重發驗證碼", description = "重新發送預註冊驗證碼到指定郵箱")
+    @Operation(summary = "Resend Verification Code", description = "Resend pre-signup verification code to specified email")
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "驗證碼重發成功"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "無效的郵箱或驗證已過期"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "請求過於頻繁") })
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Verification code resent successfully"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid email or verification expired"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "Request too frequent") })
     public ResponseEntity<ApiResponse<Void>> resendVerificationCode(
-            @Parameter(description = "郵箱地址", required = true) @Valid @RequestBody EmailRequest request) {
+            @Parameter(description = "Email address", required = true) @Valid @RequestBody EmailRequest request) {
         String email = request.getEmail();
         log.info("Resend verification code request for email: {}", email);
         BaseResponse response = preSignupService.resendVerificationCode(email);
@@ -110,31 +110,31 @@ public class AuthController {
     }
 
     @PostMapping("/signup")
-    @Operation(summary = "會員註冊", description = "創建新會員帳戶")
+    @Operation(summary = "Member Sign Up", description = "Create a new member account")
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "註冊成功"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "註冊資料無效，如用戶名已被使用") })
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Sign up successful"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid sign up data, such as username already used") })
     public ResponseEntity<ApiResponse<JwtResponse>> registerUser(
-            @Parameter(description = "註冊請求") @Valid @RequestBody SignupRequest signUpRequest) {
+            @Parameter(description = "Sign up request") @Valid @RequestBody SignupRequest signUpRequest) {
         var result = signupService.processSignup(signUpRequest);
         if (!result.isSuccess()) {
             return ResponseEntity.badRequest()
                     .body(ApiResponse.error(result.getErrorType(), result.getErrorMessage()));
         }
 
-        // 直接產生 JWT + RefreshToken，不透過 signin() 以避免繞過 Rate Limiter
+        // Generate JWT + RefreshToken directly, not through signin() to avoid bypassing Rate Limiter
         JwtResponse jwtResponse = authSessionService.createAuthenticatedSession(signUpRequest.getEmail());
         log.info("User registered and signed in: {}", signUpRequest.getEmail());
         return ResponseEntity.ok(ApiResponse.success(jwtResponse, "Registration successful"));
     }
 
     @PostMapping("/refreshToken")
-    @Operation(summary = "刷新令牌", description = "使用刷新令牌獲取新的訪問令牌")
+    @Operation(summary = "Refresh Token", description = "Use refresh token to get a new access token")
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "令牌刷新成功"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "刷新令牌無效或已過期") })
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Token refresh successful"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Refresh token invalid or expired") })
     public ResponseEntity<ApiResponse<TokenRefreshResponse>> refreshToken(
-            @Parameter(description = "刷新令牌請求") @Valid @RequestBody TokenRefreshRequest request) {
+            @Parameter(description = "Refresh token request") @Valid @RequestBody TokenRefreshRequest request) {
         String requestRefreshToken = request.getRefreshToken();
         TokenRefreshResponse tokenResponse = refreshTokenService.findByToken(requestRefreshToken)
                 .map(refreshTokenService::verifyExpiration)
@@ -149,10 +149,10 @@ public class AuthController {
 
     @PostMapping("/signout")
     @PreAuthorize("isAuthenticated()")
-    @Operation(summary = "會員登出", description = "會員登出系統並清除刷新令牌")
+    @Operation(summary = "Member Sign Out", description = "Sign out from the system and clear refresh token")
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "登出成功"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未認證") })
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Sign out successful"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Not authenticated") })
     public ResponseEntity<ApiResponse<Void>> logoutUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
@@ -163,10 +163,10 @@ public class AuthController {
 
     @PostMapping("/force-expire-token")
     @PreAuthorize("isAuthenticated()")
-    @Operation(summary = "強制使JWT令牌過期", description = "立即使當前JWT令牌失效，並清除刷新令牌。用於安全登出或強制終止會話。")
+    @Operation(summary = "Force Expire JWT Token", description = "Immediately invalidate the current JWT token and clear refresh token. Used for secure logout or forced session termination.")
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "令牌已成功失效"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未認證或無效令牌") })
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Token successfully invalidated"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Not authenticated or invalid token") })
     public ResponseEntity<ApiResponse<Void>> forceExpireToken(HttpServletRequest request) {
         String headerAuth = request.getHeader("Authorization");
         if (headerAuth == null || !headerAuth.startsWith("Bearer ")) {
@@ -189,16 +189,16 @@ public class AuthController {
 
     @PostMapping("/generateVerificationCode")
     @RateLimiter(name = "resend-verification")
-    @Operation(summary = "產生認證碼", description = "產生認證碼並發送至指定 email")
+    @Operation(summary = "Generate Verification Code", description = "Generate verification code and send to specified email")
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "認證碼生成成功"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "用戶不存在"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "認證碼生成失敗")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Verification code generated successfully"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User does not exist"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Verification code generation failed")
     })
     public ResponseEntity<ApiResponse<Void>> generateVerificationCode(
             @Parameter(description = "email") @Valid @RequestBody EmailRequest request) {
         String email = request.getEmail();
-        // EntityNotFoundException / BusinessRuleViolationException 由 GlobalExceptionHandler 處理
+        // EntityNotFoundException / BusinessRuleViolationException handled by GlobalExceptionHandler
         authService.generateVerificationCode(email);
         log.info("Verification code generated for email: {}", email);
         return ResponseEntity.ok(ApiResponse.success("Verification code sent successfully."));

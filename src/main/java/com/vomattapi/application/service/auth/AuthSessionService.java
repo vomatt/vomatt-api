@@ -16,8 +16,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * 負責建立認證會話（JWT + RefreshToken）
- * 統一 signin 和 signup 的會話建立邏輯
+ * Responsible for creating authenticated sessions (JWT + RefreshToken)
+ * Unified session creation logic for signin and signup
  */
 @Service
 @RequiredArgsConstructor
@@ -27,7 +27,7 @@ public class AuthSessionService {
     private final UserDetailsServiceImpl userDetailsService;
 
     /**
-     * 根據 email 建立認證會話，回傳 JwtResponse
+     * Create authenticated session based on email, return JwtResponse
      */
     public JwtResponse createAuthenticatedSession(String email) {
         UserDetailsImpl userDetails = (UserDetailsImpl) userDetailsService.loadUserByEmail(email);

@@ -86,7 +86,7 @@ public class LookupServiceImpl implements LookupService {
 
         if (lookupRepository.existsByLookupTypeAndLookupKey(type, key)) {
             throw new BusinessRuleViolationException(
-                    "字典項目已存在: " + type + "/" + key);
+                    "Dictionary item already exists: " + type + "/" + key);
         }
 
         Lookup lookup = new Lookup();
@@ -102,7 +102,7 @@ public class LookupServiceImpl implements LookupService {
 
         Lookup saved = lookupRepository.save(lookup);
         evictCacheForType(type, Boolean.TRUE.equals(saved.getFrontendUsing()));
-        log.info("字典項目已建立: {}/{}", type, key);
+        log.info("Dictionary item created: {}/{}", type, key);
         return lookupMapper.toDto(saved);
     }
 
@@ -111,7 +111,7 @@ public class LookupServiceImpl implements LookupService {
     public LookupDto update(String id, UpdateLookupRequest request) {
         Lookup lookup = findById(id);
 
-        // 若要更換 type/key，確認不重複
+        // If changing type/key, confirm no duplicates
         String newType = request.getLookupType() != null
                 ? request.getLookupType().trim() : lookup.getLookupType();
         String newKey = request.getLookupKey() != null
@@ -119,7 +119,7 @@ public class LookupServiceImpl implements LookupService {
 
         if (lookupRepository.existsByLookupTypeAndLookupKeyAndIdNot(newType, newKey, lookup.getId())) {
             throw new BusinessRuleViolationException(
-                    "字典項目已存在: " + newType + "/" + newKey);
+                    "Dictionary item already exists: " + newType + "/" + newKey);
         }
 
         String oldType = lookup.getLookupType();
@@ -136,10 +136,10 @@ public class LookupServiceImpl implements LookupService {
 
         Lookup saved = lookupRepository.save(lookup);
 
-        // 清除可能影響到的快取
+        // Evict caches that may be affected
         evictCacheForType(oldType, oldFrontend);
         evictCacheForType(newType, Boolean.TRUE.equals(saved.getFrontendUsing()));
-        log.info("字典項目已更新: id={}", id);
+        log.info("Dictionary item updated: id={}", id);
         return lookupMapper.toDto(saved);
     }
 
@@ -150,7 +150,7 @@ public class LookupServiceImpl implements LookupService {
         lookup.setIsActive(true);
         lookupRepository.save(lookup);
         evictCacheForType(lookup.getLookupType(), Boolean.TRUE.equals(lookup.getFrontendUsing()));
-        log.info("字典項目已啟用: id={}, type={}", id, lookup.getLookupType());
+        log.info("Dictionary item activated: id={}, type={}", id, lookup.getLookupType());
     }
 
     @Override
@@ -160,7 +160,7 @@ public class LookupServiceImpl implements LookupService {
         lookup.setIsActive(false);
         lookupRepository.save(lookup);
         evictCacheForType(lookup.getLookupType(), Boolean.TRUE.equals(lookup.getFrontendUsing()));
-        log.info("字典項目已停用: id={}, type={}", id, lookup.getLookupType());
+        log.info("Dictionary item deactivated: id={}, type={}", id, lookup.getLookupType());
     }
 
     @Override
@@ -171,7 +171,7 @@ public class LookupServiceImpl implements LookupService {
         boolean frontend = Boolean.TRUE.equals(lookup.getFrontendUsing());
         lookupRepository.delete(lookup);
         evictCacheForType(type, frontend);
-        log.info("字典項目已刪除: id={}, type={}", id, type);
+        log.info("Dictionary item deleted: id={}, type={}", id, type);
     }
 
     // ─── private helpers ──────────────────────────────────────────────────────

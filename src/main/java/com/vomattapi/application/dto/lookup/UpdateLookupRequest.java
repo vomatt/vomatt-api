@@ -5,7 +5,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
- * 更新字典項目請求（所有欄位為 Optional，只更新非 null 的欄位）
+ * Update dictionary item request (all fields are Optional, only update non-null fields)
  */
 @Data
 public class UpdateLookupRequest {

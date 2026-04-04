@@ -16,7 +16,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * 字典表實體
+ * Dictionary table entity
  */
 @Entity
 @Table(name = "lookup")

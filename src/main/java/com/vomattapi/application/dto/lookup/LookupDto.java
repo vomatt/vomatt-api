@@ -3,7 +3,7 @@ package com.vomattapi.application.dto.lookup;
 import com.fasterxml.jackson.databind.JsonNode;
 
 /**
- * 字典表回應 DTO
+ * Dictionary table response DTO
  */
 public record LookupDto(
         String id,

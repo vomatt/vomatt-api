@@ -10,47 +10,47 @@ import java.util.Map;
 public interface LookupService {
 
     /**
-     * 取得某 type 下所有 active 字典項目（公開）
+     * Get all active dictionary items of a specific type (Public)
      */
     List<LookupDto> getActiveByType(String lookupType);
 
     /**
-     * 取得單筆字典項目
+     * Get a single dictionary item
      */
     LookupDto getByTypeAndKey(String lookupType, String lookupKey);
 
     /**
-     * 取得某 type 下特定父節點的子項目（公開）
+     * Get child items of a specific parent node under a type (Public)
      */
     List<LookupDto> getChildrenByParent(String lookupType, String parentType, String parentKey);
 
     /**
-     * 取得所有前端用字典，依 type 分組回傳（公開）
+     * Get all frontend dictionaries, return grouped by type (Public)
      */
     Map<String, List<LookupDto>> getFrontendLookups();
 
     /**
-     * 建立字典項目（Admin）
+     * Create dictionary item (Admin)
      */
     LookupDto create(CreateLookupRequest request);
 
     /**
-     * 更新字典項目（Admin）
+     * Update dictionary item (Admin)
      */
     LookupDto update(String id, UpdateLookupRequest request);
 
     /**
-     * 啟用字典項目（Admin）
+     * Activate dictionary item (Admin)
      */
     void activate(String id);
 
     /**
-     * 停用字典項目（Admin，軟刪除）
+     * Deactivate dictionary item (Admin, soft delete)
      */
     void deactivate(String id);
 
     /**
-     * 刪除字典項目（Admin，硬刪除）
+     * Delete dictionary item (Admin, hard delete)
      */
     void delete(String id);
 }

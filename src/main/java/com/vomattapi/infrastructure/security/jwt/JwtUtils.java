@@ -40,11 +40,11 @@ public class JwtUtils {
     public void init() {
         if (jwtSecret == null || jwtSecret.isBlank()) {
             throw new IllegalStateException(
-                "JWT_SECRET 環境變數未設定。請設定至少 32 字元的隨機密鑰。");
+                "JWT_SECRET environment variable not set. Please set a random secret key of at least 32 characters.");
         }
         if (jwtSecret.length() < 32) {
             throw new IllegalStateException(
-                "JWT_SECRET 長度不足（目前 " + jwtSecret.length() + " 字元），請使用至少 32 字元的密鑰。");
+                "JWT_SECRET is too short (currently " + jwtSecret.length() + " characters), please use at least 32 characters.");
         }
         byte[] keyBytes = jwtSecret.getBytes(StandardCharsets.UTF_8);
         this.key = Keys.hmacShaKeyFor(keyBytes);

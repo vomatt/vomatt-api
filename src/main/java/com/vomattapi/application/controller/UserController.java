@@ -44,7 +44,7 @@ public class UserController {
 
     @GetMapping("/me")
     @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
-    @Operation(summary = "Get my profile", description = "取得認證使用者的完整個人資料")
+    @Operation(summary = "Get my profile", description = "Get the complete profile of the authenticated user")
     @ApiResponses(value = {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Profile retrieved successfully"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized")
@@ -57,7 +57,7 @@ public class UserController {
 
     @PatchMapping("/me/visibility")
     @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
-    @Operation(summary = "Update profile visibility", description = "更新公開個人資料的欄位顯示設定")
+    @Operation(summary = "Update profile visibility", description = "Update field visibility settings for public profile")
     @ApiResponses(value = {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Visibility settings updated"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized")

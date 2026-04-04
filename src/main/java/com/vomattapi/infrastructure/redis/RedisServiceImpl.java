@@ -20,7 +20,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Redis 服務實現類 提供高效能的緩存操作，支援序列化和批量操作
+ * Redis service implementation providing high-performance caching operations with serialization and batch operation support
  */
 @Slf4j
 @Service
@@ -29,7 +29,7 @@ public class RedisServiceImpl implements RedisService {
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
 
-    // ==================== 單筆操作 ====================
+    // ==================== Single operations ====================
 
     @Override
     public void set(String cacheName, String key, Object value) {
@@ -67,7 +67,7 @@ public class RedisServiceImpl implements RedisService {
                 return (T) value;
             }
 
-            // 使用 ObjectMapper 進行類型轉換
+            // Use ObjectMapper for type conversion
             return objectMapper.convertValue(value, clazz);
         } catch (Exception e) {
             log.error("Redis GET error: key={}, class={}, error={}", cacheKey, clazz.getSimpleName(), e.getMessage(), e);

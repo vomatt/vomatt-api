@@ -17,8 +17,8 @@ import java.util.stream.Collectors;
 public class VoteMapper {
 
     /**
-     * @param optionCounts 預取的 Map<optionId, voteCount>，避免 N+1 lazy load
-     * @param totalVoteCount 預取的總投票數，避免觸發 userVotes 集合 lazy load
+     * @param optionCounts Pre-fetched Map<optionId, voteCount> to avoid N+1 lazy load
+     * @param totalVoteCount Pre-fetched total vote count to avoid triggering userVotes collection lazy load
      */
     public VoteResponse toResponse(Vote vote, List<VoteOption> options,
                                    Map<UUID, Long> optionCounts, long totalVoteCount) {
@@ -67,8 +67,8 @@ public class VoteMapper {
     }
 
     /**
-     * @param optionCounts 預取的 Map<optionId, voteCount>
-     * @param totalVoteCount 預取的總投票數
+     * @param optionCounts Pre-fetched Map<optionId, voteCount>
+     * @param totalVoteCount Pre-fetched total vote count
      */
     public VoteResultResponse toResultResponse(Vote vote, List<VoteOption> options,
                                                int totalParticipants,

@@ -30,7 +30,7 @@ public class CreateVoteRequest {
     
     private boolean isAnonymous = false;
 
-    @Size(max = 5, message = "最多選擇 5 個標籤")
+    @Size(max = 5, message = "Maximum 5 tags can be selected")
     private List<UUID> tagIds;
 
     @Data

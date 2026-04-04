@@ -12,33 +12,33 @@ import java.util.UUID;
 public interface LookupRepository extends JpaRepository<Lookup, UUID> {
 
     /**
-     * 查詢某 type 下所有 active 項目，依 seq 排序
+     * Query all active items of a specific type, sorted by seq
      */
     List<Lookup> findByLookupTypeAndIsActiveTrueOrderBySeqAsc(String lookupType);
 
     /**
-     * 查詢特定 type + key 的項目
+     * Query item for specific type + key combination
      */
     Optional<Lookup> findByLookupTypeAndLookupKey(String lookupType, String lookupKey);
 
     /**
-     * 查詢某 type 下特定父節點的子項目（active only），依 seq 排序
+     * Query child items of a specific parent node under a type (active only), sorted by seq
      */
     List<Lookup> findByLookupTypeAndParentTypeAndParentKeyAndIsActiveTrueOrderBySeqAsc(
             String lookupType, String parentType, String parentKey);
 
     /**
-     * 查詢所有標記為前端使用的 active 項目，依 type 和 seq 排序
+     * Query all active items marked for frontend usage, sorted by type and seq
      */
     List<Lookup> findByFrontendUsingTrueAndIsActiveTrueOrderByLookupTypeAscSeqAsc();
 
     /**
-     * 確認 type + key 組合是否已存在（新增時用）
+     * Check if type + key combination already exists (used for creation)
      */
     boolean existsByLookupTypeAndLookupKey(String lookupType, String lookupKey);
 
     /**
-     * 確認 type + key 組合是否被其他筆記錄使用（更新時用）
+     * Check if type + key combination is used by other records (used for update)
      */
     boolean existsByLookupTypeAndLookupKeyAndIdNot(String lookupType, String lookupKey, UUID id);
 }

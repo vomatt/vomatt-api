@@ -39,7 +39,7 @@ public class VoteMapper {
         response.setVotingActive(vote.isVotingActive());
         response.setOptions(options.stream()
                 .map(opt -> toOptionResponse(opt, optionCounts.getOrDefault(opt.getId(), 0L)))
-                .collect(Collectors.toList()));
+                .toList());
         List<TagDto> tagDtos = (vote.getTags() != null)
                 ? vote.getTags().stream()
                         .map(tag -> new TagDto(
@@ -93,7 +93,7 @@ public class VoteMapper {
         List<VoteResultResponse.VoteOptionResultResponse> optionResults = options.stream()
             .map(opt -> toOptionResultResponse(opt, totalVoteCount, vote.isAnonymous(),
                     optionCounts.getOrDefault(opt.getId(), 0L)))
-            .collect(Collectors.toList());
+            .toList();
         response.setOptions(optionResults);
         return response;
     }
@@ -119,7 +119,7 @@ public class VoteMapper {
                     voter.setVotedAt(userVote.getCreatedAt());
                     return voter;
                 })
-                .collect(Collectors.toList());
+                .toList();
             result.setVoters(voters);
         } else {
             result.setVoters(new ArrayList<>());

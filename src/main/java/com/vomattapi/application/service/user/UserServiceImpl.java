@@ -253,7 +253,7 @@ public class UserServiceImpl implements UserService {
 
         cacheUtil.evictUserCache(userId);
         log.info("Visibility settings updated for user: {}", userId);
-        return loadVisibilitySettings(userUuid, true);
+        return loadVisibilitySettings(userUuid, false);
     }
 
     @Override

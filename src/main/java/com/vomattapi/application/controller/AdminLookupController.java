@@ -21,7 +21,6 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
 @Tag(name = "Admin - Lookup", description = "字典表管理 API（Admin）")
-@SecurityRequirement(name = "Bearer Authentication")
 public class AdminLookupController {
 
     private final LookupService lookupService;

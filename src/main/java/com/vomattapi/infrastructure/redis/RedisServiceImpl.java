@@ -444,7 +444,7 @@ public class RedisServiceImpl implements RedisService {
                     return clazz.cast(value);
                 }
                 return objectMapper.convertValue(value, clazz);
-            }).collect(Collectors.toList());
+            }).toList();
         } catch (Exception e) {
             log.error("Redis GETRANGE error: key={}, start={}, end={}, class={}, error={}", cacheKey, start, end,
                     clazz.getSimpleName(), e.getMessage(), e);

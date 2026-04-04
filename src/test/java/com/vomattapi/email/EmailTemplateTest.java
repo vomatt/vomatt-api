@@ -59,6 +59,7 @@ public class EmailTemplateTest {
 
     private TemplateEngine createTemplateEngine() {
         SpringTemplateEngine templateEngine = new SpringTemplateEngine();
+        templateEngine.setMessageSource(createMessageSource());
 
         ClassLoaderTemplateResolver templateResolver = new ClassLoaderTemplateResolver();
         templateResolver.setPrefix("templates/");

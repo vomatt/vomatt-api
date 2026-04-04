@@ -117,7 +117,7 @@ public class VoteServiceImpl implements VoteService {
         List<Vote> votes = voteRepository.findActiveVotesAtTime(LocalDateTime.now());
         return votes.stream()
             .map(this::convertToVoteResponse)
-            .collect(Collectors.toList());
+            .toList();
     }
 
     @Override
@@ -140,7 +140,7 @@ public class VoteServiceImpl implements VoteService {
         List<Vote> votes = voteRepository.findByCreatorIdOrderByCreatedAtDesc(UUID.fromString(creatorId));
         return votes.stream()
             .map(this::convertToVoteResponse)
-            .collect(Collectors.toList());
+            .toList();
     }
 
     @Override
@@ -239,7 +239,7 @@ public class VoteServiceImpl implements VoteService {
         return userVoteRepository.findByUserIdAndVoteId(UUID.fromString(userId), UUID.fromString(voteId))
             .stream()
             .map(mv -> mv.getOption().getId().toString())
-            .collect(Collectors.toList());
+            .toList();
     }
 
     @Override
@@ -279,7 +279,7 @@ public class VoteServiceImpl implements VoteService {
         // Set 轉排序後的 List，維持 displayOrder 順序
         List<VoteOption> options = voteWithOptions.getOptions().stream()
             .sorted(Comparator.comparingInt(VoteOption::getDisplayOrder))
-            .collect(Collectors.toList());
+            .toList();
         Map<UUID, Long> optionCounts = buildOptionCountMap(voteId);
         // 由 optionCounts 加總，避免再次查詢總票數
         long totalVoteCount = optionCounts.values().stream().mapToLong(Long::longValue).sum();

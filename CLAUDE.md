@@ -331,7 +331,7 @@ public List<UserDTO> getActiveUsers() {
     return userRepository.findAll().stream()
         .filter(User::isActive)
         .map(userMapper::toDTO)
-        .collect(Collectors.toList());
+        .toList();
 }
 
 // 選項 2：效能優先（資料量 > 100,000 筆）

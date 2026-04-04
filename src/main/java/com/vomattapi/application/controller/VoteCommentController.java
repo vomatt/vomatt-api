@@ -40,7 +40,6 @@ import org.slf4j.LoggerFactory;
 @RequestMapping("/api/v1/votes/{voteId}/comments")
 @RequiredArgsConstructor
 @Tag(name = "Vote Comment", description = "Vote comment management APIs")
-@SecurityRequirement(name = "Bearer Authentication")
 public class VoteCommentController {
 
     private static final Logger log = LoggerFactory.getLogger(VoteCommentController.class);

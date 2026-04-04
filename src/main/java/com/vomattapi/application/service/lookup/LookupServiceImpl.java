@@ -42,7 +42,7 @@ public class LookupServiceImpl implements LookupService {
                 () -> lookupRepository.findByLookupTypeAndIsActiveTrueOrderBySeqAsc(lookupType)
                         .stream()
                         .map(lookupMapper::toDto)
-                        .collect(Collectors.toList()),
+                        .toList(),
                 LOOKUP_CACHE_DURATION);
     }
 
@@ -63,7 +63,7 @@ public class LookupServiceImpl implements LookupService {
                         lookupType, parentType, parentKey)
                 .stream()
                 .map(lookupMapper::toDto)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override

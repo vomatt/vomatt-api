@@ -42,7 +42,6 @@ import org.slf4j.LoggerFactory;
 @RequestMapping("/api/v1/votes")
 @RequiredArgsConstructor
 @Tag(name = "Vote", description = "Vote management APIs")
-@SecurityRequirement(name = "Bearer Authentication")
 public class VoteController {
     private static final Logger log = LoggerFactory.getLogger(VoteController.class);
     private final VoteService voteService;

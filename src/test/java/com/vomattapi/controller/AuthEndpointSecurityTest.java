@@ -4,6 +4,7 @@ import com.vomattapi.application.controller.AuthController;
 import com.vomattapi.infrastructure.security.jwt.JwtUtils;
 import com.vomattapi.infrastructure.security.services.UserDetailsServiceImpl;
 import com.vomattapi.application.service.auth.AuthService;
+import com.vomattapi.application.service.auth.AuthSessionService;
 import com.vomattapi.application.service.auth.JwtBlacklistService;
 import com.vomattapi.application.service.auth.PreSignupService;
 import com.vomattapi.application.service.auth.RefreshTokenService;
@@ -92,6 +93,7 @@ class AuthEndpointSecurityTest {
     @Autowired MockMvc mockMvc;
 
     @MockBean AuthService authService;
+    @MockBean AuthSessionService authSessionService;
     @MockBean RefreshTokenService refreshTokenService;
     @MockBean PreSignupService preSignupService;
     @MockBean SignupService signupService;

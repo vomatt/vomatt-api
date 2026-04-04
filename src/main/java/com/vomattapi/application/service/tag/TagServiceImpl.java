@@ -96,7 +96,7 @@ public class TagServiceImpl implements TagService {
         return tagRepository.findAllByOrderByDisplayOrderAsc()
                 .stream()
                 .map(this::toDto)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override

@@ -168,7 +168,7 @@ class UserProfileVisibilityTest {
                     .thenReturn(expectedResponse);
 
             // When
-            UserProfileResponse result = userService.getUserProfile(USERNAME);
+            UserProfileResponse result = userService.getUserProfile(USERNAME, false);
 
             // Then
             assertThat(result).isNotNull();
@@ -202,7 +202,7 @@ class UserProfileVisibilityTest {
                     .thenReturn(expectedResponse);
 
             // When
-            UserProfileResponse result = userService.getUserProfile(USERNAME);
+            UserProfileResponse result = userService.getUserProfile(USERNAME, false);
 
             // Then
             assertThat(result.email()).isEqualTo("test@example.com");

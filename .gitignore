@@ -43,3 +43,6 @@ build/
 
 ### Maven ###
 .mvn
+
+### Superpowers ###
+/docs/

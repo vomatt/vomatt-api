@@ -41,8 +41,11 @@ build/
 ### Worktrees ###
 .worktrees/
 
-### Maven ###
-.mvn
+
 
 ### Superpowers ###
 /docs/
+.serena/
+
+### Env ###
+.env

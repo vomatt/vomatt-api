@@ -1,3 +1,0 @@
--- 新增用戶個人檔案欄位
-ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(100);
-ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT;

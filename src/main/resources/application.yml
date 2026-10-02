@@ -1,0 +1,154 @@
+spring:
+  application:
+    name: vomatt-api
+  profiles:
+    active: ${PROFILES_ACTIVE:dev}
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DB_URL}?reWriteBatchedInserts=true&prepareThreshold=0
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        default_schema: vomatt
+        jdbc:
+          batch_size: 100
+        default_batch_fetch_size: 50
+        order_inserts: true
+        order_updates: true
+    show-sql: false
+    open-in-view: false
+
+  data:
+    web:
+      pageable:
+        # 與 PageResponse.page（1-based）一致：請求參數 page 亦從 1 開始
+        one-indexed-parameters: true
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 5000ms
+      jedis:
+        pool:
+          max-active: 10
+          max-idle: 5
+          min-idle: 1
+
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          # SMTP 無 timeout 時同步寄信會阻塞請求執行緒至 OS socket 逾時
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+server:
+  port: ${PORT:8080}
+  compression:
+    enabled: true
+    min-response-size: 128
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+    try-it-out-enabled: true
+    filter: true
+    syntax-highlight:
+      activated: true
+  default-produces-media-type: application/json
+
+app:
+  openapi:
+    dev-url: ${OPENAPI_DEV_URL:http://localhost:8080}
+    prod-url: ${OPENAPI_PROD_URL:https://localhost:8080}
+  email:
+    enabled: ${EMAIL_ENABLED:false}
+    from: ${EMAIL_FROM:noreply@vomatt.com}
+  security:
+    # 逗號分隔；allowCredentials=true 時不可用 *
+    cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  vote:
+    max-options-per-vote: ${VOTE_MAX_OPTIONS:10}
+    min-options-per-vote: ${VOTE_MIN_OPTIONS:2}
+    default-vote-duration: ${VOTE_DEFAULT_DURATION:P7D}
+    max-vote-duration: ${VOTE_MAX_DURATION:P365D}
+    allow-anonymous-voting: ${VOTE_ALLOW_ANONYMOUS:true}
+    allow-multiple-choices-by-default: ${VOTE_ALLOW_MULTIPLE_DEFAULT:false}
+  audit:
+    enabled: ${AUDIT_ENABLED:true}
+
+otp:
+  ttl-seconds: ${OTP_TTL_SECONDS:180}
+  resend-cooldown-seconds: ${OTP_RESEND_COOLDOWN_SECONDS:180}
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration-seconds: ${JWT_EXPIRATION_SECONDS:3600}
+  refresh-expiration-days: ${JWT_REFRESH_EXPIRATION_DAYS:30}
+  # 同一 oldToken 於 N 秒內重複 rotate 回傳同一組 pair，避免 cross-instance race 誤判 reuse
+  refresh-grace-seconds: ${JWT_REFRESH_GRACE_SECONDS:10}
+
+google:
+  client-id: ${GOOGLE_CLIENT_ID:}
+
+line:
+  channel-id: ${LINE_CHANNEL_ID:}
+  channel-secret: ${LINE_CHANNEL_SECRET:}
+
+apple:
+  client-id: ${APPLE_CLIENT_ID:}
+
+oauth:
+  google:
+    token-info-url: ${GOOGLE_TOKEN_INFO_URL:https://oauth2.googleapis.com/tokeninfo}
+  line:
+    token-url: ${LINE_TOKEN_URL:https://api.line.me/oauth2/v2.1/token}
+    verify-url: ${LINE_VERIFY_URL:https://api.line.me/oauth2/v2.1/verify}
+    profile-url: ${LINE_PROFILE_URL:https://api.line.me/v2/profile}
+  apple:
+    jwks-url: ${APPLE_JWKS_URL:https://appleid.apple.com/auth/keys}
+
+logging:
+  level:
+    com.vomatt: ${LOG_LEVEL:INFO}
+
+rate-limit:
+  enabled: true
+  limit:
+    capacity: 300
+    window-seconds: 60
+  paths:
+    - /api/auth/**

@@ -27,96 +27,68 @@
 
 ## 🎯 專案資訊
 
-### 技術棧
-| 類型 | 技術/版本                             |
-|------|-----------------------------------|
-| 語言 | Java 21                           |
-| Framework | Spring Boot 3.4.8+                |
-| Build | Maven                             |
-| 資料庫 | Postgre                           |
+### 技術棧（架構沿用 sachmis-api）
+| 類型 | 技術/版本 |
+|------|-----------|
+| 語言 | Java 25（虛擬執行緒啟用） |
+| Framework | Spring Boot 4.0.5（Spring Security 7、Jackson 3、Hibernate 7） |
+| Build | Maven Wrapper（`./mvnw`） |
+| 資料庫 | PostgreSQL（schema `vomatt`）、Redis（Jedis） |
+| 其他 | JJWT 0.12.6、Bucket4j、SpringDoc 3、Lombok + MapStruct、Thymeleaf（email） |
 
-### 專案結構（DDD 三層架構）
+### 常用指令
+```bash
+./mvnw clean package -DskipTests   # 建置
+./mvnw spring-boot:run             # 啟動（需 .env，見 .env.example）
+./mvnw test                        # 全部測試
+./mvnw test -Dtest=VoteServiceTest # 單一測試
 ```
-src/main/java/com/vomattapi/
-├── application/
-│   ├── controller/
-│   │   ├── AuthController.java
-│   │   ├── UserController.java
-│   │   ├── VoteController.java
-│   │   ├── VoteCommentController.java
-│   │   ├── TagController.java
-│   │   └── AdminTagController.java
-│   ├── dto/
-│   │   ├── auth/              # JwtResponse, SigninRequest, SignupRequest, PreSignupRequest/Response, TokenRefresh*
-│   │   ├── common/            # ApiResponse, BaseResponse, ErrorResponse, ErrorType, MessageResponse
-│   │   ├── tag/               # TagDto, CreateTagRequest, UpdateTagRequest
-│   │   ├── user/              # UserDto, UserProfileResponse, UpdateProfileRequest
-│   │   └── vote/              # VoteRequest/Response/ResultResponse, CommentDto, CreateVoteRequest, UserVoteStatusResponse
-│   ├── exception/
-│   │   ├── GlobalExceptionHandler.java
-│   │   ├── BusinessRuleViolationException.java
-│   │   ├── EntityNotFoundException.java
-│   │   ├── InvalidVerificationCodeException.java
-│   │   ├── ResourceConflictException.java
-│   │   ├── TokenRefreshException.java
-│   │   ├── UnauthorizedOperationException.java
-│   │   └── VotingNotAllowedException.java
-│   ├── mapper/
-│   │   ├── VoteMapper.java
-│   │   ├── CommentMapper.java
-│   │   └── UserMapper.java
-│   └── service/
-│       ├── auth/              # AuthService, AuthSessionService, PreSignupService, SignupService,
-│       │                      # RefreshTokenService, JwtBlacklistService, ValidationService, VerificationCodeService
-│       ├── shared/            # EmailService/Impl/NoOp, SmsService/NoOp, LocaleService
-│       ├── tag/               # TagService, TagServiceImpl
-│       ├── user/              # UserService, UserServiceImpl
-│       └── vote/              # VoteService/Impl, VoteCommentService/Impl, VoteEventListener
-├── domain/
-│   ├── common/
-│   │   └── BaseEntity.java    # UUID v7 主鍵
-│   ├── user/
-│   │   ├── User.java
-│   │   ├── Role.java
-│   │   ├── ERole.java
-│   │   ├── RefreshToken.java
-│   │   ├── UserActivity.java
-│   │   ├── UserPreference.java
-│   │   └── repository/        # UserRepository, RoleRepository, RefreshTokenRepository, UserActivityRepository
-│   └── vote/
-│       ├── Vote.java
-│       ├── VoteOption.java
-│       ├── VoteType.java      # STANDARD, IMAGE, RANKING, RATING
-│       ├── UserVote.java
-│       ├── VoteComment.java
-│       ├── CommentLike.java
-│       ├── Tag.java
-│       ├── event/             # VoteEvent, VoteCastEvent, VoteCreatedEvent, VoteDeactivatedEvent
-│       └── repository/        # VoteRepository, VoteOptionRepository, UserVoteRepository,
-│                              # VoteCommentRepository, CommentLikeRepository, TagRepository
-└── infrastructure/
-    ├── audit/                 # Auditable, AuditAspect (AOP), AuditLog, AuditLogRepository, AuditService
-    ├── config/                # ApplicationConfigurationProperties, SecurityConfigurationProperties,
-    │                          # VoteConfigurationProperties, AsyncConfig, RedisConfig,
-    │                          # OpenAPIConfig, ThymeleafConfig, InternationalizationConfig
-    ├── constants/             # CacheConstants
-    ├── generator/             # UUIDv7Generator
-    ├── redis/                 # RedisService/Impl, CacheUtil, CacheKeyUtil
-    └── security/
-        ├── WebSecurityConfig.java
-        ├── jwt/               # JwtUtils, AuthTokenFilter, AuthEntryPointJwt
-        └── services/          # UserDetailsImpl, UserDetailsServiceImpl
+
+### 專案結構（domain-driven，對齊 sachmis-api）
 ```
+src/main/java/com/vomatt/
+├── vomattapi/VomattApiApplication.java
+├── auth/        # OTP（email/手機）+ Google/LINE/Apple OAuth、refresh、logout
+├── users/       # 個人資料、公開頁、欄位可見度、搜尋、刪除帳號
+├── votes/       # 投票 CRUD、投票/取消、結果；VoteConfigurationProperties（app.vote.*）
+├── comments/    # 投票留言、按讚
+├── tags/        # 公開標籤查詢
+├── lookups/     # 字典表查詢（Redis 快取）
+├── admin/       # /api/admin/**：標籤、字典表管理
+│   （各 domain：Controller + Service + Mapper + dto/）
+├── entity/      # 所有 JPA entity；common/BaseEntity（id + created_at）、AuditableEntity（+ updated_at）
+├── repository/  # 所有 Spring Data repository / projection
+└── common/
+    ├── annotation/  # @CommonApiResponses、@PublicApiResponse
+    ├── audit/       # @Auditable AOP → audit_logs
+    ├── config/      # SecurityConfig、RedisConfig、OpenAPIConfig、I18nConfig、RateLimitConfig、WebClientConfig
+    ├── constant/    # UserRole（user / moderator / admin）
+    ├── email/ sms/  # EmailService（Impl / NoOp）、SmsService（NoOp）
+    ├── exception/   # ApiException + GlobalExceptionHandler
+    ├── filter/      # RateLimitFilter（Bucket4j + Redis）
+    ├── i18n/        # MessageKey、LocalizedMessageService（resources/i18n/messages*.properties）
+    ├── redis/       # RedisService、CacheNamespaces
+    ├── response/    # ApiResponse、PageResponse、SimpleResultResponse
+    ├── security/    # JwtUtil、JwtAuthFilter、RefreshTokenService、SecurityEndpoints、UserPrincipal
+    └── util/        # UUIDv7Generator、ClientIpResolver、TimeUtil
+```
+
+- DDL 唯一來源：`src/main/resources/db/schema.sql`（`ddl-auto: none`）；時間欄位一律 `TIMESTAMPTZ` ↔ `OffsetDateTime`
+- API 前綴 `/api`；回應統一 `ApiResponse<T>`；錯誤一律 `throw ApiException.xxx(MessageKey.X)`，訊息放 i18n
+- 認證：JWT access token + Redis refresh token（rotation + grace window + reuse 偵測）；`User.active=false` 即停權
+- 角色：`User.roles`（`text[]`）→ JWT roles → `ROLE_<UPPER>`；一般受保護端點不掛 `@PreAuthorize`，`/api/admin/**` controller 類別層級必掛 `@PreAuthorize("hasRole('ADMIN')")`
+- 公開路徑只能加在 `SecurityEndpoints.PUBLIC_*`
+- Controller 端點必須有 `@Operation` + `@CommonApiResponses`/`@PublicApiResponse`；DTO 欄位加 `@Schema`；不得回傳泛型 `Map`/`Object`（動態結構除外）
+- 測試：Controller 用 `standaloneSetup`、Service 用 `@ExtendWith(MockitoExtension.class)`
 
 ### 命名規範
 - **類別**：駝峰式 (PascalCase)
   - Controller：`UserController`
-  - Service：`UserService` / `UserServiceImpl`
+  - Service：`UserService`（單一實作不拆 interface / Impl）
   - Repository：`UserRepository`
   - Entity：`User`
 - **方法/變數**：駝峰式 (camelCase)
 - **常量**：大寫底線 (UPPER_SNAKE_CASE)
-- **模組**：`ibpaas-common-*` 系列
 
 ---
 
@@ -272,7 +244,6 @@ src/main/java/com/vomattapi/
   public class OrderService extends BaseService implements Auditable {}
   ```
 
-- **介面優於單例** - 啟用測試和靈活性
 - **顯式優於隱式** - 清晰的資料流和依賴
 - **盡可能測試驅動** - 永遠不要停用測試，要修復它們
 

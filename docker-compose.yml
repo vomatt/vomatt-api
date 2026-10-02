@@ -1,0 +1,18 @@
+# 本地開發用 Postgres + Redis（OrbStack / Docker）：docker compose up -d
+# 首次啟動自動執行 db/schema.sql；重建 schema：docker compose down -v
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+volumes:
+  pgdata:

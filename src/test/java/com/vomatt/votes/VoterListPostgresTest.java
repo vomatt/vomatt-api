@@ -19,7 +19,7 @@ import com.vomatt.entity.VoteOption;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.votes.dto.VoterResponse;
 
-@Import({ VoteService.class, VoteMapper.class, VoteConfigurationProperties.class })
+@Import(VoteServiceSlice.class)
 @DisplayName("Voter list (Postgres)")
 class VoterListPostgresTest extends PostgresRepositoryTest {
 

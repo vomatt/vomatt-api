@@ -6,6 +6,8 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -15,16 +17,18 @@ import org.springframework.context.annotation.Import;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.entity.Tag;
 import com.vomatt.entity.User;
+import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
+import com.vomatt.entity.VoteComment;
+import com.vomatt.entity.VoteOption;
 import com.vomatt.repository.PostgresRepositoryTest;
-import com.vomatt.repository.VoteListRepository;
 import com.vomatt.votes.dto.VoteResponse;
 
 /**
  * Feed / Explore keyset lists. Each test runs in a rolled-back transaction; tests filter on a unique tag
  * so rows committed by other test classes never interfere.
  */
-@Import({ VoteService.class, VoteMapper.class, VoteConfigurationProperties.class, VoteListRepository.class })
+@Import(VoteServiceSlice.class)
 @DisplayName("Poll lists (Postgres)")
 class VoteListPostgresTest extends PostgresRepositoryTest {
 
@@ -54,7 +58,7 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
         List<String> titles = new ArrayList<>();
         String cursor = null;
         do {
-            CursorResponse<VoteResponse> page = voteService.listVotes(order, tag.getSlug(), cursor, limit);
+            CursorResponse<VoteResponse> page = voteService.listVotes(order, tag.getSlug(), cursor, limit, null);
             page.items().forEach(v -> titles.add(v.getTitle()));
             cursor = page.nextCursor();
         } while (cursor != null);
@@ -104,5 +108,58 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
 
         assertThat(titles(VoteListOrder.NEWEST, 2)).doesNotHaveDuplicates().containsExactlyInAnyOrderElementsOf(expected);
         assertThat(titles(VoteListOrder.CLOSING, 3)).doesNotHaveDuplicates().containsExactlyInAnyOrderElementsOf(expected);
+    }
+
+    @Test
+    @DisplayName("應該在列表項目附上 myOptionId、participantCount 與 commentCount（含回覆、不含已刪除）")
+    void shouldAttachSelectionTurnoutAndCommentCount() {
+        Vote voted = poll("voted", now.minusHours(1), now.plusDays(1));
+        poll("untouched", now.minusHours(2), now.plusDays(1));
+        User voter = persistUser("list-voter-" + System.nanoTime());
+        VoteOption chosen = voted.getOptions().iterator().next();
+        em.persist(new UserVote(voter, voted, chosen, null));
+        em.flush();
+        em.createNativeQuery("UPDATE vomatt.vote_options SET vote_count = 1 WHERE id = :id")
+                .setParameter("id", chosen.getId()).executeUpdate();
+        em.persist(new VoteComment(voted, voter, "hello"));
+        VoteComment deleted = new VoteComment(voted, voter, "gone");
+        deleted.softDelete();
+        em.persist(deleted);
+        em.flush();
+        em.clear();
+
+        List<VoteResponse> items = voteService.listVotes(VoteListOrder.NEWEST, tag.getSlug(), null, null,
+                voter.getId().toString()).items();
+
+        VoteResponse first = items.getFirst();
+        assertThat(first.getTitle()).isEqualTo("voted");
+        assertThat(first.getMyOptionId()).isEqualTo(chosen.getId().toString());
+        assertThat(first.getParticipantCount()).isEqualTo(1);
+        assertThat(first.getCommentCount()).isEqualTo(1);
+        assertThat(items.get(1).getMyOptionId()).isNull();
+        assertThat(items.get(1).getCommentCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("應該讓每頁查詢數固定，不隨筆數成長")
+    void shouldUseConstantQueriesPerPage() {
+        User voter = persistUser("list-q-" + System.nanoTime());
+        for (int i = 0; i < 12; i++) {
+            poll("q" + i, now.minusMinutes(i + 1), now.plusDays(1));
+        }
+        em.flush();
+        em.clear();
+        Statistics stats = em.getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
+        stats.setStatisticsEnabled(true);
+
+        stats.clear();
+        voteService.listVotes(VoteListOrder.NEWEST, tag.getSlug(), null, 2, voter.getId().toString());
+        long smallPage = stats.getPrepareStatementCount();
+        em.clear();
+        stats.clear();
+        voteService.listVotes(VoteListOrder.NEWEST, tag.getSlug(), null, 12, voter.getId().toString());
+        long largePage = stats.getPrepareStatementCount();
+
+        assertThat(largePage).isEqualTo(smallPage);
     }
 }

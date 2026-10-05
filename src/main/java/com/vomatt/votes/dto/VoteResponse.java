@@ -32,6 +32,9 @@ public class VoteResponse {
     private List<VoteOptionResponse> options;
     private List<TagDto> tags;
 
+    @Schema(description = "留言數（含回覆，不含已刪除）")
+    private long commentCount;
+
     @Schema(description = "投票者可見度（Poll 結束後誰可看到每位 Participant 的選擇）")
     private VoterVisibility voterVisibility;
 

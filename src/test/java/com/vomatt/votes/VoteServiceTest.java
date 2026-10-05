@@ -49,6 +49,7 @@ class VoteServiceTest {
     @Mock UserRepository userRepository;
     @Mock TagRepository tagRepository;
     @Mock VoteConfigurationProperties voteConfig;
+    @Mock com.vomatt.repository.VoteCommentRepository voteCommentRepository;
     @Spy VoteMapper voteMapper = new VoteMapper();
 
     @InjectMocks
@@ -365,8 +366,10 @@ class VoteServiceTest {
             vote.addOption(option);
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             stubConvertToVoteResponse(vote);
-            when(userVoteRepository.findByUserIdAndVoteId(userId, voteId))
-                    .thenReturn(List.of(new com.vomatt.entity.UserVote(user, vote, option, null)));
+            com.vomatt.repository.BallotSelection selection = mock(com.vomatt.repository.BallotSelection.class);
+            when(selection.getVoteId()).thenReturn(voteId);
+            when(selection.getOptionId()).thenReturn(optionId);
+            when(userVoteRepository.findSelections(userId, List.of(voteId))).thenReturn(List.of(selection));
 
             VoteResponse result = voteService.getVote(voteId.toString(), userId.toString());
 
@@ -416,7 +419,7 @@ class VoteServiceTest {
             stubConvertToVoteResponse(vote);
 
             assertThat(voteService.getVote(voteId.toString(), null).getMyOptionId()).isNull();
-            verify(userVoteRepository, never()).findByUserIdAndVoteId(any(), any());
+            verify(userVoteRepository, never()).findSelections(any(), any());
         }
     }
 

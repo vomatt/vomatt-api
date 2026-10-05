@@ -6,6 +6,7 @@ import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -33,6 +34,9 @@ import com.vomatt.entity.VoteStatus;
 import com.vomatt.repository.TagRepository;
 import com.vomatt.repository.UserVoteRepository;
 import com.vomatt.repository.VoteOptionRepository;
+import com.vomatt.repository.BallotSelection;
+import com.vomatt.repository.VoteCommentRepository;
+import com.vomatt.repository.VoteIdCount;
 import com.vomatt.repository.VoteListRepository;
 import com.vomatt.repository.VoteRepository;
 
@@ -54,6 +58,7 @@ public class VoteService {
     private final VoteConfigurationProperties voteConfig;
     private final VoteMapper voteMapper;
     private final VoteListRepository voteListRepository;
+    private final VoteCommentRepository voteCommentRepository;
 
     public VoteResponse createVote(CreateVoteRequest request, String creatorId) {
         validateCreateVoteRequest(request);
@@ -141,13 +146,14 @@ public class VoteService {
 
     /** Feed / Explore page: Open (newest or closing soonest) or Ended Polls, optionally under one tag. */
     @Transactional(readOnly = true)
-    public CursorResponse<VoteResponse> listVotes(VoteListOrder order, String tag, String cursor, Integer limit) {
+    public CursorResponse<VoteResponse> listVotes(VoteListOrder order, String tag, String cursor, Integer limit,
+                                                  String userId) {
         int size = CursorResponse.limit(limit);
         String tagSlug = tag == null || tag.isBlank() ? null : tag;
         List<Vote> rows = voteListRepository.findPage(order, tagSlug, Cursor.decode(cursor), OffsetDateTime.now(), size + 1);
         return CursorResponse.of(rows, size,
             v -> Cursor.of(order == VoteListOrder.NEWEST ? v.getStartTime() : v.getEndTime(), v.getId()),
-            page -> page.stream().map(this::toListItem).toList());
+            page -> toResponses(page, userId));
     }
 
     @Transactional(readOnly = true)
@@ -292,30 +298,38 @@ public class VoteService {
     }
 
     private VoteResponse convertToVoteResponse(Vote vote, String userId) {
-        UUID voteId = vote.getId();
         // Use JOIN FETCH to avoid additional queries for options
-        Vote voteWithOptions = voteRepository.findByIdWithOptions(voteId).orElse(vote);
-        VoteResponse response = voteMapper.toResponse(voteWithOptions, sortedOptions(voteWithOptions));
-        response.setMyOptionId(userId == null ? null : findMyOptionId(voteId, UUID.fromString(userId)));
-        return response;
+        Vote voteWithOptions = voteRepository.findByIdWithOptions(vote.getId()).orElse(vote);
+        return toResponses(List.of(voteWithOptions), userId).getFirst();
     }
 
-    // Options and tags come in via batch fetching (default_batch_fetch_size), not one query per Poll
-    private VoteResponse toListItem(Vote vote) {
-        return voteMapper.toResponse(vote, sortedOptions(vote));
+    /**
+     * Assembles responses for a page of Polls with a fixed number of queries: options, tags and creators
+     * come in via batch fetching (default_batch_fetch_size); Selections and comment counts in one query each.
+     */
+    private List<VoteResponse> toResponses(List<Vote> votes, String userId) {
+        if (votes.isEmpty()) {
+            return List.of();
+        }
+        List<UUID> ids = votes.stream().map(Vote::getId).toList();
+        Map<UUID, Long> commentCounts = voteCommentRepository.countVisibleByVoteIds(ids).stream()
+            .collect(Collectors.toMap(VoteIdCount::getVoteId, VoteIdCount::getCount));
+        Map<UUID, UUID> selections = userId == null ? Map.of()
+            : userVoteRepository.findSelections(UUID.fromString(userId), ids).stream()
+                .collect(Collectors.toMap(BallotSelection::getVoteId, BallotSelection::getOptionId, (a, b) -> a));
+        return votes.stream().map(vote -> {
+            VoteResponse response = voteMapper.toResponse(vote, sortedOptions(vote));
+            UUID myOptionId = selections.get(vote.getId());
+            response.setMyOptionId(myOptionId == null ? null : myOptionId.toString());
+            response.setCommentCount(commentCounts.getOrDefault(vote.getId(), 0L));
+            return response;
+        }).toList();
     }
 
     private static List<VoteOption> sortedOptions(Vote vote) {
         return vote.getOptions().stream()
             .sorted(Comparator.comparingInt(VoteOption::getDisplayOrder))
             .toList();
-    }
-
-    private String findMyOptionId(UUID voteId, UUID userId) {
-        return userVoteRepository.findByUserIdAndVoteId(userId, voteId).stream()
-            .findFirst()
-            .map(ballot -> ballot.getOption().getId().toString())
-            .orElse(null);
     }
 
     private Vote findVote(UUID voteId) {

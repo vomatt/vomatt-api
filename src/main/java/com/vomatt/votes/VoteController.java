@@ -96,9 +96,10 @@ public class VoteController {
             @Parameter(description = "newest | closing（僅 status=open）") @RequestParam(required = false) String sort,
             @Parameter(description = "標籤 slug") @RequestParam(required = false) String tag,
             @Parameter(description = "上一頁回傳的 nextCursor") @RequestParam(required = false) String cursor,
-            @Parameter(description = "每頁筆數（1–50，預設 20）") @RequestParam(required = false) Integer limit) {
-        return ResponseEntity.ok(ApiResponse.ok(
-                voteService.listVotes(VoteListOrder.of(status, sort), tag, cursor, limit)));
+            @Parameter(description = "每頁筆數（1–50，預設 20）") @RequestParam(required = false) Integer limit,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(voteService.listVotes(VoteListOrder.of(status, sort), tag, cursor,
+                limit, principal != null ? principal.userId() : null)));
     }
 
     @GetMapping("/my")

@@ -1,6 +1,7 @@
 package com.vomatt.repository;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -35,6 +36,11 @@ public interface UserVoteRepository extends JpaRepository<UserVote, UUID> {
     long countByOptionId(@Param("optionId") UUID optionId);
 
     void deleteByUserIdAndVoteId(UUID userId, UUID voteId);
+
+    /** The user's Selection in each of a page of Polls. */
+    @Query("SELECT uv.vote.id AS voteId, uv.option.id AS optionId FROM UserVote uv "
+            + "WHERE uv.user.id = :userId AND uv.vote.id IN :voteIds")
+    List<BallotSelection> findSelections(@Param("userId") UUID userId, @Param("voteIds") Collection<UUID> voteIds);
 
     /** Keyset page of a Poll's Ballots, oldest first; pass null cursor values for the first page. */
     @Query("""

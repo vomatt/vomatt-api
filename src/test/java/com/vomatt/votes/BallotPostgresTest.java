@@ -33,7 +33,7 @@ import com.vomatt.votes.dto.VoteResponse;
 /**
  * Ballot writes against real Postgres with real commits: stored option counts must always equal the Ballot rows.
  */
-@Import({ VoteService.class, VoteMapper.class, VoteConfigurationProperties.class })
+@Import(VoteServiceSlice.class)
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("Ballot counting (Postgres)")
 class BallotPostgresTest extends PostgresRepositoryTest {

@@ -41,15 +41,35 @@ public interface VoteCommentRepository extends JpaRepository<VoteComment, UUID> 
             + "WHERE c.vote.id IN :voteIds AND c.isDeleted = false GROUP BY c.vote.id")
     List<IdCount> countVisibleByVoteIds(@Param("voteIds") Collection<UUID> voteIds);
 
-    /** Keyset page of a Poll's visible comments, newest first; null cursor values for the first page. */
+    /**
+     * Keyset page of a Poll's top-level Comments, newest first; a deleted Comment stays as a placeholder
+     * while it still has visible Replies. Null cursor values for the first page.
+     */
     @Query("""
             SELECT c FROM VoteComment c JOIN FETCH c.user
-            WHERE c.vote.id = :voteId AND c.isDeleted = false
+            WHERE c.vote.id = :voteId AND c.parent IS NULL
+              AND (c.isDeleted = false
+                   OR EXISTS (SELECT 1 FROM VoteComment r WHERE r.parent = c AND r.isDeleted = false))
               AND (CAST(:afterTime AS OffsetDateTime) IS NULL OR c.createdAt < :afterTime
                    OR (c.createdAt = :afterTime AND c.id < :afterId))
             ORDER BY c.createdAt DESC, c.id DESC""")
     List<VoteComment> findPageByVoteId(@Param("voteId") UUID voteId, @Param("afterTime") OffsetDateTime afterTime,
                                        @Param("afterId") UUID afterId, Limit limit);
+
+    /** Keyset page of a Comment's visible Replies, oldest first. */
+    @Query("""
+            SELECT c FROM VoteComment c JOIN FETCH c.user
+            WHERE c.parent.id = :parentId AND c.isDeleted = false
+              AND (CAST(:afterTime AS OffsetDateTime) IS NULL OR c.createdAt > :afterTime
+                   OR (c.createdAt = :afterTime AND c.id > :afterId))
+            ORDER BY c.createdAt, c.id""")
+    List<VoteComment> findReplyPage(@Param("parentId") UUID parentId, @Param("afterTime") OffsetDateTime afterTime,
+                                    @Param("afterId") UUID afterId, Limit limit);
+
+    /** Visible Reply counts for a page of top-level Comments. */
+    @Query("SELECT c.parent.id AS id, COUNT(c) AS count FROM VoteComment c "
+            + "WHERE c.parent.id IN :parentIds AND c.isDeleted = false GROUP BY c.parent.id")
+    List<IdCount> countRepliesByParentIds(@Param("parentIds") Collection<UUID> parentIds);
 
     /**
      * Find all comments by user

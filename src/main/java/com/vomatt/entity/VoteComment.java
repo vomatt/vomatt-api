@@ -22,7 +22,7 @@ import lombok.ToString;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@ToString(exclude = {"user", "vote"})
+@ToString(exclude = {"user", "vote", "parent"})
 public class VoteComment extends AuditableEntity {
 
     @NotNull
@@ -38,6 +38,11 @@ public class VoteComment extends AuditableEntity {
     @NotBlank
     @Column(name = "content", columnDefinition = "TEXT")
     private String content;
+
+    /** Root Comment this Reply belongs to; null for a top-level Comment. Replies are one level deep. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_id")
+    private VoteComment parent;
 
     @Column(name = "is_deleted")
     private boolean isDeleted = false;

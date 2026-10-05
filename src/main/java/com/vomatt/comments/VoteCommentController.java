@@ -59,7 +59,9 @@ public class VoteCommentController {
 
     @GetMapping
     @CommonApiResponses
-    @Operation(summary = "Get comments for a vote", description = "Comments of a Poll, newest first (cursor-paged)")
+    @Operation(summary = "Get comments for a vote",
+            description = "Top-level comments of a Poll, newest first (cursor-paged), each with replyCount. "
+                    + "A deleted comment that still has replies is kept as a placeholder (isDeleted, no text or author)")
     public ResponseEntity<ApiResponse<CursorResponse<CommentDto>>> getComments(
             @Parameter(description = "Vote ID", required = true) @PathVariable String voteId,
             @Parameter(description = "上一頁回傳的 nextCursor") @RequestParam(required = false) String cursor,
@@ -67,6 +69,19 @@ public class VoteCommentController {
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(
                 commentService.getCommentsByVote(voteId, cursor, limit, principal.userId())));
+    }
+
+    @GetMapping("/{commentId}/replies")
+    @CommonApiResponses
+    @Operation(summary = "Get replies of a comment", description = "Replies under a top-level comment, oldest first (cursor-paged)")
+    public ResponseEntity<ApiResponse<CursorResponse<CommentDto>>> getReplies(
+            @Parameter(description = "Vote ID", required = true) @PathVariable String voteId,
+            @Parameter(description = "Top-level comment ID", required = true) @PathVariable UUID commentId,
+            @Parameter(description = "上一頁回傳的 nextCursor") @RequestParam(required = false) String cursor,
+            @Parameter(description = "每頁筆數（1–50，預設 20）") @RequestParam(required = false) Integer limit,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                commentService.getReplies(voteId, commentId, cursor, limit, principal.userId())));
     }
 
     @PutMapping("/{commentId}")

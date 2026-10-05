@@ -126,6 +126,7 @@ CREATE TABLE IF NOT EXISTS vomatt.vote_comments (
     vote_id    UUID        NOT NULL REFERENCES vomatt.votes (id) ON DELETE CASCADE,
     user_id    UUID        NOT NULL REFERENCES vomatt.users (id) ON DELETE CASCADE,
     content    TEXT        NOT NULL,
+    parent_id  UUID        REFERENCES vomatt.vote_comments (id) ON DELETE CASCADE,
     is_deleted BOOLEAN     NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -218,6 +219,7 @@ CREATE INDEX IF NOT EXISTS idx_user_rankings_vote_id       ON vomatt.user_rankin
 CREATE INDEX IF NOT EXISTS idx_user_ratings_vote_id        ON vomatt.user_ratings (vote_id);
 CREATE INDEX IF NOT EXISTS idx_vote_comments_vote_created  ON vomatt.vote_comments (vote_id, created_at) WHERE is_deleted = FALSE;
 CREATE INDEX IF NOT EXISTS idx_vote_comments_user_id       ON vomatt.vote_comments (user_id);
+CREATE INDEX IF NOT EXISTS idx_vote_comments_parent        ON vomatt.vote_comments (parent_id, created_at, id);
 CREATE INDEX IF NOT EXISTS idx_comment_likes_user_id       ON vomatt.comment_likes (user_id);
 CREATE INDEX IF NOT EXISTS idx_tags_usage_count            ON vomatt.tags (usage_count DESC);
 CREATE INDEX IF NOT EXISTS idx_vote_tags_tag_id            ON vomatt.vote_tags (tag_id);
@@ -241,3 +243,6 @@ ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS voter_visibility VARCHAR(20) N
 ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS search_bigrams TEXT[] GENERATED ALWAYS AS
     (vomatt.text_bigrams(COALESCE(title, '') || ' ' || COALESCE(description, ''))) STORED;
 CREATE INDEX IF NOT EXISTS idx_votes_search_bigrams ON vomatt.votes USING GIN (search_bigrams);
+-- 留言回覆（一層）：parent_id 只指向頂層留言
+ALTER TABLE vomatt.vote_comments ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES vomatt.vote_comments (id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_vote_comments_parent ON vomatt.vote_comments (parent_id, created_at, id);

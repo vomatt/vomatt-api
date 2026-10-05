@@ -49,7 +49,11 @@ public class VoteCommentService {
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
 
         VoteComment comment = new VoteComment(vote, user, request.getText());
-        comment = commentRepository.save(comment);
+        if (request.getParentId() != null) {
+            comment.setParent(findReplyRoot(request.getParentId(), vote.getId()));
+        }
+        // flush so created_at / updated_at exist before mapping (UUIDv7 ids defer the insert)
+        comment = commentRepository.saveAndFlush(comment);
 
         log.info("Comment created: {} on vote: {} by user: {}", comment.getId(), voteId, userId);
 
@@ -70,7 +74,42 @@ public class VoteCommentService {
         List<VoteComment> rows = commentRepository.findPageByVoteId(voteUuid,
             after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
         return CursorResponse.of(rows, size, c -> Cursor.of(c.getCreatedAt(), c.getId()),
+            page -> withReplyCounts(page, toDtos(page, currentUserId)));
+    }
+
+    /** Replies under one top-level Comment, oldest first, cursor-paged. */
+    @Transactional(readOnly = true)
+    public CursorResponse<CommentDto> getReplies(String voteId, UUID commentId, String cursor, Integer limit,
+                                                 String currentUserId) {
+        VoteComment root = commentRepository.findById(commentId)
+            .filter(c -> c.getParent() == null && c.getVote().getId().toString().equals(voteId))
+            .orElseThrow(() -> ApiException.notFound(MessageKey.COMMENT_NOT_FOUND));
+
+        int size = CursorResponse.limit(limit);
+        Cursor after = Cursor.decode(cursor);
+        List<VoteComment> rows = commentRepository.findReplyPage(root.getId(),
+            after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
+        return CursorResponse.of(rows, size, c -> Cursor.of(c.getCreatedAt(), c.getId()),
             page -> toDtos(page, currentUserId));
+    }
+
+    // Replies are one level deep: replying to a Reply attaches to the same top-level Comment
+    private VoteComment findReplyRoot(UUID targetId, UUID voteId) {
+        VoteComment target = commentRepository.findByIdAndNotDeleted(targetId)
+            .filter(c -> c.getVote().getId().equals(voteId))
+            .orElseThrow(() -> ApiException.badRequest(MessageKey.COMMENT_PARENT_INVALID));
+        return target.getParent() != null ? target.getParent() : target;
+    }
+
+    private List<CommentDto> withReplyCounts(List<VoteComment> roots, List<CommentDto> dtos) {
+        if (roots.isEmpty()) {
+            return dtos;
+        }
+        Map<UUID, Long> replyCounts = commentRepository.countRepliesByParentIds(
+                roots.stream().map(VoteComment::getId).toList()).stream()
+            .collect(Collectors.toMap(IdCount::getId, IdCount::getCount));
+        dtos.forEach(dto -> dto.setReplyCount(replyCounts.getOrDefault(UUID.fromString(dto.getId()), 0L)));
+        return dtos;
     }
 
     public CommentDto updateComment(UUID commentId, String userId, UpdateCommentRequest request) {
@@ -82,7 +121,7 @@ public class VoteCommentService {
         }
 
         comment.updateContent(request.getText());
-        comment = commentRepository.save(comment);
+        comment = commentRepository.saveAndFlush(comment);
 
         log.info("Comment {} updated by user {}", commentId, userId);
 

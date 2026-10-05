@@ -89,7 +89,6 @@ public class VoteService {
         return convertToVoteResponse(vote);
     }
 
-    /** @param userId viewer, or null when signed out */
     /**
      * Edits a Scheduled Poll (owner only); takes the same fields and validation as create.
      * No Ballots can exist before the start time, so options are replaced wholesale.
@@ -138,6 +137,7 @@ public class VoteService {
         return convertToVoteResponse(vote, userId);
     }
 
+    /** @param userId viewer, or null when signed out */
     @Transactional(readOnly = true)
     public VoteResponse getVote(String voteId, String userId) {
         Vote vote = findVote(UUID.fromString(voteId));
@@ -335,10 +335,7 @@ public class VoteService {
         return toResponses(List.of(voteWithOptions), userId).getFirst();
     }
 
-    /**
-     * Assembles responses for a page of Polls with a fixed number of queries: options, tags and creators
-     * come in via batch fetching (default_batch_fetch_size); Selections and comment counts in one query each.
-     */
+    // Fixed queries per page: options / tags / creators via batch fetching, Selections and comment counts one query each
     private List<VoteResponse> toResponses(List<Vote> votes, String userId) {
         if (votes.isEmpty()) {
             return List.of();
@@ -424,7 +421,8 @@ public class VoteService {
                 throw ApiException.badRequest(MessageKey.VOTE_END_TIME_PAST);
             }
 
-            if (request.getStartTime() != null && request.getEndTime().isBefore(request.getStartTime())) {
+            // equal start and end would never open (and would read as a cancelled Scheduled Poll)
+            if (request.getStartTime() != null && !request.getEndTime().isAfter(request.getStartTime())) {
                 throw ApiException.badRequest(MessageKey.VOTE_END_BEFORE_START);
             }
 

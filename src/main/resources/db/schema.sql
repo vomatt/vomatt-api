@@ -220,7 +220,6 @@ CREATE INDEX IF NOT EXISTS idx_votes_active_time           ON vomatt.votes (is_a
 CREATE INDEX IF NOT EXISTS idx_votes_vote_type             ON vomatt.votes (vote_type);
 CREATE INDEX IF NOT EXISTS idx_votes_start_id              ON vomatt.votes (start_time DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_votes_end_id                ON vomatt.votes (end_time, id);
-CREATE INDEX IF NOT EXISTS idx_votes_search_bigrams        ON vomatt.votes USING GIN (search_bigrams);
 CREATE INDEX IF NOT EXISTS idx_vote_options_vote_order     ON vomatt.vote_options (vote_id, display_order);
 CREATE INDEX IF NOT EXISTS idx_user_votes_vote_option      ON vomatt.user_votes (vote_id, option_id);
 CREATE INDEX IF NOT EXISTS idx_user_votes_user_vote        ON vomatt.user_votes (user_id, vote_id);
@@ -229,7 +228,6 @@ CREATE INDEX IF NOT EXISTS idx_user_rankings_vote_id       ON vomatt.user_rankin
 CREATE INDEX IF NOT EXISTS idx_user_ratings_vote_id        ON vomatt.user_ratings (vote_id);
 CREATE INDEX IF NOT EXISTS idx_vote_comments_vote_created  ON vomatt.vote_comments (vote_id, created_at) WHERE is_deleted = FALSE;
 CREATE INDEX IF NOT EXISTS idx_vote_comments_user_id       ON vomatt.vote_comments (user_id);
-CREATE INDEX IF NOT EXISTS idx_vote_comments_parent        ON vomatt.vote_comments (parent_id, created_at, id);
 CREATE INDEX IF NOT EXISTS idx_comment_likes_user_id       ON vomatt.comment_likes (user_id);
 CREATE INDEX IF NOT EXISTS idx_tags_usage_count            ON vomatt.tags (usage_count DESC);
 CREATE INDEX IF NOT EXISTS idx_vote_tags_tag_id            ON vomatt.vote_tags (tag_id);
@@ -249,7 +247,7 @@ ALTER TABLE vomatt.vote_options ADD COLUMN IF NOT EXISTS vote_count INTEGER NOT 
 ALTER TABLE vomatt.votes ALTER COLUMN end_time SET NOT NULL;
 -- 投票者可見度：NOBODY / OWNER（預設）/ SIGNED_IN；Poll 開始後不可改
 ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS voter_visibility VARCHAR(20) NOT NULL DEFAULT 'OWNER';
--- 搜尋用 bigram 生成欄位（不映射進 entity）；索引見上方 idx_votes_search_bigrams
+-- 搜尋用 bigram 生成欄位（不映射進 entity）與 GIN index；index 必須在補欄位之後建立
 ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS search_bigrams TEXT[] GENERATED ALWAYS AS
     (vomatt.text_bigrams(COALESCE(title, '') || ' ' || COALESCE(description, ''))) STORED;
 CREATE INDEX IF NOT EXISTS idx_votes_search_bigrams ON vomatt.votes USING GIN (search_bigrams);

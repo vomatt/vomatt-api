@@ -181,6 +181,22 @@ class VoteServiceTest {
         }
 
         @Test
+        @DisplayName("應該在結束時間等於開始時間時拋出 400 VOTE_END_BEFORE_START")
+        void shouldRejectCreateWhenEndEqualsStart() {
+            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
+            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
+            OffsetDateTime start = OffsetDateTime.now().plusDays(1);
+            CreateVoteRequest request = new CreateVoteRequest();
+            request.setTitle("Test");
+            request.setOptions(List.of(buildOption("A"), buildOption("B")));
+            request.setStartTime(start);
+            request.setEndTime(start);
+
+            assertThatThrownBy(() -> voteService.createVote(request, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_END_BEFORE_START));
+        }
+
+        @Test
         @DisplayName("應該在找不到建立者時拋出 404 USER_NOT_FOUND")
         void shouldThrowWhenCreatorNotFound() {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
@@ -531,6 +547,8 @@ class VoteServiceTest {
             assertThat(result.getTitle()).isEqualTo("Edited");
             assertThat(result.getOptions()).extracting(VoteResponse.VoteOptionResponse::getText)
                     .containsExactlyInAnyOrder("X", "Y", "Z");
+            // still Scheduled: counts are Sealed on the edit response too
+            assertThat(result.getOptions()).extracting(VoteResponse.VoteOptionResponse::getVotes).containsOnlyNulls();
         }
 
         @Test

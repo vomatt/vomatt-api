@@ -3,6 +3,7 @@ package com.vomatt.votes.dto;
 import java.time.OffsetDateTime;
 import java.util.List;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 @Data
@@ -31,7 +32,7 @@ public class VoteResultResponse {
         private String description;
         private Integer displayOrder;
         private long voteCount;
-        /** Support as a percentage of Participants (0–100). */
+        @Schema(description = "Support：選此選項的 Participant 比例（0–100）")
         private double percentage;
     }
 

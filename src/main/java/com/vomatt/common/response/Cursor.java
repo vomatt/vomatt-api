@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 import java.util.Base64;
 import java.util.UUID;
 
@@ -28,12 +29,21 @@ public record Cursor(String key, UUID id) {
         return new Cursor(value, id);
     }
 
+    // A client may send a cursor from another list; a key of the wrong kind is a bad cursor, not a 500
     public OffsetDateTime timeKey() {
-        return Instant.parse(key).atOffset(ZoneOffset.UTC);
+        try {
+            return Instant.parse(key).atOffset(ZoneOffset.UTC);
+        } catch (DateTimeParseException e) {
+            throw ApiException.badRequest(MessageKey.COMMON_CURSOR_INVALID);
+        }
     }
 
     public long longKey() {
-        return Long.parseLong(key);
+        try {
+            return Long.parseLong(key);
+        } catch (NumberFormatException e) {
+            throw ApiException.badRequest(MessageKey.COMMON_CURSOR_INVALID);
+        }
     }
 
     public String encode() {

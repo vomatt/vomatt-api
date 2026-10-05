@@ -154,7 +154,7 @@ public class VoteController {
     }
 
     @GetMapping("/{voteId}/results")
-    @CommonApiResponses
+    @PublicApiResponse
     @Operation(summary = "Get Poll results", description = "Public once the Poll has Ended; 403 vote.results.sealed while Scheduled or Open")
     public ResponseEntity<ApiResponse<VoteResultResponse>> getVoteResults(
             @Parameter(description = "Vote ID", required = true)

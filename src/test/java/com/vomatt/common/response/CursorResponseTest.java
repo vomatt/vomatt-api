@@ -71,6 +71,20 @@ class CursorResponseTest {
     }
 
     @Test
+    @DisplayName("應該在 cursor 排序鍵種類不符（例如拿到別的列表的 cursor）時拋出 400 COMMON_CURSOR_INVALID")
+    void shouldRejectCursorWhenKeyKindMismatch() {
+        Cursor fromTagList = Cursor.decode(Cursor.of(42L, UUID.randomUUID()).encode());
+        Cursor fromUserList = Cursor.decode(Cursor.of("alice", UUID.randomUUID()).encode());
+
+        assertThatThrownBy(fromTagList::timeKey)
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMON_CURSOR_INVALID));
+        assertThatThrownBy(fromUserList::longKey)
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMON_CURSOR_INVALID));
+    }
+
+    @Test
     @DisplayName("應該把 limit 限制在 1 到 50 之間，未指定時為 20")
     void shouldClampLimit() {
         assertThat(CursorResponse.limit(null)).isEqualTo(20);

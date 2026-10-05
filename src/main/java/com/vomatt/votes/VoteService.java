@@ -144,13 +144,22 @@ public class VoteService {
         return convertToVoteResponse(vote, userId);
     }
 
-    /** Feed / Explore page: Open (newest or closing soonest) or Ended Polls, optionally under one tag. */
+    /**
+     * Feed / Explore / Search page: Open (newest or closing soonest) or Ended Polls, optionally under one tag
+     * and matching a free-text query on title and description.
+     */
     @Transactional(readOnly = true)
-    public CursorResponse<VoteResponse> listVotes(VoteListOrder order, String tag, String cursor, Integer limit,
-                                                  String userId) {
+    public CursorResponse<VoteResponse> listVotes(VoteListOrder order, String tag, String q, String cursor,
+                                                  Integer limit, String userId) {
         int size = CursorResponse.limit(limit);
         String tagSlug = tag == null || tag.isBlank() ? null : tag;
-        List<Vote> rows = voteListRepository.findPage(order, tagSlug, Cursor.decode(cursor), OffsetDateTime.now(), size + 1);
+        String query = q == null || q.isBlank() ? null : q.strip();
+        // one-character queries cannot use the bigram index (ADR 0001)
+        if (query != null && query.codePointCount(0, query.length()) < 2) {
+            throw ApiException.badRequest(MessageKey.VOTE_SEARCH_QUERY_TOO_SHORT);
+        }
+        List<Vote> rows = voteListRepository.findPage(order, tagSlug, query, Cursor.decode(cursor),
+            OffsetDateTime.now(), size + 1);
         return CursorResponse.of(rows, size,
             v -> Cursor.of(order == VoteListOrder.NEWEST ? v.getStartTime() : v.getEndTime(), v.getId()),
             page -> toResponses(page, userId));

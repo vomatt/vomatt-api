@@ -88,17 +88,18 @@ public class VoteController {
 
     @GetMapping
     @PublicApiResponse
-    @Operation(summary = "List Polls (Feed / Explore)",
+    @Operation(summary = "List Polls (Feed / Explore / Search)",
             description = "status=open (default) with sort=newest (default) | closing; status=ended is ordered by end time and rejects sort. "
-                    + "Optional tag slug. Cursor-paged; Scheduled Polls never appear")
+                    + "Optional tag slug and q (title + description, at least 2 characters). Cursor-paged; Scheduled Polls never appear")
     public ResponseEntity<ApiResponse<CursorResponse<VoteResponse>>> listVotes(
             @Parameter(description = "open | ended") @RequestParam(required = false) String status,
             @Parameter(description = "newest | closing（僅 status=open）") @RequestParam(required = false) String sort,
             @Parameter(description = "標籤 slug") @RequestParam(required = false) String tag,
+            @Parameter(description = "搜尋題目與描述（至少 2 字）") @RequestParam(required = false) String q,
             @Parameter(description = "上一頁回傳的 nextCursor") @RequestParam(required = false) String cursor,
             @Parameter(description = "每頁筆數（1–50，預設 20）") @RequestParam(required = false) Integer limit,
             @AuthenticationPrincipal UserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.ok(voteService.listVotes(VoteListOrder.of(status, sort), tag, cursor,
+        return ResponseEntity.ok(ApiResponse.ok(voteService.listVotes(VoteListOrder.of(status, sort), tag, q, cursor,
                 limit, principal != null ? principal.userId() : null)));
     }
 

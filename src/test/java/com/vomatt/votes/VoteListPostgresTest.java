@@ -1,6 +1,7 @@
 package com.vomatt.votes;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -14,6 +15,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 
+import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.entity.Tag;
 import com.vomatt.entity.User;
@@ -58,7 +61,7 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
         List<String> titles = new ArrayList<>();
         String cursor = null;
         do {
-            CursorResponse<VoteResponse> page = voteService.listVotes(order, tag.getSlug(), cursor, limit, null);
+            CursorResponse<VoteResponse> page = voteService.listVotes(order, tag.getSlug(), null, cursor, limit, null);
             page.items().forEach(v -> titles.add(v.getTitle()));
             cursor = page.nextCursor();
         } while (cursor != null);
@@ -128,7 +131,7 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
         em.flush();
         em.clear();
 
-        List<VoteResponse> items = voteService.listVotes(VoteListOrder.NEWEST, tag.getSlug(), null, null,
+        List<VoteResponse> items = voteService.listVotes(VoteListOrder.NEWEST, tag.getSlug(), null, null, null,
                 voter.getId().toString()).items();
 
         VoteResponse first = items.getFirst();
@@ -153,13 +156,75 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
         stats.setStatisticsEnabled(true);
 
         stats.clear();
-        voteService.listVotes(VoteListOrder.NEWEST, tag.getSlug(), null, 2, voter.getId().toString());
+        voteService.listVotes(VoteListOrder.NEWEST, tag.getSlug(), null, null, 2, voter.getId().toString());
         long smallPage = stats.getPrepareStatementCount();
         em.clear();
         stats.clear();
-        voteService.listVotes(VoteListOrder.NEWEST, tag.getSlug(), null, 12, voter.getId().toString());
+        voteService.listVotes(VoteListOrder.NEWEST, tag.getSlug(), null, null, 12, voter.getId().toString());
         long largePage = stats.getPrepareStatementCount();
 
         assertThat(largePage).isEqualTo(smallPage);
+    }
+
+    private List<String> search(VoteListOrder order, String q) {
+        em.flush();
+        em.clear();
+        return voteService.listVotes(order, tag.getSlug(), q, null, 50, null).items().stream()
+                .map(VoteResponse::getTitle).toList();
+    }
+
+    @Test
+    @DisplayName("應該以兩字中文搜尋題目與描述，不比對選項文字")
+    void shouldFindPollsByTwoCharacterChineseQuery() {
+        poll("今天午餐吃什麼", now.minusHours(1), now.plusDays(1));
+        Vote byDescription = poll("週末計畫", now.minusHours(2), now.plusDays(1));
+        byDescription.setDescription("想去吃午餐");
+        Vote optionOnly = poll("其他", now.minusHours(3), now.plusDays(1));
+        optionOnly.getOptions().iterator().next().setText("午餐");
+        poll("午 餐 分開", now.minusHours(4), now.plusDays(1));
+
+        assertThat(search(VoteListOrder.NEWEST, "午餐")).containsExactly("今天午餐吃什麼", "週末計畫");
+    }
+
+    @Test
+    @DisplayName("應該忽略大小寫，且搜尋已結束的 Poll 時依結束時間排序")
+    void shouldSearchEndedPollsCaseInsensitively() {
+        poll("Best IDE ever", now.minusDays(3), now.minusDays(2));
+        poll("which ide now", now.minusDays(3), now.minusHours(1));
+        poll("open ide", now.minusDays(1), now.plusDays(1));
+
+        assertThat(search(VoteListOrder.ENDED, "IDE")).containsExactly("which ide now", "Best IDE ever");
+    }
+
+    @Test
+    @DisplayName("應該把 % 與 _ 當成一般字元")
+    void shouldEscapeLikeWildcardsInQuery() {
+        poll("100% sure", now.minusHours(1), now.plusDays(1));
+        poll("1000 sure", now.minusHours(2), now.plusDays(1));
+        poll("snake_case", now.minusHours(3), now.plusDays(1));
+        poll("snakeXcase", now.minusHours(4), now.plusDays(1));
+
+        assertThat(search(VoteListOrder.NEWEST, "0%")).containsExactly("100% sure");
+        assertThat(search(VoteListOrder.NEWEST, "e_c")).containsExactly("snake_case");
+    }
+
+    @Test
+    @DisplayName("應該拒絕少於 2 個字的搜尋字串")
+    void shouldRejectQueryShorterThanTwoChars() {
+        assertThatThrownBy(() -> voteService.listVotes(VoteListOrder.NEWEST, null, "午", null, null, null))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_SEARCH_QUERY_TOO_SHORT));
+    }
+
+    @Test
+    @DisplayName("應該讓兩字查詢可走 bigram GIN index")
+    void shouldUseBigramIndexForTwoCharacterQuery() {
+        em.createNativeQuery("SET LOCAL enable_seqscan = off").executeUpdate();
+        @SuppressWarnings("unchecked")
+        List<String> plan = em.createNativeQuery(
+                "EXPLAIN SELECT id FROM vomatt.votes WHERE search_bigrams @> vomatt.text_bigrams('午餐')")
+                .getResultList();
+
+        assertThat(String.join("\n", plan)).contains("idx_votes_search_bigrams");
     }
 }

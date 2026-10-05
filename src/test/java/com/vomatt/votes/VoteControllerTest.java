@@ -109,7 +109,7 @@ class VoteControllerTest {
             VoteResponse vote = new VoteResponse();
             vote.setId(UUID.randomUUID().toString());
             vote.setTitle("Test Vote");
-            when(voteService.listVotes(eq(VoteListOrder.NEWEST), isNull(), isNull(), isNull(), isNull()))
+            when(voteService.listVotes(eq(VoteListOrder.NEWEST), isNull(), isNull(), isNull(), isNull(), isNull()))
                     .thenReturn(new CursorResponse<>(List.of(vote), "next"));
 
             mockMvc.perform(get("/api/votes"))
@@ -124,7 +124,7 @@ class VoteControllerTest {
         @Test
         @DisplayName("Should pass status, sort, tag and cursor through")
         void shouldFilterByTag() throws Exception {
-            when(voteService.listVotes(VoteListOrder.CLOSING, "tech", "c1", 10, null))
+            when(voteService.listVotes(VoteListOrder.CLOSING, "tech", null, "c1", 10, null))
                     .thenReturn(new CursorResponse<>(List.of(), null));
 
             mockMvc.perform(get("/api/votes").param("status", "open").param("sort", "closing")

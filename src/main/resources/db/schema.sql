@@ -43,6 +43,14 @@ CREATE TABLE IF NOT EXISTS vomatt.user_preferences (
 );
 
 -- =============================================================================
+-- SEARCH：Poll 題目＋描述的字元 bigram（ADR 0001）
+-- 函式本體刻意寫成單一 SQL 表達式、內部無分號，方便以分號切割執行本檔
+-- =============================================================================
+CREATE OR REPLACE FUNCTION vomatt.text_bigrams(input TEXT) RETURNS TEXT[]
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    AS $$ SELECT COALESCE(array_agg(DISTINCT substr(lower(input), i, 2)), '{}') FROM generate_series(1, char_length(input) - 1) AS i $$;
+
+-- =============================================================================
 -- VOTES
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS vomatt.votes (
@@ -59,6 +67,8 @@ CREATE TABLE IF NOT EXISTS vomatt.votes (
     is_public              BOOLEAN       NOT NULL DEFAULT TRUE,
     max_choices            INTEGER       NOT NULL DEFAULT 1,
     voter_visibility       VARCHAR(20)   NOT NULL DEFAULT 'OWNER',
+    search_bigrams         TEXT[]        GENERATED ALWAYS AS
+                           (vomatt.text_bigrams(COALESCE(title, '') || ' ' || COALESCE(description, ''))) STORED,
     created_at             TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at             TIMESTAMPTZ   NOT NULL DEFAULT now()
 );
@@ -199,6 +209,7 @@ CREATE INDEX IF NOT EXISTS idx_votes_active_time           ON vomatt.votes (is_a
 CREATE INDEX IF NOT EXISTS idx_votes_vote_type             ON vomatt.votes (vote_type);
 CREATE INDEX IF NOT EXISTS idx_votes_start_id              ON vomatt.votes (start_time DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_votes_end_id                ON vomatt.votes (end_time, id);
+CREATE INDEX IF NOT EXISTS idx_votes_search_bigrams        ON vomatt.votes USING GIN (search_bigrams);
 CREATE INDEX IF NOT EXISTS idx_vote_options_vote_order     ON vomatt.vote_options (vote_id, display_order);
 CREATE INDEX IF NOT EXISTS idx_user_votes_vote_option      ON vomatt.user_votes (vote_id, option_id);
 CREATE INDEX IF NOT EXISTS idx_user_votes_user_vote        ON vomatt.user_votes (user_id, vote_id);
@@ -226,3 +237,7 @@ ALTER TABLE vomatt.vote_options ADD COLUMN IF NOT EXISTS vote_count INTEGER NOT 
 ALTER TABLE vomatt.votes ALTER COLUMN end_time SET NOT NULL;
 -- 投票者可見度：NOBODY / OWNER（預設）/ SIGNED_IN；Poll 開始後不可改
 ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS voter_visibility VARCHAR(20) NOT NULL DEFAULT 'OWNER';
+-- 搜尋用 bigram 生成欄位（不映射進 entity）；索引見上方 idx_votes_search_bigrams
+ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS search_bigrams TEXT[] GENERATED ALWAYS AS
+    (vomatt.text_bigrams(COALESCE(title, '') || ' ' || COALESCE(description, ''))) STORED;
+CREATE INDEX IF NOT EXISTS idx_votes_search_bigrams ON vomatt.votes USING GIN (search_bigrams);

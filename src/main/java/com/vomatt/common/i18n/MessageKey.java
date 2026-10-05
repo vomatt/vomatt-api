@@ -84,6 +84,7 @@ public enum MessageKey {
     VOTE_VOTERS_HIDDEN("vote.voters.hidden"),
     VOTE_NOT_EDITABLE("vote.not_editable"),
     VOTE_LIST_SORT_NOT_ALLOWED("vote.list.sort_not_allowed"),
+    VOTE_SEARCH_QUERY_TOO_SHORT("vote.search.query_too_short"),
     VOTE_MULTIPLE_NOT_ALLOWED("vote.multiple.not_allowed"),
     VOTE_END_TIME_PAST("vote.end_time.past"),
     VOTE_END_BEFORE_START("vote.end_time.before_start"),

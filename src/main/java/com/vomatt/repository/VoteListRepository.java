@@ -25,10 +25,12 @@ public class VoteListRepository {
 
     /**
      * @param tag   tag slug filter, or null
+     * @param query Search text (already validated, at least two characters), or null
      * @param after keyset position (sort key + id) of the previous page's last item, or null
      */
     @SuppressWarnings("unchecked")
-    public List<Vote> findPage(VoteListOrder order, String tag, Cursor after, OffsetDateTime now, int limit) {
+    public List<Vote> findPage(VoteListOrder order, String tag, String query, Cursor after, OffsetDateTime now,
+                               int limit) {
         StringBuilder sql = new StringBuilder("SELECT v.* FROM vomatt.votes v WHERE ");
         String sortColumn = switch (order) {
             case NEWEST -> "v.start_time";
@@ -43,6 +45,11 @@ public class VoteListRepository {
             sql.append(" AND EXISTS (SELECT 1 FROM vomatt.vote_tags vt JOIN vomatt.tags t ON t.id = vt.tag_id")
                .append(" WHERE vt.vote_id = v.id AND t.slug = :tag)");
         }
+        if (query != null) {
+            // bigram GIN index finds candidates (ADR 0001); LIKE confirms the contiguous match
+            sql.append(" AND v.search_bigrams @> vomatt.text_bigrams(:q)")
+               .append(" AND lower(COALESCE(v.title, '') || ' ' || COALESCE(v.description, '')) LIKE :pattern ESCAPE '\\'");
+        }
         if (after != null) {
             sql.append(" AND (").append(sortColumn).append(", v.id) ").append(descending ? "<" : ">")
                .append(" (:afterKey, :afterId)");
@@ -51,15 +58,24 @@ public class VoteListRepository {
         sql.append(" ORDER BY ").append(sortColumn).append(direction).append(", v.id").append(direction)
            .append(" LIMIT :limit");
 
-        Query query = em.createNativeQuery(sql.toString(), Vote.class)
+        Query nativeQuery = em.createNativeQuery(sql.toString(), Vote.class)
                 .setParameter("now", now)
                 .setParameter("limit", limit);
         if (tag != null) {
-            query.setParameter("tag", tag);
+            nativeQuery.setParameter("tag", tag);
+        }
+        if (query != null) {
+            nativeQuery.setParameter("q", query)
+                    .setParameter("pattern", "%" + escapeLike(query.toLowerCase()) + "%");
         }
         if (after != null) {
-            query.setParameter("afterKey", after.timeKey()).setParameter("afterId", after.id());
+            nativeQuery.setParameter("afterKey", after.timeKey()).setParameter("afterId", after.id());
         }
-        return query.getResultList();
+        return nativeQuery.getResultList();
+    }
+
+    // % and _ in the user's query are literal characters, not wildcards
+    static String escapeLike(String text) {
+        return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 }

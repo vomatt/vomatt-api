@@ -21,6 +21,7 @@ public enum MessageKey {
     COMMON_IMAGE_UPLOAD_FAILED("common.image_upload_failed"),
     COMMON_SIGN_URL_FAILED("common.sign_url_failed"),
     COMMON_INVALID_STATUS("common.invalid_status"),
+    COMMON_CURSOR_INVALID("common.cursor_invalid"),
 
     // === Auth ===
     AUTH_OTP_SENT("auth.otp.sent"),

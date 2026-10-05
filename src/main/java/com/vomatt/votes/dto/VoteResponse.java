@@ -24,6 +24,9 @@ public class VoteResponse {
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
     private long totalVotes;
+
+    @Schema(description = "Turnout：投票人數，任何時候都可見")
+    private long participantCount;
     private boolean isVotingActive;
     private List<VoteOptionResponse> options;
     private List<TagDto> tags;
@@ -38,6 +41,7 @@ public class VoteResponse {
         private String description;
         private Integer displayOrder;
         private OffsetDateTime createdAt;
-        private long votes;
+        @Schema(description = "此選項票數；Poll 結束前封存為 null", nullable = true)
+        private Long votes;
     }
 }

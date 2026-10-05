@@ -61,8 +61,8 @@ public class VoteController {
     }
 
     @GetMapping("/{voteId}")
-    @CommonApiResponses
-    @Operation(summary = "Get vote by ID", description = "Retrieve vote details by vote ID")
+    @PublicApiResponse
+    @Operation(summary = "Get Poll by ID", description = "Public. Per-option counts are null (Sealed) until the Poll has Ended; participantCount is always present")
     public ResponseEntity<ApiResponse<VoteResponse>> getVote(
             @Parameter(description = "Vote ID", required = true)
             @PathVariable String voteId,
@@ -141,7 +141,7 @@ public class VoteController {
 
     @GetMapping("/{voteId}/results")
     @CommonApiResponses
-    @Operation(summary = "Get vote results", description = "Retrieve detailed vote results including voter information (if not anonymous)")
+    @Operation(summary = "Get Poll results", description = "Public once the Poll has Ended; 403 vote.results.sealed while Scheduled or Open")
     public ResponseEntity<ApiResponse<VoteResultResponse>> getVoteResults(
             @Parameter(description = "Vote ID", required = true)
             @PathVariable String voteId) {

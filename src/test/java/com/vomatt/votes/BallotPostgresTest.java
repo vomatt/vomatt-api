@@ -106,6 +106,9 @@ class BallotPostgresTest extends PostgresRepositoryTest {
 
         assertThat(response.getMyOptionId()).isEqualTo(optionB.toString());
         assertThat(response.getTotalVotes()).isEqualTo(1);
+        assertThat(response.getParticipantCount()).isEqualTo(1);
+        // Open Poll: the caster sees only their own Ballot, not per-option counts
+        assertThat(response.getOptions()).extracting(VoteResponse.VoteOptionResponse::getVotes).containsOnlyNulls();
         Map<UUID, long[]> counts = counts();
         assertThat(counts.get(optionA)[0]).isZero();
         assertThat(counts.get(optionB)[0]).isEqualTo(1);
@@ -150,6 +153,7 @@ class BallotPostgresTest extends PostgresRepositoryTest {
 
         assertThat(response.getMyOptionId()).isNull();
         assertThat(response.getTotalVotes()).isZero();
+        assertThat(response.getOptions()).extracting(VoteResponse.VoteOptionResponse::getVotes).containsOnlyNulls();
         assertThat(counts().get(optionA)[0]).isZero();
         assertStoredMatchesActual();
     }

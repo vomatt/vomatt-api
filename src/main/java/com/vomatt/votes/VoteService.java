@@ -6,10 +6,8 @@ import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -26,7 +24,6 @@ import com.vomatt.entity.Tag;
 import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
-import com.vomatt.repository.OptionVoteCount;
 import com.vomatt.repository.TagRepository;
 import com.vomatt.repository.UserVoteRepository;
 import com.vomatt.repository.VoteOptionRepository;
@@ -177,18 +174,15 @@ public class VoteService {
         return convertToVoteResponse(voteUuid, userId);
     }
 
+    /** Results of an Ended Poll; 403 while Sealed. */
     @Transactional(readOnly = true)
     public VoteResultResponse getVoteResults(String voteId) {
-        UUID voteUuid = UUID.fromString(voteId);
-        Vote vote = voteRepository.findById(voteUuid)
-            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
-
-        int totalParticipants = (int) userVoteRepository.countDistinctUserByVoteId(voteUuid);
-        long totalVoteCount = userVoteRepository.countByVoteId(voteUuid);
-        Map<UUID, Long> optionCounts = buildOptionCountMap(voteUuid);
-        List<VoteOption> options = voteOptionRepository.findByVoteIdOrderByDisplayOrder(voteUuid);
-
-        return voteMapper.toResultResponse(vote, options, totalParticipants, optionCounts, totalVoteCount);
+        Vote vote = findVote(UUID.fromString(voteId));
+        if (vote.isResultsSealed()) {
+            throw ApiException.forbidden(MessageKey.VOTE_RESULTS_SEALED);
+        }
+        List<VoteOption> options = voteOptionRepository.findByVoteIdOrderByDisplayOrder(vote.getId());
+        return voteMapper.toResultResponse(vote, options);
     }
 
     @Transactional(readOnly = true)
@@ -235,11 +229,7 @@ public class VoteService {
         List<VoteOption> options = voteWithOptions.getOptions().stream()
             .sorted(Comparator.comparingInt(VoteOption::getDisplayOrder))
             .toList();
-        Map<UUID, Long> optionCounts = options.stream()
-            .collect(Collectors.toMap(VoteOption::getId, o -> (long) o.getVoteCount()));
-        // Turnout: single-choice, so the option counts add up to the number of Participants
-        long totalVoteCount = optionCounts.values().stream().mapToLong(Long::longValue).sum();
-        VoteResponse response = voteMapper.toResponse(voteWithOptions, options, optionCounts, totalVoteCount);
+        VoteResponse response = voteMapper.toResponse(voteWithOptions, options);
         response.setMyOptionId(userId == null ? null : findMyOptionId(voteId, UUID.fromString(userId)));
         return response;
     }
@@ -270,12 +260,6 @@ public class VoteService {
         List<UUID> optionIds = ballots.stream().map(b -> b.getOption().getId()).toList();
         userVoteRepository.deleteAll(ballots);
         return optionIds;
-    }
-
-    private Map<UUID, Long> buildOptionCountMap(UUID voteId) {
-        return userVoteRepository.countByOptionGroupedForVote(voteId)
-            .stream()
-            .collect(Collectors.toMap(OptionVoteCount::getOptionId, OptionVoteCount::getCount));
     }
 
     private void validateCreateVoteRequest(CreateVoteRequest request) {

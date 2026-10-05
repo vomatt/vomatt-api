@@ -115,6 +115,11 @@ public class Vote extends AuditableEntity {
         return getStatus() == VoteStatus.OPEN;
     }
 
+    /** Sealed: nobody, including the owner, sees per-option counts or Support until the Poll has Ended. */
+    public boolean isResultsSealed() {
+        return getStatus() != VoteStatus.ENDED;
+    }
+
     public void addTag(Tag tag) {
         this.tags.add(tag);
     }

@@ -7,21 +7,18 @@ import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Component
 public class VoteMapper {
 
     /**
-     * @param optionCounts Pre-fetched Map<optionId, voteCount> to avoid N+1 lazy load
-     * @param totalVoteCount Pre-fetched total vote count to avoid triggering userVotes collection lazy load
+     * The single sealing point: while a Poll has not Ended, per-option counts stay null so no endpoint
+     * can leak them. Turnout ({@code participantCount}) is always present. Counts come from the stored
+     * option counts, so no Ballot rows are loaded.
      */
-    public VoteResponse toResponse(Vote vote, List<VoteOption> options,
-                                   Map<UUID, Long> optionCounts, long totalVoteCount) {
+    public VoteResponse toResponse(Vote vote, List<VoteOption> options) {
+        boolean sealed = vote.isResultsSealed();
         VoteResponse response = new VoteResponse();
         response.setId(vote.getId().toString());
         response.setTitle(vote.getTitle());
@@ -35,10 +32,12 @@ public class VoteMapper {
         response.setAnonymous(vote.isAnonymous());
         response.setCreatedAt(vote.getCreatedAt());
         response.setUpdatedAt(vote.getUpdatedAt());
-        response.setTotalVotes(totalVoteCount);
+        long turnout = turnout(options);
+        response.setTotalVotes(turnout);
+        response.setParticipantCount(turnout);
         response.setVotingActive(vote.isVotingActive());
         response.setOptions(options.stream()
-                .map(opt -> toOptionResponse(opt, optionCounts.getOrDefault(opt.getId(), 0L)))
+                .map(opt -> toOptionResponse(opt, sealed))
                 .toList());
         List<TagDto> tagDtos = (vote.getTags() != null)
                 ? vote.getTags().stream()
@@ -55,25 +54,20 @@ public class VoteMapper {
         return response;
     }
 
-    public VoteResponse.VoteOptionResponse toOptionResponse(VoteOption option, long voteCount) {
+    public VoteResponse.VoteOptionResponse toOptionResponse(VoteOption option, boolean sealed) {
         VoteResponse.VoteOptionResponse resp = new VoteResponse.VoteOptionResponse();
         resp.setId(option.getId().toString());
         resp.setText(option.getText());
         resp.setDescription(option.getDescription());
         resp.setDisplayOrder(option.getDisplayOrder());
         resp.setCreatedAt(option.getCreatedAt());
-        resp.setVotes(voteCount);
+        resp.setVotes(sealed ? null : (long) option.getVoteCount());
         return resp;
     }
 
-    /**
-     * @param optionCounts Pre-fetched Map<optionId, voteCount>
-     * @param totalVoteCount Pre-fetched total vote count
-     */
-    public VoteResultResponse toResultResponse(Vote vote, List<VoteOption> options,
-                                               int totalParticipants,
-                                               Map<UUID, Long> optionCounts,
-                                               long totalVoteCount) {
+    /** Results of an Ended Poll; Support uses the number of Participants as denominator. */
+    public VoteResultResponse toResultResponse(Vote vote, List<VoteOption> options) {
+        long participants = turnout(options);
         VoteResultResponse response = new VoteResultResponse();
         response.setId(vote.getId().toString());
         response.setTitle(vote.getTitle());
@@ -86,44 +80,28 @@ public class VoteMapper {
         response.setAllowMultipleChoices(vote.isAllowMultipleChoices());
         response.setAnonymous(vote.isAnonymous());
         response.setCreatedAt(vote.getCreatedAt());
-        response.setTotalVotes(totalVoteCount);
+        response.setTotalVotes(participants);
         response.setVotingActive(vote.isVotingActive());
-        response.setTotalParticipants(totalParticipants);
-
-        List<VoteResultResponse.VoteOptionResultResponse> optionResults = options.stream()
-            .map(opt -> toOptionResultResponse(opt, totalVoteCount, vote.isAnonymous(),
-                    optionCounts.getOrDefault(opt.getId(), 0L)))
-            .toList();
-        response.setOptions(optionResults);
+        response.setTotalParticipants(participants);
+        response.setOptions(options.stream()
+                .map(opt -> toOptionResultResponse(opt, participants))
+                .toList());
         return response;
     }
 
-    public VoteResultResponse.VoteOptionResultResponse toOptionResultResponse(
-            VoteOption option, long totalVotes, boolean isAnonymous, long voteCount) {
+    public VoteResultResponse.VoteOptionResultResponse toOptionResultResponse(VoteOption option, long participants) {
         VoteResultResponse.VoteOptionResultResponse result = new VoteResultResponse.VoteOptionResultResponse();
         result.setId(option.getId().toString());
         result.setText(option.getText());
         result.setDescription(option.getDescription());
         result.setDisplayOrder(option.getDisplayOrder());
-        result.setVoteCount(voteCount);
-
-        double percentage = totalVotes > 0 ? (double) voteCount / totalVotes * 100 : 0.0;
-        result.setPercentage(percentage);
-
-        if (!isAnonymous) {
-            List<VoteResultResponse.VoterResponse> voters = option.getUserVotes().stream()
-                .map(userVote -> {
-                    VoteResultResponse.VoterResponse voter = new VoteResultResponse.VoterResponse();
-                    voter.setUserId(userVote.getUser().getId().toString());
-                    voter.setUsername(userVote.getUser().getUsername());
-                    voter.setVotedAt(userVote.getCreatedAt());
-                    return voter;
-                })
-                .toList();
-            result.setVoters(voters);
-        } else {
-            result.setVoters(new ArrayList<>());
-        }
+        result.setVoteCount(option.getVoteCount());
+        result.setPercentage(participants > 0 ? (double) option.getVoteCount() / participants * 100 : 0.0);
         return result;
+    }
+
+    // Turnout: Polls are single-choice, so the option counts add up to the number of Participants
+    private static long turnout(List<VoteOption> options) {
+        return options.stream().mapToLong(VoteOption::getVoteCount).sum();
     }
 }

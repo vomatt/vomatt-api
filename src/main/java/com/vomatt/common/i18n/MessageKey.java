@@ -79,6 +79,7 @@ public enum MessageKey {
     VOTE_OPTION_NOT_IN_VOTE("vote.option.not_in_vote"),
     VOTE_NOT_ALLOWED("vote.not_allowed"),
     VOTE_ENDED("vote.ended"),
+    VOTE_RESULTS_SEALED("vote.results.sealed"),
     VOTE_MULTIPLE_NOT_ALLOWED("vote.multiple.not_allowed"),
     VOTE_END_TIME_PAST("vote.end_time.past"),
     VOTE_END_BEFORE_START("vote.end_time.before_start"),

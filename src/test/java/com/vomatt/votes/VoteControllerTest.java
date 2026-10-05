@@ -82,6 +82,11 @@ class VoteControllerTest {
     /** 模擬 SecurityConfig：路徑是否落在任一公開白名單（未登入可存取） */
     private static boolean isPublic(String method, String path) {
         AntPathMatcher matcher = new AntPathMatcher();
+        // authenticated sub-paths are matched before PUBLIC_GET
+        if (Stream.of(SecurityEndpoints.AUTHENTICATED_USERS, SecurityEndpoints.AUTHENTICATED_VOTES)
+                .flatMap(Arrays::stream).anyMatch(p -> matcher.match(p, path))) {
+            return false;
+        }
         Stream<String> patterns = Stream.of(SecurityEndpoints.PUBLIC_AUTH, SecurityEndpoints.PUBLIC_SWAGGER,
                 SecurityEndpoints.PUBLIC_ACTUATOR).flatMap(Arrays::stream);
         if ("GET".equals(method)) {
@@ -303,5 +308,19 @@ class VoteControllerTest {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.errorCode").value(MessageKey.VOTE_ENDED.code()));
         }
+    }
+
+    // ─── public vs authenticated vote paths ───────────────────────────────────
+
+    @Test
+    @DisplayName("Poll 詳情與結果公開；/my、投票狀態、投票者清單、留言需登入")
+    void shouldExposeOnlyDetailAndResultsPublicly() {
+        assertThat(isPublic("GET", "/api/votes/abc")).isTrue();
+        assertThat(isPublic("GET", "/api/votes/abc/results")).isTrue();
+        assertThat(isPublic("GET", "/api/votes/my")).isFalse();
+        assertThat(isPublic("GET", "/api/votes/abc/my-vote-status")).isFalse();
+        assertThat(isPublic("GET", "/api/votes/abc/voters")).isFalse();
+        assertThat(isPublic("GET", "/api/votes/abc/comments")).isFalse();
+        assertThat(isPublic("GET", "/api/votes/abc/comments/def/replies")).isFalse();
     }
 }

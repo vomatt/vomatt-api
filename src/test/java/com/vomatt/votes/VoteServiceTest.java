@@ -27,7 +27,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.OffsetDateTime;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -36,7 +35,6 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -212,6 +210,8 @@ class VoteServiceTest {
             assertThat(result.getTitle()).isEqualTo("Favourite Color?");
             assertThat(result.getOptions()).extracting(VoteResponse.VoteOptionResponse::getText)
                     .containsExactlyInAnyOrder("Red", "Blue");
+            // a new Poll is Open: counts are Sealed
+            assertThat(result.getOptions()).extracting(VoteResponse.VoteOptionResponse::getVotes).containsOnlyNulls();
             verify(voteRepository, times(2)).save(argThat(v ->
                     "Favourite Color?".equals(v.getTitle()) && v.getCreator() == user));
         }
@@ -369,6 +369,42 @@ class VoteServiceTest {
             VoteResponse result = voteService.getVote(voteId.toString(), userId.toString());
 
             assertThat(result.getMyOptionId()).isEqualTo(optionId.toString());
+        }
+
+        @Test
+        @DisplayName("應該在 Poll Open 時對 /results 回 403 vote.results.sealed")
+        void shouldReturnForbiddenForResultsWhenPollOpen() {
+            vote.setEndTime(OffsetDateTime.now().plusDays(1));
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+
+            assertThatThrownBy(() -> voteService.getVoteResults(voteId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_RESULTS_SEALED));
+        }
+
+        @Test
+        @DisplayName("應該在 Poll Ended 後回傳結果")
+        void shouldReturnResultsWhenPollEnded() {
+            vote.setEndTime(OffsetDateTime.now().minusMinutes(1));
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteOptionRepository.findByVoteIdOrderByDisplayOrder(voteId)).thenReturn(List.of());
+
+            assertThat(voteService.getVoteResults(voteId.toString()).getTotalParticipants()).isZero();
+        }
+
+        @Test
+        @DisplayName("應該在 GET 詳情時於 Poll Open 期間封存選項票數")
+        void shouldOmitOptionCountsOnGetWhenPollOpen() {
+            setId(option, UUID.randomUUID());
+            option.setDisplayOrder(0);
+            ReflectionTestUtils.setField(option, "voteCount", 5);
+            vote.addOption(option);
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            stubConvertToVoteResponse(vote);
+
+            VoteResponse result = voteService.getVote(voteId.toString(), null);
+
+            assertThat(result.getOptions()).extracting(VoteResponse.VoteOptionResponse::getVotes).containsOnlyNulls();
+            assertThat(result.getParticipantCount()).isEqualTo(5);
         }
 
         @Test

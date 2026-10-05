@@ -31,8 +31,8 @@ public class VoteResultResponse {
         private String description;
         private Integer displayOrder;
         private long voteCount;
+        /** Support as a percentage of Participants (0–100). */
         private double percentage;
-        private List<VoterResponse> voters;
     }
     
     @Data

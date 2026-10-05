@@ -4,6 +4,7 @@ import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.exception.GlobalExceptionHandler;
 import com.vomatt.common.i18n.LocalizedMessageService;
 import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.security.SecurityEndpoints;
 import com.vomatt.common.security.UserPrincipal;
 import com.vomatt.votes.dto.CreateVoteRequest;
@@ -40,6 +41,7 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -107,29 +109,36 @@ class VoteControllerTest {
             VoteResponse vote = new VoteResponse();
             vote.setId(UUID.randomUUID().toString());
             vote.setTitle("Test Vote");
-            Page<VoteResponse> page = new PageImpl<>(List.of(vote));
-            when(voteService.getActiveVotes(any(Pageable.class))).thenReturn(page);
+            when(voteService.listVotes(eq(VoteListOrder.NEWEST), isNull(), isNull(), isNull()))
+                    .thenReturn(new CursorResponse<>(List.of(vote), "next"));
 
             mockMvc.perform(get("/api/votes"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
-                    .andExpect(jsonPath("$.data.content").isArray())
-                    .andExpect(jsonPath("$.data.content[0].title").value("Test Vote"))
-                    .andExpect(jsonPath("$.data.page").value(1));
+                    .andExpect(jsonPath("$.data.items[0].title").value("Test Vote"))
+                    .andExpect(jsonPath("$.data.nextCursor").value("next"));
 
             assertThat(isPublic("GET", "/api/votes")).isTrue();
         }
 
         @Test
-        @DisplayName("Should filter by tag slug when ?tag= is given")
+        @DisplayName("Should pass status, sort, tag and cursor through")
         void shouldFilterByTag() throws Exception {
-            when(voteService.getActiveVotesByTag(eq("tech"), any(Pageable.class))).thenReturn(Page.empty());
+            when(voteService.listVotes(VoteListOrder.CLOSING, "tech", "c1", 10))
+                    .thenReturn(new CursorResponse<>(List.of(), null));
 
-            mockMvc.perform(get("/api/votes").param("tag", "tech"))
+            mockMvc.perform(get("/api/votes").param("status", "open").param("sort", "closing")
+                            .param("tag", "tech").param("cursor", "c1").param("limit", "10"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.success").value(true));
+                    .andExpect(jsonPath("$.data.nextCursor").isEmpty());
+        }
 
-            verify(voteService, never()).getActiveVotes(any());
+        @Test
+        @DisplayName("應該在 status=ended 帶 sort 時回 400")
+        void shouldRejectSortWhenStatusEnded() throws Exception {
+            mockMvc.perform(get("/api/votes").param("status", "ended").param("sort", "newest"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errorCode").value(MessageKey.VOTE_LIST_SORT_NOT_ALLOWED.code()));
         }
     }
 

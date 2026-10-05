@@ -33,6 +33,7 @@ import com.vomatt.entity.VoteStatus;
 import com.vomatt.repository.TagRepository;
 import com.vomatt.repository.UserVoteRepository;
 import com.vomatt.repository.VoteOptionRepository;
+import com.vomatt.repository.VoteListRepository;
 import com.vomatt.repository.VoteRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -52,6 +53,7 @@ public class VoteService {
     private final TagRepository tagRepository;
     private final VoteConfigurationProperties voteConfig;
     private final VoteMapper voteMapper;
+    private final VoteListRepository voteListRepository;
 
     public VoteResponse createVote(CreateVoteRequest request, String creatorId) {
         validateCreateVoteRequest(request);
@@ -137,16 +139,15 @@ public class VoteService {
         return convertToVoteResponse(vote, userId);
     }
 
+    /** Feed / Explore page: Open (newest or closing soonest) or Ended Polls, optionally under one tag. */
     @Transactional(readOnly = true)
-    public Page<VoteResponse> getActiveVotes(Pageable pageable) {
-        Page<Vote> votes = voteRepository.findActiveVotesAtTime(OffsetDateTime.now(), pageable);
-        return votes.map(this::convertToVoteResponse);
-    }
-
-    @Transactional(readOnly = true)
-    public Page<VoteResponse> getActiveVotesByTag(String tagSlug, Pageable pageable) {
-        Page<Vote> votes = voteRepository.findByTagSlugAndIsActiveTrue(tagSlug, pageable);
-        return votes.map(this::convertToVoteResponse);
+    public CursorResponse<VoteResponse> listVotes(VoteListOrder order, String tag, String cursor, Integer limit) {
+        int size = CursorResponse.limit(limit);
+        String tagSlug = tag == null || tag.isBlank() ? null : tag;
+        List<Vote> rows = voteListRepository.findPage(order, tagSlug, Cursor.decode(cursor), OffsetDateTime.now(), size + 1);
+        return CursorResponse.of(rows, size,
+            v -> Cursor.of(order == VoteListOrder.NEWEST ? v.getStartTime() : v.getEndTime(), v.getId()),
+            page -> page.stream().map(this::toListItem).toList());
     }
 
     @Transactional(readOnly = true)
@@ -294,13 +295,20 @@ public class VoteService {
         UUID voteId = vote.getId();
         // Use JOIN FETCH to avoid additional queries for options
         Vote voteWithOptions = voteRepository.findByIdWithOptions(voteId).orElse(vote);
-        // Convert Set to sorted List, maintaining displayOrder
-        List<VoteOption> options = voteWithOptions.getOptions().stream()
-            .sorted(Comparator.comparingInt(VoteOption::getDisplayOrder))
-            .toList();
-        VoteResponse response = voteMapper.toResponse(voteWithOptions, options);
+        VoteResponse response = voteMapper.toResponse(voteWithOptions, sortedOptions(voteWithOptions));
         response.setMyOptionId(userId == null ? null : findMyOptionId(voteId, UUID.fromString(userId)));
         return response;
+    }
+
+    // Options and tags come in via batch fetching (default_batch_fetch_size), not one query per Poll
+    private VoteResponse toListItem(Vote vote) {
+        return voteMapper.toResponse(vote, sortedOptions(vote));
+    }
+
+    private static List<VoteOption> sortedOptions(Vote vote) {
+        return vote.getOptions().stream()
+            .sorted(Comparator.comparingInt(VoteOption::getDisplayOrder))
+            .toList();
     }
 
     private String findMyOptionId(UUID voteId, UUID userId) {

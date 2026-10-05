@@ -88,17 +88,17 @@ public class VoteController {
 
     @GetMapping
     @PublicApiResponse
-    @Operation(summary = "Get active votes", description = "Retrieve all active votes with pagination")
-    public ResponseEntity<ApiResponse<PageResponse<VoteResponse>>> getActiveVotes(
-            @PageableDefault(size = 20) Pageable pageable,
-            @RequestParam(required = false) String tag) {
-        Page<VoteResponse> votes;
-        if (tag != null && !tag.isBlank()) {
-            votes = voteService.getActiveVotesByTag(tag, pageable);
-        } else {
-            votes = voteService.getActiveVotes(pageable);
-        }
-        return ResponseEntity.ok(ApiResponse.ok(PageResponse.from(votes)));
+    @Operation(summary = "List Polls (Feed / Explore)",
+            description = "status=open (default) with sort=newest (default) | closing; status=ended is ordered by end time and rejects sort. "
+                    + "Optional tag slug. Cursor-paged; Scheduled Polls never appear")
+    public ResponseEntity<ApiResponse<CursorResponse<VoteResponse>>> listVotes(
+            @Parameter(description = "open | ended") @RequestParam(required = false) String status,
+            @Parameter(description = "newest | closing（僅 status=open）") @RequestParam(required = false) String sort,
+            @Parameter(description = "標籤 slug") @RequestParam(required = false) String tag,
+            @Parameter(description = "上一頁回傳的 nextCursor") @RequestParam(required = false) String cursor,
+            @Parameter(description = "每頁筆數（1–50，預設 20）") @RequestParam(required = false) Integer limit) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                voteService.listVotes(VoteListOrder.of(status, sort), tag, cursor, limit)));
     }
 
     @GetMapping("/my")

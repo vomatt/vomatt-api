@@ -21,6 +21,7 @@ public enum MessageKey {
     COMMON_IMAGE_UPLOAD_FAILED("common.image_upload_failed"),
     COMMON_SIGN_URL_FAILED("common.sign_url_failed"),
     COMMON_INVALID_STATUS("common.invalid_status"),
+    COMMON_INVALID_SORT("common.invalid_sort"),
     COMMON_CURSOR_INVALID("common.cursor_invalid"),
 
     // === Auth ===
@@ -82,6 +83,7 @@ public enum MessageKey {
     VOTE_RESULTS_SEALED("vote.results.sealed"),
     VOTE_VOTERS_HIDDEN("vote.voters.hidden"),
     VOTE_NOT_EDITABLE("vote.not_editable"),
+    VOTE_LIST_SORT_NOT_ALLOWED("vote.list.sort_not_allowed"),
     VOTE_MULTIPLE_NOT_ALLOWED("vote.multiple.not_allowed"),
     VOTE_END_TIME_PAST("vote.end_time.past"),
     VOTE_END_BEFORE_START("vote.end_time.before_start"),

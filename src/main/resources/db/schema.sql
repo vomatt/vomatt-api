@@ -197,6 +197,8 @@ CREATE INDEX IF NOT EXISTS idx_users_active                ON vomatt.users (acti
 CREATE INDEX IF NOT EXISTS idx_votes_creator_id            ON vomatt.votes (creator_id);
 CREATE INDEX IF NOT EXISTS idx_votes_active_time           ON vomatt.votes (is_active, start_time, end_time);
 CREATE INDEX IF NOT EXISTS idx_votes_vote_type             ON vomatt.votes (vote_type);
+CREATE INDEX IF NOT EXISTS idx_votes_start_id              ON vomatt.votes (start_time DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_votes_end_id                ON vomatt.votes (end_time, id);
 CREATE INDEX IF NOT EXISTS idx_vote_options_vote_order     ON vomatt.vote_options (vote_id, display_order);
 CREATE INDEX IF NOT EXISTS idx_user_votes_vote_option      ON vomatt.user_votes (vote_id, option_id);
 CREATE INDEX IF NOT EXISTS idx_user_votes_user_vote        ON vomatt.user_votes (user_id, vote_id);

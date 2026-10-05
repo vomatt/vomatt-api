@@ -152,7 +152,7 @@ public class VoteController {
     @PutMapping("/{voteId}/deactivate")
     @Auditable(action = "DEACTIVATE", resourceType = "VOTE", resourceIdIndex = 0)
     @CommonApiResponses
-    @Operation(summary = "Deactivate vote", description = "Deactivate a vote (only by creator)")
+    @Operation(summary = "Close a Poll", description = "Creator only. Open → ends now; Scheduled → cancelled (Ended); Ended → unchanged")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> deactivateVote(
             @Parameter(description = "Vote ID", required = true)
             @PathVariable String voteId,

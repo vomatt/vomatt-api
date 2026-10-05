@@ -100,12 +100,19 @@ public class Vote extends AuditableEntity {
         this.endTime = endTime;
     }
 
+    public VoteStatus getStatus() {
+        return statusAt(OffsetDateTime.now());
+    }
+
+    // Ended wins over Scheduled: a cancelled Scheduled Poll has end time before start time
+    public VoteStatus statusAt(OffsetDateTime now) {
+        if (endTime != null && !now.isBefore(endTime)) return VoteStatus.ENDED;
+        if (startTime != null && now.isBefore(startTime)) return VoteStatus.SCHEDULED;
+        return VoteStatus.OPEN;
+    }
+
     public boolean isVotingActive() {
-        OffsetDateTime now = OffsetDateTime.now();
-        if (!isActive) return false;
-        if (startTime != null && now.isBefore(startTime)) return false;
-        if (endTime != null && now.isAfter(endTime)) return false;
-        return true;
+        return getStatus() == VoteStatus.OPEN;
     }
 
     public void addTag(Tag tag) {
@@ -126,7 +133,14 @@ public class Vote extends AuditableEntity {
         return userVotes.size();
     }
 
+    /**
+     * Close: an Open Poll ends now; a Scheduled Poll is cancelled (ends before it ever starts);
+     * an Ended Poll keeps its real end time.
+     */
     public void deactivate() {
+        if (getStatus() == VoteStatus.ENDED) {
+            return;
+        }
         this.isActive = false;
         this.endTime = OffsetDateTime.now();
     }

@@ -5,6 +5,8 @@ import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.entity.Tag;
 import com.vomatt.repository.TagRepository;
 import com.vomatt.tags.dto.CreateTagRequest;
+import com.vomatt.common.response.Cursor;
+import com.vomatt.common.response.CursorResponse;
 import com.vomatt.tags.dto.TagDto;
 import com.vomatt.tags.dto.UpdateTagRequest;
 import org.junit.jupiter.api.DisplayName;
@@ -300,25 +302,23 @@ class TagServiceTest {
     class GetPopularTagsTests {
 
         @Test
-        @DisplayName("應該依 usageCount 分頁排序回傳熱門標籤")
-        void shouldReturnPagedTagsOrderedByUsageCount() {
+        @DisplayName("應該依 usageCount 回傳熱門標籤，並在多一筆時給出下一頁 cursor")
+        void shouldReturnTagsOrderedByUsageCount() {
             Tag tag1 = createTagWithId("Popular", "popular", null, 0);
             tag1.setUsageCount(100);
             Tag tag2 = createTagWithId("LessPopular", "less-popular", null, 0);
             tag2.setUsageCount(50);
+            Tag tag3 = createTagWithId("Rare", "rare", null, 0);
+            tag3.setUsageCount(1);
+            when(tagRepository.findPopularPage(null, null, org.springframework.data.domain.Limit.of(3)))
+                    .thenReturn(List.of(tag1, tag2, tag3));
 
-            Pageable pageable = PageRequest.of(0, 10);
-            Page<Tag> tagPage = new PageImpl<>(List.of(tag1, tag2), pageable, 2);
+            CursorResponse<TagDto> result = tagService.getPopularTags(null, 2);
 
-            when(tagRepository.findAllByOrderByUsageCountDesc(pageable)).thenReturn(tagPage);
-
-            Page<TagDto> result = tagService.getPopularTags(pageable);
-
-            assertThat(result.getTotalElements()).isEqualTo(2);
-            assertThat(result.getContent().get(0).getName()).isEqualTo("Popular");
-            assertThat(result.getContent().get(0).getUsageCount()).isEqualTo(100);
-            assertThat(result.getContent().get(1).getName()).isEqualTo("LessPopular");
-            assertThat(result.getContent().get(1).getUsageCount()).isEqualTo(50);
+            assertThat(result.items()).extracting(TagDto::getName).containsExactly("Popular", "LessPopular");
+            Cursor next = Cursor.decode(result.nextCursor());
+            assertThat(next.longKey()).isEqualTo(50);
+            assertThat(next.id()).isEqualTo(tag2.getId());
         }
     }
 }

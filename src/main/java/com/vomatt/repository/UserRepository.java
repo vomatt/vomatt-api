@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -34,6 +35,15 @@ public interface UserRepository extends JpaRepository<User, UUID> {
      */
     @Query("SELECT u FROM User u WHERE LOWER(u.username) LIKE LOWER(CONCAT('%', :username, '%')) AND u.active = true")
     Page<User> searchByUsername(@Param("username") String username, Pageable pageable);
+
+    /** Keyset page of username search, ordered by username; null cursor for the first page. */
+    @Query("""
+            SELECT u FROM User u
+            WHERE LOWER(u.username) LIKE LOWER(CONCAT('%', :username, '%')) AND u.active = true
+              AND (CAST(:afterUsername AS String) IS NULL OR u.username > :afterUsername)
+            ORDER BY u.username""")
+    List<User> searchByUsernameAfter(@Param("username") String username,
+                                     @Param("afterUsername") String afterUsername, Limit limit);
 
     /**
      * Find users by exact username match

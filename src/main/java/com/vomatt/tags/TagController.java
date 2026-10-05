@@ -1,19 +1,18 @@
 package com.vomatt.tags;
 
 import com.vomatt.common.response.ApiResponse;
-import com.vomatt.common.response.PageResponse;
+import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.annotation.PublicApiResponse;
 import com.vomatt.tags.dto.TagDto;
 import com.vomatt.tags.TagService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -36,10 +35,11 @@ public class TagController {
 
     @GetMapping("/popular")
     @PublicApiResponse
-    @Operation(summary = "Get Popular Tags", description = "Get popular tags sorted by usage count (paginated)")
-    public ResponseEntity<ApiResponse<PageResponse<TagDto>>> getPopularTags(
-            @PageableDefault(size = 20) Pageable pageable) {
-        Page<TagDto> tags = tagService.getPopularTags(pageable);
-        return ResponseEntity.ok(ApiResponse.ok(PageResponse.from(tags)));
+    @Operation(summary = "Get Popular Tags",
+            description = "Tags by usage count, most used first (cursor-paged; items may shift while usage changes)")
+    public ResponseEntity<ApiResponse<CursorResponse<TagDto>>> getPopularTags(
+            @Parameter(description = "上一頁回傳的 nextCursor") @RequestParam(required = false) String cursor,
+            @Parameter(description = "每頁筆數（1–50，預設 20）") @RequestParam(required = false) Integer limit) {
+        return ResponseEntity.ok(ApiResponse.ok(tagService.getPopularTags(cursor, limit)));
     }
 }

@@ -6,7 +6,7 @@ import com.vomatt.users.dto.MyProfileResponse;
 import com.vomatt.users.dto.UpdateProfileRequest;
 import com.vomatt.users.dto.UpdateVisibilityRequest;
 import com.vomatt.common.response.ApiResponse;
-import com.vomatt.common.response.PageResponse;
+import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.response.SimpleResultResponse;
 import com.vomatt.common.annotation.CommonApiResponses;
 import com.vomatt.common.annotation.PublicApiResponse;
@@ -23,9 +23,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -82,17 +79,19 @@ public class UserController {
 
     @GetMapping("/search")
     @CommonApiResponses
-    @Operation(summary = "Search users by username", description = "Search for users by username (case-insensitive, partial match)")
-    public ResponseEntity<ApiResponse<PageResponse<UserDto>>> searchUsers(
+    @Operation(summary = "Search users by username",
+            description = "Case-insensitive partial match, ordered by username (cursor-paged)")
+    public ResponseEntity<ApiResponse<CursorResponse<UserDto>>> searchUsers(
             @Parameter(description = "Username to search for", required = true)
             @RequestParam String username,
-            @PageableDefault(size = 20) Pageable pageable) {
+            @Parameter(description = "上一頁回傳的 nextCursor") @RequestParam(required = false) String cursor,
+            @Parameter(description = "每頁筆數（1–50，預設 20）") @RequestParam(required = false) Integer limit) {
         if (username.isBlank()) {
             throw ApiException.badRequest(MessageKey.COMMON_MISSING_PARAM, "username");
         }
-        Page<UserDto> users = userService.searchUsersByUsername(username.trim(), pageable);
-        log.info("User search completed for username: {}, found {} results", username, users.getTotalElements());
-        return ResponseEntity.ok(ApiResponse.ok(PageResponse.from(users)));
+        CursorResponse<UserDto> users = userService.searchUsersByUsername(username.trim(), cursor, limit);
+        log.info("User search completed for username: {}, page size {}", username, users.items().size());
+        return ResponseEntity.ok(ApiResponse.ok(users));
     }
 
     @DeleteMapping("/{userId}")

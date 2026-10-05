@@ -6,11 +6,12 @@ import com.vomatt.tags.dto.CreateTagRequest;
 import com.vomatt.tags.dto.UpdateTagRequest;
 import com.vomatt.tags.dto.TagDto;
 import com.vomatt.entity.Tag;
+import com.vomatt.common.response.Cursor;
+import com.vomatt.common.response.CursorResponse;
 import com.vomatt.repository.TagRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -94,9 +95,13 @@ public class TagService {
     }
 
     @Transactional(readOnly = true)
-    public Page<TagDto> getPopularTags(Pageable pageable) {
-        return tagRepository.findAllByOrderByUsageCountDesc(pageable)
-                .map(this::toDto);
+    public CursorResponse<TagDto> getPopularTags(String cursor, Integer limit) {
+        int size = CursorResponse.limit(limit);
+        Cursor after = Cursor.decode(cursor);
+        List<Tag> rows = tagRepository.findPopularPage(after == null ? null : (int) after.longKey(),
+                after == null ? null : after.id(), Limit.of(size + 1));
+        return CursorResponse.of(rows, size, t -> Cursor.of(t.getUsageCount(), t.getId()),
+                page -> page.stream().map(this::toDto).toList());
     }
 
     private String resolveSlug(String providedSlug, String name) {

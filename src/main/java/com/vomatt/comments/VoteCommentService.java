@@ -11,17 +11,23 @@ import com.vomatt.repository.UserRepository;
 import com.vomatt.entity.CommentLike;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
+import com.vomatt.common.response.Cursor;
+import com.vomatt.common.response.CursorResponse;
 import com.vomatt.repository.CommentLikeRepository;
+import com.vomatt.repository.IdCount;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.repository.VoteRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -50,14 +56,21 @@ public class VoteCommentService {
         return convertToCommentDto(comment);
     }
 
+    /** A Poll's comments, newest first, cursor-paged; likes are loaded per page, not per comment. */
     @Transactional(readOnly = true)
-    public Page<CommentDto> getCommentsByVote(String voteId, Pageable pageable, String currentUserId) {
-        if (!voteRepository.existsById(UUID.fromString(voteId))) {
+    public CursorResponse<CommentDto> getCommentsByVote(String voteId, String cursor, Integer limit,
+                                                        String currentUserId) {
+        UUID voteUuid = UUID.fromString(voteId);
+        if (!voteRepository.existsById(voteUuid)) {
             throw ApiException.notFound(MessageKey.VOTE_NOT_FOUND);
         }
 
-        Page<VoteComment> comments = commentRepository.findByVoteId(UUID.fromString(voteId), pageable);
-        return comments.map(comment -> convertToCommentDto(comment, currentUserId));
+        int size = CursorResponse.limit(limit);
+        Cursor after = Cursor.decode(cursor);
+        List<VoteComment> rows = commentRepository.findPageByVoteId(voteUuid,
+            after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
+        return CursorResponse.of(rows, size, c -> Cursor.of(c.getCreatedAt(), c.getId()),
+            page -> toDtos(page, currentUserId));
     }
 
     public CommentDto updateComment(UUID commentId, String userId, UpdateCommentRequest request) {
@@ -133,6 +146,20 @@ public class VoteCommentService {
         commentLikeRepository.deleteByCommentIdAndUserId(commentId, UUID.fromString(userId));
 
         log.info("User {} unliked comment {}", userId, commentId);
+    }
+
+    private List<CommentDto> toDtos(List<VoteComment> comments, String currentUserId) {
+        if (comments.isEmpty()) {
+            return List.of();
+        }
+        List<UUID> ids = comments.stream().map(VoteComment::getId).toList();
+        Map<UUID, Long> likeCounts = commentLikeRepository.countByCommentIds(ids).stream()
+            .collect(Collectors.toMap(IdCount::getId, IdCount::getCount));
+        Set<UUID> liked = currentUserId == null ? Set.of()
+            : Set.copyOf(commentLikeRepository.findLikedCommentIds(UUID.fromString(currentUserId), ids));
+        return comments.stream()
+            .map(c -> commentMapper.toDto(c, likeCounts.getOrDefault(c.getId(), 0L), liked.contains(c.getId())))
+            .toList();
     }
 
     private CommentDto convertToCommentDto(VoteComment comment) {

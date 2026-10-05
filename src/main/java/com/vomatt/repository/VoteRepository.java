@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -22,6 +23,15 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
     Page<Vote> findByCreatorIdOrderByCreatedAtDesc(UUID creatorId, Pageable pageable);
 
     long countByCreatorId(UUID creatorId);
+
+    /** Keyset page of a user's own Polls, newest first; null cursor for the first page. */
+    @Query("""
+            SELECT v FROM Vote v WHERE v.creator.id = :creatorId
+              AND (CAST(:afterTime AS OffsetDateTime) IS NULL OR v.createdAt < :afterTime
+                   OR (v.createdAt = :afterTime AND v.id < :afterId))
+            ORDER BY v.createdAt DESC, v.id DESC""")
+    List<Vote> findCreatorPage(@Param("creatorId") UUID creatorId, @Param("afterTime") OffsetDateTime afterTime,
+                               @Param("afterId") UUID afterId, Limit limit);
 
     List<Vote> findByIsActiveTrueOrderByCreatedAtDesc();
 

@@ -12,8 +12,6 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Limit;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,8 +33,8 @@ import com.vomatt.repository.TagRepository;
 import com.vomatt.repository.UserVoteRepository;
 import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.BallotSelection;
+import com.vomatt.repository.IdCount;
 import com.vomatt.repository.VoteCommentRepository;
-import com.vomatt.repository.VoteIdCount;
 import com.vomatt.repository.VoteListRepository;
 import com.vomatt.repository.VoteRepository;
 
@@ -166,9 +164,13 @@ public class VoteService {
     }
 
     @Transactional(readOnly = true)
-    public Page<VoteResponse> getVotesByCreator(String creatorId, Pageable pageable) {
-        Page<Vote> votes = voteRepository.findByCreatorIdOrderByCreatedAtDesc(UUID.fromString(creatorId), pageable);
-        return votes.map(this::convertToVoteResponse);
+    public CursorResponse<VoteResponse> getVotesByCreator(String creatorId, String cursor, Integer limit) {
+        int size = CursorResponse.limit(limit);
+        Cursor after = Cursor.decode(cursor);
+        List<Vote> rows = voteRepository.findCreatorPage(UUID.fromString(creatorId),
+            after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
+        return CursorResponse.of(rows, size, v -> Cursor.of(v.getCreatedAt(), v.getId()),
+            page -> toResponses(page, creatorId));
     }
 
     /**
@@ -322,7 +324,7 @@ public class VoteService {
         }
         List<UUID> ids = votes.stream().map(Vote::getId).toList();
         Map<UUID, Long> commentCounts = voteCommentRepository.countVisibleByVoteIds(ids).stream()
-            .collect(Collectors.toMap(VoteIdCount::getVoteId, VoteIdCount::getCount));
+            .collect(Collectors.toMap(IdCount::getId, IdCount::getCount));
         Map<UUID, UUID> selections = userId == null ? Map.of()
             : userVoteRepository.findSelections(UUID.fromString(userId), ids).stream()
                 .collect(Collectors.toMap(BallotSelection::getVoteId, BallotSelection::getOptionId, (a, b) -> a));

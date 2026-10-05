@@ -2,6 +2,7 @@ package com.vomatt.tags;
 
 import com.vomatt.common.exception.GlobalExceptionHandler;
 import com.vomatt.common.i18n.LocalizedMessageService;
+import com.vomatt.common.response.CursorResponse;
 import com.vomatt.tags.dto.TagDto;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -96,34 +97,25 @@ class TagControllerTest {
     class GetPopularTagsTests {
 
         @Test
-        @DisplayName("Should return 200 and paginated popular tags (PageResponse, 1-based page)")
+        @DisplayName("Should return 200 and a cursor page of popular tags")
         void shouldReturn200WithPopularTagsPage() throws Exception {
             TagDto tag = buildTagDto("id-1", "Trending");
-            Page<TagDto> page = new PageImpl<>(List.of(tag), PageRequest.of(0, 20), 1);
-            // 預設 @PageableDefault(size = 20)
-            when(tagService.getPopularTags(argThat(p -> p.getPageNumber() == 0 && p.getPageSize() == 20)))
-                    .thenReturn(page);
+            when(tagService.getPopularTags(null, null)).thenReturn(new CursorResponse<>(List.of(tag), "next"));
 
             mockMvc.perform(get("/api/tags/popular"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.success").value(true))
-                    .andExpect(jsonPath("$.data.content").isArray())
-                    .andExpect(jsonPath("$.data.content[0].id").value("id-1"))
-                    .andExpect(jsonPath("$.data.total").value(1))
-                    .andExpect(jsonPath("$.data.page").value(1))
-                    .andExpect(jsonPath("$.data.limit").value(20));
+                    .andExpect(jsonPath("$.data.items[0].id").value("id-1"))
+                    .andExpect(jsonPath("$.data.nextCursor").value("next"));
         }
 
         @Test
-        @DisplayName("Should return empty page when there are no popular tags")
-        void shouldReturnEmptyPageWhenNoPopularTags() throws Exception {
-            when(tagService.getPopularTags(any(Pageable.class))).thenReturn(Page.empty());
+        @DisplayName("Should pass cursor and limit through")
+        void shouldPassCursorAndLimit() throws Exception {
+            when(tagService.getPopularTags("c1", 5)).thenReturn(new CursorResponse<>(List.of(), null));
 
-            mockMvc.perform(get("/api/tags/popular"))
+            mockMvc.perform(get("/api/tags/popular").param("cursor", "c1").param("limit", "5"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.success").value(true))
-                    .andExpect(jsonPath("$.data.content").isArray())
-                    .andExpect(jsonPath("$.data.content").isEmpty());
+                    .andExpect(jsonPath("$.data.items").isEmpty());
         }
     }
 }

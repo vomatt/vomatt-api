@@ -13,12 +13,13 @@ import com.vomatt.entity.User;
 import com.vomatt.entity.UserPreference;
 import com.vomatt.repository.UserPreferenceRepository;
 import com.vomatt.repository.UserProfileProjection;
+import com.vomatt.common.response.Cursor;
+import com.vomatt.common.response.CursorResponse;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.VoteOptionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,10 +56,14 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
-    public Page<UserDto> searchUsersByUsername(String username, Pageable pageable) {
+    public CursorResponse<UserDto> searchUsersByUsername(String username, String cursor, Integer limit) {
         log.debug("Searching users with username containing: {}", username);
-        return userRepository.searchByUsername(username, pageable)
-            .map(userMapper::toDto);
+        int size = CursorResponse.limit(limit);
+        Cursor after = Cursor.decode(cursor);
+        List<User> rows = userRepository.searchByUsernameAfter(username, after == null ? null : after.key(),
+            Limit.of(size + 1));
+        return CursorResponse.of(rows, size, u -> Cursor.of(u.getUsername(), u.getId()),
+            page -> page.stream().map(userMapper::toDto).toList());
     }
 
     @Transactional(readOnly = true)

@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -29,6 +31,15 @@ public interface CommentLikeRepository extends JpaRepository<CommentLike, UUID> 
      */
     @Query("SELECT COUNT(cl) FROM CommentLike cl WHERE cl.comment.id = :commentId")
     long countByCommentId(@Param("commentId") UUID commentId);
+
+    /** Like counts for a page of comments. */
+    @Query("SELECT cl.comment.id AS id, COUNT(cl) AS count FROM CommentLike cl "
+            + "WHERE cl.comment.id IN :commentIds GROUP BY cl.comment.id")
+    List<IdCount> countByCommentIds(@Param("commentIds") Collection<UUID> commentIds);
+
+    /** Which of a page of comments the user has liked. */
+    @Query("SELECT cl.comment.id FROM CommentLike cl WHERE cl.user.id = :userId AND cl.comment.id IN :commentIds")
+    List<UUID> findLikedCommentIds(@Param("userId") UUID userId, @Param("commentIds") Collection<UUID> commentIds);
 
     /**
      * Delete like by comment and user

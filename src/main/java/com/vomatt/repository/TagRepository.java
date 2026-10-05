@@ -1,6 +1,7 @@
 package com.vomatt.repository;
 
 import com.vomatt.entity.Tag;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -32,6 +33,14 @@ public interface TagRepository extends JpaRepository<Tag, UUID> {
     List<Tag> findAllByOrderByDisplayOrderAsc();
 
     Page<Tag> findAllByOrderByUsageCountDesc(Pageable pageable);
+
+    /** Keyset page of tags by usage, most used first; null cursor for the first page. */
+    @Query("""
+            SELECT t FROM Tag t
+            WHERE CAST(:afterCount AS Integer) IS NULL OR t.usageCount < :afterCount
+               OR (t.usageCount = :afterCount AND t.id < :afterId)
+            ORDER BY t.usageCount DESC, t.id DESC""")
+    List<Tag> findPopularPage(@Param("afterCount") Integer afterCount, @Param("afterId") UUID afterId, Limit limit);
 
     List<Tag> findAllByIdIn(Set<UUID> ids);
 

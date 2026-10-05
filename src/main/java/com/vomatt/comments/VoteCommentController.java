@@ -2,9 +2,6 @@ package com.vomatt.comments;
 
 import java.util.UUID;
 
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -14,12 +11,13 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.vomatt.comments.dto.CreateCommentRequest;
 import com.vomatt.comments.dto.UpdateCommentRequest;
 import com.vomatt.common.response.ApiResponse;
-import com.vomatt.common.response.PageResponse;
+import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.response.SimpleResultResponse;
 import com.vomatt.common.annotation.CommonApiResponses;
 import com.vomatt.comments.dto.CommentDto;
@@ -61,13 +59,14 @@ public class VoteCommentController {
 
     @GetMapping
     @CommonApiResponses
-    @Operation(summary = "Get comments for a vote", description = "Retrieve all comments for a vote (paginated)")
-    public ResponseEntity<ApiResponse<PageResponse<CommentDto>>> getComments(
+    @Operation(summary = "Get comments for a vote", description = "Comments of a Poll, newest first (cursor-paged)")
+    public ResponseEntity<ApiResponse<CursorResponse<CommentDto>>> getComments(
             @Parameter(description = "Vote ID", required = true) @PathVariable String voteId,
-            @PageableDefault(size = 20) Pageable pageable,
+            @Parameter(description = "上一頁回傳的 nextCursor") @RequestParam(required = false) String cursor,
+            @Parameter(description = "每頁筆數（1–50，預設 20）") @RequestParam(required = false) Integer limit,
             @AuthenticationPrincipal UserPrincipal principal) {
-        Page<CommentDto> response = commentService.getCommentsByVote(voteId, pageable, principal.userId());
-        return ResponseEntity.ok(ApiResponse.ok(PageResponse.from(response)));
+        return ResponseEntity.ok(ApiResponse.ok(
+                commentService.getCommentsByVote(voteId, cursor, limit, principal.userId())));
     }
 
     @PutMapping("/{commentId}")

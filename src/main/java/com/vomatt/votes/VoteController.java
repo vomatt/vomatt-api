@@ -1,8 +1,5 @@
 package com.vomatt.votes;
 
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -19,7 +16,6 @@ import com.vomatt.votes.dto.CreateVoteRequest;
 import com.vomatt.votes.dto.VoteRequest;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.CursorResponse;
-import com.vomatt.common.response.PageResponse;
 import com.vomatt.common.response.SimpleResultResponse;
 import com.vomatt.common.annotation.CommonApiResponses;
 import com.vomatt.common.annotation.PublicApiResponse;
@@ -106,11 +102,11 @@ public class VoteController {
     @GetMapping("/my")
     @CommonApiResponses
     @Operation(summary = "Get user's votes", description = "Retrieve votes created by the authenticated user (paginated)")
-    public ResponseEntity<ApiResponse<PageResponse<VoteResponse>>> getMyVotes(
-            @PageableDefault(size = 20) Pageable pageable,
+    public ResponseEntity<ApiResponse<CursorResponse<VoteResponse>>> getMyVotes(
+            @Parameter(description = "上一頁回傳的 nextCursor") @RequestParam(required = false) String cursor,
+            @Parameter(description = "每頁筆數（1–50，預設 20）") @RequestParam(required = false) Integer limit,
             @AuthenticationPrincipal UserPrincipal principal) {
-        Page<VoteResponse> response = voteService.getVotesByCreator(principal.userId(), pageable);
-        return ResponseEntity.ok(ApiResponse.ok(PageResponse.from(response)));
+        return ResponseEntity.ok(ApiResponse.ok(voteService.getVotesByCreator(principal.userId(), cursor, limit)));
     }
 
     @PostMapping("/{voteId}/vote")

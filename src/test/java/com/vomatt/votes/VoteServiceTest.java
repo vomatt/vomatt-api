@@ -166,6 +166,20 @@ class VoteServiceTest {
         }
 
         @Test
+        @DisplayName("應該在要求複選時拋出 400 VOTE_MULTIPLE_NOT_ALLOWED")
+        void shouldRejectCreateWhenMultipleChoicesRequested() {
+            CreateVoteRequest request = new CreateVoteRequest();
+            request.setTitle("Test");
+            request.setOptions(List.of(buildOption("A"), buildOption("B")));
+            request.setEndTime(OffsetDateTime.now().plusDays(1));
+            request.setAllowMultipleChoices(true);
+
+            assertThatThrownBy(() -> voteService.createVote(request, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_MULTIPLE_NOT_ALLOWED));
+            verify(voteRepository, never()).save(any());
+        }
+
+        @Test
         @DisplayName("應該在找不到建立者時拋出 404 USER_NOT_FOUND")
         void shouldThrowWhenCreatorNotFound() {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);

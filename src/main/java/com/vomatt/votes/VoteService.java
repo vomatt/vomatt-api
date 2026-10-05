@@ -58,7 +58,6 @@ public class VoteService {
 
         Vote vote = new Vote(request.getTitle(), request.getDescription(), creator, request.getEndTime());
         vote.setStartTime(request.getStartTime() != null ? request.getStartTime() : OffsetDateTime.now());
-        vote.setAllowMultipleChoices(request.isAllowMultipleChoices());
         vote.setAnonymous(request.isAnonymous());
 
         if (request.getTagIds() != null && !request.getTagIds().isEmpty()) {
@@ -280,6 +279,10 @@ public class VoteService {
     }
 
     private void validateCreateVoteRequest(CreateVoteRequest request) {
+        if (request.isAllowMultipleChoices()) {
+            throw ApiException.badRequest(MessageKey.VOTE_MULTIPLE_NOT_ALLOWED);
+        }
+
         if (request.getOptions().size() < voteConfig.getMinOptionsPerVote()) {
             throw ApiException.badRequest(MessageKey.VOTE_OPTIONS_MIN, voteConfig.getMinOptionsPerVote());
         }

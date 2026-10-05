@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS vomatt.votes (
     creator_id             UUID          NOT NULL REFERENCES vomatt.users (id) ON DELETE CASCADE,
     vote_type              VARCHAR(20)   NOT NULL DEFAULT 'STANDARD',
     start_time             TIMESTAMPTZ   NOT NULL DEFAULT now(),
-    end_time               TIMESTAMPTZ,
+    end_time               TIMESTAMPTZ   NOT NULL,
     is_active              BOOLEAN       NOT NULL DEFAULT TRUE,
     allow_multiple_choices BOOLEAN       NOT NULL DEFAULT FALSE,
     is_anonymous           BOOLEAN       NOT NULL DEFAULT FALSE,
@@ -218,3 +218,5 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at       ON vomatt.audit_logs 
 -- =============================================================================
 -- 選項票數（Ballot 寫入時原子加減；校正見 db/reconcile-vote-counts.sql）
 ALTER TABLE vomatt.vote_options ADD COLUMN IF NOT EXISTS vote_count INTEGER NOT NULL DEFAULT 0;
+-- 每個 Poll 都必須有結束時間（正式環境上線時 0 筆 Poll，無需回填）
+ALTER TABLE vomatt.votes ALTER COLUMN end_time SET NOT NULL;

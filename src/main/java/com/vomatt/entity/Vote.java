@@ -52,7 +52,7 @@ public class Vote extends AuditableEntity {
     @Column(name = "start_time")
     private OffsetDateTime startTime;
 
-    @Column(name = "end_time")
+    @Column(name = "end_time", nullable = false)
     private OffsetDateTime endTime;
 
     @Column(name = "is_active")

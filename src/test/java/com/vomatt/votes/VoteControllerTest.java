@@ -203,6 +203,7 @@ class VoteControllerTest {
             CreateVoteRequest.VoteOptionRequest opt2 = new CreateVoteRequest.VoteOptionRequest();
             opt2.setText("Blue");
             request.setOptions(List.of(opt1, opt2));
+            request.setEndTime(java.time.OffsetDateTime.now().plusDays(1));
 
             mockMvc.perform(post("/api/votes")
                     .contentType(MediaType.APPLICATION_JSON)
@@ -210,6 +211,19 @@ class VoteControllerTest {
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.title").value("Favourite Color?"));
+        }
+
+        @Test
+        @DisplayName("應該在缺少 endTime 時回傳 400")
+        void shouldRejectCreateWhenEndTimeMissing() throws Exception {
+            authenticate();
+
+            mockMvc.perform(post("/api/votes")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"title\":\"Q\",\"options\":[{\"text\":\"A\"},{\"text\":\"B\"}]}"))
+                    .andExpect(status().isBadRequest());
+
+            verify(voteService, never()).createVote(any(), any());
         }
 
         @Test

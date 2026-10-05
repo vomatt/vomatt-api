@@ -2,6 +2,7 @@ package com.vomatt.repository;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.stereotype.Repository;
 
@@ -68,6 +69,34 @@ public class VoteListRepository {
             nativeQuery.setParameter("q", query)
                     .setParameter("pattern", "%" + escapeLike(query.toLowerCase()) + "%");
         }
+        if (after != null) {
+            nativeQuery.setParameter("afterKey", after.timeKey()).setParameter("afterId", after.id());
+        }
+        return nativeQuery.getResultList();
+    }
+
+    /**
+     * My Polls: Polls the user created or holds a Ballot in. Not yet Ended (Scheduled + Open) closing soonest
+     * first, or Ended most recently ended first.
+     */
+    @SuppressWarnings("unchecked")
+    public List<Vote> findMine(UUID userId, boolean ended, Cursor after, OffsetDateTime now, int limit) {
+        String direction = ended ? " DESC" : " ASC";
+        StringBuilder sql = new StringBuilder("""
+                SELECT v.* FROM vomatt.votes v
+                WHERE (v.creator_id = :userId
+                       OR EXISTS (SELECT 1 FROM vomatt.user_votes uv WHERE uv.vote_id = v.id AND uv.user_id = :userId))
+                """);
+        sql.append(ended ? " AND v.end_time <= :now" : " AND v.end_time > :now");
+        if (after != null) {
+            sql.append(" AND (v.end_time, v.id) ").append(ended ? "<" : ">").append(" (:afterKey, :afterId)");
+        }
+        sql.append(" ORDER BY v.end_time").append(direction).append(", v.id").append(direction).append(" LIMIT :limit");
+
+        Query nativeQuery = em.createNativeQuery(sql.toString(), Vote.class)
+                .setParameter("userId", userId)
+                .setParameter("now", now)
+                .setParameter("limit", limit);
         if (after != null) {
             nativeQuery.setParameter("afterKey", after.timeKey()).setParameter("afterId", after.id());
         }

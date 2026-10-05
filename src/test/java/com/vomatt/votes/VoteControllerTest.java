@@ -270,7 +270,7 @@ class VoteControllerTest {
         @DisplayName("Authenticated user should be able to retrieve their own votes")
         void shouldReturnUserVotesWhenAuthenticated() throws Exception {
             authenticate();
-            when(voteService.getVotesByCreator(USER_ID, null, null))
+            when(voteService.getMyPolls(USER_ID, null, null, null))
                     .thenReturn(new CursorResponse<>(List.of(), null));
 
             mockMvc.perform(get("/api/votes/my"))

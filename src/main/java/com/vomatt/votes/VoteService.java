@@ -163,14 +163,22 @@ public class VoteService {
             page -> toResponses(page, userId));
     }
 
+    /**
+     * My Polls: Polls the user created or holds a Ballot in. {@code status=open} (default) lists Scheduled and
+     * Open ones closing soonest first; {@code status=ended} lists Ended ones most recently ended first.
+     */
     @Transactional(readOnly = true)
-    public CursorResponse<VoteResponse> getVotesByCreator(String creatorId, String cursor, Integer limit) {
+    public CursorResponse<VoteResponse> getMyPolls(String userId, String status, String cursor, Integer limit) {
+        boolean ended = switch (status == null ? "open" : status) {
+            case "open" -> false;
+            case "ended" -> true;
+            default -> throw ApiException.badRequest(MessageKey.COMMON_INVALID_STATUS, status);
+        };
         int size = CursorResponse.limit(limit);
-        Cursor after = Cursor.decode(cursor);
-        List<Vote> rows = voteRepository.findCreatorPage(UUID.fromString(creatorId),
-            after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
-        return CursorResponse.of(rows, size, v -> Cursor.of(v.getCreatedAt(), v.getId()),
-            page -> toResponses(page, creatorId));
+        List<Vote> rows = voteListRepository.findMine(UUID.fromString(userId), ended, Cursor.decode(cursor),
+            OffsetDateTime.now(), size + 1);
+        return CursorResponse.of(rows, size, v -> Cursor.of(v.getEndTime(), v.getId()),
+            page -> toResponses(page, userId));
     }
 
     /**

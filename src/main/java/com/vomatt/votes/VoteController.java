@@ -101,12 +101,13 @@ public class VoteController {
 
     @GetMapping("/my")
     @CommonApiResponses
-    @Operation(summary = "Get user's votes", description = "Retrieve votes created by the authenticated user (paginated)")
+    @Operation(summary = "My Polls", description = "Polls I created or hold a Ballot in. status=open: Scheduled and Open, closing soonest first; status=ended: most recently ended first (cursor-paged)")
     public ResponseEntity<ApiResponse<CursorResponse<VoteResponse>>> getMyVotes(
+            @Parameter(description = "open（預設，含自己的 Scheduled）| ended") @RequestParam(required = false) String status,
             @Parameter(description = "上一頁回傳的 nextCursor") @RequestParam(required = false) String cursor,
             @Parameter(description = "每頁筆數（1–50，預設 20）") @RequestParam(required = false) Integer limit,
             @AuthenticationPrincipal UserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.ok(voteService.getVotesByCreator(principal.userId(), cursor, limit)));
+        return ResponseEntity.ok(ApiResponse.ok(voteService.getMyPolls(principal.userId(), status, cursor, limit)));
     }
 
     @PostMapping("/{voteId}/vote")

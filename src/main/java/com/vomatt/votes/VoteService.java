@@ -34,6 +34,7 @@ import com.vomatt.repository.UserVoteRepository;
 import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.BallotSelection;
 import com.vomatt.repository.IdCount;
+import com.vomatt.repository.NotificationReadRepository;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.repository.VoteListRepository;
 import com.vomatt.repository.VoteRepository;
@@ -57,6 +58,7 @@ public class VoteService {
     private final VoteMapper voteMapper;
     private final VoteListRepository voteListRepository;
     private final VoteCommentRepository voteCommentRepository;
+    private final NotificationReadRepository notificationReadRepository;
 
     public VoteResponse createVote(CreateVoteRequest request, String creatorId) {
         validateCreateVoteRequest(request);
@@ -175,10 +177,21 @@ public class VoteService {
             default -> throw ApiException.badRequest(MessageKey.COMMON_INVALID_STATUS, status);
         };
         int size = CursorResponse.limit(limit);
-        List<Vote> rows = voteListRepository.findMine(UUID.fromString(userId), ended, Cursor.decode(cursor),
+        UUID userUuid = UUID.fromString(userId);
+        List<Vote> rows = voteListRepository.findMine(userUuid, ended, Cursor.decode(cursor),
             OffsetDateTime.now(), size + 1);
         return CursorResponse.of(rows, size, v -> Cursor.of(v.getEndTime(), v.getId()),
-            page -> toResponses(page, userId));
+            page -> ended ? withUnread(page, toResponses(page, userId), userUuid) : toResponses(page, userId));
+    }
+
+    // Ended tab: unread when the Poll produced an Ended Notification (it opened) that the user hasn't read
+    private List<VoteResponse> withUnread(List<Vote> page, List<VoteResponse> responses, UUID userId) {
+        Set<UUID> read = notificationReadRepository.findReadVoteIds(userId, page.stream().map(Vote::getId).toList());
+        for (int i = 0; i < page.size(); i++) {
+            Vote vote = page.get(i);
+            responses.get(i).setUnread(!vote.isCancelledBeforeOpening() && !read.contains(vote.getId()));
+        }
+        return responses;
     }
 
     /**

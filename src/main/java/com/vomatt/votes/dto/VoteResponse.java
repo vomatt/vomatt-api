@@ -38,6 +38,9 @@ public class VoteResponse {
     @Schema(description = "投票者可見度（Poll 結束後誰可看到每位 Participant 的選擇）")
     private VoterVisibility voterVisibility;
 
+    @Schema(description = "僅 My Polls 已結束分頁：結束通知是否未讀；其他情況為 null", nullable = true)
+    private Boolean unread;
+
     @Schema(description = "目前使用者選擇的選項 ID；未投票或未登入為 null", nullable = true)
     private String myOptionId;
     

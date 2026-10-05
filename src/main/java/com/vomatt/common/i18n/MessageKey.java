@@ -97,6 +97,7 @@ public enum MessageKey {
     COMMENT_NOT_FOUND("comment.not_found"),
     COMMENT_FORBIDDEN("comment.forbidden"),
     COMMENT_PARENT_INVALID("comment.parent.invalid"),
+    NOTIFICATION_NOT_FOUND("notification.not_found"),
 
     // === Tag ===
     TAG_NOT_FOUND("tag.not_found"),

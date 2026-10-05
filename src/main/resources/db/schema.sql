@@ -142,6 +142,16 @@ CREATE TABLE IF NOT EXISTS vomatt.comment_likes (
 );
 
 -- =============================================================================
+-- NOTIFICATIONS：「Poll 結束」通知於讀取時推算，只存已讀狀態（ADR 0003）
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS vomatt.notification_reads (
+    user_id UUID        NOT NULL REFERENCES vomatt.users (id) ON DELETE CASCADE,
+    vote_id UUID        NOT NULL REFERENCES vomatt.votes (id) ON DELETE CASCADE,
+    read_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, vote_id)
+);
+
+-- =============================================================================
 -- TAGS
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS vomatt.tags (

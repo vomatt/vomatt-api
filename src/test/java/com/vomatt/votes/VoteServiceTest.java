@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -48,7 +49,7 @@ class VoteServiceTest {
     @Mock UserRepository userRepository;
     @Mock TagRepository tagRepository;
     @Mock VoteConfigurationProperties voteConfig;
-    @Mock VoteMapper voteMapper;
+    @Spy VoteMapper voteMapper = new VoteMapper();
 
     @InjectMocks
     VoteService voteService;
@@ -68,6 +69,7 @@ class VoteServiceTest {
 
         vote = new Vote();
         vote.setTitle("Test Vote");
+        vote.setCreator(user);
         setId(vote, voteId);
 
         option = new VoteOption();
@@ -88,13 +90,10 @@ class VoteServiceTest {
         assertThat(apiEx.getMessageKey()).isEqualTo(key);
     }
 
-    private VoteResponse stubConvertToVoteResponse(Vote v) {
+    private void stubConvertToVoteResponse(Vote v) {
         when(voteRepository.findByIdWithOptions(v.getId())).thenReturn(Optional.of(v));
         when(userVoteRepository.countByOptionGroupedForVote(v.getId()))
                 .thenReturn(Collections.emptyList());
-        VoteResponse response = new VoteResponse();
-        when(voteMapper.toResponse(eq(v), any(), any(), eq(0L))).thenReturn(response);
-        return response;
     }
 
     private void stubSaveAssignsId() {
@@ -103,6 +102,7 @@ class VoteServiceTest {
             if (v.getId() == null) {
                 setId(v, UUID.randomUUID()); // 模擬 DB 分配 ID
             }
+            v.getOptions().stream().filter(o -> o.getId() == null).forEach(o -> setId(o, UUID.randomUUID()));
             return v;
         });
     }
@@ -194,13 +194,13 @@ class VoteServiceTest {
             request.setTitle("Favourite Color?");
             request.setOptions(List.of(buildOption("Red"), buildOption("Blue")));
 
-            VoteResponse expected = new VoteResponse();
             when(userVoteRepository.countByOptionGroupedForVote(any())).thenReturn(Collections.emptyList());
-            when(voteMapper.toResponse(any(), any(), any(), anyLong())).thenReturn(expected);
 
             VoteResponse result = voteService.createVote(request, userId.toString());
 
-            assertThat(result).isSameAs(expected);
+            assertThat(result.getTitle()).isEqualTo("Favourite Color?");
+            assertThat(result.getOptions()).extracting(VoteResponse.VoteOptionResponse::getText)
+                    .containsExactlyInAnyOrder("Red", "Blue");
             verify(voteRepository, times(2)).save(argThat(v ->
                     "Favourite Color?".equals(v.getTitle()) && v.getCreator() == user));
         }
@@ -224,11 +224,12 @@ class VoteServiceTest {
         @DisplayName("應該成功回傳投票")
         void shouldReturnVoteWhenFound() {
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
-            VoteResponse expected = stubConvertToVoteResponse(vote);
+            stubConvertToVoteResponse(vote);
 
             VoteResponse result = voteService.getVote(voteId.toString());
 
-            assertThat(result).isSameAs(expected);
+            assertThat(result.getId()).isEqualTo(voteId.toString());
+            assertThat(result.getTitle()).isEqualTo("Test Vote");
         }
     }
 
@@ -354,7 +355,6 @@ class VoteServiceTest {
             Tag tag = setId(new Tag("Tech", "tech", "Technology", 1), tagId);
             when(tagRepository.findAllByIdIn(Set.of(tagId))).thenReturn(List.of(tag));
             when(userVoteRepository.countByOptionGroupedForVote(any())).thenReturn(Collections.emptyList());
-            when(voteMapper.toResponse(any(), any(), any(), anyLong())).thenReturn(new VoteResponse());
 
             CreateVoteRequest request = new CreateVoteRequest();
             request.setTitle("Tag Vote");
@@ -400,7 +400,6 @@ class VoteServiceTest {
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
             stubSaveAssignsId();
             when(userVoteRepository.countByOptionGroupedForVote(any())).thenReturn(Collections.emptyList());
-            when(voteMapper.toResponse(any(), any(), any(), anyLong())).thenReturn(new VoteResponse());
 
             CreateVoteRequest request = new CreateVoteRequest();
             request.setTitle("No Tag Vote");

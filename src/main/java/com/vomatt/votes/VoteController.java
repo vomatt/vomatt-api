@@ -62,6 +62,19 @@ public class VoteController {
                 .body(ApiResponse.ok(voteResponse));
     }
 
+    @PutMapping("/{voteId}")
+    @Auditable(action = "UPDATE", resourceType = "VOTE", resourceIdIndex = 0)
+    @CommonApiResponses
+    @Operation(summary = "Edit a Scheduled Poll",
+            description = "Creator only, before the Poll opens; same body and validation as create. 400 vote.not_editable once Open or Ended")
+    public ResponseEntity<ApiResponse<VoteResponse>> updateVote(
+            @Parameter(description = "Vote ID", required = true)
+            @PathVariable String voteId,
+            @Valid @RequestBody CreateVoteRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(voteService.updateVote(voteId, request, principal.userId())));
+    }
+
     @GetMapping("/{voteId}")
     @PublicApiResponse
     @Operation(summary = "Get Poll by ID", description = "Public. Per-option counts are null (Sealed) until the Poll has Ended; participantCount is always present")

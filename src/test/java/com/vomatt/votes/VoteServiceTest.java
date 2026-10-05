@@ -474,6 +474,84 @@ class VoteServiceTest {
         }
     }
 
+    @Nested
+    @DisplayName("updateVote")
+    class UpdateVoteTests {
+
+        private CreateVoteRequest editRequest(List<UUID> tagIds) {
+            CreateVoteRequest request = new CreateVoteRequest();
+            request.setTitle("Edited");
+            request.setOptions(List.of(buildOption("X"), buildOption("Y"), buildOption("Z")));
+            request.setStartTime(OffsetDateTime.now().plusHours(2));
+            request.setEndTime(OffsetDateTime.now().plusDays(2));
+            request.setTagIds(tagIds);
+            return request;
+        }
+
+        private void scheduled() {
+            vote.setStartTime(OffsetDateTime.now().plusHours(1));
+            vote.setEndTime(OffsetDateTime.now().plusDays(1));
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+        }
+
+        @Test
+        @DisplayName("應該在 Poll 已開始時拒絕編輯")
+        void shouldRejectEditWhenPollOpen() {
+            vote.setEndTime(OffsetDateTime.now().plusDays(1));
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+
+            assertThatThrownBy(() -> voteService.updateVote(voteId.toString(), editRequest(null), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_NOT_EDITABLE));
+            verify(voteRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("應該在非發起人編輯時回 403")
+        void shouldRejectEditWhenNotOwner() {
+            scheduled();
+
+            assertThatThrownBy(() -> voteService.updateVote(voteId.toString(), editRequest(null), UUID.randomUUID().toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_FORBIDDEN));
+        }
+
+        @Test
+        @DisplayName("應該在編輯 Scheduled Poll 時取代題目與選項")
+        void shouldReplaceFieldsAndOptionsWhenScheduledPollEdited() {
+            scheduled();
+            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
+            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
+            when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
+            stubSaveAssignsId();
+
+            VoteResponse result = voteService.updateVote(voteId.toString(), editRequest(null), userId.toString());
+
+            assertThat(result.getTitle()).isEqualTo("Edited");
+            assertThat(result.getOptions()).extracting(VoteResponse.VoteOptionResponse::getText)
+                    .containsExactlyInAnyOrder("X", "Y", "Z");
+        }
+
+        @Test
+        @DisplayName("應該在編輯標籤時調整 usage_count：移除的減一、新增的加一")
+        void shouldAdjustTagUsageWhenTagsEdited() {
+            Tag kept = setId(new Tag("Kept", "kept", null, 1), UUID.randomUUID());
+            Tag dropped = setId(new Tag("Dropped", "dropped", null, 2), UUID.randomUUID());
+            Tag added = setId(new Tag("Added", "added", null, 3), UUID.randomUUID());
+            vote.addTag(kept);
+            vote.addTag(dropped);
+            scheduled();
+            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
+            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
+            when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
+            when(tagRepository.findAllByIdIn(Set.of(kept.getId(), added.getId()))).thenReturn(List.of(kept, added));
+            stubSaveAssignsId();
+
+            voteService.updateVote(voteId.toString(), editRequest(List.of(kept.getId(), added.getId())), userId.toString());
+
+            verify(tagRepository).decrementUsageCount(Set.of(dropped.getId()));
+            verify(tagRepository).incrementUsageCount(Set.of(added.getId()));
+        }
+    }
+
     // ─── deactivateVote ───────────────────────────────────────────────────────
 
     @Nested

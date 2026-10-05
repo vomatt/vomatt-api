@@ -8,6 +8,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.Page;
@@ -28,6 +29,7 @@ import com.vomatt.entity.Tag;
 import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
+import com.vomatt.entity.VoteStatus;
 import com.vomatt.repository.TagRepository;
 import com.vomatt.repository.UserVoteRepository;
 import com.vomatt.repository.VoteOptionRepository;
@@ -64,23 +66,11 @@ public class VoteService {
             vote.setVoterVisibility(request.getVoterVisibility());
         }
 
-        if (request.getTagIds() != null && !request.getTagIds().isEmpty()) {
-            Set<UUID> tagUUIDs = new HashSet<>(request.getTagIds());
-            List<Tag> tags = tagRepository.findAllByIdIn(tagUUIDs);
-            if (tags.size() != tagUUIDs.size()) {
-                throw ApiException.badRequest(MessageKey.TAG_IDS_INVALID);
-            }
-            tags.forEach(vote::addTag);
-        }
+        findTags(request.getTagIds()).forEach(vote::addTag);
 
         vote = voteRepository.save(vote);
 
-        for (int i = 0; i < request.getOptions().size(); i++) {
-            CreateVoteRequest.VoteOptionRequest optionRequest = request.getOptions().get(i);
-            VoteOption option = new VoteOption(optionRequest.getText(), optionRequest.getDescription(), vote);
-            option.setDisplayOrder(optionRequest.getDisplayOrder() != null ? optionRequest.getDisplayOrder() : i);
-            vote.addOption(option);
-        }
+        addOptions(vote, request);
 
         vote = voteRepository.save(vote);
         log.info("Vote created: {} by user: {}", vote.getId(), creatorId);
@@ -93,6 +83,54 @@ public class VoteService {
     }
 
     /** @param userId viewer, or null when signed out */
+    /**
+     * Edits a Scheduled Poll (owner only); takes the same fields and validation as create.
+     * No Ballots can exist before the start time, so options are replaced wholesale.
+     */
+    public VoteResponse updateVote(String voteId, CreateVoteRequest request, String userId) {
+        Vote vote = findVote(UUID.fromString(voteId));
+        if (!vote.getCreator().getId().toString().equals(userId)) {
+            throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
+        }
+        if (vote.getStatus() != VoteStatus.SCHEDULED) {
+            throw ApiException.badRequest(MessageKey.VOTE_NOT_EDITABLE);
+        }
+        validateCreateVoteRequest(request);
+
+        vote.setTitle(request.getTitle());
+        vote.setDescription(request.getDescription());
+        vote.setStartTime(request.getStartTime() != null ? request.getStartTime() : OffsetDateTime.now());
+        vote.setEndTime(request.getEndTime());
+        vote.setAnonymous(request.isAnonymous());
+        if (request.getVoterVisibility() != null) {
+            vote.setVoterVisibility(request.getVoterVisibility());
+        }
+
+        Set<UUID> oldTagIds = vote.getTags().stream().map(Tag::getId).collect(Collectors.toSet());
+        List<Tag> newTags = findTags(request.getTagIds());
+        Set<UUID> newTagIds = newTags.stream().map(Tag::getId).collect(Collectors.toSet());
+        vote.getTags().clear();
+        newTags.forEach(vote::addTag);
+
+        vote.getOptions().clear();
+        addOptions(vote, request);
+        vote = voteRepository.save(vote);
+
+        Set<UUID> removed = new HashSet<>(oldTagIds);
+        removed.removeAll(newTagIds);
+        Set<UUID> added = new HashSet<>(newTagIds);
+        added.removeAll(oldTagIds);
+        if (!removed.isEmpty()) {
+            tagRepository.decrementUsageCount(removed);
+        }
+        if (!added.isEmpty()) {
+            tagRepository.incrementUsageCount(added);
+        }
+        log.info("Vote {} edited by creator {}", voteId, userId);
+
+        return convertToVoteResponse(vote, userId);
+    }
+
     @Transactional(readOnly = true)
     public VoteResponse getVote(String voteId, String userId) {
         Vote vote = findVote(UUID.fromString(voteId));
@@ -291,6 +329,27 @@ public class VoteService {
         List<UUID> optionIds = ballots.stream().map(b -> b.getOption().getId()).toList();
         userVoteRepository.deleteAll(ballots);
         return optionIds;
+    }
+
+    private List<Tag> findTags(List<UUID> tagIds) {
+        if (tagIds == null || tagIds.isEmpty()) {
+            return List.of();
+        }
+        Set<UUID> tagUUIDs = new HashSet<>(tagIds);
+        List<Tag> tags = tagRepository.findAllByIdIn(tagUUIDs);
+        if (tags.size() != tagUUIDs.size()) {
+            throw ApiException.badRequest(MessageKey.TAG_IDS_INVALID);
+        }
+        return tags;
+    }
+
+    private void addOptions(Vote vote, CreateVoteRequest request) {
+        for (int i = 0; i < request.getOptions().size(); i++) {
+            CreateVoteRequest.VoteOptionRequest optionRequest = request.getOptions().get(i);
+            VoteOption option = new VoteOption(optionRequest.getText(), optionRequest.getDescription(), vote);
+            option.setDisplayOrder(optionRequest.getDisplayOrder() != null ? optionRequest.getDisplayOrder() : i);
+            vote.addOption(option);
+        }
     }
 
     private void validateCreateVoteRequest(CreateVoteRequest request) {

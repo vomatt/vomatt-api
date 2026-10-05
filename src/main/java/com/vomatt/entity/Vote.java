@@ -71,6 +71,10 @@ public class Vote extends AuditableEntity {
     private Integer maxChoices = 1;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "voter_visibility", nullable = false)
+    private VoterVisibility voterVisibility = VoterVisibility.OWNER;
+
+    @Enumerated(EnumType.STRING)
     @Column(name = "vote_type", nullable = false)
     private VoteType voteType = VoteType.STANDARD;
 

@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,9 @@ import com.vomatt.votes.dto.CreateVoteRequest;
 import com.vomatt.votes.dto.VoteRequest;
 import com.vomatt.votes.dto.VoteResponse;
 import com.vomatt.votes.dto.VoteResultResponse;
+import com.vomatt.votes.dto.VoterResponse;
+import com.vomatt.common.response.Cursor;
+import com.vomatt.common.response.CursorResponse;
 import com.vomatt.entity.User;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.entity.Tag;
@@ -56,6 +60,9 @@ public class VoteService {
         Vote vote = new Vote(request.getTitle(), request.getDescription(), creator, request.getEndTime());
         vote.setStartTime(request.getStartTime() != null ? request.getStartTime() : OffsetDateTime.now());
         vote.setAnonymous(request.isAnonymous());
+        if (request.getVoterVisibility() != null) {
+            vote.setVoterVisibility(request.getVoterVisibility());
+        }
 
         if (request.getTagIds() != null && !request.getTagIds().isEmpty()) {
             Set<UUID> tagUUIDs = new HashSet<>(request.getTagIds());
@@ -183,6 +190,30 @@ public class VoteService {
         }
         List<VoteOption> options = voteOptionRepository.findByVoteIdOrderByDisplayOrder(vote.getId());
         return voteMapper.toResultResponse(vote, options);
+    }
+
+    /** Who chose what in an Ended Poll, as allowed by its Voter Visibility; oldest Ballot first. */
+    @Transactional(readOnly = true)
+    public CursorResponse<VoterResponse> getVoters(String voteId, String userId, String cursor, Integer limit) {
+        Vote vote = findVote(UUID.fromString(voteId));
+        if (vote.isResultsSealed()) {
+            throw ApiException.forbidden(MessageKey.VOTE_RESULTS_SEALED);
+        }
+        boolean allowed = switch (vote.getVoterVisibility()) {
+            case NOBODY -> false;
+            case OWNER -> vote.getCreator().getId().toString().equals(userId);
+            case SIGNED_IN -> true;
+        };
+        if (!allowed) {
+            throw ApiException.forbidden(MessageKey.VOTE_VOTERS_HIDDEN);
+        }
+
+        int size = CursorResponse.limit(limit);
+        Cursor after = Cursor.decode(cursor);
+        List<UserVote> rows = userVoteRepository.findVoterPage(vote.getId(),
+            after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
+        return CursorResponse.of(rows, size, ballot -> Cursor.of(ballot.getCreatedAt(), ballot.getId()),
+            page -> page.stream().map(voteMapper::toVoterResponse).toList());
     }
 
     @Transactional(readOnly = true)

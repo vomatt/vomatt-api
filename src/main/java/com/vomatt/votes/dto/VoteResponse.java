@@ -1,5 +1,6 @@
 package com.vomatt.votes.dto;
 
+import com.vomatt.entity.VoterVisibility;
 import com.vomatt.tags.dto.TagDto;
 
 import java.time.OffsetDateTime;
@@ -30,6 +31,9 @@ public class VoteResponse {
     private boolean isVotingActive;
     private List<VoteOptionResponse> options;
     private List<TagDto> tags;
+
+    @Schema(description = "投票者可見度（Poll 結束後誰可看到每位 Participant 的選擇）")
+    private VoterVisibility voterVisibility;
 
     @Schema(description = "目前使用者選擇的選項 ID；未投票或未登入為 null", nullable = true)
     private String myOptionId;

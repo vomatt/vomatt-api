@@ -34,11 +34,5 @@ public class VoteResultResponse {
         /** Support as a percentage of Participants (0–100). */
         private double percentage;
     }
-    
-    @Data
-    public static class VoterResponse {
-        private String userId;
-        private String username;
-        private OffsetDateTime votedAt;
-    }
+
 }

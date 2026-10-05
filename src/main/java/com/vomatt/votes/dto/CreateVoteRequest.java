@@ -8,6 +8,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import com.vomatt.entity.VoterVisibility;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
@@ -36,6 +38,9 @@ public class CreateVoteRequest {
 
     @Schema(description = "已停用：改用投票者可見度", deprecated = true)
     private boolean isAnonymous = false;
+
+    @Schema(description = "投票者可見度；未指定為 OWNER", nullable = true)
+    private VoterVisibility voterVisibility;
 
     @Size(max = 5, message = "Maximum 5 tags can be selected")
     private List<UUID> tagIds;

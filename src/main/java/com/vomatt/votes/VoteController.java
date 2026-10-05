@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.vomatt.votes.dto.CreateVoteRequest;
 import com.vomatt.votes.dto.VoteRequest;
 import com.vomatt.common.response.ApiResponse;
+import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.response.PageResponse;
 import com.vomatt.common.response.SimpleResultResponse;
 import com.vomatt.common.annotation.CommonApiResponses;
@@ -25,6 +26,7 @@ import com.vomatt.common.annotation.PublicApiResponse;
 import com.vomatt.votes.dto.UserVoteStatusResponse;
 import com.vomatt.votes.dto.VoteResponse;
 import com.vomatt.votes.dto.VoteResultResponse;
+import com.vomatt.votes.dto.VoterResponse;
 import com.vomatt.common.security.UserPrincipal;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import com.vomatt.votes.VoteService;
@@ -147,6 +149,19 @@ public class VoteController {
             @PathVariable String voteId) {
         VoteResultResponse response = voteService.getVoteResults(voteId);
         return ResponseEntity.ok(ApiResponse.ok(response));
+    }
+
+    @GetMapping("/{voteId}/voters")
+    @CommonApiResponses
+    @Operation(summary = "List voters of an Ended Poll",
+            description = "Who chose which option, oldest first; cursor-paged. 403 while the Poll is not Ended or when Voter Visibility does not allow the caller")
+    public ResponseEntity<ApiResponse<CursorResponse<VoterResponse>>> getVoters(
+            @Parameter(description = "Vote ID", required = true)
+            @PathVariable String voteId,
+            @Parameter(description = "上一頁回傳的 nextCursor") @RequestParam(required = false) String cursor,
+            @Parameter(description = "每頁筆數（1–50，預設 20）") @RequestParam(required = false) Integer limit,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(voteService.getVoters(voteId, principal.userId(), cursor, limit)));
     }
 
     @GetMapping("/{voteId}/my-vote-status")

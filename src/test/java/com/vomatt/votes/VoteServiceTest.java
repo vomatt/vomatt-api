@@ -35,6 +35,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -415,6 +417,60 @@ class VoteServiceTest {
 
             assertThat(voteService.getVote(voteId.toString(), null).getMyOptionId()).isNull();
             verify(userVoteRepository, never()).findByUserIdAndVoteId(any(), any());
+        }
+    }
+
+    @Nested
+    @DisplayName("getVoters")
+    class VoterVisibilityTests {
+
+        private void endedWith(com.vomatt.entity.VoterVisibility visibility) {
+            vote.setEndTime(OffsetDateTime.now().minusMinutes(1));
+            vote.setVoterVisibility(visibility);
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+        }
+
+        private void assertHidden(String viewerId) {
+            assertThatThrownBy(() -> voteService.getVoters(voteId.toString(), viewerId, null, null))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_VOTERS_HIDDEN));
+        }
+
+        @Test
+        @DisplayName("應該在可見度為 NOBODY 時連發起人也看不到投票者")
+        void shouldHideVotersWhenVisibilityIsNobody() {
+            endedWith(com.vomatt.entity.VoterVisibility.NOBODY);
+            assertHidden(userId.toString());
+        }
+
+        @Test
+        @DisplayName("應該在可見度為 OWNER 時只開放給發起人")
+        void shouldShowVotersOnlyToOwnerWhenVisibilityIsOwner() {
+            endedWith(com.vomatt.entity.VoterVisibility.OWNER);
+            when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of());
+
+            assertThat(voteService.getVoters(voteId.toString(), userId.toString(), null, null).items()).isEmpty();
+            assertHidden(UUID.randomUUID().toString());
+        }
+
+        @Test
+        @DisplayName("應該在可見度為 SIGNED_IN 時開放給任何登入使用者")
+        void shouldShowVotersToAnySignedInUserWhenVisibilityIsSignedIn() {
+            endedWith(com.vomatt.entity.VoterVisibility.SIGNED_IN);
+            when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of());
+
+            assertThat(voteService.getVoters(voteId.toString(), UUID.randomUUID().toString(), null, null).nextCursor())
+                    .isNull();
+        }
+
+        @Test
+        @DisplayName("應該在 Poll 尚未結束時拒絕查看投票者")
+        void shouldRejectVotersWhenPollOpen() {
+            vote.setEndTime(OffsetDateTime.now().plusDays(1));
+            vote.setVoterVisibility(com.vomatt.entity.VoterVisibility.SIGNED_IN);
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+
+            assertThatThrownBy(() -> voteService.getVoters(voteId.toString(), userId.toString(), null, null))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_RESULTS_SEALED));
         }
     }
 

@@ -3,6 +3,8 @@ package com.vomatt.votes;
 import com.vomatt.tags.dto.TagDto;
 import com.vomatt.votes.dto.VoteResponse;
 import com.vomatt.votes.dto.VoteResultResponse;
+import com.vomatt.votes.dto.VoterResponse;
+import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
 import org.springframework.stereotype.Component;
@@ -30,6 +32,7 @@ public class VoteMapper {
         response.setActive(vote.isActive());
         response.setAllowMultipleChoices(vote.isAllowMultipleChoices());
         response.setAnonymous(vote.isAnonymous());
+        response.setVoterVisibility(vote.getVoterVisibility());
         response.setCreatedAt(vote.getCreatedAt());
         response.setUpdatedAt(vote.getUpdatedAt());
         long turnout = turnout(options);
@@ -98,6 +101,11 @@ public class VoteMapper {
         result.setVoteCount(option.getVoteCount());
         result.setPercentage(participants > 0 ? (double) option.getVoteCount() / participants * 100 : 0.0);
         return result;
+    }
+
+    public VoterResponse toVoterResponse(UserVote ballot) {
+        return new VoterResponse(ballot.getUser().getId().toString(), ballot.getUser().getUsername(),
+                ballot.getOption().getId().toString(), ballot.getCreatedAt());
     }
 
     // Turnout: Polls are single-choice, so the option counts add up to the number of Participants

@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS vomatt.votes (
     is_anonymous           BOOLEAN       NOT NULL DEFAULT FALSE,
     is_public              BOOLEAN       NOT NULL DEFAULT TRUE,
     max_choices            INTEGER       NOT NULL DEFAULT 1,
+    voter_visibility       VARCHAR(20)   NOT NULL DEFAULT 'OWNER',
     created_at             TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at             TIMESTAMPTZ   NOT NULL DEFAULT now()
 );
@@ -199,6 +200,7 @@ CREATE INDEX IF NOT EXISTS idx_votes_vote_type             ON vomatt.votes (vote
 CREATE INDEX IF NOT EXISTS idx_vote_options_vote_order     ON vomatt.vote_options (vote_id, display_order);
 CREATE INDEX IF NOT EXISTS idx_user_votes_vote_option      ON vomatt.user_votes (vote_id, option_id);
 CREATE INDEX IF NOT EXISTS idx_user_votes_user_vote        ON vomatt.user_votes (user_id, vote_id);
+CREATE INDEX IF NOT EXISTS idx_user_votes_vote_created     ON vomatt.user_votes (vote_id, created_at, id);
 CREATE INDEX IF NOT EXISTS idx_user_rankings_vote_id       ON vomatt.user_rankings (vote_id);
 CREATE INDEX IF NOT EXISTS idx_user_ratings_vote_id        ON vomatt.user_ratings (vote_id);
 CREATE INDEX IF NOT EXISTS idx_vote_comments_vote_created  ON vomatt.vote_comments (vote_id, created_at) WHERE is_deleted = FALSE;
@@ -220,3 +222,5 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at       ON vomatt.audit_logs 
 ALTER TABLE vomatt.vote_options ADD COLUMN IF NOT EXISTS vote_count INTEGER NOT NULL DEFAULT 0;
 -- 每個 Poll 都必須有結束時間（正式環境上線時 0 筆 Poll，無需回填）
 ALTER TABLE vomatt.votes ALTER COLUMN end_time SET NOT NULL;
+-- 投票者可見度：NOBODY / OWNER（預設）/ SIGNED_IN；Poll 開始後不可改
+ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS voter_visibility VARCHAR(20) NOT NULL DEFAULT 'OWNER';

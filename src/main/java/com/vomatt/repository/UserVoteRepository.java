@@ -1,9 +1,11 @@
 package com.vomatt.repository;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -33,6 +35,16 @@ public interface UserVoteRepository extends JpaRepository<UserVote, UUID> {
     long countByOptionId(@Param("optionId") UUID optionId);
 
     void deleteByUserIdAndVoteId(UUID userId, UUID voteId);
+
+    /** Keyset page of a Poll's Ballots, oldest first; pass null cursor values for the first page. */
+    @Query("""
+            SELECT uv FROM UserVote uv JOIN FETCH uv.user JOIN FETCH uv.option
+            WHERE uv.vote.id = :voteId
+              AND (CAST(:afterTime AS OffsetDateTime) IS NULL OR uv.createdAt > :afterTime
+                   OR (uv.createdAt = :afterTime AND uv.id > :afterId))
+            ORDER BY uv.createdAt, uv.id""")
+    List<UserVote> findVoterPage(@Param("voteId") UUID voteId, @Param("afterTime") OffsetDateTime afterTime,
+                                 @Param("afterId") UUID afterId, Limit limit);
 
     /** Serialises Ballot changes of one user in one Poll until the transaction ends. */
     @Query(value = "SELECT 1 FROM pg_advisory_xact_lock(hashtext(:userId), hashtext(:voteId))", nativeQuery = true)

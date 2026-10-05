@@ -34,6 +34,10 @@ public interface UserVoteRepository extends JpaRepository<UserVote, UUID> {
 
     void deleteByUserIdAndVoteId(UUID userId, UUID voteId);
 
+    /** Serialises Ballot changes of one user in one Poll until the transaction ends. */
+    @Query(value = "SELECT 1 FROM pg_advisory_xact_lock(hashtext(:userId), hashtext(:voteId))", nativeQuery = true)
+    Integer lockBallot(@Param("userId") String userId, @Param("voteId") String voteId);
+
     void deleteByUserIdAndVoteIdAndOptionId(UUID userId, UUID voteId, UUID optionId);
 
     @Query("SELECT COUNT(DISTINCT uv.vote.id) FROM UserVote uv WHERE uv.user.id = :userId")

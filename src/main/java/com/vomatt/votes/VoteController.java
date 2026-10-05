@@ -65,8 +65,9 @@ public class VoteController {
     @Operation(summary = "Get vote by ID", description = "Retrieve vote details by vote ID")
     public ResponseEntity<ApiResponse<VoteResponse>> getVote(
             @Parameter(description = "Vote ID", required = true)
-            @PathVariable String voteId) {
-        VoteResponse response = voteService.getVote(voteId);
+            @PathVariable String voteId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        VoteResponse response = voteService.getVote(voteId, principal != null ? principal.userId() : null);
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
@@ -98,7 +99,7 @@ public class VoteController {
     @PostMapping("/{voteId}/vote")
     @Auditable(action = "VOTE", resourceType = "VOTE", resourceIdIndex = 0)
     @CommonApiResponses
-    @Operation(summary = "Vote on a poll", description = "Cast vote(s) on the specified vote")
+    @Operation(summary = "Cast a Ballot", description = "Single option; replaces the caller's previous Ballot. errorCode vote.ended once the Poll has Ended")
     public ResponseEntity<ApiResponse<VoteResponse>> vote(
             @Parameter(description = "Vote ID", required = true)
             @PathVariable String voteId,

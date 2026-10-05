@@ -14,6 +14,7 @@ import com.vomatt.entity.UserPreference;
 import com.vomatt.repository.UserPreferenceRepository;
 import com.vomatt.repository.UserProfileProjection;
 import com.vomatt.repository.UserRepository;
+import com.vomatt.repository.VoteOptionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -36,6 +37,7 @@ public class UserService {
     private final UserPreferenceRepository preferenceRepository;
     private final UserMapper userMapper;
     private final RefreshTokenService refreshTokenService;
+    private final VoteOptionRepository voteOptionRepository;
 
     /** 本人或 ADMIN 可刪除帳號；刪除同時撤銷該使用者所有 refresh token。 */
     @Transactional
@@ -46,6 +48,8 @@ public class UserService {
         }
         User user = findUserById(userId);
         refreshTokenService.revokeAllForUser(userId);
+        // user_votes rows cascade with the user; release them from stored option counts first
+        voteOptionRepository.decrementForUserBallots(user.getId());
         userRepository.delete(user);
         log.info("User {} deleted by {}", userId, principal.userId());
     }

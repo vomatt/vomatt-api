@@ -89,11 +89,11 @@ public class VoteService {
         return convertToVoteResponse(vote);
     }
 
+    /** @param userId viewer, or null when signed out */
     @Transactional(readOnly = true)
-    public VoteResponse getVote(String voteId) {
-        Vote vote = voteRepository.findById(UUID.fromString(voteId))
-            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
-        return convertToVoteResponse(vote);
+    public VoteResponse getVote(String voteId, String userId) {
+        Vote vote = findVote(UUID.fromString(voteId));
+        return convertToVoteResponse(vote, userId);
     }
 
     @Transactional(readOnly = true)
@@ -114,62 +114,55 @@ public class VoteService {
         return votes.map(this::convertToVoteResponse);
     }
 
+    /**
+     * Casts a Ballot: replaces the user's previous Ballot in this Poll within one transaction.
+     * Casting the same option again changes nothing.
+     */
     public VoteResponse vote(String voteId, VoteRequest request, String userId, String ipAddress) {
-        Vote vote = voteRepository.findByIdAndIsActiveTrue(UUID.fromString(voteId))
-            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
+        UUID voteUuid = UUID.fromString(voteId);
+        UUID userUuid = UUID.fromString(userId);
+        Vote vote = findVote(voteUuid);
+        requireOpen(vote);
 
-        if (!vote.isVotingActive()) {
-            throw ApiException.badRequest(MessageKey.VOTE_NOT_ALLOWED);
+        if (request.getOptionIds().size() > 1) {
+            throw ApiException.badRequest(MessageKey.VOTE_MULTIPLE_NOT_ALLOWED);
         }
-
-        User user = userRepository.findById(UUID.fromString(userId))
+        UUID optionUuid = UUID.fromString(request.getOptionIds().getFirst());
+        VoteOption option = voteOptionRepository.findById(optionUuid)
+            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_OPTION_NOT_FOUND));
+        if (!option.getVote().getId().equals(voteUuid)) {
+            throw ApiException.badRequest(MessageKey.VOTE_OPTION_NOT_IN_VOTE);
+        }
+        User user = userRepository.findById(userUuid)
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
 
-        UUID userUuid = UUID.fromString(userId);
-        UUID voteUuid = UUID.fromString(voteId);
-
-        if (!vote.isAllowMultipleChoices()) {
-            if (request.getOptionIds().size() > 1) {
-                throw ApiException.badRequest(MessageKey.VOTE_MULTIPLE_NOT_ALLOWED);
-            }
-            userVoteRepository.deleteByUserIdAndVoteId(userUuid, voteUuid);
+        userVoteRepository.lockBallot(userId, voteId);
+        List<UserVote> previous = userVoteRepository.findByUserIdAndVoteId(userUuid, voteUuid);
+        boolean unchanged = previous.size() == 1 && previous.getFirst().getOption().getId().equals(optionUuid);
+        if (!unchanged) {
+            List<UUID> releasedOptionIds = deleteBallots(previous);
+            userVoteRepository.save(new UserVote(user, vote, option, ipAddress));
+            releasedOptionIds.forEach(id -> voteOptionRepository.adjustVoteCount(id, -1));
+            voteOptionRepository.adjustVoteCount(optionUuid, 1);
+            log.info("User {} cast ballot on vote {} for option {}", userId, voteId, optionUuid);
         }
 
-        for (String optionId : request.getOptionIds()) {
-            UUID optionUuid = UUID.fromString(optionId);
-            VoteOption option = voteOptionRepository.findById(optionUuid)
-                .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_OPTION_NOT_FOUND));
-
-            if (!option.getVote().getId().toString().equals(voteId)) {
-                throw ApiException.badRequest(MessageKey.VOTE_OPTION_NOT_IN_VOTE);
-            }
-
-            if (!userVoteRepository.existsByUserIdAndVoteIdAndOptionId(userUuid, voteUuid, optionUuid)) {
-                UserVote userVote = new UserVote(user, vote, option, ipAddress);
-                userVoteRepository.save(userVote);
-            }
-        }
-
-        log.info("User {} voted on vote {} with options {}", userId, voteId, request.getOptionIds());
-
-        return convertToVoteResponse(voteRepository.findById(UUID.fromString(voteId))
-            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND)));
+        return convertToVoteResponse(voteUuid, userId);
     }
 
+    /** Removes the user's Selection of one option (kept for API compatibility; same as a Retraction when it matches). */
     public VoteResponse removeVote(String voteId, String optionId, String userId) {
-        Vote vote = voteRepository.findByIdAndIsActiveTrue(UUID.fromString(voteId))
-            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
+        UUID voteUuid = UUID.fromString(voteId);
+        UUID userUuid = UUID.fromString(userId);
+        requireOpen(findVote(voteUuid));
 
-        if (!vote.isVotingActive()) {
-            throw ApiException.badRequest(MessageKey.VOTE_NOT_ALLOWED);
-        }
-
-        userVoteRepository.deleteByUserIdAndVoteIdAndOptionId(
-            UUID.fromString(userId), UUID.fromString(voteId), UUID.fromString(optionId));
+        userVoteRepository.lockBallot(userId, voteId);
+        userVoteRepository.findByUserIdAndVoteIdAndOptionId(userUuid, voteUuid, UUID.fromString(optionId))
+            .ifPresent(ballot -> deleteBallots(List.of(ballot))
+                .forEach(id -> voteOptionRepository.adjustVoteCount(id, -1)));
         log.info("User {} removed vote from option {} in vote {}", userId, optionId, voteId);
 
-        return convertToVoteResponse(voteRepository.findById(UUID.fromString(voteId))
-            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND)));
+        return convertToVoteResponse(voteUuid, userId);
     }
 
     @Transactional(readOnly = true)
@@ -215,6 +208,14 @@ public class VoteService {
     }
 
     private VoteResponse convertToVoteResponse(Vote vote) {
+        return convertToVoteResponse(vote, null);
+    }
+
+    private VoteResponse convertToVoteResponse(UUID voteId, String userId) {
+        return convertToVoteResponse(findVote(voteId), userId);
+    }
+
+    private VoteResponse convertToVoteResponse(Vote vote, String userId) {
         UUID voteId = vote.getId();
         // Use JOIN FETCH to avoid additional queries for options
         Vote voteWithOptions = voteRepository.findByIdWithOptions(voteId).orElse(vote);
@@ -222,10 +223,41 @@ public class VoteService {
         List<VoteOption> options = voteWithOptions.getOptions().stream()
             .sorted(Comparator.comparingInt(VoteOption::getDisplayOrder))
             .toList();
-        Map<UUID, Long> optionCounts = buildOptionCountMap(voteId);
-        // Sum from optionCounts to avoid querying total vote count again
+        Map<UUID, Long> optionCounts = options.stream()
+            .collect(Collectors.toMap(VoteOption::getId, o -> (long) o.getVoteCount()));
+        // Turnout: single-choice, so the option counts add up to the number of Participants
         long totalVoteCount = optionCounts.values().stream().mapToLong(Long::longValue).sum();
-        return voteMapper.toResponse(voteWithOptions, options, optionCounts, totalVoteCount);
+        VoteResponse response = voteMapper.toResponse(voteWithOptions, options, optionCounts, totalVoteCount);
+        response.setMyOptionId(userId == null ? null : findMyOptionId(voteId, UUID.fromString(userId)));
+        return response;
+    }
+
+    private String findMyOptionId(UUID voteId, UUID userId) {
+        return userVoteRepository.findByUserIdAndVoteId(userId, voteId).stream()
+            .findFirst()
+            .map(ballot -> ballot.getOption().getId().toString())
+            .orElse(null);
+    }
+
+    private Vote findVote(UUID voteId) {
+        return voteRepository.findById(voteId)
+            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
+    }
+
+    // Ballots can change only while Open; frozen once Ended
+    private void requireOpen(Vote vote) {
+        switch (vote.getStatus()) {
+            case ENDED -> throw ApiException.badRequest(MessageKey.VOTE_ENDED);
+            case SCHEDULED -> throw ApiException.badRequest(MessageKey.VOTE_NOT_ALLOWED);
+            case OPEN -> { }
+        }
+    }
+
+    // Deletes Ballot rows and returns the options whose counts must be released
+    private List<UUID> deleteBallots(List<UserVote> ballots) {
+        List<UUID> optionIds = ballots.stream().map(b -> b.getOption().getId()).toList();
+        userVoteRepository.deleteAll(ballots);
+        return optionIds;
     }
 
     private Map<UUID, Long> buildOptionCountMap(UUID voteId) {

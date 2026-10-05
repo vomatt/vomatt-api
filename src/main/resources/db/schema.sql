@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS vomatt.vote_options (
     vote_id       UUID         NOT NULL REFERENCES vomatt.votes (id) ON DELETE CASCADE,
     display_order INTEGER      NOT NULL DEFAULT 0,
     image_url     VARCHAR(500),
+    vote_count    INTEGER      NOT NULL DEFAULT 0,
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
@@ -211,3 +212,9 @@ CREATE INDEX IF NOT EXISTS idx_lookup_frontend             ON vomatt.lookup (fro
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id          ON vomatt.audit_logs (user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_resource         ON vomatt.audit_logs (resource_type, resource_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at       ON vomatt.audit_logs (created_at);
+
+-- =============================================================================
+-- UPGRADES：既有資料庫補欄位（冪等；新建資料庫上為 no-op）
+-- =============================================================================
+-- 選項票數（Ballot 寫入時原子加減；校正見 db/reconcile-vote-counts.sql）
+ALTER TABLE vomatt.vote_options ADD COLUMN IF NOT EXISTS vote_count INTEGER NOT NULL DEFAULT 0;

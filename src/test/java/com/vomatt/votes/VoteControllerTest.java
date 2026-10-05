@@ -141,7 +141,7 @@ class VoteControllerTest {
             VoteResponse vote = new VoteResponse();
             vote.setId(voteId);
             vote.setTitle("Test");
-            when(voteService.getVote(voteId)).thenReturn(vote);
+            when(voteService.getVote(voteId, null)).thenReturn(vote);
 
             mockMvc.perform(get("/api/votes/{voteId}", voteId))
                     .andExpect(status().isOk())
@@ -153,7 +153,7 @@ class VoteControllerTest {
         @DisplayName("Should return 404 when vote does not exist")
         void shouldReturn404WhenNotFound() throws Exception {
             String voteId = UUID.randomUUID().toString();
-            when(voteService.getVote(voteId)).thenThrow(ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
+            when(voteService.getVote(voteId, null)).thenThrow(ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
 
             mockMvc.perform(get("/api/votes/{voteId}", voteId))
                     .andExpect(status().isNotFound())
@@ -165,7 +165,7 @@ class VoteControllerTest {
         @DisplayName("Should return 400 when voteId is not a valid UUID")
         void shouldReturn400WhenInvalidUuid() throws Exception {
             // VoteService 以 UUID.fromString 解析 id，無效字串丟 IllegalArgumentException → 400
-            when(voteService.getVote("not-a-uuid"))
+            when(voteService.getVote("not-a-uuid", null))
                     .thenThrow(new IllegalArgumentException("Invalid UUID string: not-a-uuid"));
 
             mockMvc.perform(get("/api/votes/{voteId}", "not-a-uuid"))

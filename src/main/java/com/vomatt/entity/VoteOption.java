@@ -50,6 +50,10 @@ public class VoteOption extends AuditableEntity {
     @Column(name = "image_url")
     private String imageUrl;
 
+    // Maintained only by atomic SQL in VoteOptionRepository; JPA never writes it, so a stale entity can't overwrite it
+    @Column(name = "vote_count", nullable = false, insertable = false, updatable = false)
+    private int voteCount;
+
     @OneToMany(mappedBy = "option", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<UserVote> userVotes = new HashSet<>();
 
@@ -59,7 +63,4 @@ public class VoteOption extends AuditableEntity {
         this.vote = vote;
     }
 
-    public long getVoteCount() {
-        return userVotes.size();
-    }
 }

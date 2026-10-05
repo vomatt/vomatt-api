@@ -5,6 +5,7 @@ import com.vomatt.tags.dto.TagDto;
 import java.time.OffsetDateTime;
 import java.util.List;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 @Data
@@ -26,6 +27,9 @@ public class VoteResponse {
     private boolean isVotingActive;
     private List<VoteOptionResponse> options;
     private List<TagDto> tags;
+
+    @Schema(description = "目前使用者選擇的選項 ID；未投票或未登入為 null", nullable = true)
+    private String myOptionId;
     
     @Data
     public static class VoteOptionResponse {

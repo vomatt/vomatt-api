@@ -250,4 +250,44 @@ class VoteControllerTest {
                     .andExpect(jsonPath("$.success").value(true));
         }
     }
+
+    // ─── DELETE /api/votes/{voteId}/vote ──────────────────────────────────────
+
+    @Nested
+    @DisplayName("DELETE /api/votes/{voteId}/vote")
+    class RetractTests {
+
+        @Test
+        @DisplayName("撤回需登入：不在任何公開白名單")
+        void shouldRequireAuthentication() {
+            assertThat(isPublic("DELETE", "/api/votes/abc/vote")).isFalse();
+        }
+
+        @Test
+        @DisplayName("應該在撤回成功時回傳 200 與 myOptionId 為 null 的 Poll")
+        void shouldReturn200WhenRetracted() throws Exception {
+            authenticate();
+            String voteId = UUID.randomUUID().toString();
+            VoteResponse vote = new VoteResponse();
+            vote.setId(voteId);
+            when(voteService.retract(voteId, USER_ID)).thenReturn(vote);
+
+            mockMvc.perform(delete("/api/votes/{voteId}/vote", voteId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.id").value(voteId))
+                    .andExpect(jsonPath("$.data.myOptionId").isEmpty());
+        }
+
+        @Test
+        @DisplayName("應該在 Poll 已結束時回傳 errorCode vote.ended")
+        void shouldReturnVoteEndedWhenPollEnded() throws Exception {
+            authenticate();
+            String voteId = UUID.randomUUID().toString();
+            when(voteService.retract(voteId, USER_ID)).thenThrow(ApiException.badRequest(MessageKey.VOTE_ENDED));
+
+            mockMvc.perform(delete("/api/votes/{voteId}/vote", voteId))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errorCode").value(MessageKey.VOTE_ENDED.code()));
+        }
+    }
 }

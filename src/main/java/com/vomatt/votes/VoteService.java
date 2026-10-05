@@ -150,6 +150,19 @@ public class VoteService {
         return convertToVoteResponse(voteUuid, userId);
     }
 
+    /** Retraction: withdraws the user's whole Ballot; succeeds even when there is none. */
+    public VoteResponse retract(String voteId, String userId) {
+        UUID voteUuid = UUID.fromString(voteId);
+        requireOpen(findVote(voteUuid));
+
+        userVoteRepository.lockBallot(userId, voteId);
+        deleteBallots(userVoteRepository.findByUserIdAndVoteId(UUID.fromString(userId), voteUuid))
+            .forEach(id -> voteOptionRepository.adjustVoteCount(id, -1));
+        log.info("User {} retracted ballot in vote {}", userId, voteId);
+
+        return convertToVoteResponse(voteUuid, userId);
+    }
+
     /** Removes the user's Selection of one option (kept for API compatibility; same as a Retraction when it matches). */
     public VoteResponse removeVote(String voteId, String optionId, String userId) {
         UUID voteUuid = UUID.fromString(voteId);

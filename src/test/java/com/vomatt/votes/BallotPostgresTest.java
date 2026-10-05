@@ -142,6 +142,28 @@ class BallotPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("應該在撤回時刪除整張 Ballot 並釋放計數")
+    void shouldRetractBallotAndReleaseCount() {
+        cast(voter, optionA);
+
+        VoteResponse response = voteService.retract(poll.getId().toString(), voter.getId().toString());
+
+        assertThat(response.getMyOptionId()).isNull();
+        assertThat(response.getTotalVotes()).isZero();
+        assertThat(counts().get(optionA)[0]).isZero();
+        assertStoredMatchesActual();
+    }
+
+    @Test
+    @DisplayName("應該在沒有 Ballot 時撤回仍成功且不改變計數")
+    void shouldRetractIdempotentlyWhenNoBallot() {
+        voteService.retract(poll.getId().toString(), voter.getId().toString());
+        voteService.retract(poll.getId().toString(), voter.getId().toString());
+
+        counts().values().forEach(c -> assertThat(c[0]).isZero());
+    }
+
+    @Test
     @DisplayName("應該在投票者刪除帳號後仍維持計數一致")
     void shouldKeepCountsConsistentWhenVoterAccountDeleted() {
         cast(voter, optionA);

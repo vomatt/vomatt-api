@@ -329,6 +329,17 @@ class VoteServiceTest {
         }
 
         @Test
+        @DisplayName("應該在 Poll 已結束時以 vote.ended 拒絕撤回")
+        void shouldRejectRetractionWhenPollEnded() {
+            vote.setEndTime(OffsetDateTime.now().minusMinutes(1));
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+
+            assertThatThrownBy(() -> voteService.retract(voteId.toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_ENDED));
+            verify(userVoteRepository, never()).deleteAll(any());
+        }
+
+        @Test
         @DisplayName("應該在檢視者有 Ballot 時回傳 myOptionId")
         void shouldReturnMyOptionIdWhenViewerHasBallot() {
             UUID optionId = UUID.randomUUID();

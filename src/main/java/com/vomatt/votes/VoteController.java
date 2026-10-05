@@ -112,6 +112,18 @@ public class VoteController {
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
+    @DeleteMapping("/{voteId}/vote")
+    @Auditable(action = "RETRACT", resourceType = "VOTE", resourceIdIndex = 0)
+    @CommonApiResponses
+    @Operation(summary = "Retract a Ballot", description = "Withdraws the caller's whole Ballot; idempotent. errorCode vote.ended once the Poll has Ended")
+    public ResponseEntity<ApiResponse<VoteResponse>> retract(
+            @Parameter(description = "Vote ID", required = true)
+            @PathVariable String voteId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        VoteResponse response = voteService.retract(voteId, principal.userId());
+        return ResponseEntity.ok(ApiResponse.ok(response));
+    }
+
     @DeleteMapping("/{voteId}/vote/{optionId}")
     @CommonApiResponses
     @Operation(summary = "Remove vote", description = "Remove vote from a specific option")

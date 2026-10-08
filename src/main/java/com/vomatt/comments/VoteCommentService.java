@@ -43,7 +43,8 @@ public class VoteCommentService {
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
 
         VoteComment comment = new VoteComment(vote, user, request.getText());
-        comment = commentRepository.save(comment);
+        // created_at / updated_at are filled on flush; the response needs them now
+        comment = commentRepository.saveAndFlush(comment);
 
         log.info("Comment created: {} on vote: {} by user: {}", comment.getId(), voteId, userId);
 

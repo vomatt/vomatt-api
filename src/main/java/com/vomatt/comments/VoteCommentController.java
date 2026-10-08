@@ -66,7 +66,9 @@ public class VoteCommentController {
             @Parameter(description = "Vote ID", required = true) @PathVariable String voteId,
             @PageableDefault(size = 20) Pageable pageable,
             @AuthenticationPrincipal UserPrincipal principal) {
-        Page<CommentDto> response = commentService.getCommentsByVote(voteId, pageable, principal.userId());
+        // Public: guests read the discussion; signed-in viewers also get their likes
+        String viewerId = principal != null ? principal.userId() : null;
+        Page<CommentDto> response = commentService.getCommentsByVote(voteId, pageable, viewerId);
         return ResponseEntity.ok(ApiResponse.ok(PageResponse.from(response)));
     }
 

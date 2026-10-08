@@ -7,6 +7,7 @@ import java.util.Set;
 import com.vomatt.entity.common.AuditableEntity;
 import com.vomatt.entity.User;
 
+import org.hibernate.annotations.BatchSize;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -80,6 +81,8 @@ public class Vote extends AuditableEntity {
     @OneToMany(mappedBy = "vote", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<UserVote> userVotes = new HashSet<>();
 
+    // Loaded for a whole page of votes in one IN query, instead of a join that multiplies option rows
+    @BatchSize(size = 50)
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
         name = "vote_tags",

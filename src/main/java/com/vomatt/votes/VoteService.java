@@ -301,9 +301,10 @@ public class VoteService {
                 Collectors.toMap(VoteOptionCount::getOptionId, VoteOptionCount::getCount)));
         Map<UUID, Long> participants = toCountMap(userVoteRepository.countParticipantsByVoteIds(ids));
         Map<UUID, Long> comments = toCountMap(voteCommentRepository.countByVoteIds(ids));
-        Map<UUID, String> myOptions = viewerId == null ? Map.of()
+        Map<UUID, List<String>> myOptions = viewerId == null ? Map.of()
             : userVoteRepository.findBallotsByUserAndVoteIds(UUID.fromString(viewerId), ids).stream()
-                .collect(Collectors.toMap(UserBallot::getVoteId, b -> b.getOptionId().toString(), (a, b) -> a));
+                .collect(Collectors.groupingBy(UserBallot::getVoteId,
+                    Collectors.mapping(b -> b.getOptionId().toString(), Collectors.toList())));
 
         return votes.stream().map(vote -> {
             Vote full = loaded.getOrDefault(vote.getId(), vote);
@@ -316,7 +317,12 @@ public class VoteService {
             VoteResponse response = voteMapper.toResponse(full, options, counts, totalVotes);
             response.setParticipantCount(participants.getOrDefault(vote.getId(), 0L));
             response.setCommentCount(comments.getOrDefault(vote.getId(), 0L));
-            if (viewerId != null) response.setMyOptionId(Optional.ofNullable(myOptions.get(vote.getId())));
+            if (viewerId != null) {
+                List<String> mine = myOptions.getOrDefault(vote.getId(), List.of());
+                response.setMyOptionIds(mine);
+                // Single-choice votes (all the web creates) have at most one
+                response.setMyOptionId(mine.stream().findFirst());
+            }
             return response;
         }).toList();
     }

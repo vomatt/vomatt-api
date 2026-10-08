@@ -28,7 +28,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.util.AntPathMatcher;
+import org.springframework.http.server.PathContainer;
+import org.springframework.web.util.pattern.PathPatternParser;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -87,11 +88,15 @@ class VoteControllerTest {
         return option;
     }
 
+    /** Matches the way Spring Security's requestMatchers(String) does: PathPatternParser. */
+    private static boolean matches(String pattern, String path) {
+        return PathPatternParser.defaultInstance.parse(pattern).matches(PathContainer.parsePath(path));
+    }
+
     /** 模擬 SecurityConfig：路徑是否落在任一公開白名單（未登入可存取） */
     private static boolean isPublic(String method, String path) {
-        AntPathMatcher matcher = new AntPathMatcher();
         // SecurityConfig matches the authenticated /api/users sub-paths before the public GET list
-        if (Arrays.stream(SecurityEndpoints.AUTHENTICATED_USERS).anyMatch(p -> matcher.match(p, path))) {
+        if (Arrays.stream(SecurityEndpoints.AUTHENTICATED_USERS).anyMatch(p -> matches(p, path))) {
             return false;
         }
         Stream<String> patterns = Stream.of(SecurityEndpoints.PUBLIC_AUTH, SecurityEndpoints.PUBLIC_SWAGGER,
@@ -99,7 +104,7 @@ class VoteControllerTest {
         if ("GET".equals(method)) {
             patterns = Stream.concat(patterns, Arrays.stream(SecurityEndpoints.PUBLIC_GET));
         }
-        return patterns.anyMatch(p -> matcher.match(p, path));
+        return patterns.anyMatch(p -> matches(p, path));
     }
 
     // ─── GET /api/votes ───────────────────────────────────────────────────────

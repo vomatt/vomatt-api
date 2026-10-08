@@ -446,6 +446,7 @@ class VoteServiceTest {
 
             VoteResponse notVoted = voteService.getVote(voteId.toString(), userId.toString());
             assertThat(notVoted.getMyOptionId()).isEqualTo(Optional.empty());
+            assertThat(notVoted.getMyOptionIds()).isEmpty();
 
             UUID optionId = UUID.randomUUID();
             UserBallot ballot = new UserBallot() {
@@ -455,6 +456,7 @@ class VoteServiceTest {
             when(userVoteRepository.findBallotsByUserAndVoteIds(eq(userId), any())).thenReturn(List.of(ballot));
             VoteResponse voted = voteService.getVote(voteId.toString(), userId.toString());
             assertThat(voted.getMyOptionId()).contains(optionId.toString());
+            assertThat(voted.getMyOptionIds()).containsExactly(optionId.toString());
         }
 
         @Test
@@ -464,7 +466,28 @@ class VoteServiceTest {
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             stubConvertToVoteResponse(vote);
 
-            assertThat(voteService.getVote(voteId.toString(), null).getMyOptionId()).isNull();
+            VoteResponse guest = voteService.getVote(voteId.toString(), null);
+            assertThat(guest.getMyOptionId()).isNull();
+            assertThat(guest.getMyOptionIds()).isNull();
+        }
+
+        @Test
+        @DisplayName("複選投票應回傳所有選擇的選項")
+        void shouldReturnEveryOptionOnMultipleChoice() {
+            openVote();
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            stubConvertToVoteResponse(vote);
+            UUID first = UUID.randomUUID();
+            UUID second = UUID.randomUUID();
+            List<UserBallot> ballots = List.of(first, second).stream().map(id -> (UserBallot) new UserBallot() {
+                public UUID getVoteId() { return voteId; }
+                public UUID getOptionId() { return id; }
+            }).toList();
+            when(userVoteRepository.findBallotsByUserAndVoteIds(eq(userId), any())).thenReturn(ballots);
+
+            VoteResponse response = voteService.getVote(voteId.toString(), userId.toString());
+
+            assertThat(response.getMyOptionIds()).containsExactly(first.toString(), second.toString());
         }
 
         @Test

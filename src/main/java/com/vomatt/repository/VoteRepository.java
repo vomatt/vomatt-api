@@ -44,18 +44,18 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
     @Query("SELECT v FROM Vote v LEFT JOIN FETCH v.tags WHERE v.id = :id")
     Optional<Vote> findByIdWithTags(@Param("id") UUID id);
 
-    /** A page of votes with everything a response needs, in one query (options and tags are Sets) */
-    @Query("SELECT DISTINCT v FROM Vote v JOIN FETCH v.creator LEFT JOIN FETCH v.options "
-            + "LEFT JOIN FETCH v.tags WHERE v.id IN :ids")
+    /** A page of votes with creator and options in one query; tags follow in one batch (Vote.tags) */
+    @Query("SELECT DISTINCT v FROM Vote v JOIN FETCH v.creator LEFT JOIN FETCH v.options WHERE v.id IN :ids")
     List<Vote> findAllForResponseByIdIn(@Param("ids") Collection<UUID> ids);
 
     /** 某使用者建立、未被取消的投票（含已結束），供公開個人頁使用 */
     @Query("SELECT v FROM Vote v WHERE v.creator.username = :username AND v.isActive = true ORDER BY v.createdAt DESC")
     Page<Vote> findByCreatorUsername(@Param("username") String username, Pageable pageable);
 
-    /** 某使用者投過票的投票（帳號頁「你的投票」） */
+    /** 某使用者投過票的投票（帳號頁「你的投票」），依最近一次投票時間排序 */
     @Query(value = "SELECT v FROM Vote v WHERE v.id IN "
-            + "(SELECT uv.vote.id FROM UserVote uv WHERE uv.user.id = :userId) ORDER BY v.createdAt DESC",
+            + "(SELECT uv.vote.id FROM UserVote uv WHERE uv.user.id = :userId) ORDER BY "
+            + "(SELECT MAX(uv2.createdAt) FROM UserVote uv2 WHERE uv2.vote = v AND uv2.user.id = :userId) DESC",
             countQuery = "SELECT COUNT(DISTINCT uv.vote.id) FROM UserVote uv WHERE uv.user.id = :userId")
     Page<Vote> findParticipatedByUserId(@Param("userId") UUID userId, Pageable pageable);
 

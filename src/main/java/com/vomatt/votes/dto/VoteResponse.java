@@ -41,6 +41,10 @@ public class VoteResponse {
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private Optional<String> myOptionId;
+
+    /** Every option the viewer chose (more than one on multiple-choice votes); left out for guests. */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private List<String> myOptionIds;
     
     @Data
     public static class VoteOptionResponse {

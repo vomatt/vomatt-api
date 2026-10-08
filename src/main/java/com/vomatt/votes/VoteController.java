@@ -61,28 +61,60 @@ public class VoteController {
     }
 
     @GetMapping("/{voteId}")
-    @CommonApiResponses
-    @Operation(summary = "Get vote by ID", description = "Retrieve vote details by vote ID")
+    @PublicApiResponse
+    @Operation(summary = "Get vote by ID",
+            description = "Public. Option counts are withheld until the vote ends; signed-in viewers also get myOptionId")
     public ResponseEntity<ApiResponse<VoteResponse>> getVote(
             @Parameter(description = "Vote ID", required = true)
-            @PathVariable String voteId) {
-        VoteResponse response = voteService.getVote(voteId);
+            @PathVariable String voteId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        VoteResponse response = voteService.getVote(voteId, viewerId(principal));
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
     @GetMapping
     @PublicApiResponse
-    @Operation(summary = "Get active votes", description = "Retrieve all active votes with pagination")
+    @Operation(summary = "Get active votes",
+            description = "Open votes, newest first. ?tag= filters by topic; ?creatorUsername= lists one user's votes, ended ones included")
     public ResponseEntity<ApiResponse<PageResponse<VoteResponse>>> getActiveVotes(
             @PageableDefault(size = 20) Pageable pageable,
-            @RequestParam(required = false) String tag) {
+            @RequestParam(required = false) String tag,
+            @RequestParam(required = false) String creatorUsername,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        String viewerId = viewerId(principal);
         Page<VoteResponse> votes;
-        if (tag != null && !tag.isBlank()) {
-            votes = voteService.getActiveVotesByTag(tag, pageable);
+        if (creatorUsername != null && !creatorUsername.isBlank()) {
+            votes = voteService.getVotesByCreatorUsername(creatorUsername, pageable, viewerId);
+        } else if (tag != null && !tag.isBlank()) {
+            votes = voteService.getActiveVotesByTag(tag, pageable, viewerId);
         } else {
-            votes = voteService.getActiveVotes(pageable);
+            votes = voteService.getActiveVotes(pageable, viewerId);
         }
         return ResponseEntity.ok(ApiResponse.ok(PageResponse.from(votes)));
+    }
+
+    @GetMapping("/participated")
+    @CommonApiResponses
+    @Operation(summary = "Get votes I voted in", description = "Votes the authenticated user holds a ballot in, each with myOptionId (paginated)")
+    public ResponseEntity<ApiResponse<PageResponse<VoteResponse>>> getParticipatedVotes(
+            @PageableDefault(size = 20) Pageable pageable,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        Page<VoteResponse> response = voteService.getParticipatedVotes(principal.userId(), pageable);
+        return ResponseEntity.ok(ApiResponse.ok(PageResponse.from(response)));
+    }
+
+    @PutMapping("/{voteId}")
+    @Auditable(action = "UPDATE", resourceType = "VOTE", resourceIdIndex = 0)
+    @CommonApiResponses
+    @Operation(summary = "Update vote", description = "Edit a vote before it opens (creator only); options are replaced")
+    public ResponseEntity<ApiResponse<VoteResponse>> updateVote(
+            @Parameter(description = "Vote ID", required = true)
+            @PathVariable String voteId,
+            @Valid @RequestBody CreateVoteRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        VoteResponse response = voteService.updateVote(voteId, request, principal.userId());
+        log.info("Vote {} updated by creator {}", voteId, principal.userId());
+        return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
     @GetMapping("/my")
@@ -127,12 +159,14 @@ public class VoteController {
     }
 
     @GetMapping("/{voteId}/results")
-    @CommonApiResponses
-    @Operation(summary = "Get vote results", description = "Retrieve detailed vote results including voter information (if not anonymous)")
+    @PublicApiResponse
+    @Operation(summary = "Get vote results",
+            description = "Public once the vote has ended (403 before). Voters are listed only for the creator of a non-anonymous vote")
     public ResponseEntity<ApiResponse<VoteResultResponse>> getVoteResults(
             @Parameter(description = "Vote ID", required = true)
-            @PathVariable String voteId) {
-        VoteResultResponse response = voteService.getVoteResults(voteId);
+            @PathVariable String voteId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        VoteResultResponse response = voteService.getVoteResults(voteId, viewerId(principal));
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
@@ -160,6 +194,11 @@ public class VoteController {
         voteService.deactivateVote(voteId, principal.userId());
         log.info("Vote {} deactivated by creator {}", voteId, principal.userId());
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
+    /** Public endpoints run without a principal for guests. */
+    private static String viewerId(UserPrincipal principal) {
+        return principal != null ? principal.userId() : null;
     }
 
     private String getClientIpAddress(HttpServletRequest request) {

@@ -108,6 +108,11 @@ public class Vote extends AuditableEntity {
         return true;
     }
 
+    /** Cancelled, or past its end time. Results are only revealed then. */
+    public boolean hasEnded() {
+        return !isActive || (endTime != null && !OffsetDateTime.now().isBefore(endTime));
+    }
+
     public void addTag(Tag tag) {
         this.tags.add(tag);
     }

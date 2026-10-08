@@ -123,12 +123,13 @@ public class UserService {
     }
 
     /**
-     * Load user's field visibility settings, default all controllable fields to false (hidden)
+     * Load user's field visibility settings. Display name and bio default to visible, the rest to hidden.
      */
     private Map<String, Boolean> loadVisibilitySettings(UUID userId, boolean isVisibility) {
-        // Initialize all fields to false
+        // Display name and bio are public unless hidden; every other field is hidden unless shown
         Map<String, Boolean> settings = Arrays.stream(VisibilityField.values())
-                .collect(Collectors.toMap(VisibilityField::getFieldName, f -> isVisibility));
+                .collect(Collectors.toMap(VisibilityField::getFieldName,
+                        f -> isVisibility || f == VisibilityField.DISPLAY_NAME || f == VisibilityField.BIO));
 
         // Load configured values from database
         List<UserPreference> prefs = preferenceRepository

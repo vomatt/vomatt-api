@@ -48,6 +48,16 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
     @Query("SELECT v FROM Vote v LEFT JOIN FETCH v.options WHERE v.id = :id")
     Optional<Vote> findByIdWithOptions(@Param("id") UUID id);
 
+    /** 某使用者建立、未被取消的投票（含已結束），供公開個人頁使用 */
+    @Query("SELECT v FROM Vote v WHERE v.creator.username = :username AND v.isActive = true ORDER BY v.createdAt DESC")
+    Page<Vote> findByCreatorUsername(@Param("username") String username, Pageable pageable);
+
+    /** 某使用者投過票的投票（帳號頁「你的投票」） */
+    @Query(value = "SELECT v FROM Vote v WHERE v.id IN "
+            + "(SELECT uv.vote.id FROM UserVote uv WHERE uv.user.id = :userId) ORDER BY v.createdAt DESC",
+            countQuery = "SELECT COUNT(DISTINCT uv.vote.id) FROM UserVote uv WHERE uv.user.id = :userId")
+    Page<Vote> findParticipatedByUserId(@Param("userId") UUID userId, Pageable pageable);
+
     @Query("SELECT v FROM Vote v JOIN v.tags t WHERE t.slug = :tagSlug AND v.isActive = true ORDER BY v.createdAt DESC")
     Page<Vote> findByTagSlugAndIsActiveTrue(@Param("tagSlug") String tagSlug, Pageable pageable);
 }

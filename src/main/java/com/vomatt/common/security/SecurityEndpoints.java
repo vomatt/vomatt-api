@@ -23,8 +23,16 @@ public final class SecurityEndpoints {
      */
     public static final String[] AUTHENTICATED_USERS = { "/api/users/me", "/api/users/me/**", "/api/users/search" };
 
+    /**
+     * 需登入的 /api/votes 子路徑；必須排在 {@link #PUBLIC_GET} 之前比對，
+     * 否則 {@code /api/votes/*} 會把 {@code /my}、{@code /participated} 一併放行。
+     */
+    public static final String[] AUTHENTICATED_VOTES = { "/api/votes/my", "/api/votes/participated",
+            "/api/votes/*/my-vote-status" };
+
     /** GET-only public endpoints */
-    public static final String[] PUBLIC_GET = { "/api/tags", "/api/tags/**", "/api/votes", "/api/users/{username}" };
+    public static final String[] PUBLIC_GET = { "/api/tags", "/api/tags/**", "/api/votes", "/api/votes/*",
+            "/api/votes/*/results", "/api/votes/*/comments", "/api/users/{username}" };
 
     /** Swagger / OpenAPI UI */
     public static final String[] PUBLIC_SWAGGER = { "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**",

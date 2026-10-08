@@ -7,11 +7,13 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +30,9 @@ import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
 import com.vomatt.repository.OptionVoteCount;
 import com.vomatt.repository.TagRepository;
+import com.vomatt.repository.UserBallot;
+import com.vomatt.repository.VoteCommentRepository;
+import com.vomatt.repository.VoteCount;
 import com.vomatt.repository.UserVoteRepository;
 import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.VoteRepository;
@@ -49,6 +54,7 @@ public class VoteService {
     private final TagRepository tagRepository;
     private final VoteConfigurationProperties voteConfig;
     private final VoteMapper voteMapper;
+    private final VoteCommentRepository voteCommentRepository;
 
     public VoteResponse createVote(CreateVoteRequest request, String creatorId) {
         validateCreateVoteRequest(request);
@@ -86,41 +92,85 @@ public class VoteService {
             tagRepository.incrementUsageCount(new HashSet<>(request.getTagIds()));
         }
 
-        return convertToVoteResponse(vote);
+        return toResponses(List.of(vote), creatorId).getFirst();
     }
 
     @Transactional(readOnly = true)
-    public VoteResponse getVote(String voteId) {
+    /** @param viewerId the signed-in viewer, or null for a guest */
+    public VoteResponse getVote(String voteId, String viewerId) {
         Vote vote = voteRepository.findById(UUID.fromString(voteId))
             .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
-        return convertToVoteResponse(vote);
+        return toResponses(List.of(vote), viewerId).getFirst();
     }
 
     @Transactional(readOnly = true)
-    public Page<VoteResponse> getActiveVotes(Pageable pageable) {
-        Page<Vote> votes = voteRepository.findActiveVotesAtTime(OffsetDateTime.now(), pageable);
-        return votes.map(this::convertToVoteResponse);
+    public Page<VoteResponse> getActiveVotes(Pageable pageable, String viewerId) {
+        return toResponses(voteRepository.findActiveVotesAtTime(OffsetDateTime.now(), pageable), viewerId);
     }
 
     @Transactional(readOnly = true)
-    public Page<VoteResponse> getActiveVotesByTag(String tagSlug, Pageable pageable) {
-        Page<Vote> votes = voteRepository.findByTagSlugAndIsActiveTrue(tagSlug, pageable);
-        return votes.map(this::convertToVoteResponse);
+    public Page<VoteResponse> getActiveVotesByTag(String tagSlug, Pageable pageable, String viewerId) {
+        return toResponses(voteRepository.findByTagSlugAndIsActiveTrue(tagSlug, pageable), viewerId);
+    }
+
+    /** A user's polls that weren't cancelled, ended ones included, for their public profile. */
+    @Transactional(readOnly = true)
+    public Page<VoteResponse> getVotesByCreatorUsername(String username, Pageable pageable, String viewerId) {
+        return toResponses(voteRepository.findByCreatorUsername(username, pageable), viewerId);
     }
 
     @Transactional(readOnly = true)
     public Page<VoteResponse> getVotesByCreator(String creatorId, Pageable pageable) {
         Page<Vote> votes = voteRepository.findByCreatorIdOrderByCreatedAtDesc(UUID.fromString(creatorId), pageable);
-        return votes.map(this::convertToVoteResponse);
+        return toResponses(votes, creatorId);
+    }
+
+    /** Polls the user voted in, each with their choice in {@code myOptionId}. */
+    @Transactional(readOnly = true)
+    public Page<VoteResponse> getParticipatedVotes(String userId, Pageable pageable) {
+        return toResponses(voteRepository.findParticipatedByUserId(UUID.fromString(userId), pageable), userId);
+    }
+
+    /**
+     * The owner may edit a vote until it opens. Nobody can have voted yet, so
+     * the options are replaced outright. Tags are left as they are.
+     */
+    public VoteResponse updateVote(String voteId, CreateVoteRequest request, String userId) {
+        Vote vote = voteRepository.findById(UUID.fromString(voteId))
+            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
+
+        if (!vote.getCreator().getId().toString().equals(userId)) {
+            throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
+        }
+        if (!vote.isActive() || vote.getStartTime() == null || !OffsetDateTime.now().isBefore(vote.getStartTime())) {
+            throw ApiException.badRequest(MessageKey.VOTE_NOT_EDITABLE);
+        }
+        validateCreateVoteRequest(request);
+
+        vote.setTitle(request.getTitle());
+        vote.setDescription(request.getDescription());
+        vote.setStartTime(request.getStartTime() != null ? request.getStartTime() : OffsetDateTime.now());
+        vote.setEndTime(request.getEndTime());
+        vote.setAllowMultipleChoices(request.isAllowMultipleChoices());
+        vote.setAnonymous(request.isAnonymous());
+
+        vote.getOptions().clear();
+        for (int i = 0; i < request.getOptions().size(); i++) {
+            CreateVoteRequest.VoteOptionRequest optionRequest = request.getOptions().get(i);
+            VoteOption option = new VoteOption(optionRequest.getText(), optionRequest.getDescription(), vote);
+            option.setDisplayOrder(optionRequest.getDisplayOrder() != null ? optionRequest.getDisplayOrder() : i);
+            vote.addOption(option);
+        }
+
+        vote = voteRepository.saveAndFlush(vote);
+        log.info("Vote {} updated by creator {}", voteId, userId);
+        return toResponses(List.of(vote), userId).getFirst();
     }
 
     public VoteResponse vote(String voteId, VoteRequest request, String userId, String ipAddress) {
-        Vote vote = voteRepository.findByIdAndIsActiveTrue(UUID.fromString(voteId))
+        Vote vote = voteRepository.findById(UUID.fromString(voteId))
             .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
-
-        if (!vote.isVotingActive()) {
-            throw ApiException.badRequest(MessageKey.VOTE_NOT_ALLOWED);
-        }
+        requireVotingOpen(vote);
 
         User user = userRepository.findById(UUID.fromString(userId))
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
@@ -152,38 +202,42 @@ public class VoteService {
 
         log.info("User {} voted on vote {} with options {}", userId, voteId, request.getOptionIds());
 
-        return convertToVoteResponse(voteRepository.findById(UUID.fromString(voteId))
-            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND)));
+        return toResponses(List.of(vote), userId).getFirst();
     }
 
     public VoteResponse removeVote(String voteId, String optionId, String userId) {
-        Vote vote = voteRepository.findByIdAndIsActiveTrue(UUID.fromString(voteId))
+        Vote vote = voteRepository.findById(UUID.fromString(voteId))
             .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
-
-        if (!vote.isVotingActive()) {
-            throw ApiException.badRequest(MessageKey.VOTE_NOT_ALLOWED);
-        }
+        requireVotingOpen(vote);
 
         userVoteRepository.deleteByUserIdAndVoteIdAndOptionId(
             UUID.fromString(userId), UUID.fromString(voteId), UUID.fromString(optionId));
         log.info("User {} removed vote from option {} in vote {}", userId, optionId, voteId);
 
-        return convertToVoteResponse(voteRepository.findById(UUID.fromString(voteId))
-            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND)));
+        return toResponses(List.of(vote), userId).getFirst();
     }
 
+    /**
+     * Sealed (403) until the vote ends. Who chose what is shown only to the
+     * creator, and never for anonymous votes.
+     */
     @Transactional(readOnly = true)
-    public VoteResultResponse getVoteResults(String voteId) {
+    public VoteResultResponse getVoteResults(String voteId, String viewerId) {
         UUID voteUuid = UUID.fromString(voteId);
         Vote vote = voteRepository.findById(voteUuid)
             .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
+        if (!vote.hasEnded()) {
+            throw ApiException.forbidden(MessageKey.VOTE_RESULTS_SEALED);
+        }
 
         int totalParticipants = (int) userVoteRepository.countDistinctUserByVoteId(voteUuid);
         long totalVoteCount = userVoteRepository.countByVoteId(voteUuid);
         Map<UUID, Long> optionCounts = buildOptionCountMap(voteUuid);
         List<VoteOption> options = voteOptionRepository.findByVoteIdOrderByDisplayOrder(voteUuid);
+        boolean showVoters = vote.getCreator().getId().toString().equals(viewerId);
 
-        return voteMapper.toResultResponse(vote, options, totalParticipants, optionCounts, totalVoteCount);
+        return voteMapper.toResultResponse(vote, options, totalParticipants, optionCounts, totalVoteCount,
+                showVoters);
     }
 
     @Transactional(readOnly = true)
@@ -211,7 +265,43 @@ public class VoteService {
         vote = voteRepository.save(vote);
         log.info("Vote {} deactivated by creator {}", voteId, creatorId);
 
-        return convertToVoteResponse(vote);
+        return toResponses(List.of(vote), creatorId).getFirst();
+    }
+
+    /** VOTE_ENDED for a cancelled or finished vote, VOTE_NOT_ALLOWED before it opens. */
+    private void requireVotingOpen(Vote vote) {
+        if (vote.isVotingActive()) return;
+        throw ApiException.badRequest(vote.hasEnded() ? MessageKey.VOTE_ENDED : MessageKey.VOTE_NOT_ALLOWED);
+    }
+
+    private Page<VoteResponse> toResponses(Page<Vote> page, String viewerId) {
+        return new PageImpl<>(toResponses(page.getContent(), viewerId), page.getPageable(), page.getTotalElements());
+    }
+
+    /**
+     * Adds what a list needs beyond one vote: participant and comment counts,
+     * and the viewer's own option, each fetched once for the whole list.
+     */
+    private List<VoteResponse> toResponses(List<Vote> votes, String viewerId) {
+        if (votes.isEmpty()) return List.of();
+        List<UUID> ids = votes.stream().map(Vote::getId).toList();
+        Map<UUID, Long> participants = toCountMap(userVoteRepository.countParticipantsByVoteIds(ids));
+        Map<UUID, Long> comments = toCountMap(voteCommentRepository.countByVoteIds(ids));
+        Map<UUID, String> myOptions = viewerId == null ? Map.of()
+            : userVoteRepository.findBallotsByUserAndVoteIds(UUID.fromString(viewerId), ids).stream()
+                .collect(Collectors.toMap(UserBallot::getVoteId, b -> b.getOptionId().toString(), (a, b) -> a));
+
+        return votes.stream().map(vote -> {
+            VoteResponse response = convertToVoteResponse(vote);
+            response.setParticipantCount(participants.getOrDefault(vote.getId(), 0L));
+            response.setCommentCount(comments.getOrDefault(vote.getId(), 0L));
+            if (viewerId != null) response.setMyOptionId(Optional.ofNullable(myOptions.get(vote.getId())));
+            return response;
+        }).toList();
+    }
+
+    private static Map<UUID, Long> toCountMap(List<VoteCount> counts) {
+        return counts.stream().collect(Collectors.toMap(VoteCount::getVoteId, VoteCount::getCount));
     }
 
     private VoteResponse convertToVoteResponse(Vote vote) {
@@ -225,7 +315,10 @@ public class VoteService {
         Map<UUID, Long> optionCounts = buildOptionCountMap(voteId);
         // Sum from optionCounts to avoid querying total vote count again
         long totalVoteCount = optionCounts.values().stream().mapToLong(Long::longValue).sum();
-        return voteMapper.toResponse(voteWithOptions, options, optionCounts, totalVoteCount);
+        VoteResponse response = voteMapper.toResponse(voteWithOptions, options, optionCounts, totalVoteCount);
+        // Sealed ballot: per-option counts stay hidden until the vote ends
+        if (!vote.hasEnded()) response.getOptions().forEach(option -> option.setVotes(null));
+        return response;
     }
 
     private Map<UUID, Long> buildOptionCountMap(UUID voteId) {

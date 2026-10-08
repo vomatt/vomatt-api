@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -32,6 +33,13 @@ public interface VoteCommentRepository extends JpaRepository<VoteComment, UUID> 
      */
     @Query("SELECT COUNT(c) FROM VoteComment c WHERE c.vote.id = :voteId AND c.isDeleted = false")
     long countByVoteId(@Param("voteId") UUID voteId);
+
+    /**
+     * Count comments for several votes at once (list pages)
+     */
+    @Query("SELECT c.vote.id AS voteId, COUNT(c) AS count FROM VoteComment c "
+            + "WHERE c.vote.id IN :voteIds AND c.isDeleted = false GROUP BY c.vote.id")
+    List<VoteCount> countByVoteIds(@Param("voteIds") Collection<UUID> voteIds);
 
     /**
      * Find all comments by user

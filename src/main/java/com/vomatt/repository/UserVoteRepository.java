@@ -1,5 +1,6 @@
 package com.vomatt.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -44,4 +45,13 @@ public interface UserVoteRepository extends JpaRepository<UserVote, UUID> {
 
     @Query("SELECT uv.option.id AS optionId, COUNT(uv) AS count FROM UserVote uv WHERE uv.vote.id = :voteId GROUP BY uv.option.id")
     List<OptionVoteCount> countByOptionGroupedForVote(@Param("voteId") UUID voteId);
+
+    @Query("SELECT uv.vote.id AS voteId, COUNT(DISTINCT uv.user.id) AS count FROM UserVote uv "
+            + "WHERE uv.vote.id IN :voteIds GROUP BY uv.vote.id")
+    List<VoteCount> countParticipantsByVoteIds(@Param("voteIds") Collection<UUID> voteIds);
+
+    @Query("SELECT uv.vote.id AS voteId, uv.option.id AS optionId FROM UserVote uv "
+            + "WHERE uv.user.id = :userId AND uv.vote.id IN :voteIds")
+    List<UserBallot> findBallotsByUserAndVoteIds(@Param("userId") UUID userId,
+            @Param("voteIds") Collection<UUID> voteIds);
 }

@@ -70,10 +70,12 @@ public class VoteMapper {
      * @param optionCounts Pre-fetched Map<optionId, voteCount>
      * @param totalVoteCount Pre-fetched total vote count
      */
+    /** @param showVoters whether to list who chose each option (the creator, for non-anonymous votes) */
     public VoteResultResponse toResultResponse(Vote vote, List<VoteOption> options,
                                                int totalParticipants,
                                                Map<UUID, Long> optionCounts,
-                                               long totalVoteCount) {
+                                               long totalVoteCount,
+                                               boolean showVoters) {
         VoteResultResponse response = new VoteResultResponse();
         response.setId(vote.getId().toString());
         response.setTitle(vote.getTitle());
@@ -91,7 +93,7 @@ public class VoteMapper {
         response.setTotalParticipants(totalParticipants);
 
         List<VoteResultResponse.VoteOptionResultResponse> optionResults = options.stream()
-            .map(opt -> toOptionResultResponse(opt, totalVoteCount, vote.isAnonymous(),
+            .map(opt -> toOptionResultResponse(opt, totalVoteCount, vote.isAnonymous() || !showVoters,
                     optionCounts.getOrDefault(opt.getId(), 0L)))
             .toList();
         response.setOptions(optionResults);

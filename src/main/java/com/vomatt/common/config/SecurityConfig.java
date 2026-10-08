@@ -57,6 +57,7 @@ public class SecurityConfig {
                         // Public: auth endpoints (OTP, OAuth)
                         .requestMatchers(SecurityEndpoints.PUBLIC_AUTH).permitAll()
                         .requestMatchers(SecurityEndpoints.AUTHENTICATED_USERS).authenticated()
+                        .requestMatchers(SecurityEndpoints.AUTHENTICATED_VOTES).authenticated()
                         // Public GET: tags, vote list, public user profile
                         .requestMatchers(HttpMethod.GET, SecurityEndpoints.PUBLIC_GET).permitAll()
                         // Public: Actuator health check

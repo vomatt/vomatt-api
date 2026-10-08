@@ -7,9 +7,11 @@ import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
 import com.vomatt.repository.TagRepository;
+import com.vomatt.repository.UserBallot;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.UserVoteRepository;
 import com.vomatt.repository.VoteOptionRepository;
+import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.repository.VoteRepository;
 import com.vomatt.votes.dto.CreateVoteRequest;
 import com.vomatt.votes.dto.VoteRequest;
@@ -26,6 +28,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -35,6 +38,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -49,6 +54,7 @@ class VoteServiceTest {
     @Mock TagRepository tagRepository;
     @Mock VoteConfigurationProperties voteConfig;
     @Mock VoteMapper voteMapper;
+    @Mock VoteCommentRepository voteCommentRepository;
 
     @InjectMocks
     VoteService voteService;
@@ -93,7 +99,15 @@ class VoteServiceTest {
         when(userVoteRepository.countByOptionGroupedForVote(v.getId()))
                 .thenReturn(Collections.emptyList());
         VoteResponse response = new VoteResponse();
+        response.setOptions(new ArrayList<>());
         when(voteMapper.toResponse(eq(v), any(), any(), eq(0L))).thenReturn(response);
+        return response;
+    }
+
+    /** What the real mapper returns at minimum: a response with an options list. */
+    private static VoteResponse mappedResponse() {
+        VoteResponse response = new VoteResponse();
+        response.setOptions(new ArrayList<>());
         return response;
     }
 
@@ -194,7 +208,7 @@ class VoteServiceTest {
             request.setTitle("Favourite Color?");
             request.setOptions(List.of(buildOption("Red"), buildOption("Blue")));
 
-            VoteResponse expected = new VoteResponse();
+            VoteResponse expected = mappedResponse();
             when(userVoteRepository.countByOptionGroupedForVote(any())).thenReturn(Collections.emptyList());
             when(voteMapper.toResponse(any(), any(), any(), anyLong())).thenReturn(expected);
 
@@ -216,7 +230,7 @@ class VoteServiceTest {
         @DisplayName("應該在找不到投票時拋出 404 VOTE_NOT_FOUND")
         void shouldThrowWhenVoteNotFound() {
             when(voteRepository.findById(voteId)).thenReturn(Optional.empty());
-            assertThatThrownBy(() -> voteService.getVote(voteId.toString()))
+            assertThatThrownBy(() -> voteService.getVote(voteId.toString(), null))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
         }
 
@@ -226,7 +240,7 @@ class VoteServiceTest {
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             VoteResponse expected = stubConvertToVoteResponse(vote);
 
-            VoteResponse result = voteService.getVote(voteId.toString());
+            VoteResponse result = voteService.getVote(voteId.toString(), null);
 
             assertThat(result).isSameAs(expected);
         }
@@ -239,9 +253,9 @@ class VoteServiceTest {
     class CastVoteTests {
 
         @Test
-        @DisplayName("應該在投票不存在或已停用時拋出 404 VOTE_NOT_FOUND")
+        @DisplayName("應該在投票不存在時拋出 404 VOTE_NOT_FOUND")
         void shouldThrowWhenVoteNotActive() {
-            when(voteRepository.findByIdAndIsActiveTrue(voteId)).thenReturn(Optional.empty());
+            when(voteRepository.findById(voteId)).thenReturn(Optional.empty());
 
             VoteRequest request = new VoteRequest();
             request.setOptionIds(List.of(UUID.randomUUID().toString()));
@@ -255,7 +269,7 @@ class VoteServiceTest {
         void shouldThrowWhenMultipleChoicesNotAllowed() {
             vote.setActive(true);
             vote.setAllowMultipleChoices(false);
-            when(voteRepository.findByIdAndIsActiveTrue(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
 
             VoteRequest request = new VoteRequest();
@@ -272,7 +286,7 @@ class VoteServiceTest {
         void shouldThrowWhenOptionBelongsToDifferentVote() {
             vote.setActive(true);
             vote.setAllowMultipleChoices(true);
-            when(voteRepository.findByIdAndIsActiveTrue(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
 
             UUID optionId = UUID.randomUUID();
@@ -354,7 +368,7 @@ class VoteServiceTest {
             Tag tag = setId(new Tag("Tech", "tech", "Technology", 1), tagId);
             when(tagRepository.findAllByIdIn(Set.of(tagId))).thenReturn(List.of(tag));
             when(userVoteRepository.countByOptionGroupedForVote(any())).thenReturn(Collections.emptyList());
-            when(voteMapper.toResponse(any(), any(), any(), anyLong())).thenReturn(new VoteResponse());
+            when(voteMapper.toResponse(any(), any(), any(), anyLong())).thenReturn(mappedResponse());
 
             CreateVoteRequest request = new CreateVoteRequest();
             request.setTitle("Tag Vote");
@@ -400,7 +414,7 @@ class VoteServiceTest {
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
             stubSaveAssignsId();
             when(userVoteRepository.countByOptionGroupedForVote(any())).thenReturn(Collections.emptyList());
-            when(voteMapper.toResponse(any(), any(), any(), anyLong())).thenReturn(new VoteResponse());
+            when(voteMapper.toResponse(any(), any(), any(), anyLong())).thenReturn(mappedResponse());
 
             CreateVoteRequest request = new CreateVoteRequest();
             request.setTitle("No Tag Vote");
@@ -411,6 +425,197 @@ class VoteServiceTest {
 
             verify(tagRepository, never()).findAllByIdIn(any());
             verify(tagRepository, never()).incrementUsageCount(any());
+        }
+    }
+
+    // ─── release readiness ────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("sealed ballots, ended votes, edits")
+    class ReleaseReadinessTests {
+
+        private void openVote() {
+            vote.setCreator(user);
+            vote.setActive(true);
+            vote.setStartTime(OffsetDateTime.now().minusHours(1));
+            vote.setEndTime(OffsetDateTime.now().plusDays(1));
+        }
+
+        @Test
+        @DisplayName("投票進行中時應隱藏各選項票數")
+        void shouldWithholdOptionCountsWhileOpen() {
+            openVote();
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            VoteResponse response = stubConvertToVoteResponse(vote);
+            VoteResponse.VoteOptionResponse opt = new VoteResponse.VoteOptionResponse();
+            opt.setVotes(3L);
+            response.getOptions().add(opt);
+
+            voteService.getVote(voteId.toString(), null);
+
+            assertThat(opt.getVotes()).isNull();
+        }
+
+        @Test
+        @DisplayName("投票結束後應公開各選項票數")
+        void shouldRevealOptionCountsOnceEnded() {
+            openVote();
+            vote.setEndTime(OffsetDateTime.now().minusMinutes(1));
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            VoteResponse response = stubConvertToVoteResponse(vote);
+            VoteResponse.VoteOptionResponse opt = new VoteResponse.VoteOptionResponse();
+            opt.setVotes(3L);
+            response.getOptions().add(opt);
+
+            voteService.getVote(voteId.toString(), null);
+
+            assertThat(opt.getVotes()).isEqualTo(3L);
+        }
+
+        @Test
+        @DisplayName("登入者應取得自己的選項，未投票時為 Optional.empty")
+        void shouldFillMyOptionIdForViewer() {
+            openVote();
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            stubConvertToVoteResponse(vote);
+
+            VoteResponse notVoted = voteService.getVote(voteId.toString(), userId.toString());
+            assertThat(notVoted.getMyOptionId()).isEqualTo(Optional.empty());
+
+            UUID optionId = UUID.randomUUID();
+            UserBallot ballot = new UserBallot() {
+                public UUID getVoteId() { return voteId; }
+                public UUID getOptionId() { return optionId; }
+            };
+            when(userVoteRepository.findBallotsByUserAndVoteIds(eq(userId), any())).thenReturn(List.of(ballot));
+            VoteResponse voted = voteService.getVote(voteId.toString(), userId.toString());
+            assertThat(voted.getMyOptionId()).contains(optionId.toString());
+        }
+
+        @Test
+        @DisplayName("訪客不應有 myOptionId")
+        void shouldLeaveMyOptionIdUnsetForGuests() {
+            openVote();
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            stubConvertToVoteResponse(vote);
+
+            assertThat(voteService.getVote(voteId.toString(), null).getMyOptionId()).isNull();
+        }
+
+        @Test
+        @DisplayName("已結束的投票應回 400 VOTE_ENDED")
+        void shouldRejectBallotOnEndedVote() {
+            openVote();
+            vote.setEndTime(OffsetDateTime.now().minusMinutes(1));
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            VoteRequest request = new VoteRequest();
+            request.setOptionIds(List.of(UUID.randomUUID().toString()));
+
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1"))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_ENDED));
+        }
+
+        @Test
+        @DisplayName("已取消的投票應回 400 VOTE_ENDED 而非 404")
+        void shouldTreatCancelledVoteAsEnded() {
+            openVote();
+            vote.setActive(false);
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            VoteRequest request = new VoteRequest();
+            request.setOptionIds(List.of(UUID.randomUUID().toString()));
+
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1"))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_ENDED));
+        }
+
+        @Test
+        @DisplayName("尚未開始的投票應回 400 VOTE_NOT_ALLOWED")
+        void shouldRejectBallotBeforeOpen() {
+            openVote();
+            vote.setStartTime(OffsetDateTime.now().plusHours(1));
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            VoteRequest request = new VoteRequest();
+            request.setOptionIds(List.of(UUID.randomUUID().toString()));
+
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1"))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_NOT_ALLOWED));
+        }
+
+        @Test
+        @DisplayName("投票結束前結果應回 403 VOTE_RESULTS_SEALED")
+        void shouldSealResultsWhileOpen() {
+            openVote();
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+
+            assertThatThrownBy(() -> voteService.getVoteResults(voteId.toString(), null))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_RESULTS_SEALED));
+        }
+
+        @Test
+        @DisplayName("只有建立者能看到誰投了什麼")
+        void shouldShowVotersToCreatorOnly() {
+            openVote();
+            vote.setEndTime(OffsetDateTime.now().minusMinutes(1));
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+
+            voteService.getVoteResults(voteId.toString(), UUID.randomUUID().toString());
+            verify(voteMapper).toResultResponse(eq(vote), any(), anyInt(), any(), anyLong(), eq(false));
+
+            voteService.getVoteResults(voteId.toString(), userId.toString());
+            verify(voteMapper).toResultResponse(eq(vote), any(), anyInt(), any(), anyLong(), eq(true));
+        }
+
+        @Test
+        @DisplayName("非建立者不能編輯")
+        void shouldForbidEditByOthers() {
+            openVote();
+            vote.setStartTime(OffsetDateTime.now().plusDays(1));
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+
+            assertThatThrownBy(() -> voteService.updateVote(voteId.toString(), new CreateVoteRequest(),
+                    UUID.randomUUID().toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_FORBIDDEN));
+        }
+
+        @Test
+        @DisplayName("已開始的投票不能編輯")
+        void shouldRejectEditOnceOpen() {
+            openVote();
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+
+            assertThatThrownBy(() -> voteService.updateVote(voteId.toString(), new CreateVoteRequest(),
+                    userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_NOT_EDITABLE));
+        }
+
+        @Test
+        @DisplayName("建立者能在開始前編輯並替換選項")
+        void shouldReplaceOptionsOnEdit() {
+            openVote();
+            vote.setStartTime(OffsetDateTime.now().plusDays(1));
+            vote.setEndTime(OffsetDateTime.now().plusDays(2));
+            vote.addOption(option);
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.saveAndFlush(vote)).thenReturn(vote);
+            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
+            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
+            when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(30));
+            stubConvertToVoteResponse(vote);
+
+            CreateVoteRequest request = new CreateVoteRequest();
+            request.setTitle("Renamed");
+            CreateVoteRequest.VoteOptionRequest a = new CreateVoteRequest.VoteOptionRequest();
+            a.setText("A");
+            CreateVoteRequest.VoteOptionRequest b = new CreateVoteRequest.VoteOptionRequest();
+            b.setText("B");
+            request.setOptions(List.of(a, b));
+            request.setStartTime(OffsetDateTime.now().plusDays(1));
+            request.setEndTime(OffsetDateTime.now().plusDays(3));
+
+            voteService.updateVote(voteId.toString(), request, userId.toString());
+
+            assertThat(vote.getTitle()).isEqualTo("Renamed");
+            assertThat(vote.getOptions()).extracting(VoteOption::getText).containsExactlyInAnyOrder("A", "B");
         }
     }
 }

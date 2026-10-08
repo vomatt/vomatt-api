@@ -67,8 +67,8 @@ public class VoteCommentController {
             @PageableDefault(size = 20) Pageable pageable,
             @AuthenticationPrincipal UserPrincipal principal) {
         // Public: guests read the discussion; signed-in viewers also get their likes
-        String viewerId = principal != null ? principal.userId() : null;
-        Page<CommentDto> response = commentService.getCommentsByVote(voteId, pageable, viewerId);
+        Page<CommentDto> response = commentService.getCommentsByVote(voteId, pageable,
+                UserPrincipal.idOrNull(principal));
         return ResponseEntity.ok(ApiResponse.ok(PageResponse.from(response)));
     }
 

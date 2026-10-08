@@ -101,16 +101,21 @@ public class Vote extends AuditableEntity {
     }
 
     public boolean isVotingActive() {
-        OffsetDateTime now = OffsetDateTime.now();
-        if (!isActive) return false;
-        if (startTime != null && now.isBefore(startTime)) return false;
-        if (endTime != null && now.isAfter(endTime)) return false;
-        return true;
+        return hasStarted() && !hasEnded();
+    }
+
+    /** Past its start time (a vote without one is open from creation). */
+    public boolean hasStarted() {
+        return startTime == null || !OffsetDateTime.now().isBefore(startTime);
     }
 
     /** Cancelled, or past its end time. Results are only revealed then. */
     public boolean hasEnded() {
         return !isActive || (endTime != null && !OffsetDateTime.now().isBefore(endTime));
+    }
+
+    public boolean isCreatedBy(String userId) {
+        return creator != null && creator.getId().toString().equals(userId);
     }
 
     public void addTag(Tag tag) {

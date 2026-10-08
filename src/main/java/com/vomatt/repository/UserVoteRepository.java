@@ -27,9 +27,6 @@ public interface UserVoteRepository extends JpaRepository<UserVote, UUID> {
 
     Optional<UserVote> findByUserIdAndVoteIdAndOptionId(UUID userId, UUID voteId, UUID optionId);
 
-    @Query("SELECT COUNT(mv) FROM UserVote mv WHERE mv.vote.id = :voteId")
-    long countByVoteId(@Param("voteId") UUID voteId);
-
     @Query("SELECT COUNT(mv) FROM UserVote mv WHERE mv.option.id = :optionId")
     long countByOptionId(@Param("optionId") UUID optionId);
 
@@ -45,6 +42,10 @@ public interface UserVoteRepository extends JpaRepository<UserVote, UUID> {
 
     @Query("SELECT uv.option.id AS optionId, COUNT(uv) AS count FROM UserVote uv WHERE uv.vote.id = :voteId GROUP BY uv.option.id")
     List<OptionVoteCount> countByOptionGroupedForVote(@Param("voteId") UUID voteId);
+
+    @Query("SELECT uv.vote.id AS voteId, uv.option.id AS optionId, COUNT(uv) AS count FROM UserVote uv "
+            + "WHERE uv.vote.id IN :voteIds GROUP BY uv.vote.id, uv.option.id")
+    List<VoteOptionCount> countByOptionForVoteIds(@Param("voteIds") Collection<UUID> voteIds);
 
     @Query("SELECT uv.vote.id AS voteId, COUNT(DISTINCT uv.user.id) AS count FROM UserVote uv "
             + "WHERE uv.vote.id IN :voteIds GROUP BY uv.vote.id")

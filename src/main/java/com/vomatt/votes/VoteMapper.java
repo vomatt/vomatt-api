@@ -17,6 +17,8 @@ import java.util.stream.Collectors;
 public class VoteMapper {
 
     /**
+     * Per-option counts are left out until the vote has ended (sealed ballot).
+     *
      * @param optionCounts Pre-fetched Map<optionId, voteCount> to avoid N+1 lazy load
      * @param totalVoteCount Pre-fetched total vote count to avoid triggering userVotes collection lazy load
      */
@@ -37,8 +39,9 @@ public class VoteMapper {
         response.setUpdatedAt(vote.getUpdatedAt());
         response.setTotalVotes(totalVoteCount);
         response.setVotingActive(vote.isVotingActive());
+        boolean sealed = !vote.hasEnded();
         response.setOptions(options.stream()
-                .map(opt -> toOptionResponse(opt, optionCounts.getOrDefault(opt.getId(), 0L)))
+                .map(opt -> toOptionResponse(opt, sealed ? null : optionCounts.getOrDefault(opt.getId(), 0L)))
                 .toList());
         List<TagDto> tagDtos = (vote.getTags() != null)
                 ? vote.getTags().stream()
@@ -55,7 +58,8 @@ public class VoteMapper {
         return response;
     }
 
-    public VoteResponse.VoteOptionResponse toOptionResponse(VoteOption option, long voteCount) {
+    /** @param voteCount null while the vote is sealed */
+    public VoteResponse.VoteOptionResponse toOptionResponse(VoteOption option, Long voteCount) {
         VoteResponse.VoteOptionResponse resp = new VoteResponse.VoteOptionResponse();
         resp.setId(option.getId().toString());
         resp.setText(option.getText());
@@ -69,8 +73,8 @@ public class VoteMapper {
     /**
      * @param optionCounts Pre-fetched Map<optionId, voteCount>
      * @param totalVoteCount Pre-fetched total vote count
+     * @param showVoters whether to list who chose each option (the creator, for non-anonymous votes)
      */
-    /** @param showVoters whether to list who chose each option (the creator, for non-anonymous votes) */
     public VoteResultResponse toResultResponse(Vote vote, List<VoteOption> options,
                                                int totalParticipants,
                                                Map<UUID, Long> optionCounts,

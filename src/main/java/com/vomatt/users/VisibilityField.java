@@ -10,16 +10,18 @@ import java.util.stream.Collectors;
  * Controllable personal profile fields for visibility settings
  */
 public enum VisibilityField {
-    EMAIL("email"),
-    FIRST_NAME("firstName"),
-    LAST_NAME("lastName"),
-    LOCATION("location"),
-    POINTS("points"),
-    DISPLAY_NAME("displayName"),
-    BIO("bio"),
-    MEMBERSHIP_LEVEL("membershipLevel");
+    EMAIL("email", false),
+    FIRST_NAME("firstName", false),
+    LAST_NAME("lastName", false),
+    LOCATION("location", false),
+    POINTS("points", false),
+    DISPLAY_NAME("displayName", true),
+    BIO("bio", true),
+    MEMBERSHIP_LEVEL("membershipLevel", false);
 
     private final String fieldName;
+    /** Shown on the public profile until the user hides it. */
+    private final boolean visibleByDefault;
 
     private static final String PREFERENCE_PREFIX = "visibility.";
 
@@ -27,12 +29,17 @@ public enum VisibilityField {
             Arrays.stream(values())
                     .collect(Collectors.toMap(VisibilityField::getFieldName, Function.identity()));
 
-    VisibilityField(String fieldName) {
+    VisibilityField(String fieldName, boolean visibleByDefault) {
         this.fieldName = fieldName;
+        this.visibleByDefault = visibleByDefault;
     }
 
     public String getFieldName() {
         return fieldName;
+    }
+
+    public boolean isVisibleByDefault() {
+        return visibleByDefault;
     }
 
     /**

@@ -29,7 +29,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -95,13 +94,16 @@ class VoteServiceTest {
     }
 
     private VoteResponse stubConvertToVoteResponse(Vote v) {
-        when(voteRepository.findByIdWithOptions(v.getId())).thenReturn(Optional.of(v));
-        when(userVoteRepository.countByOptionGroupedForVote(v.getId()))
-                .thenReturn(Collections.emptyList());
-        VoteResponse response = new VoteResponse();
-        response.setOptions(new ArrayList<>());
+        when(voteRepository.findAllForResponseByIdIn(any())).thenReturn(List.of(v));
+        VoteResponse response = mappedResponse();
         when(voteMapper.toResponse(eq(v), any(), any(), eq(0L))).thenReturn(response);
         return response;
+    }
+
+    private static VoteRequest ballotRequest() {
+        VoteRequest request = new VoteRequest();
+        request.setOptionIds(List.of(UUID.randomUUID().toString()));
+        return request;
     }
 
     /** What the real mapper returns at minimum: a response with an options list. */
@@ -209,7 +211,6 @@ class VoteServiceTest {
             request.setOptions(List.of(buildOption("Red"), buildOption("Blue")));
 
             VoteResponse expected = mappedResponse();
-            when(userVoteRepository.countByOptionGroupedForVote(any())).thenReturn(Collections.emptyList());
             when(voteMapper.toResponse(any(), any(), any(), anyLong())).thenReturn(expected);
 
             VoteResponse result = voteService.createVote(request, userId.toString());
@@ -257,10 +258,7 @@ class VoteServiceTest {
         void shouldThrowWhenVoteNotActive() {
             when(voteRepository.findById(voteId)).thenReturn(Optional.empty());
 
-            VoteRequest request = new VoteRequest();
-            request.setOptionIds(List.of(UUID.randomUUID().toString()));
-
-            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1"))
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), ballotRequest(), userId.toString(), "127.0.0.1"))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
         }
 
@@ -367,7 +365,6 @@ class VoteServiceTest {
             UUID tagId = UUID.randomUUID();
             Tag tag = setId(new Tag("Tech", "tech", "Technology", 1), tagId);
             when(tagRepository.findAllByIdIn(Set.of(tagId))).thenReturn(List.of(tag));
-            when(userVoteRepository.countByOptionGroupedForVote(any())).thenReturn(Collections.emptyList());
             when(voteMapper.toResponse(any(), any(), any(), anyLong())).thenReturn(mappedResponse());
 
             CreateVoteRequest request = new CreateVoteRequest();
@@ -413,7 +410,6 @@ class VoteServiceTest {
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
             stubSaveAssignsId();
-            when(userVoteRepository.countByOptionGroupedForVote(any())).thenReturn(Collections.emptyList());
             when(voteMapper.toResponse(any(), any(), any(), anyLong())).thenReturn(mappedResponse());
 
             CreateVoteRequest request = new CreateVoteRequest();
@@ -439,37 +435,6 @@ class VoteServiceTest {
             vote.setActive(true);
             vote.setStartTime(OffsetDateTime.now().minusHours(1));
             vote.setEndTime(OffsetDateTime.now().plusDays(1));
-        }
-
-        @Test
-        @DisplayName("投票進行中時應隱藏各選項票數")
-        void shouldWithholdOptionCountsWhileOpen() {
-            openVote();
-            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
-            VoteResponse response = stubConvertToVoteResponse(vote);
-            VoteResponse.VoteOptionResponse opt = new VoteResponse.VoteOptionResponse();
-            opt.setVotes(3L);
-            response.getOptions().add(opt);
-
-            voteService.getVote(voteId.toString(), null);
-
-            assertThat(opt.getVotes()).isNull();
-        }
-
-        @Test
-        @DisplayName("投票結束後應公開各選項票數")
-        void shouldRevealOptionCountsOnceEnded() {
-            openVote();
-            vote.setEndTime(OffsetDateTime.now().minusMinutes(1));
-            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
-            VoteResponse response = stubConvertToVoteResponse(vote);
-            VoteResponse.VoteOptionResponse opt = new VoteResponse.VoteOptionResponse();
-            opt.setVotes(3L);
-            response.getOptions().add(opt);
-
-            voteService.getVote(voteId.toString(), null);
-
-            assertThat(opt.getVotes()).isEqualTo(3L);
         }
 
         @Test
@@ -508,10 +473,7 @@ class VoteServiceTest {
             openVote();
             vote.setEndTime(OffsetDateTime.now().minusMinutes(1));
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
-            VoteRequest request = new VoteRequest();
-            request.setOptionIds(List.of(UUID.randomUUID().toString()));
-
-            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1"))
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), ballotRequest(), userId.toString(), "127.0.0.1"))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_ENDED));
         }
 
@@ -521,10 +483,7 @@ class VoteServiceTest {
             openVote();
             vote.setActive(false);
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
-            VoteRequest request = new VoteRequest();
-            request.setOptionIds(List.of(UUID.randomUUID().toString()));
-
-            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1"))
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), ballotRequest(), userId.toString(), "127.0.0.1"))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_ENDED));
         }
 
@@ -534,10 +493,7 @@ class VoteServiceTest {
             openVote();
             vote.setStartTime(OffsetDateTime.now().plusHours(1));
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
-            VoteRequest request = new VoteRequest();
-            request.setOptionIds(List.of(UUID.randomUUID().toString()));
-
-            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1"))
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), ballotRequest(), userId.toString(), "127.0.0.1"))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_NOT_ALLOWED));
         }
 
@@ -604,11 +560,7 @@ class VoteServiceTest {
 
             CreateVoteRequest request = new CreateVoteRequest();
             request.setTitle("Renamed");
-            CreateVoteRequest.VoteOptionRequest a = new CreateVoteRequest.VoteOptionRequest();
-            a.setText("A");
-            CreateVoteRequest.VoteOptionRequest b = new CreateVoteRequest.VoteOptionRequest();
-            b.setText("B");
-            request.setOptions(List.of(a, b));
+            request.setOptions(List.of(buildOption("A"), buildOption("B")));
             request.setStartTime(OffsetDateTime.now().plusDays(1));
             request.setEndTime(OffsetDateTime.now().plusDays(3));
 

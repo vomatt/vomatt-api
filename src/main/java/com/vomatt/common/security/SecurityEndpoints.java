@@ -24,15 +24,15 @@ public final class SecurityEndpoints {
     public static final String[] AUTHENTICATED_USERS = { "/api/users/me", "/api/users/me/**", "/api/users/search" };
 
     /**
-     * 需登入的 /api/votes 子路徑；必須排在 {@link #PUBLIC_GET} 之前比對，
-     * 否則 {@code /api/votes/*} 會把 {@code /my}、{@code /participated} 一併放行。
+     * 投票 ID（UUID）路徑段。只比對 UUID，{@code /api/votes/my}、{@code /participated}
+     * 等具名子路徑就不會被公開規則放行，與規則先後順序無關。
      */
-    public static final String[] AUTHENTICATED_VOTES = { "/api/votes/my", "/api/votes/participated",
-            "/api/votes/*/my-vote-status" };
+    private static final String VOTE_ID = "{voteId:[0-9a-fA-F]+-[0-9a-fA-F-]+}";
 
     /** GET-only public endpoints */
-    public static final String[] PUBLIC_GET = { "/api/tags", "/api/tags/**", "/api/votes", "/api/votes/*",
-            "/api/votes/*/results", "/api/votes/*/comments", "/api/users/{username}" };
+    public static final String[] PUBLIC_GET = { "/api/tags", "/api/tags/**", "/api/votes",
+            "/api/votes/" + VOTE_ID, "/api/votes/" + VOTE_ID + "/results", "/api/votes/" + VOTE_ID + "/comments",
+            "/api/users/{username}" };
 
     /** Swagger / OpenAPI UI */
     public static final String[] PUBLIC_SWAGGER = { "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**",

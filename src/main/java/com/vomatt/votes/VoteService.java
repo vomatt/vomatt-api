@@ -33,6 +33,7 @@ import com.vomatt.repository.TagRepository;
 import com.vomatt.repository.UserBallot;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.repository.VoteCount;
+import com.vomatt.repository.VoteOptionCount;
 import com.vomatt.repository.UserVoteRepository;
 import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.VoteRepository;
@@ -62,10 +63,9 @@ public class VoteService {
         User creator = userRepository.findById(UUID.fromString(creatorId))
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
 
-        Vote vote = new Vote(request.getTitle(), request.getDescription(), creator, request.getEndTime());
-        vote.setStartTime(request.getStartTime() != null ? request.getStartTime() : OffsetDateTime.now());
-        vote.setAllowMultipleChoices(request.isAllowMultipleChoices());
-        vote.setAnonymous(request.isAnonymous());
+        Vote vote = new Vote();
+        vote.setCreator(creator);
+        applyFields(vote, request);
 
         if (request.getTagIds() != null && !request.getTagIds().isEmpty()) {
             Set<UUID> tagUUIDs = new HashSet<>(request.getTagIds());
@@ -77,14 +77,7 @@ public class VoteService {
         }
 
         vote = voteRepository.save(vote);
-
-        for (int i = 0; i < request.getOptions().size(); i++) {
-            CreateVoteRequest.VoteOptionRequest optionRequest = request.getOptions().get(i);
-            VoteOption option = new VoteOption(optionRequest.getText(), optionRequest.getDescription(), vote);
-            option.setDisplayOrder(optionRequest.getDisplayOrder() != null ? optionRequest.getDisplayOrder() : i);
-            vote.addOption(option);
-        }
-
+        addOptions(vote, request);
         vote = voteRepository.save(vote);
         log.info("Vote created: {} by user: {}", vote.getId(), creatorId);
 
@@ -92,15 +85,15 @@ public class VoteService {
             tagRepository.incrementUsageCount(new HashSet<>(request.getTagIds()));
         }
 
-        return toResponses(List.of(vote), creatorId).getFirst();
+        return toResponse(vote, creatorId);
     }
 
-    @Transactional(readOnly = true)
     /** @param viewerId the signed-in viewer, or null for a guest */
+    @Transactional(readOnly = true)
     public VoteResponse getVote(String voteId, String viewerId) {
         Vote vote = voteRepository.findById(UUID.fromString(voteId))
             .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
-        return toResponses(List.of(vote), viewerId).getFirst();
+        return toResponse(vote, viewerId);
     }
 
     @Transactional(readOnly = true)
@@ -139,32 +132,19 @@ public class VoteService {
         Vote vote = voteRepository.findById(UUID.fromString(voteId))
             .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
 
-        if (!vote.getCreator().getId().toString().equals(userId)) {
-            throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
-        }
-        if (!vote.isActive() || vote.getStartTime() == null || !OffsetDateTime.now().isBefore(vote.getStartTime())) {
+        requireCreator(vote, userId);
+        if (!vote.isActive() || vote.hasStarted()) {
             throw ApiException.badRequest(MessageKey.VOTE_NOT_EDITABLE);
         }
         validateCreateVoteRequest(request);
 
-        vote.setTitle(request.getTitle());
-        vote.setDescription(request.getDescription());
-        vote.setStartTime(request.getStartTime() != null ? request.getStartTime() : OffsetDateTime.now());
-        vote.setEndTime(request.getEndTime());
-        vote.setAllowMultipleChoices(request.isAllowMultipleChoices());
-        vote.setAnonymous(request.isAnonymous());
-
+        applyFields(vote, request);
         vote.getOptions().clear();
-        for (int i = 0; i < request.getOptions().size(); i++) {
-            CreateVoteRequest.VoteOptionRequest optionRequest = request.getOptions().get(i);
-            VoteOption option = new VoteOption(optionRequest.getText(), optionRequest.getDescription(), vote);
-            option.setDisplayOrder(optionRequest.getDisplayOrder() != null ? optionRequest.getDisplayOrder() : i);
-            vote.addOption(option);
-        }
+        addOptions(vote, request);
 
         vote = voteRepository.saveAndFlush(vote);
         log.info("Vote {} updated by creator {}", voteId, userId);
-        return toResponses(List.of(vote), userId).getFirst();
+        return toResponse(vote, userId);
     }
 
     public VoteResponse vote(String voteId, VoteRequest request, String userId, String ipAddress) {
@@ -202,7 +182,7 @@ public class VoteService {
 
         log.info("User {} voted on vote {} with options {}", userId, voteId, request.getOptionIds());
 
-        return toResponses(List.of(vote), userId).getFirst();
+        return toResponse(vote, userId);
     }
 
     public VoteResponse removeVote(String voteId, String optionId, String userId) {
@@ -214,7 +194,7 @@ public class VoteService {
             UUID.fromString(userId), UUID.fromString(voteId), UUID.fromString(optionId));
         log.info("User {} removed vote from option {} in vote {}", userId, optionId, voteId);
 
-        return toResponses(List.of(vote), userId).getFirst();
+        return toResponse(vote, userId);
     }
 
     /**
@@ -231,10 +211,10 @@ public class VoteService {
         }
 
         int totalParticipants = (int) userVoteRepository.countDistinctUserByVoteId(voteUuid);
-        long totalVoteCount = userVoteRepository.countByVoteId(voteUuid);
         Map<UUID, Long> optionCounts = buildOptionCountMap(voteUuid);
+        long totalVoteCount = optionCounts.values().stream().mapToLong(Long::longValue).sum();
         List<VoteOption> options = voteOptionRepository.findByVoteIdOrderByDisplayOrder(voteUuid);
-        boolean showVoters = vote.getCreator().getId().toString().equals(viewerId);
+        boolean showVoters = vote.isCreatedBy(viewerId);
 
         return voteMapper.toResultResponse(vote, options, totalParticipants, optionCounts, totalVoteCount,
                 showVoters);
@@ -257,15 +237,13 @@ public class VoteService {
         Vote vote = voteRepository.findById(UUID.fromString(voteId))
             .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
 
-        if (!vote.getCreator().getId().toString().equals(creatorId)) {
-            throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
-        }
+        requireCreator(vote, creatorId);
 
         vote.deactivate();
         vote = voteRepository.save(vote);
         log.info("Vote {} deactivated by creator {}", voteId, creatorId);
 
-        return toResponses(List.of(vote), creatorId).getFirst();
+        return toResponse(vote, creatorId);
     }
 
     /** VOTE_ENDED for a cancelled or finished vote, VOTE_NOT_ALLOWED before it opens. */
@@ -274,17 +252,53 @@ public class VoteService {
         throw ApiException.badRequest(vote.hasEnded() ? MessageKey.VOTE_ENDED : MessageKey.VOTE_NOT_ALLOWED);
     }
 
+    private static void requireCreator(Vote vote, String userId) {
+        if (!vote.isCreatedBy(userId)) {
+            throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
+        }
+    }
+
+    /** The fields create and update share; an empty start time opens the vote now. */
+    private static void applyFields(Vote vote, CreateVoteRequest request) {
+        vote.setTitle(request.getTitle());
+        vote.setDescription(request.getDescription());
+        vote.setStartTime(request.getStartTime() != null ? request.getStartTime() : OffsetDateTime.now());
+        vote.setEndTime(request.getEndTime());
+        vote.setAllowMultipleChoices(request.isAllowMultipleChoices());
+        vote.setAnonymous(request.isAnonymous());
+    }
+
+    /** Options keep the request's order unless it gives its own display order. */
+    private static void addOptions(Vote vote, CreateVoteRequest request) {
+        for (int i = 0; i < request.getOptions().size(); i++) {
+            CreateVoteRequest.VoteOptionRequest optionRequest = request.getOptions().get(i);
+            VoteOption option = new VoteOption(optionRequest.getText(), optionRequest.getDescription(), vote);
+            option.setDisplayOrder(optionRequest.getDisplayOrder() != null ? optionRequest.getDisplayOrder() : i);
+            vote.addOption(option);
+        }
+    }
+
+    private VoteResponse toResponse(Vote vote, String viewerId) {
+        return toResponses(List.of(vote), viewerId).getFirst();
+    }
+
     private Page<VoteResponse> toResponses(Page<Vote> page, String viewerId) {
         return new PageImpl<>(toResponses(page.getContent(), viewerId), page.getPageable(), page.getTotalElements());
     }
 
     /**
-     * Adds what a list needs beyond one vote: participant and comment counts,
-     * and the viewer's own option, each fetched once for the whole list.
+     * Builds responses for a list in a fixed number of queries, however long it
+     * is: votes with creator, options and tags; option counts; participant and
+     * comment counts; and the viewer's own option.
      */
     private List<VoteResponse> toResponses(List<Vote> votes, String viewerId) {
         if (votes.isEmpty()) return List.of();
         List<UUID> ids = votes.stream().map(Vote::getId).toList();
+        Map<UUID, Vote> loaded = voteRepository.findAllForResponseByIdIn(ids).stream()
+            .collect(Collectors.toMap(Vote::getId, v -> v));
+        Map<UUID, Map<UUID, Long>> optionCounts = userVoteRepository.countByOptionForVoteIds(ids).stream()
+            .collect(Collectors.groupingBy(VoteOptionCount::getVoteId,
+                Collectors.toMap(VoteOptionCount::getOptionId, VoteOptionCount::getCount)));
         Map<UUID, Long> participants = toCountMap(userVoteRepository.countParticipantsByVoteIds(ids));
         Map<UUID, Long> comments = toCountMap(voteCommentRepository.countByVoteIds(ids));
         Map<UUID, String> myOptions = viewerId == null ? Map.of()
@@ -292,7 +306,14 @@ public class VoteService {
                 .collect(Collectors.toMap(UserBallot::getVoteId, b -> b.getOptionId().toString(), (a, b) -> a));
 
         return votes.stream().map(vote -> {
-            VoteResponse response = convertToVoteResponse(vote);
+            Vote full = loaded.getOrDefault(vote.getId(), vote);
+            Map<UUID, Long> counts = optionCounts.getOrDefault(vote.getId(), Map.of());
+            List<VoteOption> options = full.getOptions().stream()
+                .sorted(Comparator.comparingInt(VoteOption::getDisplayOrder))
+                .toList();
+            long totalVotes = counts.values().stream().mapToLong(Long::longValue).sum();
+
+            VoteResponse response = voteMapper.toResponse(full, options, counts, totalVotes);
             response.setParticipantCount(participants.getOrDefault(vote.getId(), 0L));
             response.setCommentCount(comments.getOrDefault(vote.getId(), 0L));
             if (viewerId != null) response.setMyOptionId(Optional.ofNullable(myOptions.get(vote.getId())));
@@ -302,23 +323,6 @@ public class VoteService {
 
     private static Map<UUID, Long> toCountMap(List<VoteCount> counts) {
         return counts.stream().collect(Collectors.toMap(VoteCount::getVoteId, VoteCount::getCount));
-    }
-
-    private VoteResponse convertToVoteResponse(Vote vote) {
-        UUID voteId = vote.getId();
-        // Use JOIN FETCH to avoid additional queries for options
-        Vote voteWithOptions = voteRepository.findByIdWithOptions(voteId).orElse(vote);
-        // Convert Set to sorted List, maintaining displayOrder
-        List<VoteOption> options = voteWithOptions.getOptions().stream()
-            .sorted(Comparator.comparingInt(VoteOption::getDisplayOrder))
-            .toList();
-        Map<UUID, Long> optionCounts = buildOptionCountMap(voteId);
-        // Sum from optionCounts to avoid querying total vote count again
-        long totalVoteCount = optionCounts.values().stream().mapToLong(Long::longValue).sum();
-        VoteResponse response = voteMapper.toResponse(voteWithOptions, options, optionCounts, totalVoteCount);
-        // Sealed ballot: per-option counts stay hidden until the vote ends
-        if (!vote.hasEnded()) response.getOptions().forEach(option -> option.setVotes(null));
-        return response;
     }
 
     private Map<UUID, Long> buildOptionCountMap(UUID voteId) {

@@ -1,6 +1,7 @@
 package com.vomatt.repository;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,13 +41,13 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
     @Query("SELECT v FROM Vote v WHERE v.endTime IS NOT NULL AND v.endTime < :now AND v.isActive = true")
     List<Vote> findExpiredActiveVotes(@Param("now") OffsetDateTime now);
 
-    Optional<Vote> findByIdAndIsActiveTrue(UUID id);
-
     @Query("SELECT v FROM Vote v LEFT JOIN FETCH v.tags WHERE v.id = :id")
     Optional<Vote> findByIdWithTags(@Param("id") UUID id);
 
-    @Query("SELECT v FROM Vote v LEFT JOIN FETCH v.options WHERE v.id = :id")
-    Optional<Vote> findByIdWithOptions(@Param("id") UUID id);
+    /** A page of votes with everything a response needs, in one query (options and tags are Sets) */
+    @Query("SELECT DISTINCT v FROM Vote v JOIN FETCH v.creator LEFT JOIN FETCH v.options "
+            + "LEFT JOIN FETCH v.tags WHERE v.id IN :ids")
+    List<Vote> findAllForResponseByIdIn(@Param("ids") Collection<UUID> ids);
 
     /** 某使用者建立、未被取消的投票（含已結束），供公開個人頁使用 */
     @Query("SELECT v FROM Vote v WHERE v.creator.username = :username AND v.isActive = true ORDER BY v.createdAt DESC")

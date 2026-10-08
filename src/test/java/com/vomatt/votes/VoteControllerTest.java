@@ -81,12 +81,17 @@ class VoteControllerTest {
                 principal, null, AuthorityUtils.createAuthorityList("ROLE_USER")));
     }
 
+    private static CreateVoteRequest.VoteOptionRequest buildOption(String text) {
+        CreateVoteRequest.VoteOptionRequest option = new CreateVoteRequest.VoteOptionRequest();
+        option.setText(text);
+        return option;
+    }
+
     /** 模擬 SecurityConfig：路徑是否落在任一公開白名單（未登入可存取） */
     private static boolean isPublic(String method, String path) {
         AntPathMatcher matcher = new AntPathMatcher();
-        // SecurityConfig matches the authenticated sub-paths before the public GET list
-        if (Stream.of(SecurityEndpoints.AUTHENTICATED_USERS, SecurityEndpoints.AUTHENTICATED_VOTES)
-                .flatMap(Arrays::stream).anyMatch(p -> matcher.match(p, path))) {
+        // SecurityConfig matches the authenticated /api/users sub-paths before the public GET list
+        if (Arrays.stream(SecurityEndpoints.AUTHENTICATED_USERS).anyMatch(p -> matcher.match(p, path))) {
             return false;
         }
         Stream<String> patterns = Stream.of(SecurityEndpoints.PUBLIC_AUTH, SecurityEndpoints.PUBLIC_SWAGGER,
@@ -320,11 +325,7 @@ class VoteControllerTest {
 
             CreateVoteRequest request = new CreateVoteRequest();
             request.setTitle("Renamed");
-            CreateVoteRequest.VoteOptionRequest a = new CreateVoteRequest.VoteOptionRequest();
-            a.setText("A");
-            CreateVoteRequest.VoteOptionRequest b = new CreateVoteRequest.VoteOptionRequest();
-            b.setText("B");
-            request.setOptions(List.of(a, b));
+            request.setOptions(List.of(buildOption("A"), buildOption("B")));
 
             mockMvc.perform(put("/api/votes/{voteId}", voteId)
                     .contentType(MediaType.APPLICATION_JSON)

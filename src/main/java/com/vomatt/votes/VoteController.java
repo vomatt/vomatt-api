@@ -68,7 +68,7 @@ public class VoteController {
             @Parameter(description = "Vote ID", required = true)
             @PathVariable String voteId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        VoteResponse response = voteService.getVote(voteId, viewerId(principal));
+        VoteResponse response = voteService.getVote(voteId, UserPrincipal.idOrNull(principal));
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
@@ -81,7 +81,7 @@ public class VoteController {
             @RequestParam(required = false) String tag,
             @RequestParam(required = false) String creatorUsername,
             @AuthenticationPrincipal UserPrincipal principal) {
-        String viewerId = viewerId(principal);
+        String viewerId = UserPrincipal.idOrNull(principal);
         Page<VoteResponse> votes;
         if (creatorUsername != null && !creatorUsername.isBlank()) {
             votes = voteService.getVotesByCreatorUsername(creatorUsername, pageable, viewerId);
@@ -113,7 +113,6 @@ public class VoteController {
             @Valid @RequestBody CreateVoteRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
         VoteResponse response = voteService.updateVote(voteId, request, principal.userId());
-        log.info("Vote {} updated by creator {}", voteId, principal.userId());
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
@@ -166,7 +165,7 @@ public class VoteController {
             @Parameter(description = "Vote ID", required = true)
             @PathVariable String voteId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        VoteResultResponse response = voteService.getVoteResults(voteId, viewerId(principal));
+        VoteResultResponse response = voteService.getVoteResults(voteId, UserPrincipal.idOrNull(principal));
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
@@ -194,11 +193,6 @@ public class VoteController {
         voteService.deactivateVote(voteId, principal.userId());
         log.info("Vote {} deactivated by creator {}", voteId, principal.userId());
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
-    }
-
-    /** Public endpoints run without a principal for guests. */
-    private static String viewerId(UserPrincipal principal) {
-        return principal != null ? principal.userId() : null;
     }
 
     private String getClientIpAddress(HttpServletRequest request) {

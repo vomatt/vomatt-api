@@ -11,6 +11,7 @@ import com.vomatt.repository.UserRepository;
 import com.vomatt.entity.CommentLike;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
+import com.vomatt.repository.CommentLikeCount;
 import com.vomatt.repository.CommentLikeRepository;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.repository.VoteRepository;
@@ -21,7 +22,12 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -58,7 +64,15 @@ public class VoteCommentService {
         }
 
         Page<VoteComment> comments = commentRepository.findByVoteId(UUID.fromString(voteId), pageable);
-        return comments.map(comment -> convertToCommentDto(comment, currentUserId));
+        // Likes for the whole page in two queries instead of two per comment
+        List<UUID> ids = comments.getContent().stream().map(VoteComment::getId).toList();
+        if (ids.isEmpty()) return comments.map(comment -> commentMapper.toDto(comment, 0, false));
+        Map<UUID, Long> likeCounts = commentLikeRepository.countByCommentIds(ids).stream()
+            .collect(Collectors.toMap(CommentLikeCount::getCommentId, CommentLikeCount::getCount));
+        Set<UUID> liked = currentUserId == null ? Set.of()
+            : new HashSet<>(commentLikeRepository.findLikedCommentIds(UUID.fromString(currentUserId), ids));
+        return comments.map(comment -> commentMapper.toDto(comment,
+            likeCounts.getOrDefault(comment.getId(), 0L), liked.contains(comment.getId())));
     }
 
     public CommentDto updateComment(UUID commentId, String userId, UpdateCommentRequest request) {

@@ -19,7 +19,8 @@ public interface VoteCommentRepository extends JpaRepository<VoteComment, UUID> 
     /**
      * Find all comments for a vote
      */
-    @Query("SELECT c FROM VoteComment c WHERE c.vote.id = :voteId AND c.isDeleted = false")
+    @Query(value = "SELECT c FROM VoteComment c JOIN FETCH c.user WHERE c.vote.id = :voteId AND c.isDeleted = false",
+            countQuery = "SELECT COUNT(c) FROM VoteComment c WHERE c.vote.id = :voteId AND c.isDeleted = false")
     Page<VoteComment> findByVoteId(@Param("voteId") UUID voteId, Pageable pageable);
 
     /**

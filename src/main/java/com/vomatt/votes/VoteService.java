@@ -6,6 +6,7 @@ import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -14,6 +15,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -104,6 +106,34 @@ public class VoteService {
     @Transactional(readOnly = true)
     public Page<VoteResponse> getActiveVotesByTag(String tagSlug, Pageable pageable, String viewerId) {
         return toResponses(voteRepository.findByTagSlugAndIsActiveTrue(tagSlug, pageable), viewerId);
+    }
+
+    /**
+     * The public list with Explore's filters. The pageable's own sort is replaced by {@code sort}'s:
+     * the {@code sort} query parameter names a {@link VoteListSort}, not a Spring sort.
+     *
+     * @param query matched case-insensitively against title, description and option text; blank matches all
+     */
+    @Transactional(readOnly = true)
+    public Page<VoteResponse> searchPublicVotes(VoteListStatus status, VoteListSort sort, String query,
+            Pageable pageable, String viewerId) {
+        OffsetDateTime now = OffsetDateTime.now();
+        boolean includeOpen = status != VoteListStatus.ENDED;
+        boolean includeEnded = status != VoteListStatus.OPEN;
+        String pattern = toLikePattern(query);
+        Pageable page = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort.order());
+        Page<Vote> votes = sort == VoteListSort.POPULAR
+            ? voteRepository.searchPublicByParticipants(now, includeOpen, includeEnded, pattern, page)
+            : voteRepository.searchPublic(now, includeOpen, includeEnded, pattern, page);
+        return toResponses(votes, viewerId);
+    }
+
+    // Lower-cased "%query%" with LIKE wildcards escaped by '!' (no backslash: HQL literals treat it as an escape)
+    static String toLikePattern(String query) {
+        if (query == null || query.isBlank()) return "%";
+        String escaped = query.trim().toLowerCase(Locale.ROOT)
+                .replace("!", "!!").replace("%", "!%").replace("_", "!_");
+        return "%" + escaped + "%";
     }
 
     /** A user's polls that weren't cancelled, ended ones included, for their public profile. */

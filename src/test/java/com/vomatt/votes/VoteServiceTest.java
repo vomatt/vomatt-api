@@ -21,9 +21,14 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -39,6 +44,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -591,6 +598,66 @@ class VoteServiceTest {
 
             assertThat(vote.getTitle()).isEqualTo("Renamed");
             assertThat(vote.getOptions()).extracting(VoteOption::getText).containsExactlyInAnyOrder("A", "B");
+        }
+    }
+
+    // ─── searchPublicVotes ────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("searchPublicVotes")
+    class SearchPublicVotesTests {
+
+        private final Pageable requested = PageRequest.of(1, 10, Sort.by("popular"));
+
+        @Test
+        @DisplayName("應該在 sort=popular 時用參與人數查詢，且不帶排序")
+        void shouldUseParticipantQueryWhenSortIsPopular() {
+            ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+            when(voteRepository.searchPublicByParticipants(any(), anyBoolean(), anyBoolean(), anyString(),
+                    pageable.capture())).thenReturn(Page.empty());
+
+            voteService.searchPublicVotes(VoteListStatus.ALL, VoteListSort.POPULAR, null, requested, null);
+
+            verify(voteRepository).searchPublicByParticipants(any(), eq(true), eq(true), eq("%"), any());
+            assertThat(pageable.getValue().getPageNumber()).isEqualTo(1);
+            assertThat(pageable.getValue().getPageSize()).isEqualTo(10);
+            assertThat(pageable.getValue().getSort().isUnsorted()).isTrue();
+            verify(voteRepository, never()).searchPublic(any(), anyBoolean(), anyBoolean(), anyString(), any());
+        }
+
+        @Test
+        @DisplayName("應該在 sort=newest 時依建立時間倒序，status=open 只含進行中")
+        void shouldSortByCreatedAtWhenSortIsNewest() {
+            ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+            when(voteRepository.searchPublic(any(), anyBoolean(), anyBoolean(), anyString(), pageable.capture()))
+                    .thenReturn(Page.empty());
+
+            voteService.searchPublicVotes(VoteListStatus.OPEN, VoteListSort.NEWEST, null, requested, null);
+
+            verify(voteRepository).searchPublic(any(), eq(true), eq(false), eq("%"), any());
+            assertThat(pageable.getValue().getSort()).isEqualTo(Sort.by(Sort.Order.desc("createdAt")));
+        }
+
+        @Test
+        @DisplayName("應該在 sort=ending 時依結束時間正序，status=ended 只含已結束")
+        void shouldSortByEndTimeWhenSortIsEnding() {
+            ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+            when(voteRepository.searchPublic(any(), anyBoolean(), anyBoolean(), anyString(), pageable.capture()))
+                    .thenReturn(Page.empty());
+
+            voteService.searchPublicVotes(VoteListStatus.ENDED, VoteListSort.ENDING, null, requested, null);
+
+            verify(voteRepository).searchPublic(any(), eq(false), eq(true), eq("%"), any());
+            assertThat(pageable.getValue().getSort())
+                    .isEqualTo(Sort.by(Sort.Order.asc("endTime"), Sort.Order.desc("createdAt")));
+        }
+
+        @Test
+        @DisplayName("應該把搜尋字轉小寫並跳脫 LIKE 萬用字元")
+        void shouldEscapeWildcardsInQuery() {
+            assertThat(VoteService.toLikePattern("  50%_Off! ")).isEqualTo("%50!%!_off!!%");
+            assertThat(VoteService.toLikePattern("   ")).isEqualTo("%");
+            assertThat(VoteService.toLikePattern(null)).isEqualTo("%");
         }
     }
 }

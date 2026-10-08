@@ -143,6 +143,57 @@ class VoteControllerTest {
 
             verify(voteService, never()).getActiveVotes(any(), any());
         }
+
+        @Test
+        @DisplayName("應該在帶 status/sort/q 時改用搜尋，並忽略大小寫")
+        void shouldSearchWhenListFiltersAreGiven() throws Exception {
+            when(voteService.searchPublicVotes(eq(VoteListStatus.ENDED), eq(VoteListSort.POPULAR), eq("pizza"),
+                    any(Pageable.class), isNull())).thenReturn(Page.empty());
+
+            mockMvc.perform(get("/api/votes").param("status", "Ended").param("sort", "popular").param("q", "pizza"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+
+            verify(voteService, never()).getActiveVotes(any(), any());
+        }
+
+        @Test
+        @DisplayName("應該在只帶 q 時預設為 open、newest")
+        void shouldDefaultToOpenNewestWhenOnlyQueryIsGiven() throws Exception {
+            when(voteService.searchPublicVotes(eq(VoteListStatus.OPEN), eq(VoteListSort.NEWEST), eq("x"),
+                    any(Pageable.class), isNull())).thenReturn(Page.empty());
+
+            mockMvc.perform(get("/api/votes").param("q", "x"))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("應該在 sort 值無效時回 400")
+        void shouldReturn400WhenSortIsInvalid() throws Exception {
+            mockMvc.perform(get("/api/votes").param("sort", "createdAt,desc"))
+                    .andExpect(status().isBadRequest());
+
+            verify(voteService, never()).searchPublicVotes(any(), any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("應該在 tag 搭配 sort 時不把 sort 當成 Spring 排序傳下去")
+        void shouldDropSpringSortWhenTagAndSortAreGiven() throws Exception {
+            org.mockito.ArgumentCaptor<Pageable> pageable = org.mockito.ArgumentCaptor.forClass(Pageable.class);
+            when(voteService.getActiveVotesByTag(eq("tech"), pageable.capture(), isNull())).thenReturn(Page.empty());
+
+            mockMvc.perform(get("/api/votes").param("tag", "tech").param("sort", "popular"))
+                    .andExpect(status().isOk());
+
+            assertThat(pageable.getValue().getSort().isUnsorted()).isTrue();
+        }
+
+        @Test
+        @DisplayName("應該在 status 值無效時回 400")
+        void shouldReturn400WhenStatusIsInvalid() throws Exception {
+            mockMvc.perform(get("/api/votes").param("status", "scheduled"))
+                    .andExpect(status().isBadRequest());
+        }
     }
 
     // ─── GET /api/votes/{voteId} ──────────────────────────────────────────────

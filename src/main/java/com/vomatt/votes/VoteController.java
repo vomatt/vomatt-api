@@ -1,6 +1,7 @@
 package com.vomatt.votes;
 
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
@@ -75,20 +76,35 @@ public class VoteController {
     @GetMapping
     @PublicApiResponse
     @Operation(summary = "Get active votes",
-            description = "Open votes, newest first. ?tag= filters by topic; ?creatorUsername= lists one user's votes, ended ones included")
+            description = "Open votes, newest first. ?tag= filters by topic; ?creatorUsername= lists one user's votes, "
+                    + "ended ones included. Otherwise ?status= (open|ended|all), ?sort= (newest|popular|ending) "
+                    + "and ?q= (title, description or option text) filter the list; scheduled and cancelled votes "
+                    + "are never listed")
     public ResponseEntity<ApiResponse<PageResponse<VoteResponse>>> getActiveVotes(
             @PageableDefault(size = 20) Pageable pageable,
             @RequestParam(required = false) String tag,
             @RequestParam(required = false) String creatorUsername,
+            @Parameter(description = "open (default), ended or all")
+            @RequestParam(required = false) String status,
+            @Parameter(description = "newest (default), popular (most participants) or ending (soonest end)")
+            @RequestParam(required = false) String sort,
+            @Parameter(description = "Case-insensitive text search")
+            @RequestParam(required = false) String q,
             @AuthenticationPrincipal UserPrincipal principal) {
         String viewerId = UserPrincipal.idOrNull(principal);
+        // ?sort= names a VoteListSort, so drop what Spring's resolver parsed from it as a property sort
+        Pageable page = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
         Page<VoteResponse> votes;
         if (creatorUsername != null && !creatorUsername.isBlank()) {
-            votes = voteService.getVotesByCreatorUsername(creatorUsername, pageable, viewerId);
+            votes = voteService.getVotesByCreatorUsername(creatorUsername, page, viewerId);
         } else if (tag != null && !tag.isBlank()) {
-            votes = voteService.getActiveVotesByTag(tag, pageable, viewerId);
+            votes = voteService.getActiveVotesByTag(tag, page, viewerId);
+        } else if (status != null || sort != null || q != null) {
+            votes = voteService.searchPublicVotes(VoteListStatus.fromParam(status), VoteListSort.fromParam(sort), q,
+                    page, viewerId);
         } else {
-            votes = voteService.getActiveVotes(pageable, viewerId);
+            votes = voteService.getActiveVotes(
+                    PageRequest.of(page.getPageNumber(), page.getPageSize(), VoteListSort.NEWEST.order()), viewerId);
         }
         return ResponseEntity.ok(ApiResponse.ok(PageResponse.from(votes)));
     }

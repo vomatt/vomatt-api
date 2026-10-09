@@ -567,6 +567,7 @@ class VoteServiceTest {
 
             assertThat(vote.getStartTime()).isEqualTo(originalStart);
             assertThat(result.isVotingActive()).isFalse();
+            assertThat(request.getStartTime()).isNull();
         }
 
         @Test

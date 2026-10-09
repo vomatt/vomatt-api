@@ -179,7 +179,7 @@
 - `shouldKeepNamedVoteRoutesAuthenticated`
 - `shouldShowDisplayNameAndBioByDefault`
 - `shouldListUserPollsExcludingScheduled`
-**狀態**：進行中
+**狀態**：已完成（分支 `fix/port-release-readiness`；`openapi.yaml` 仍為舊版 `/api/v1` 合約、未同步，與階段 1–5 相同）
 **修改檔案**：
 - `src/main/java/com/vomatt/votes/VoteService.java`、`VoteController.java`、`src/main/java/com/vomatt/repository/VoteListRepository.java`
 - `src/main/java/com/vomatt/comments/CommentMapper.java`、`VoteCommentController.java`、`VoteCommentService.java`

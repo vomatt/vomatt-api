@@ -552,6 +552,39 @@ class VoteServiceTest {
         }
 
         @Test
+        @DisplayName("應該在編輯未帶 startTime 時保留原開始時間（不因編輯而開放）")
+        void shouldKeepStartTimeWhenEditOmitsIt() {
+            scheduled();
+            OffsetDateTime originalStart = vote.getStartTime();
+            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
+            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
+            when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
+            stubSaveAssignsId();
+            CreateVoteRequest request = editRequest(null);
+            request.setStartTime(null);
+
+            VoteResponse result = voteService.updateVote(voteId.toString(), request, userId.toString());
+
+            assertThat(vote.getStartTime()).isEqualTo(originalStart);
+            assertThat(result.isVotingActive()).isFalse();
+        }
+
+        @Test
+        @DisplayName("應該在編輯未帶 startTime 時以原開始時間驗證結束時間")
+        void shouldValidateEndTimeAgainstKeptStartTime() {
+            scheduled();
+            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
+            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
+            CreateVoteRequest request = editRequest(null);
+            request.setStartTime(null);
+            // ends after now but before the kept start time
+            request.setEndTime(vote.getStartTime().minusMinutes(10));
+
+            assertThatThrownBy(() -> voteService.updateVote(voteId.toString(), request, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_END_BEFORE_START));
+        }
+
+        @Test
         @DisplayName("應該在編輯標籤時調整 usage_count：移除的減一、新增的加一")
         void shouldAdjustTagUsageWhenTagsEdited() {
             Tag kept = setId(new Tag("Kept", "kept", null, 1), UUID.randomUUID());

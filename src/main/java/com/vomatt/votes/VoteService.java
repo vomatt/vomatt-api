@@ -101,6 +101,10 @@ public class VoteService {
         if (vote.getStatus() != VoteStatus.SCHEDULED) {
             throw ApiException.badRequest(MessageKey.VOTE_NOT_EDITABLE);
         }
+        // An omitted start time keeps the scheduled one; create's "now" default would open the Poll on edit
+        if (request.getStartTime() == null) {
+            request.setStartTime(vote.getStartTime());
+        }
         validateCreateVoteRequest(request);
 
         vote.setTitle(request.getTitle());

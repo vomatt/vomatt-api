@@ -35,8 +35,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class AuthController {
 
-    private static final String ERROR_REF = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA;
-
     private static final String OK_RESULT = """
             {"success": true, "data": {"success": true}, "message": null, "errorCode": null, "error": null}""";
 
@@ -84,7 +82,7 @@ public class AuthController {
                     {"email": "user@example.com", "checkRole": "false"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
             description = "`checkRole` is \"true\" and the email is not an existing admin account",
-            content = @Content(schema = @Schema(ref = ERROR_REF), examples = @ExampleObject(value = """
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
                     {"success": false, "data": null, "message": "This account does not have admin privileges", "errorCode": "auth.admin.forbidden", "error": "This account does not have admin privileges"}""")))
     @Operation(summary = "Send email OTP",
             description = """
@@ -111,11 +109,11 @@ public class AuthController {
                     {"email": "user@example.com", "code": "123456", "checkRole": "false"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
             description = "OTP missing/expired, wrong, or too many wrong attempts",
-            content = @Content(schema = @Schema(ref = ERROR_REF), examples = @ExampleObject(value = """
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
                     {"success": false, "data": null, "message": "Invalid verification code", "errorCode": "auth.invalid_otp", "error": "Invalid verification code"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
             description = "Account suspended (`auth.account_banned`) or not an admin when `checkRole` is \"true\" (`auth.admin.forbidden`)",
-            content = @Content(schema = @Schema(ref = ERROR_REF), examples = @ExampleObject(value = """
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
                     {"success": false, "data": null, "message": "This account has been banned and cannot sign in", "errorCode": "auth.account_banned", "error": "This account has been banned and cannot sign in"}""")))
     @Operation(summary = "Verify email OTP and sign in",
             description = """
@@ -186,11 +184,11 @@ public class AuthController {
                     {"phone": "0912345678", "code": "123456"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
             description = "OTP missing/expired, wrong, or too many wrong attempts",
-            content = @Content(schema = @Schema(ref = ERROR_REF), examples = @ExampleObject(value = """
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
                     {"success": false, "data": null, "message": "Invalid verification code", "errorCode": "auth.invalid_otp", "error": "Invalid verification code"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
             description = "Account suspended (`auth.account_banned`)",
-            content = @Content(schema = @Schema(ref = ERROR_REF), examples = @ExampleObject(value = """
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
                     {"success": false, "data": null, "message": "This account has been banned and cannot sign in", "errorCode": "auth.account_banned", "error": "This account has been banned and cannot sign in"}""")))
     @Operation(summary = "Verify phone OTP and sign in",
             description = """
@@ -216,11 +214,11 @@ public class AuthController {
                     {"idToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6Ij..."}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
             description = "Google ID token rejected, or its email is not verified",
-            content = @Content(schema = @Schema(ref = ERROR_REF), examples = @ExampleObject(value = """
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
                     {"success": false, "data": null, "message": "This OAuth account's email is not verified; cannot sign in or merge an existing account", "errorCode": "auth.email_not_verified", "error": "This OAuth account's email is not verified; cannot sign in or merge an existing account"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
             description = "Account suspended (`auth.account_banned`)",
-            content = @Content(schema = @Schema(ref = ERROR_REF), examples = @ExampleObject(value = """
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
                     {"success": false, "data": null, "message": "This account has been banned and cannot sign in", "errorCode": "auth.account_banned", "error": "This account has been banned and cannot sign in"}""")))
     @Operation(summary = "Sign in with Google",
             description = """
@@ -247,11 +245,11 @@ public class AuthController {
                     {"code": "abc123def456", "redirectUri": "https://app.example.com/auth/line/callback"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
             description = "LINE authorization code could not be exchanged, or the LINE profile could not be read",
-            content = @Content(schema = @Schema(ref = ERROR_REF), examples = @ExampleObject(value = """
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
                     {"success": false, "data": null, "message": "LINE token exchange failed", "errorCode": "auth.line.token_exchange_failed", "error": "LINE token exchange failed"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
             description = "Account suspended (`auth.account_banned`)",
-            content = @Content(schema = @Schema(ref = ERROR_REF), examples = @ExampleObject(value = """
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
                     {"success": false, "data": null, "message": "This account has been banned and cannot sign in", "errorCode": "auth.account_banned", "error": "This account has been banned and cannot sign in"}""")))
     @Operation(summary = "Sign in with LINE",
             description = """
@@ -277,15 +275,15 @@ public class AuthController {
                     {"idToken": "eyJraWQiOiJZdXl1eVoxIiwiYWxnIjoiUlMyNTYifQ...", "fullName": "Ming Wang"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
             description = "Apple identity token rejected (malformed, bad signature, wrong issuer/audience, expired, no email, or unverified email)",
-            content = @Content(schema = @Schema(ref = ERROR_REF), examples = @ExampleObject(value = """
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
                     {"success": false, "data": null, "message": "Apple verification failed: invalid signature", "errorCode": "auth.apple.invalid_signature", "error": "Apple verification failed: invalid signature"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
             description = "Account suspended (`auth.account_banned`)",
-            content = @Content(schema = @Schema(ref = ERROR_REF), examples = @ExampleObject(value = """
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
                     {"success": false, "data": null, "message": "This account has been banned and cannot sign in", "errorCode": "auth.account_banned", "error": "This account has been banned and cannot sign in"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503",
             description = "Apple's key endpoint is unreachable; safe to retry (`common.service_unavailable`)",
-            content = @Content(schema = @Schema(ref = ERROR_REF)))
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF)))
     @Operation(summary = "Sign in with Apple",
             description = """
                     **Auth**: public
@@ -317,7 +315,7 @@ public class AuthController {
                     {"refreshToken": "8c7e3f4a-1234-5678-90ab-cdef12345678"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
             description = "Refresh token invalid/expired/revoked (`auth.refresh_token.invalid`), or reuse of an already-rotated token detected (`auth.suspicious_login`); either way the client must sign in again",
-            content = @Content(schema = @Schema(ref = ERROR_REF), examples = @ExampleObject(value = """
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
                     {"success": false, "data": null, "message": "Security alert: suspicious login detected. All sessions have been terminated, please log in again", "errorCode": "auth.suspicious_login", "error": "Security alert: suspicious login detected. All sessions have been terminated, please log in again"}""")))
     @Operation(summary = "Refresh access token",
             description = """

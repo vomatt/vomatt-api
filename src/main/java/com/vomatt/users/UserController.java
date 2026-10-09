@@ -15,7 +15,6 @@ import com.vomatt.users.dto.UserProfileResponse;
 import com.vomatt.common.security.UserPrincipal;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import com.vomatt.users.UserService;
-import com.vomatt.votes.VoteController;
 import com.vomatt.votes.VoteService;
 import com.vomatt.votes.dto.VoteResponse;
 import jakarta.validation.Valid;
@@ -52,7 +51,7 @@ public class UserController {
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":null,"firstName":"Alice","lastName":"Chen","displayName":"Alice","bio":"Poll enthusiast","location":"Taipei","points":120,"membershipLevel":"basic","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"visibilitySettings":{"email":false,"firstName":false,"lastName":false,"location":false,"points":false,"displayName":true,"bio":true,"membershipLevel":false}},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
-            content = @Content(schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Get my profile", description = """
@@ -77,7 +76,7 @@ public class UserController {
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"email":false,"firstName":true,"lastName":true,"location":false,"points":false,"displayName":true,"bio":true,"membershipLevel":false},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
-            content = @Content(schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Update profile visibility", description = """
@@ -103,7 +102,7 @@ public class UserController {
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"username":"alice","displayName":"Alice","bio":"Poll enthusiast","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"email":null,"firstName":"Alice","lastName":null,"location":null,"points":null,"membershipLevel":null},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No user with this username (errorCode `user.not_found`)",
-            content = @Content(schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Get user public profile", description = """
@@ -126,9 +125,9 @@ public class UserController {
     @GetMapping("/{username}/votes")
     @PublicApiResponse
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
-            content = @Content(examples = @ExampleObject(name = "Page", value = VoteController.EX_PAGE_OF_POLLS)))
+            content = @Content(examples = @ExampleObject(name = "Page", value = OpenAPIConfig.EX_PAGE_OF_POLLS)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No active user with this username (errorCode `user.not_found`)",
-            content = @Content(schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Get a user's Polls", description = """
@@ -157,7 +156,7 @@ public class UserController {
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"username":"alice","displayName":"Alice C.","bio":"Poll enthusiast","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"email":null,"firstName":"Alice","lastName":null,"location":null,"points":null,"membershipLevel":null},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
-            content = @Content(schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Update my profile", description = """
@@ -212,7 +211,7 @@ public class UserController {
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account does not exist (errorCode `user.not_found`)",
-            content = @Content(schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Delete user account", description = """

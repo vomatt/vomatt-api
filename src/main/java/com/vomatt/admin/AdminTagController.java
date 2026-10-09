@@ -72,7 +72,7 @@ public class AdminTagController {
                       "error": null
                     }""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "`slug` cannot be generated from the name (`common.bad_request`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "BadRequest", value = """
                             {
                               "success": false,
@@ -82,7 +82,7 @@ public class AdminTagController {
                               "error": "Invalid request"
                             }""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Tag name already exists (`tag.name.exists`) or slug already exists (`tag.slug.exists`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "TagNameExists", value = """
                             {
                               "success": false,
@@ -135,7 +135,7 @@ public class AdminTagController {
                       "error": null
                     }""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Malformed `tagId`, or `slug` cannot be generated (`common.bad_request`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "BadRequest", value = """
                             {
                               "success": false,
@@ -145,7 +145,7 @@ public class AdminTagController {
                               "error": "Invalid request"
                             }""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Tag not found (`tag.not_found`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "TagNotFound", value = """
                             {
                               "success": false,
@@ -155,7 +155,7 @@ public class AdminTagController {
                               "error": "Tag not found"
                             }""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Tag name already exists (`tag.name.exists`) or slug already exists (`tag.slug.exists`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "TagNameExists", value = """
                             {
                               "success": false,
@@ -199,7 +199,7 @@ public class AdminTagController {
                       "error": null
                     }""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Malformed ID in the path (`common.bad_request`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "BadRequest", value = """
                             {
                               "success": false,
@@ -209,7 +209,7 @@ public class AdminTagController {
                               "error": "Invalid request"
                             }""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Tag not found (`tag.not_found`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "TagNotFound", value = """
                             {
                               "success": false,
@@ -219,7 +219,7 @@ public class AdminTagController {
                               "error": "Tag not found"
                             }""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Tag is referenced by a Poll (`tag.in_use`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "TagInUse", value = """
                             {
                               "success": false,

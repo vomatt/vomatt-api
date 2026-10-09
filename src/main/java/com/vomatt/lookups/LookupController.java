@@ -136,7 +136,7 @@ public class LookupController {
                       "error": null
                     }""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Dictionary item not found (`lookup.not_found`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "LookupNotFound", value = """
                             {
                               "success": false,

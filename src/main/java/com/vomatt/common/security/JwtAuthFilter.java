@@ -2,6 +2,7 @@ package com.vomatt.common.security;
 
 import com.vomatt.common.i18n.MessageKey;
 import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -39,7 +40,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                         .collect(Collectors.toList());
                 var auth = new UsernamePasswordAuthenticationToken(principal, null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(auth);
-            } catch (Exception ex) {
+            } catch (JwtException | IllegalArgumentException ex) {
                 // Reason is consumed by JwtAuthenticationEntryPoint only if the path requires auth
                 request.setAttribute(AUTH_ERROR_ATTR, ex instanceof ExpiredJwtException
                         ? MessageKey.AUTH_TOKEN_EXPIRED : MessageKey.AUTH_TOKEN_INVALID);

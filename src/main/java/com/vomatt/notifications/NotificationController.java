@@ -56,7 +56,7 @@ public class NotificationController {
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Caller has no Ended Notification for this Poll (errorCode `notification.not_found`)",
-            content = @Content(schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"Notification not found","errorCode":"notification.not_found","error":"Notification not found"}""")))
     @Operation(summary = "Mark an Ended Notification read", description = """

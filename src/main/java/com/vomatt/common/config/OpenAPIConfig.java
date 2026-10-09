@@ -29,6 +29,23 @@ public class OpenAPIConfig {
     public static final String EX_FORBIDDEN = "Forbidden";
     public static final String EX_NOT_FOUND = "NotFound";
     public static final String EX_RATE_LIMITED = "RateLimited";
+    public static final String ERROR_REF = "#/components/schemas/" + ERROR_SCHEMA;
+
+    // Error example pieces for annotations, which need compile-time constants:
+    // ERR_MESSAGE + message + ERR_CODE + errorCode + ERR_ERROR + message + ERR_END (same shape as ApiResponse.error)
+    public static final String ERR_MESSAGE = "{ \"success\": false, \"data\": null, \"message\": \"";
+    public static final String ERR_CODE = "\", \"errorCode\": \"";
+    public static final String ERR_ERROR = "\", \"error\": \"";
+    public static final String ERR_END = "\" }";
+
+    /** Page of Poll summaries, shared by the Poll listing and user Poll listing endpoints. */
+    public static final String EX_PAGE_OF_POLLS = "{ \"success\": true, \"data\": { \"items\": [ { \"id\": \"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05\", "
+            + "\"title\": \"Which language should we use for the next side project?\", \"creatorUsername\": \"alice\", "
+            + "\"startTime\": \"2026-10-12T09:00:00+08:00\", \"endTime\": \"2026-10-19T09:00:00+08:00\", \"votingActive\": true, "
+            + "\"participantCount\": 42, \"commentCount\": 7, \"voterVisibility\": \"OWNER\", \"myOptionId\": null, "
+            + "\"options\": [ { \"text\": \"Java\", \"votes\": null }, { \"text\": \"Kotlin\", \"votes\": null } ] } ], "
+            + "\"nextCursor\": \"MDE5OWYyYTMtNWI3ZS03ZDQwLWExYzgtOWUzYjJmNmQ0YzA1fDIwMjYtMTAtMTlUMDE6MDA6MDBa\" }, "
+            + "\"message\": null, \"errorCode\": null, \"error\": null }";
 
     private static final String API_DESCRIPTION = """
             REST API of Vomatt, a social polling platform.
@@ -40,12 +57,13 @@ public class OpenAPIConfig {
             401 `auth.token.expired` means refresh, `auth.token.invalid` means sign in again.
 
             **Errors**: branch on `errorCode` (lowercase dotted, e.g. `vote.not_found`), never on `message`. \
-            Filter-level 401/403/429 use the same body. 429 carries a `Retry-After` header (seconds).
+            Filter-level 401/403/429 use the same body. 429 carries a `Retry-After` header (seconds), \
+            except when the rate limiter itself is unavailable.
 
             **Pagination**: list endpoints return `{ items, nextCursor }`; pass `nextCursor` back as `cursor`. \
             `limit` defaults to 20 and is clamped to 1..50.
 
-            **i18n**: send `Accept-Language` (`zh-TW` default, `zh-CN`, `en`) to localize `message`.
+            **i18n**: send `Accept-Language` (`zh-TW` default, `en`) to localize `message`.
 
             Conventions, flows and glossary: `docs/frontend/README.md` in the repository.""";
 

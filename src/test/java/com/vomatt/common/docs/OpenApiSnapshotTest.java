@@ -28,6 +28,7 @@ import tools.jackson.databind.json.JsonMapper;
  */
 @SpringBootTest(classes = VomattApiApplication.class, webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
         "springdoc.api-docs.enabled=true",
+        "spring.profiles.active=dev",
         "app.openapi.dev-url=http://localhost:8080",
         "app.openapi.prod-url=https://api.example.com",
         "jwt.secret=openapi-snapshot-test-secret-0123456789-0123456789"

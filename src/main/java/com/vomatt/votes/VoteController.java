@@ -41,6 +41,12 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.vomatt.common.config.OpenAPIConfig.ERR_CODE;
+import static com.vomatt.common.config.OpenAPIConfig.ERR_END;
+import static com.vomatt.common.config.OpenAPIConfig.ERR_ERROR;
+import static com.vomatt.common.config.OpenAPIConfig.ERR_MESSAGE;
+import static com.vomatt.common.config.OpenAPIConfig.EX_PAGE_OF_POLLS;
+
 @RestController
 @RequestMapping("/api/votes")
 @RequiredArgsConstructor
@@ -48,13 +54,6 @@ import org.slf4j.LoggerFactory;
 public class VoteController {
     private static final Logger log = LoggerFactory.getLogger(VoteController.class);
     private final VoteService voteService;
-
-    private static final String ERR = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA;
-
-    // Example bodies; pieces are concatenated so that every example stays a compile-time constant
-    private static final String ERR_1 = "{ \"success\": false, \"data\": null, \"message\": \"";
-    private static final String ERR_2 = "\", \"errorCode\": \"";
-    private static final String ERR_3 = "\", \"error\": \"Same text as message\" }";
 
     private static final String POLL_1 = """
             { "success": true, "data": {
@@ -103,13 +102,6 @@ public class VoteController {
     private static final String EX_POLL_SCHEDULED = POLL_1 + POLL_COUNTS_NONE + POLL_OPTIONS_SEALED + POLL_2 + POLL_NO_OPTION;
     /** Ended Poll: counts are visible. */
     private static final String EX_POLL_ENDED = POLL_1 + POLL_COUNTS_ENDED + POLL_OPTIONS_ENDED + POLL_2 + POLL_MY_OPTION;
-    public static final String EX_PAGE_OF_POLLS = "{ \"success\": true, \"data\": { \"items\": [ { \"id\": \"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05\", "
-            + "\"title\": \"Which language should we use for the next side project?\", \"creatorUsername\": \"alice\", "
-            + "\"startTime\": \"2026-10-12T09:00:00+08:00\", \"endTime\": \"2026-10-19T09:00:00+08:00\", \"votingActive\": true, "
-            + "\"participantCount\": 42, \"commentCount\": 7, \"voterVisibility\": \"OWNER\", \"myOptionId\": null, "
-            + "\"options\": [ { \"text\": \"Java\", \"votes\": null }, { \"text\": \"Kotlin\", \"votes\": null } ] } ], "
-            + "\"nextCursor\": \"MDE5OWYyYTMtNWI3ZS03ZDQwLWExYzgtOWUzYjJmNmQ0YzA1fDIwMjYtMTAtMTlUMDE6MDA6MDBa\" }, "
-            + "\"message\": null, \"errorCode\": null, \"error\": null }";
 
 
     @PostMapping
@@ -147,8 +139,8 @@ public class VoteController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Poll created",
             content = @Content(examples = @ExampleObject(name = "Scheduled Poll", value = EX_POLL_SCHEDULED)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "The signed-in user no longer exists (errorCode `user.not_found`)",
-            content = @Content(schema = @Schema(ref = ERR),
-                    examples = @ExampleObject(name = "user.not_found", value = ERR_1 + "User not found" + ERR_2 + "user.not_found" + ERR_3)))
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "user.not_found", value = ERR_MESSAGE + "User not found" + ERR_CODE + "user.not_found" + ERR_ERROR + "User not found" + ERR_END)))
     public ResponseEntity<ApiResponse<VoteResponse>> createVote(
             @Valid @RequestBody CreateVoteRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -191,14 +183,14 @@ public class VoteController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Poll updated",
             content = @Content(examples = @ExampleObject(name = "Scheduled Poll", value = EX_POLL_SCHEDULED)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Poll is not Scheduled (`vote.not_editable`) or the body breaks a rule (`vote.options.min`, `vote.end_time.past`, `tag.ids.invalid`, ...)",
-            content = @Content(schema = @Schema(ref = ERR),
-                    examples = @ExampleObject(name = "vote.not_editable", value = ERR_1 + "Poll can no longer be edited" + ERR_2 + "vote.not_editable" + ERR_3)))
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.not_editable", value = ERR_MESSAGE + "Poll can no longer be edited" + ERR_CODE + "vote.not_editable" + ERR_ERROR + "Poll can no longer be edited" + ERR_END)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Caller is not the owner (`vote.forbidden`)",
-            content = @Content(schema = @Schema(ref = ERR),
-                    examples = @ExampleObject(name = "vote.forbidden", value = ERR_1 + "Not allowed to modify this Poll" + ERR_2 + "vote.forbidden" + ERR_3)))
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.forbidden", value = ERR_MESSAGE + "Not allowed to modify this Poll" + ERR_CODE + "vote.forbidden" + ERR_ERROR + "Not allowed to modify this Poll" + ERR_END)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist (`vote.not_found`)",
-            content = @Content(schema = @Schema(ref = ERR),
-                    examples = @ExampleObject(name = "vote.not_found", value = ERR_1 + "Poll not found" + ERR_2 + "vote.not_found" + ERR_3)))
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<VoteResponse>> updateVote(
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
             @PathVariable String voteId,
@@ -251,8 +243,8 @@ public class VoteController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of Polls",
             content = @Content(examples = @ExampleObject(name = "Page", value = EX_PAGE_OF_POLLS)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid filter or cursor (`common.invalid_status`, `common.invalid_sort`, `vote.list.sort_not_allowed`, `vote.search.query_too_short`, `common.cursor_invalid`)",
-            content = @Content(schema = @Schema(ref = ERR),
-                    examples = @ExampleObject(name = "vote.search.query_too_short", value = ERR_1 + "Search query must be at least 2 characters" + ERR_2 + "vote.search.query_too_short" + ERR_3)))
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.search.query_too_short", value = ERR_MESSAGE + "Search query must be at least 2 characters" + ERR_CODE + "vote.search.query_too_short" + ERR_ERROR + "Search query must be at least 2 characters" + ERR_END)))
     public ResponseEntity<ApiResponse<CursorResponse<VoteResponse>>> listVotes(
             @Parameter(description = "`open` (default) or `ended`", example = "open") @RequestParam(required = false) String status,
             @Parameter(description = "`newest` (default) or `closing`; only valid with `status=open`", example = "closing") @RequestParam(required = false) String sort,
@@ -315,11 +307,11 @@ public class VoteController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Ballot recorded; Poll with results Sealed",
             content = @Content(examples = @ExampleObject(name = "Open Poll (Sealed)", value = EX_POLL_OPEN)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Poll has Ended (`vote.ended`), is still Scheduled (`vote.not_allowed`), or the Selection is invalid (`vote.multiple.not_allowed`, `vote.option.not_in_vote`)",
-            content = @Content(schema = @Schema(ref = ERR),
-                    examples = @ExampleObject(name = "vote.ended", value = ERR_1 + "Voting for this Poll has ended" + ERR_2 + "vote.ended" + ERR_3)))
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.ended", value = ERR_MESSAGE + "Voting for this Poll has ended" + ERR_CODE + "vote.ended" + ERR_ERROR + "Voting for this Poll has ended" + ERR_END)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll or option does not exist (`vote.not_found`, `vote.option.not_found`, `user.not_found`)",
-            content = @Content(schema = @Schema(ref = ERR),
-                    examples = @ExampleObject(name = "vote.not_found", value = ERR_1 + "Poll not found" + ERR_2 + "vote.not_found" + ERR_3)))
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<VoteResponse>> vote(
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
             @PathVariable String voteId,
@@ -348,11 +340,11 @@ public class VoteController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Ballot withdrawn (or none existed); `myOptionId` is null",
             content = @Content(examples = @ExampleObject(name = "Open Poll (Sealed)", value = EX_POLL_OPEN_NO_BALLOT)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Poll has Ended (`vote.ended`) or is still Scheduled (`vote.not_allowed`)",
-            content = @Content(schema = @Schema(ref = ERR),
-                    examples = @ExampleObject(name = "vote.ended", value = ERR_1 + "Voting for this Poll has ended" + ERR_2 + "vote.ended" + ERR_3)))
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.ended", value = ERR_MESSAGE + "Voting for this Poll has ended" + ERR_CODE + "vote.ended" + ERR_ERROR + "Voting for this Poll has ended" + ERR_END)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist (`vote.not_found`)",
-            content = @Content(schema = @Schema(ref = ERR),
-                    examples = @ExampleObject(name = "vote.not_found", value = ERR_1 + "Poll not found" + ERR_2 + "vote.not_found" + ERR_3)))
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<VoteResponse>> retract(
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
             @PathVariable String voteId,
@@ -377,11 +369,11 @@ public class VoteController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Poll after the removal",
             content = @Content(examples = @ExampleObject(name = "Open Poll (Sealed)", value = EX_POLL_OPEN)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Poll has Ended (`vote.ended`) or is still Scheduled (`vote.not_allowed`)",
-            content = @Content(schema = @Schema(ref = ERR),
-                    examples = @ExampleObject(name = "vote.ended", value = ERR_1 + "Voting for this Poll has ended" + ERR_2 + "vote.ended" + ERR_3)))
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.ended", value = ERR_MESSAGE + "Voting for this Poll has ended" + ERR_CODE + "vote.ended" + ERR_ERROR + "Voting for this Poll has ended" + ERR_END)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist (`vote.not_found`)",
-            content = @Content(schema = @Schema(ref = ERR),
-                    examples = @ExampleObject(name = "vote.not_found", value = ERR_1 + "Poll not found" + ERR_2 + "vote.not_found" + ERR_3)))
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<VoteResponse>> removeVote(
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
             @PathVariable String voteId,
@@ -425,8 +417,8 @@ public class VoteController {
                       }, "message": null, "errorCode": null, "error": null }
                     """)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "The Poll has not Ended, results are Sealed (`vote.results.sealed`)",
-            content = @Content(schema = @Schema(ref = ERR),
-                    examples = @ExampleObject(name = "vote.results.sealed", value = ERR_1 + "Results are sealed until the Poll ends" + ERR_2 + "vote.results.sealed" + ERR_3)))
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.results.sealed", value = ERR_MESSAGE + "Results are sealed until the Poll ends" + ERR_CODE + "vote.results.sealed" + ERR_ERROR + "Results are sealed until the Poll ends" + ERR_END)))
     public ResponseEntity<ApiResponse<VoteResultResponse>> getVoteResults(
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
             @PathVariable String voteId) {
@@ -457,11 +449,11 @@ public class VoteController {
                       }, "message": null, "errorCode": null, "error": null }
                     """)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Poll not Ended (`vote.results.sealed`) or Voter Visibility does not allow the caller (`vote.voters.hidden`)",
-            content = @Content(schema = @Schema(ref = ERR),
-                    examples = @ExampleObject(name = "vote.voters.hidden", value = ERR_1 + "Voters of this Poll are hidden" + ERR_2 + "vote.voters.hidden" + ERR_3)))
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.voters.hidden", value = ERR_MESSAGE + "Voters of this Poll are hidden" + ERR_CODE + "vote.voters.hidden" + ERR_ERROR + "Voters of this Poll are hidden" + ERR_END)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist (`vote.not_found`)",
-            content = @Content(schema = @Schema(ref = ERR),
-                    examples = @ExampleObject(name = "vote.not_found", value = ERR_1 + "Poll not found" + ERR_2 + "vote.not_found" + ERR_3)))
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<CursorResponse<VoterResponse>>> getVoters(
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
             @PathVariable String voteId,
@@ -519,11 +511,11 @@ public class VoteController {
                       "message": null, "errorCode": null, "error": null }
                     """)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Caller is not the owner (`vote.forbidden`)",
-            content = @Content(schema = @Schema(ref = ERR),
-                    examples = @ExampleObject(name = "vote.forbidden", value = ERR_1 + "Not allowed to modify this Poll" + ERR_2 + "vote.forbidden" + ERR_3)))
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.forbidden", value = ERR_MESSAGE + "Not allowed to modify this Poll" + ERR_CODE + "vote.forbidden" + ERR_ERROR + "Not allowed to modify this Poll" + ERR_END)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist (`vote.not_found`)",
-            content = @Content(schema = @Schema(ref = ERR),
-                    examples = @ExampleObject(name = "vote.not_found", value = ERR_1 + "Poll not found" + ERR_2 + "vote.not_found" + ERR_3)))
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<SimpleResultResponse>> deactivateVote(
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
             @PathVariable String voteId,

@@ -140,6 +140,7 @@ class RateLimitFilterTest {
 
         verify(chain, never()).doFilter(any(), any());
         assertThat(response.getStatus()).isEqualTo(429);
+        assertThat(response.getHeader("Retry-After")).isNull();
     }
 
     @Test

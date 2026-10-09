@@ -76,10 +76,10 @@ public class VoteCommentController {
                             }
                             """)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll or current user not found (errorCode `vote.not_found`, `user.not_found`)",
-            content = @Content(schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(ref = "#/components/examples/" + OpenAPIConfig.EX_NOT_FOUND)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "`comment.parent.invalid` when parentId is unusable (400 also covers `common.validation_failed`)",
-            content = @Content(schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "parentInvalid", value = """
                             {
                               "success": false,
@@ -263,10 +263,10 @@ public class VoteCommentController {
                             }
                             """)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Comment not found or already deleted (errorCode `comment.not_found`)",
-            content = @Content(schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(ref = "#/components/examples/" + OpenAPIConfig.EX_NOT_FOUND)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Caller is not the author (errorCode `comment.forbidden`)",
-            content = @Content(schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "notOwner", value = """
                             {
                               "success": false,
@@ -319,10 +319,10 @@ public class VoteCommentController {
                             }
                             """)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Comment not found or already deleted (errorCode `comment.not_found`)",
-            content = @Content(schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(ref = "#/components/examples/" + OpenAPIConfig.EX_NOT_FOUND)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Caller is not the author (errorCode `comment.forbidden`)",
-            content = @Content(schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "notOwner", value = """
                             {
                               "success": false,
@@ -370,7 +370,7 @@ public class VoteCommentController {
                             }
                             """)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Comment or current user not found (errorCode `comment.not_found`, `user.not_found`)",
-            content = @Content(schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(ref = "#/components/examples/" + OpenAPIConfig.EX_NOT_FOUND)))
     @Operation(summary = "Like a Comment or Reply",
             description = """
@@ -410,7 +410,7 @@ public class VoteCommentController {
                             }
                             """)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Comment not found or deleted (errorCode `comment.not_found`)",
-            content = @Content(schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(ref = "#/components/examples/" + OpenAPIConfig.EX_NOT_FOUND)))
     @Operation(summary = "Unlike a Comment or Reply",
             description = """

@@ -78,7 +78,7 @@ public class AdminLookupController {
                       "error": null
                     }""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Type and key already used by another item (`lookup.exists`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "LookupExists", value = """
                             {
                               "success": false,
@@ -133,7 +133,7 @@ public class AdminLookupController {
                       "error": null
                     }""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Malformed ID in the path (`common.bad_request`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "BadRequest", value = """
                             {
                               "success": false,
@@ -143,7 +143,7 @@ public class AdminLookupController {
                               "error": "Invalid request"
                             }""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Dictionary item not found (`lookup.not_found`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "LookupNotFound", value = """
                             {
                               "success": false,
@@ -153,7 +153,7 @@ public class AdminLookupController {
                               "error": "Dictionary item not found"
                             }""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Type and key already used by another item (`lookup.exists`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "LookupExists", value = """
                             {
                               "success": false,
@@ -195,7 +195,7 @@ public class AdminLookupController {
                       "error": null
                     }""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Malformed ID in the path (`common.bad_request`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "BadRequest", value = """
                             {
                               "success": false,
@@ -205,7 +205,7 @@ public class AdminLookupController {
                               "error": "Invalid request"
                             }""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Dictionary item not found (`lookup.not_found`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "LookupNotFound", value = """
                             {
                               "success": false,
@@ -246,7 +246,7 @@ public class AdminLookupController {
                       "error": null
                     }""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Malformed ID in the path (`common.bad_request`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "BadRequest", value = """
                             {
                               "success": false,
@@ -256,7 +256,7 @@ public class AdminLookupController {
                               "error": "Invalid request"
                             }""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Dictionary item not found (`lookup.not_found`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "LookupNotFound", value = """
                             {
                               "success": false,
@@ -297,7 +297,7 @@ public class AdminLookupController {
                       "error": null
                     }""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Malformed ID in the path (`common.bad_request`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "BadRequest", value = """
                             {
                               "success": false,
@@ -307,7 +307,7 @@ public class AdminLookupController {
                               "error": "Invalid request"
                             }""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Dictionary item not found (`lookup.not_found`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "LookupNotFound", value = """
                             {
                               "success": false,

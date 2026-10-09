@@ -8,7 +8,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.core.env.StandardEnvironment;
+import org.springframework.core.env.MutablePropertySources;
+import org.springframework.core.env.PropertySourcesPropertyResolver;
 import org.springframework.boot.env.YamlPropertySourceLoader;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.security.access.AccessDeniedException;
@@ -19,7 +20,9 @@ import java.util.Date;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class SecurityErrorHandlersTest {
 
@@ -75,6 +78,20 @@ class SecurityErrorHandlersTest {
     }
 
     @Test
+    void shouldPropagateWhenTokenParsingHitsServerBug() {
+        // A server-side bug must surface as an error, not as "sign in again"
+        JwtUtil brokenJwtUtil = mock(JwtUtil.class);
+        when(brokenJwtUtil.parseToken("token")).thenThrow(new IllegalStateException("bug"));
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/users/me");
+        request.addHeader("Authorization", "Bearer token");
+
+        assertThatThrownBy(() -> new JwtAuthFilter(brokenJwtUtil)
+                .doFilter(request, new MockHttpServletResponse(), mock(FilterChain.class)))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(request.getAttribute(JwtAuthFilter.AUTH_ERROR_ATTR)).isNull();
+    }
+
+    @Test
     void shouldReturn401TokenInvalidWhenSignatureWrong() throws Exception {
         String forged = Jwts.builder().subject("u1").claim("roles", List.of("admin"))
                 .expiration(new Date(System.currentTimeMillis() + 60_000))
@@ -118,9 +135,11 @@ class SecurityErrorHandlersTest {
 
     @Test
     void shouldDisableSwaggerWhenSwaggerEnabledNotSet() throws Exception {
-        StandardEnvironment env = new StandardEnvironment();
-        env.getPropertySources().addLast(
+        // Only application.yml, so an exported SWAGGER_ENABLED in the shell cannot change the result
+        MutablePropertySources sources = new MutablePropertySources();
+        sources.addLast(
                 new YamlPropertySourceLoader().load("application", new ClassPathResource("application.yml")).get(0));
+        PropertySourcesPropertyResolver env = new PropertySourcesPropertyResolver(sources);
 
         assertThat(env.resolvePlaceholders("${springdoc.api-docs.enabled}")).isEqualTo("false");
         assertThat(env.resolvePlaceholders("${springdoc.swagger-ui.enabled}")).isEqualTo("false");

@@ -54,7 +54,7 @@
 
 - **時間**：ISO-8601 含時區 offset（例 `2026-10-09T12:34:56+08:00`）。顯示時前端自行轉成使用者時區。
 - **ID**：UUIDv7 字串。路徑中格式錯誤會得到 400。
-- **i18n**：以 `Accept-Language` 決定 `message` 語言，支援 `zh-TW`（預設）、`zh-CN`、`en`。filter 層錯誤（401 / 403 / 429）同樣依此本地化。
+- **i18n**：以 `Accept-Language` 決定 `message` 語言，支援 `zh-TW`（預設）、`en`。filter 層錯誤（401 / 403 / 429）同樣依此本地化。
 - **CORS**：允許的來源由 `app.security.cors-allowed-origins`（環境變數 `CORS_ALLOWED_ORIGINS`，預設 `http://localhost:3000`）設定；新的前端網域需請後端加入。
 
 ## 5. 限流
@@ -62,4 +62,4 @@
 - 目前只對 `/api/auth/**` 限流（設定 `rate-limit.paths`），其他路徑不限。
 - 以 client IP 計算，預設每 60 秒 300 次（固定視窗），超過回 429 + `Retry-After`。
 - Redis 故障時，`/api/auth/**` 為 fail-closed（直接回 429），其他路徑放行。
-- 前端：收到 429 依 `Retry-After` 倒數；倒數期間停用送出按鈕。
+- 前端：收到 429 依 `Retry-After` 倒數；倒數期間停用送出按鈕。限流服務本身故障時，認證端點回 429 但不帶 `Retry-After`，請顯示稍後再試。

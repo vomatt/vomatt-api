@@ -5,7 +5,8 @@
 ## 2026-10-09
 
 - 💥 BREAKING 401 / 403 回應（filter 層）改為帶 `ApiResponse` body 與 `errorCode`（原本 body 為空）：`common.unauthorized`、`auth.token.expired`、`auth.token.invalid`、`common.forbidden`。前端以 `errorCode` 判斷是否 refresh（見 [auth-flow.md](auth-flow.md)）。
-- 💥 BREAKING 429 回應 body 改為 `ApiResponse`（`errorCode` = `common.rate_limited`），並加上 `Retry-After` header（秒）。
+- 💥 BREAKING 429 回應 body 改為 `ApiResponse`（`errorCode` = `common.rate_limited`），並加上 `Retry-After` header（秒），跨網域也可讀取。限流服務本身故障時，認證端點回 429 但不帶 `Retry-After`。
+- 文件不再列出 `zh-CN`：`Accept-Language` 支援 `zh-TW`（預設）與 `en`。
 - 💥 BREAKING Swagger UI 與 `/v3/api-docs` 預設關閉，需設定 `SWAGGER_ENABLED=true` 才開放（production 不開放）。前端請改用 [openapi.json](openapi.json)。
 - 契約來源改為 `docs/frontend/openapi.json`（由測試產生）；根目錄舊的 `openapi.yaml`（Next.js 時期）已封存至 `docs/archive/`，不再維護。
 - OpenAPI 的 `summary` / `description` / `@Schema` 說明一律改為英文，並補上各端點的權限、前置條件、副作用、錯誤與範例。

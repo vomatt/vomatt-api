@@ -2361,7 +2361,7 @@
       "email" : "yi-hsien@vomatt.com",
       "name" : "Vomatt"
     },
-    "description" : "REST API of Vomatt, a social polling platform.\n\n**Envelope**: every response is `{ success, data, message, errorCode, error }`. On success `data` holds the payload; on failure `success=false` and `data` is normally null.\n\n**Auth**: `Authorization: Bearer <access token>` (JWT). Obtain tokens via `/api/auth/**`; 401 `auth.token.expired` means refresh, `auth.token.invalid` means sign in again.\n\n**Errors**: branch on `errorCode` (lowercase dotted, e.g. `vote.not_found`), never on `message`. Filter-level 401/403/429 use the same body. 429 carries a `Retry-After` header (seconds).\n\n**Pagination**: list endpoints return `{ items, nextCursor }`; pass `nextCursor` back as `cursor`. `limit` defaults to 20 and is clamped to 1..50.\n\n**i18n**: send `Accept-Language` (`zh-TW` default, `zh-CN`, `en`) to localize `message`.\n\nConventions, flows and glossary: `docs/frontend/README.md` in the repository.",
+    "description" : "REST API of Vomatt, a social polling platform.\n\n**Envelope**: every response is `{ success, data, message, errorCode, error }`. On success `data` holds the payload; on failure `success=false` and `data` is normally null.\n\n**Auth**: `Authorization: Bearer <access token>` (JWT). Obtain tokens via `/api/auth/**`; 401 `auth.token.expired` means refresh, `auth.token.invalid` means sign in again.\n\n**Errors**: branch on `errorCode` (lowercase dotted, e.g. `vote.not_found`), never on `message`. Filter-level 401/403/429 use the same body. 429 carries a `Retry-After` header (seconds), except when the rate limiter itself is unavailable.\n\n**Pagination**: list endpoints return `{ items, nextCursor }`; pass `nextCursor` back as `cursor`. `limit` defaults to 20 and is clamped to 1..50.\n\n**i18n**: send `Accept-Language` (`zh-TW` default, `en`) to localize `message`.\n\nConventions, flows and glossary: `docs/frontend/README.md` in the repository.",
     "license" : {
       "name" : "MIT License",
       "url" : "https://opensource.org/licenses/MIT"
@@ -6251,7 +6251,7 @@
                     "description" : "user.not_found",
                     "value" : {
                       "data" : null,
-                      "error" : "Same text as message",
+                      "error" : "User not found",
                       "errorCode" : "user.not_found",
                       "message" : "User not found",
                       "success" : false
@@ -6722,7 +6722,7 @@
                     "description" : "vote.not_found",
                     "value" : {
                       "data" : null,
-                      "error" : "Same text as message",
+                      "error" : "Poll not found",
                       "errorCode" : "vote.not_found",
                       "message" : "Poll not found",
                       "success" : false
@@ -7670,7 +7670,7 @@
                     "description" : "vote.not_found",
                     "value" : {
                       "data" : null,
-                      "error" : "Same text as message",
+                      "error" : "Poll not found",
                       "errorCode" : "vote.not_found",
                       "message" : "Poll not found",
                       "success" : false
@@ -7888,7 +7888,7 @@
                     "description" : "vote.results.sealed",
                     "value" : {
                       "data" : null,
-                      "error" : "Same text as message",
+                      "error" : "Results are sealed until the Poll ends",
                       "errorCode" : "vote.results.sealed",
                       "message" : "Results are sealed until the Poll ends",
                       "success" : false
@@ -8050,7 +8050,7 @@
                     "description" : "vote.not_found",
                     "value" : {
                       "data" : null,
-                      "error" : "Same text as message",
+                      "error" : "Poll not found",
                       "errorCode" : "vote.not_found",
                       "message" : "Poll not found",
                       "success" : false
@@ -8217,7 +8217,7 @@
                     "description" : "vote.not_found",
                     "value" : {
                       "data" : null,
-                      "error" : "Same text as message",
+                      "error" : "Poll not found",
                       "errorCode" : "vote.not_found",
                       "message" : "Poll not found",
                       "success" : false
@@ -8377,7 +8377,7 @@
                     "description" : "vote.not_found",
                     "value" : {
                       "data" : null,
-                      "error" : "Same text as message",
+                      "error" : "Poll not found",
                       "errorCode" : "vote.not_found",
                       "message" : "Poll not found",
                       "success" : false
@@ -8511,7 +8511,7 @@
                     "description" : "vote.not_found",
                     "value" : {
                       "data" : null,
-                      "error" : "Same text as message",
+                      "error" : "Poll not found",
                       "errorCode" : "vote.not_found",
                       "message" : "Poll not found",
                       "success" : false

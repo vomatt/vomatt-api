@@ -261,6 +261,32 @@ class UserProfileVisibilityTest {
         }
     }
 
+    @Nested
+    @DisplayName("UserMapper.toPublicProfileResponse - 顯示名稱與簡介")
+    class MapperDisplayNameBioTests {
+
+        @Test
+        @DisplayName("應該在顯示名稱與簡介設為隱藏時回傳 null")
+        void shouldHideDisplayNameAndBioWhenHidden() {
+            UserProfileResponse result = new UserMapper().toPublicProfileResponse(
+                    createTestProjection(), Map.of("displayName", false, "bio", false));
+
+            assertThat(result.displayName()).isNull();
+            assertThat(result.bio()).isNull();
+            assertThat(result.username()).isEqualTo(USERNAME);
+        }
+
+        @Test
+        @DisplayName("應該在顯示名稱與簡介設為公開時回傳原值")
+        void shouldShowDisplayNameAndBioWhenVisible() {
+            UserProfileResponse result = new UserMapper().toPublicProfileResponse(
+                    createTestProjection(), Map.of("displayName", true, "bio", true));
+
+            assertThat(result.displayName()).isEqualTo("TestDisplay");
+            assertThat(result.bio()).isEqualTo("Hello world");
+        }
+    }
+
     // ─── updateVisibility ─────────────────────────────────────────────────────
 
     @Nested

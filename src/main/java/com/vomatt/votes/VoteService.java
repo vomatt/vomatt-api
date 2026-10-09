@@ -196,11 +196,11 @@ public class VoteService {
      */
     @Transactional(readOnly = true)
     public CursorResponse<VoteResponse> getUserPolls(String username, String cursor, Integer limit, String userId) {
-        if (!userRepository.existsByUsername(username)) {
-            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
-        }
+        // Suspended users are hidden, same as user search
+        User creator = userRepository.findByUsername(username).filter(User::isActive)
+            .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
         int size = CursorResponse.limit(limit);
-        List<Vote> rows = voteListRepository.findByCreator(username, Cursor.decode(cursor), OffsetDateTime.now(),
+        List<Vote> rows = voteListRepository.findByCreator(creator.getId(), Cursor.decode(cursor), OffsetDateTime.now(),
             size + 1);
         return CursorResponse.of(rows, size, v -> Cursor.of(v.getStartTime(), v.getId()),
             page -> toResponses(page, userId));

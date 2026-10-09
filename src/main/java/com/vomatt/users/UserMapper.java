@@ -62,8 +62,8 @@ public class UserMapper {
                                                         Map<String, Boolean> visibility) {
         return new UserProfileResponse(
                 projection.getUsername(),
-                projection.getDisplayName(),
-                projection.getBio(),
+                visibility.getOrDefault("displayName", false) ? projection.getDisplayName() : null,
+                visibility.getOrDefault("bio", false) ? projection.getBio() : null,
                 projection.getCreatedAt(),
                 projection.getTotalPolls().intValue(),
                 projection.getTotalVotes().intValue(),

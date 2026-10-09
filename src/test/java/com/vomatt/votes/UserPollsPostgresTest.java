@@ -81,6 +81,19 @@ class UserPollsPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("應該在使用者已停權時回 404")
+    void shouldReturnNotFoundWhenUserSuspended() {
+        poll(owner, "open", now.minusHours(1), now.plusDays(1));
+        owner.setActive(false);
+
+        assertThatThrownBy(() -> page(null, null))
+                .isInstanceOfSatisfying(ApiException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                    assertThat(ex.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND);
+                });
+    }
+
+    @Test
     @DisplayName("應該在使用者不存在時回 404")
     void shouldReturnNotFoundWhenUserMissing() {
         assertThatThrownBy(() -> voteService.getUserPolls("nobody-" + System.nanoTime(), null, null, null))

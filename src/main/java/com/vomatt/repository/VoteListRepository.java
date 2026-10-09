@@ -108,10 +108,10 @@ public class VoteListRepository {
      * Cancelled before opening), most recently opened first.
      */
     @SuppressWarnings("unchecked")
-    public List<Vote> findByCreator(String username, Cursor after, OffsetDateTime now, int limit) {
+    public List<Vote> findByCreator(UUID creatorId, Cursor after, OffsetDateTime now, int limit) {
         StringBuilder sql = new StringBuilder("""
-                SELECT v.* FROM vomatt.votes v JOIN vomatt.users u ON u.id = v.creator_id
-                WHERE u.username = :username AND v.start_time <= :now AND v.end_time > v.start_time
+                SELECT v.* FROM vomatt.votes v
+                WHERE v.creator_id = :creatorId AND v.start_time <= :now AND v.end_time > v.start_time
                 """);
         if (after != null) {
             sql.append(" AND (v.start_time, v.id) < (:afterKey, :afterId)");
@@ -119,7 +119,7 @@ public class VoteListRepository {
         sql.append(" ORDER BY v.start_time DESC, v.id DESC LIMIT :limit");
 
         Query nativeQuery = em.createNativeQuery(sql.toString(), Vote.class)
-                .setParameter("username", username)
+                .setParameter("creatorId", creatorId)
                 .setParameter("now", now)
                 .setParameter("limit", limit);
         if (after != null) {

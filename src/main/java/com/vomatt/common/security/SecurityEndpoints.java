@@ -21,7 +21,8 @@ public final class SecurityEndpoints {
      * 需登入的 /api/users 子路徑；必須排在 {@link #PUBLIC_GET} 之前比對，
      * 否則 {@code /api/users/{username}} 會把 {@code /me}、{@code /search} 一併放行。
      */
-    public static final String[] AUTHENTICATED_USERS = { "/api/users/me", "/api/users/me/**", "/api/users/search" };
+    public static final String[] AUTHENTICATED_USERS = { "/api/users/me", "/api/users/me/**", "/api/users/search",
+            "/api/users/search/**" };
 
     /**
      * 需登入的 /api/votes 子路徑。{@link #PUBLIC_GET} 的 Poll 路徑只比對 UUID，本身已不會放行這些路徑；
@@ -34,7 +35,7 @@ public final class SecurityEndpoints {
      * Poll ID（UUID）路徑段。只比對 UUID，{@code /api/votes/my} 等具名子路徑就不會被公開規則放行，
      * 不必依賴 {@link #AUTHENTICATED_VOTES} 排在前面。
      */
-    private static final String VOTE = "/api/votes/{voteId:[0-9a-fA-F]+-[0-9a-fA-F-]+}";
+    private static final String VOTE = "/api/votes/{voteId:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}";
 
     /** GET-only public endpoints（Poll 詳情、結束後的結果、留言與回覆未登入也可讀） */
     public static final String[] PUBLIC_GET = { "/api/tags", "/api/tags/**", "/api/votes", VOTE,

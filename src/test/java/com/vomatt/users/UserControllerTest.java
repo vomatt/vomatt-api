@@ -72,5 +72,7 @@ class UserControllerTest {
                 .anyMatch(p -> parser.parse(p).matches(PathContainer.parsePath("/api/users/alice/votes")))).isTrue();
         assertThat(Arrays.stream(SecurityEndpoints.AUTHENTICATED_USERS)
                 .anyMatch(p -> parser.parse(p).matches(PathContainer.parsePath("/api/users/me/votes")))).isTrue();
+        assertThat(Arrays.stream(SecurityEndpoints.AUTHENTICATED_USERS)
+                .anyMatch(p -> parser.parse(p).matches(PathContainer.parsePath("/api/users/search/votes")))).isTrue();
     }
 }

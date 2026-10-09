@@ -355,5 +355,8 @@ class VoteControllerTest {
         assertThat(publicGet.test("/api/votes/my")).isFalse();
         assertThat(publicGet.test("/api/votes/notifications")).isFalse();
         assertThat(publicGet.test("/api/votes/my/comments")).isFalse();
+        // hex-only route names are not UUIDs
+        assertThat(publicGet.test("/api/votes/dead-beef")).isFalse();
+        assertThat(publicGet.test("/api/votes/ad-feed/results")).isFalse();
     }
 }

@@ -5,55 +5,56 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 
 /**
- * 登入或註冊成功後的回應；包含 access token、refresh token，以及使用者基本資訊。
+ * Response after a successful login, signup or token refresh: access token, refresh token and basic user info.
  *
- * <p>Access token 預設有效 1 小時、refresh token 預設 30 天（可由環境變數調整）。</p>
+ * <p>Access token is valid for 1 hour and refresh token for 30 days by default (configurable by environment variables).</p>
  */
-@Schema(description = "登入/註冊成功的回應")
+@Schema(description = "Response after a successful login, signup or token refresh")
 public record AuthResponse(
 
-        @Schema(description = "JWT access token（請放在 Authorization: Bearer 標頭）",
+        @Schema(description = "JWT access token; send it as `Authorization: Bearer <token>`. Valid for 1 hour by default",
                 example = "eyJhbGciOiJIUzI1NiJ9...")
         String token,
 
-        @Schema(description = "刷新用 refresh token；access token 過期時用此換新",
+        @Schema(description = "Opaque refresh token, valid for 30 days by default. Use it with POST /api/auth/refresh when the access token expires. Single-use: every refresh returns a new one that replaces it",
                 example = "8c7e3f4a-1234-5678-90ab-cdef12345678")
         String refreshToken,
 
-        @Schema(description = "使用者基本資訊")
+        @Schema(description = "Basic user info. Null on POST /api/auth/refresh (keep the info from login); always present on login and signup",
+                nullable = true)
         UserInfo user
 ) {
 
     /**
-     * 登入回應中的使用者基本資訊。
+     * Basic user info included in a login response.
      */
-    @Schema(description = "登入回應中的使用者基本資訊")
+    @Schema(description = "Basic user info included in a login response")
     public record UserInfo(
 
-            @Schema(description = "使用者 ID（UUID v7）",
+            @Schema(description = "User ID (UUIDv7)",
                     example = "0190a8b2-1234-7890-abcd-ef0123456789")
             String id,
 
-            @Schema(description = "電子郵件；OAuth 登入若 provider 未提供 email 可能為 null",
+            @Schema(description = "Email address. Null for users who signed up by phone OTP and have no email; email, Google, LINE and Apple users always have one",
                     example = "user@example.com", nullable = true)
             String email,
 
-            @Schema(description = "使用者名稱（公開個人頁路徑用，註冊時自動產生）", example = "john_0427")
+            @Schema(description = "Username used in the public profile path; generated at signup", example = "john_0427")
             String username,
 
-            @Schema(description = "顯示名稱", example = "王小明", nullable = true)
+            @Schema(description = "Display name. Set at signup (email local part, provider name, or the phone number); null only if the column is empty", example = "Ming Wang", nullable = true)
             String displayName,
 
-            @Schema(description = "使用者角色清單",
+            @Schema(description = "Role list",
                     example = "[\"user\"]",
                     allowableValues = {"user", "moderator", "admin"})
             List<String> roles,
 
-            @Schema(description = "頭像 URL", example = "https://cdn.example.com/avatar/abc.jpg",
+            @Schema(description = "Avatar URL. Null until the user or an OAuth provider (Google / LINE) supplies one", example = "https://cdn.example.com/avatar/abc.jpg",
                     nullable = true)
             String avatarUrl,
 
-            @Schema(description = "手機號碼", example = "0912345678", nullable = true)
+            @Schema(description = "Phone number. Null for users who signed up by email or OAuth and never added a phone", example = "0912345678", nullable = true)
             String phoneNumber
     ) {
     }

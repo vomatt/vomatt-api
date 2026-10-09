@@ -4,18 +4,18 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 /**
- * Apple Sign-In 登入請求；後端會以 Apple JWKS 驗證 idToken。
+ * Sign in with Apple request; the server verifies {@code idToken} against Apple's JWKS.
  */
-@Schema(description = "Apple Sign-In 登入請求")
+@Schema(description = "Sign in with Apple request")
 public record AppleAuthRequest(
 
-        @Schema(description = "Apple 簽發的 identity token (JWT)",
+        @Schema(description = "Identity token (JWT) issued by Apple",
                 requiredMode = Schema.RequiredMode.REQUIRED,
                 example = "eyJraWQiOiJZdXl1eVoxIiwiYWxnIjoiUlMyNTYifQ...")
         @NotBlank String idToken,
 
-        @Schema(description = "首次登入時 Apple 提供的姓名（之後不會再帶）",
-                example = "王小明", nullable = true)
+        @Schema(description = "Full name, used only when a new user is created. Apple provides the name on the first authorization only, so send it then; null or ignored afterwards",
+                example = "Ming Wang", nullable = true)
         String fullName
 ) {
 }

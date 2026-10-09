@@ -5,12 +5,12 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
 /**
- * 檢查 email 是否已註冊的請求；用於前端決定要走「登入」還是「註冊」流程。
+ * Request to check whether an email is registered; lets the client choose between login and signup wording.
  */
-@Schema(description = "檢查 email 是否已註冊的請求")
+@Schema(description = "Request to check whether an email is registered")
 public record CheckEmailRequest(
 
-        @Schema(description = "要檢查的電子郵件", requiredMode = Schema.RequiredMode.REQUIRED,
+        @Schema(description = "Email address to check", requiredMode = Schema.RequiredMode.REQUIRED,
                 example = "user@example.com")
         @NotBlank @Email String email
 ) {

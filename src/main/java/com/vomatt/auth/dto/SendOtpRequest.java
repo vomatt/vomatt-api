@@ -4,17 +4,17 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 
 /**
- * 發送 email OTP 的請求。
+ * Request to send an email OTP.
  *
- * <p>{@code checkRole} 為字串布林（"true" / "false"）；若為 "true" 則僅允許 admin 角色取得 OTP（用於後台登入）。</p>
+ * <p>{@code checkRole} is a string boolean ("true" / "false"); when "true" only admin accounts may get an OTP (admin console login).</p>
  */
-@Schema(description = "發送 email OTP 的請求")
+@Schema(description = "Request to send an email OTP")
 public record SendOtpRequest(
 
-        @Schema(description = "電子郵件", example = "user@example.com")
+        @Schema(description = "Email address; the server lower-cases and trims it. Required in practice: a missing or blank value yields 400 auth.identifier.required", example = "user@example.com")
         @Email String email,
 
-        @Schema(description = "是否限制管理員才可登入；填 \"true\" 只允許 admin 取得 OTP",
+        @Schema(description = "Set to \"true\" to restrict to admin accounts (admin console login). Any other value, or null, means no restriction",
                 example = "false", allowableValues = {"true", "false"}, nullable = true)
         String checkRole
 ) {

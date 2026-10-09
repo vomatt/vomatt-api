@@ -38,7 +38,8 @@ public final class SecurityEndpoints {
 
     /** GET-only public endpoints（Poll 詳情、結束後的結果、留言與回覆未登入也可讀） */
     public static final String[] PUBLIC_GET = { "/api/tags", "/api/tags/**", "/api/votes", VOTE,
-            VOTE + "/results", VOTE + "/comments", VOTE + "/comments/*/replies", "/api/users/{username}" };
+            VOTE + "/results", VOTE + "/comments", VOTE + "/comments/*/replies", "/api/users/{username}",
+            "/api/users/{username}/votes" };
 
     /** Swagger / OpenAPI UI */
     public static final String[] PUBLIC_SWAGGER = { "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**",

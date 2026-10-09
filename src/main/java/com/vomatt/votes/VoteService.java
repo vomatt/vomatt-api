@@ -188,6 +188,24 @@ public class VoteService {
             page -> ended ? withUnread(page, toResponses(page, userId), userUuid) : toResponses(page, userId));
     }
 
+    /**
+     * A user's public profile list: their Open and Ended Polls, most recently opened first (cursor-paged).
+     * Scheduled Polls and Polls Cancelled before opening are left out.
+     *
+     * @param userId viewer, or null when signed out
+     */
+    @Transactional(readOnly = true)
+    public CursorResponse<VoteResponse> getUserPolls(String username, String cursor, Integer limit, String userId) {
+        if (!userRepository.existsByUsername(username)) {
+            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
+        }
+        int size = CursorResponse.limit(limit);
+        List<Vote> rows = voteListRepository.findByCreator(username, Cursor.decode(cursor), OffsetDateTime.now(),
+            size + 1);
+        return CursorResponse.of(rows, size, v -> Cursor.of(v.getStartTime(), v.getId()),
+            page -> toResponses(page, userId));
+    }
+
     // Ended tab: unread when the Poll produced an Ended Notification (it opened) that the user hasn't read
     private List<VoteResponse> withUnread(List<Vote> page, List<VoteResponse> responses, UUID userId) {
         Set<UUID> read = notificationReadRepository.findReadVoteIds(userId, page.stream().map(Vote::getId).toList());

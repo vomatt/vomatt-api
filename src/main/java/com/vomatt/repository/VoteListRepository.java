@@ -103,6 +103,31 @@ public class VoteListRepository {
         return nativeQuery.getResultList();
     }
 
+    /**
+     * A user's public profile list: Polls they created that have opened (Open or Ended, not Scheduled and not
+     * Cancelled before opening), most recently opened first.
+     */
+    @SuppressWarnings("unchecked")
+    public List<Vote> findByCreator(String username, Cursor after, OffsetDateTime now, int limit) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT v.* FROM vomatt.votes v JOIN vomatt.users u ON u.id = v.creator_id
+                WHERE u.username = :username AND v.start_time <= :now AND v.end_time > v.start_time
+                """);
+        if (after != null) {
+            sql.append(" AND (v.start_time, v.id) < (:afterKey, :afterId)");
+        }
+        sql.append(" ORDER BY v.start_time DESC, v.id DESC LIMIT :limit");
+
+        Query nativeQuery = em.createNativeQuery(sql.toString(), Vote.class)
+                .setParameter("username", username)
+                .setParameter("now", now)
+                .setParameter("limit", limit);
+        if (after != null) {
+            nativeQuery.setParameter("afterKey", after.timeKey()).setParameter("afterId", after.id());
+        }
+        return nativeQuery.getResultList();
+    }
+
     // % and _ in the user's query are literal characters, not wildcards
     static String escapeLike(String text) {
         return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");

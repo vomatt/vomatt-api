@@ -34,4 +34,4 @@ Vomatt 投票社群後端。架構沿用 sachmis-api（domain-driven 套件 + �
 
 既有資料庫從舊 schema 升級：`psql "$DB" -v ON_ERROR_STOP=1 -f src/main/resources/db/migrations/2026-10-02-sachmis-arch.sql`（單一交易，執行前先備份並確認檔頭的時區假設）。
 
-開發規範見 [CLAUDE.md](CLAUDE.md)。
+開發規範見 [AGENTS.md](AGENTS.md)。

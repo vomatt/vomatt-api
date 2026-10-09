@@ -39,4 +39,4 @@ Production 不開放。
 npx openapi-typescript docs/frontend/openapi.json -o src/api/schema.d.ts
 ```
 
-根目錄舊的 `openapi.yaml` 是 Next.js 時期產物，已封存於 `docs/archive/`，不再維護，請勿使用。
+根目錄舊的 `openapi.yaml`（Next.js 時期產物）已移除，請勿使用。

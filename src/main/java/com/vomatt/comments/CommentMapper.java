@@ -21,7 +21,9 @@ public class CommentMapper {
         }
         dto.setCreatedAt(comment.getCreatedAt());
         dto.setUpdatedAt(comment.getUpdatedAt());
-        dto.setEdited(!comment.getCreatedAt().equals(comment.getUpdatedAt()));
+        // Insert stamps both times a few microseconds apart, so only a later save counts as an edit
+        dto.setEdited(comment.getCreatedAt() != null && comment.getUpdatedAt() != null
+                && comment.getUpdatedAt().isAfter(comment.getCreatedAt().plusSeconds(1)));
         dto.setLikeCount(likeCount);
         dto.setLikedByCurrentUser(isLikedByCurrentUser);
         return dto;

@@ -1,5 +1,7 @@
 package com.vomatt.common.security;
 
+import com.vomatt.common.i18n.MessageKey;
+import io.jsonwebtoken.ExpiredJwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,6 +23,8 @@ import java.util.stream.Collectors;
 @Slf4j
 @RequiredArgsConstructor
 public class JwtAuthFilter extends OncePerRequestFilter {
+    public static final String AUTH_ERROR_ATTR = JwtAuthFilter.class.getName() + ".authError";
+
     private final JwtUtil jwtUtil;
 
     @Override
@@ -36,6 +40,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 var auth = new UsernamePasswordAuthenticationToken(principal, null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(auth);
             } catch (Exception ex) {
+                // Reason is consumed by JwtAuthenticationEntryPoint only if the path requires auth
+                request.setAttribute(AUTH_ERROR_ATTR, ex instanceof ExpiredJwtException
+                        ? MessageKey.AUTH_TOKEN_EXPIRED : MessageKey.AUTH_TOKEN_INVALID);
                 log.debug("Invalid JWT token: {}", ex.getMessage());
             }
         }

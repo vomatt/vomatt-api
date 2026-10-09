@@ -1,7 +1,9 @@
 package com.vomatt.common.filter;
 
 import com.vomatt.common.config.RateLimitConfig;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.redis.RedisService;
+import com.vomatt.common.security.SecurityErrorWriter;
 import com.vomatt.common.util.ClientIpResolver;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -9,6 +11,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.util.AntPathMatcher;
@@ -24,6 +27,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private final RedisService redisService;
     private final RateLimitConfig rateLimitConfig;
+    private final SecurityErrorWriter errorWriter;
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
 
     @Override
@@ -40,9 +44,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         if (isRateLimited(request)) {
-            response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
-            response.setContentType("application/json");
-            response.getWriter().write("{\"success\":false,\"error\":\"請求過於頻繁，請稍後再試\"}");
+            int windowSeconds = rateLimitConfig.getLimit().getWindowSeconds();
+            // Fixed-window counter: the limit resets when the current window ends
+            long retryAfter = windowSeconds - Instant.now().getEpochSecond() % windowSeconds;
+            response.setHeader(HttpHeaders.RETRY_AFTER, String.valueOf(retryAfter));
+            errorWriter.write(request, response, HttpStatus.TOO_MANY_REQUESTS.value(),
+                    MessageKey.COMMON_RATE_LIMITED);
             return;
         }
         filterChain.doFilter(request, response);

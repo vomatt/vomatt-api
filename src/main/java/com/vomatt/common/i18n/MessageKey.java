@@ -8,6 +8,7 @@ public enum MessageKey {
     COMMON_SERVICE_UNAVAILABLE("common.service_unavailable"),
     COMMON_UNAUTHORIZED("common.unauthorized"),
     COMMON_FORBIDDEN("common.forbidden"),
+    COMMON_RATE_LIMITED("common.rate_limited"),
     COMMON_NOT_FOUND("common.not_found"),
     COMMON_CONFLICT("common.conflict"),
     COMMON_VALIDATION_FAILED("common.validation_failed"),

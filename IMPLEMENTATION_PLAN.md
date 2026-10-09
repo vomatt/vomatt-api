@@ -162,6 +162,31 @@
 - `openapi.yaml`
 - 測試：`VoteCommentServiceTest`、`VoteCommentControllerTest`
 
+## 階段 6：移植 release-readiness 分支
+**目標**：把 `origin/release-readiness` 中 main 缺少的部分移植回來（見 [RELEASE_READINESS_REVIEW.md](RELEASE_READINESS_REVIEW.md)），其餘以 main 為準
+**部署**：不破壞合約，隨時可部署（6-6 為新增端點）
+**成功標準**：
+- 6-1 編輯 Scheduled Poll 未帶 `startTime` 時保留原值（不會因編輯而開放），驗證以實際開始時間為準
+- 6-2 新留言 `edited=false`；時間戳為 null 時不 NPE
+- 6-3 未登入可讀留言與回覆（`likedByCurrentUser=false`）；發留言、按讚仍需登入
+- 6-4 公開的 `/api/votes/{id}` 規則只比對 UUID，`/my` 等具名子路徑不依賴規則先後順序
+- 6-5 顯示名稱、簡介預設公開
+- 6-6 `GET /api/users/{username}/votes`：該使用者的 Open 與 Ended Poll（不含 Scheduled 與開放前就取消的），cursor 分頁
+**測試**：
+- `shouldKeepStartTimeWhenEditOmitsIt`
+- `shouldNotMarkNewCommentEdited`、`shouldNotFailWhenTimestampsMissing`
+- `shouldListCommentsWhenSignedOut`
+- `shouldKeepNamedVoteRoutesAuthenticated`
+- `shouldShowDisplayNameAndBioByDefault`
+- `shouldListUserPollsExcludingScheduled`
+**狀態**：進行中
+**修改檔案**：
+- `src/main/java/com/vomatt/votes/VoteService.java`、`VoteController.java`、`src/main/java/com/vomatt/repository/VoteListRepository.java`
+- `src/main/java/com/vomatt/comments/CommentMapper.java`、`VoteCommentController.java`、`VoteCommentService.java`
+- `src/main/java/com/vomatt/common/security/SecurityEndpoints.java`
+- `src/main/java/com/vomatt/users/VisibilityField.java`、`UserService.java`
+- 對應測試
+
 ---
 
 ## 部署順序（後端 ↔ 前端 rev 2 階段）

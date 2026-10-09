@@ -30,19 +30,29 @@ class CommentMapperTest {
     }
 
     @Test
-    @DisplayName("應該在新留言（兩個時間戳相差微秒）時不標記為已編輯")
+    @DisplayName("應該在新留言（兩個時間戳相同）時不標記為已編輯")
     void shouldNotMarkNewCommentEdited() {
         OffsetDateTime at = OffsetDateTime.now();
 
-        assertThat(mapper.toDto(comment(at, at.plusNanos(5_000)), 0, false).isEdited()).isFalse();
+        assertThat(mapper.toDto(comment(at, at), 0, false).isEdited()).isFalse();
     }
 
     @Test
-    @DisplayName("應該在建立後超過一秒才更新時標記為已編輯")
-    void shouldMarkEditedWhenUpdatedLater() {
+    @DisplayName("應該在建立後一秒內更新時也標記為已編輯")
+    void shouldMarkEditedWhenUpdatedWithinOneSecond() {
         OffsetDateTime at = OffsetDateTime.now();
 
-        assertThat(mapper.toDto(comment(at, at.plusSeconds(5)), 0, false).isEdited()).isTrue();
+        assertThat(mapper.toDto(comment(at, at.plusNanos(500_000)), 0, false).isEdited()).isTrue();
+    }
+
+    @Test
+    @DisplayName("應該在留言已刪除時不標記為已編輯")
+    void shouldNotMarkDeletedCommentEdited() {
+        OffsetDateTime at = OffsetDateTime.now();
+        VoteComment c = comment(at, at.plusMinutes(10));
+        c.softDelete();
+
+        assertThat(mapper.toDto(c, 0, false).isEdited()).isFalse();
     }
 
     @Test

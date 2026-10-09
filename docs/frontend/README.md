@@ -31,11 +31,9 @@ Production 不開放。
 5. `flows/*.md` — 各流程：[poll-lifecycle](flows/poll-lifecycle.md)、[comments](flows/comments.md)、[discovery](flows/discovery.md)、[notifications](flows/notifications.md)、[profile](flows/profile.md)
 6. [CHANGELOG.md](CHANGELOG.md) — 面向前端的 API 變更紀錄
 
-> `auth-flow.md`、`error-codes.md`、`flows/*.md`、`CHANGELOG.md` 由後續階段陸續補上，連結先保留。
-
 ## 產生 TypeScript 型別
 
-契約快照 `docs/frontend/openapi.json` 由測試產生（勿手改），**此檔由後續階段提供**。有快照後：
+契約快照 [openapi.json](openapi.json) 由 `OpenApiSnapshotTest` 產生（勿手改）；Swagger 關閉時也能直接用它產生型別：
 
 ```bash
 npx openapi-typescript docs/frontend/openapi.json -o src/api/schema.d.ts

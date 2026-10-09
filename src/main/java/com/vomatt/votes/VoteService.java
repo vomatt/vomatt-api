@@ -61,7 +61,7 @@ public class VoteService {
     private final NotificationReadRepository notificationReadRepository;
 
     public VoteResponse createVote(CreateVoteRequest request, String creatorId) {
-        validateCreateVoteRequest(request);
+        validateCreateVoteRequest(request, request.getStartTime());
 
         User creator = userRepository.findById(UUID.fromString(creatorId))
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
@@ -102,14 +102,12 @@ public class VoteService {
             throw ApiException.badRequest(MessageKey.VOTE_NOT_EDITABLE);
         }
         // An omitted start time keeps the scheduled one; create's "now" default would open the Poll on edit
-        if (request.getStartTime() == null) {
-            request.setStartTime(vote.getStartTime());
-        }
-        validateCreateVoteRequest(request);
+        OffsetDateTime startTime = request.getStartTime() != null ? request.getStartTime() : vote.getStartTime();
+        validateCreateVoteRequest(request, startTime);
 
         vote.setTitle(request.getTitle());
         vote.setDescription(request.getDescription());
-        vote.setStartTime(request.getStartTime() != null ? request.getStartTime() : OffsetDateTime.now());
+        vote.setStartTime(startTime);
         vote.setEndTime(request.getEndTime());
         vote.setAnonymous(request.isAnonymous());
         if (request.getVoterVisibility() != null) {
@@ -425,7 +423,8 @@ public class VoteService {
         }
     }
 
-    private void validateCreateVoteRequest(CreateVoteRequest request) {
+    // startTime null means the Poll opens now
+    private void validateCreateVoteRequest(CreateVoteRequest request, OffsetDateTime startTime) {
         if (request.isAllowMultipleChoices()) {
             throw ApiException.badRequest(MessageKey.VOTE_MULTIPLE_NOT_ALLOWED);
         }
@@ -444,11 +443,11 @@ public class VoteService {
             }
 
             // equal start and end would never open (and would read as a cancelled Scheduled Poll)
-            if (request.getStartTime() != null && !request.getEndTime().isAfter(request.getStartTime())) {
+            if (startTime != null && !request.getEndTime().isAfter(startTime)) {
                 throw ApiException.badRequest(MessageKey.VOTE_END_BEFORE_START);
             }
 
-            OffsetDateTime maxEndTime = (request.getStartTime() != null ? request.getStartTime() : OffsetDateTime.now())
+            OffsetDateTime maxEndTime = (startTime != null ? startTime : OffsetDateTime.now())
                 .plus(voteConfig.getMaxVoteDuration());
             if (request.getEndTime().isAfter(maxEndTime)) {
                 throw ApiException.badRequest(MessageKey.VOTE_DURATION_EXCEEDED, voteConfig.getMaxVoteDuration().toDays());

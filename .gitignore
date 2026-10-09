@@ -46,7 +46,6 @@ build/
 ### Superpowers ###
 /docs/*
 !/docs/frontend/
-!/docs/archive/
 .serena/
 
 ### Env ###

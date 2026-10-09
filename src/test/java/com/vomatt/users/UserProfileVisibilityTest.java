@@ -1,5 +1,7 @@
 package com.vomatt.users;
 
+import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserPreference;
@@ -15,12 +17,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -68,6 +72,10 @@ class UserProfileVisibilityTest {
     }
 
     private UserProfileProjection createTestProjection() {
+        return createTestProjection(true);
+    }
+
+    private UserProfileProjection createTestProjection(boolean active) {
         return new UserProfileProjection() {
             @Override public UUID getId() { return USER_UUID; }
             @Override public String getUsername() { return USERNAME; }
@@ -76,6 +84,7 @@ class UserProfileVisibilityTest {
             @Override public OffsetDateTime getCreatedAt() { return JOINED_AT; }
             @Override public Long getTotalPolls() { return 5L; }
             @Override public Long getTotalVotes() { return 10L; }
+            @Override public Boolean getActive() { return active; }
             @Override public String getEmail() { return "test@example.com"; }
             @Override public String getFirstName() { return "Test"; }
             @Override public String getLastName() { return "User"; }
@@ -133,6 +142,43 @@ class UserProfileVisibilityTest {
             assertThat(result.totalVotes()).isEqualTo(10);
             assertThat(result.visibilitySettings()).containsEntry("email", false);
         }
+
+        @Test
+        @DisplayName("應該在未設定時將顯示名稱與簡介預設為公開、其餘預設隱藏")
+        void shouldShowDisplayNameAndBioByDefault() {
+            // Given
+            User user = createTestUser();
+            when(userRepository.findById(USER_UUID)).thenReturn(Optional.of(user));
+            when(userRepository.findProfileByUsername(USERNAME)).thenReturn(Optional.of(createTestProjection()));
+            when(preferenceRepository.findByUserIdAndKeyStartingWith(USER_UUID, "visibility."))
+                    .thenReturn(Collections.emptyList());
+
+            // When
+            userService.getMyProfile(USER_ID);
+
+            // Then
+            verify(userMapper).toMyProfileResponse(eq(user), eq(5), eq(10), argThat(v ->
+                    Boolean.TRUE.equals(v.get("displayName")) && Boolean.TRUE.equals(v.get("bio"))
+                            && Boolean.FALSE.equals(v.get("email")) && Boolean.FALSE.equals(v.get("location"))));
+        }
+
+        @Test
+        @DisplayName("應該在使用者隱藏顯示名稱後回報為隱藏")
+        void shouldHideDisplayNameWhenConfigured() {
+            // Given
+            User user = createTestUser();
+            when(userRepository.findById(USER_UUID)).thenReturn(Optional.of(user));
+            when(userRepository.findProfileByUsername(USERNAME)).thenReturn(Optional.of(createTestProjection()));
+            when(preferenceRepository.findByUserIdAndKeyStartingWith(USER_UUID, "visibility."))
+                    .thenReturn(List.of(createPref("visibility.displayName", "false")));
+
+            // When
+            userService.getMyProfile(USER_ID);
+
+            // Then
+            verify(userMapper).toMyProfileResponse(eq(user), eq(5), eq(10),
+                    argThat(v -> Boolean.FALSE.equals(v.get("displayName")) && Boolean.TRUE.equals(v.get("bio"))));
+        }
     }
 
     // ─── getUserProfile（公開）─────────────────────────────────────────────────
@@ -171,6 +217,19 @@ class UserProfileVisibilityTest {
             assertThat(result.location()).isNull();
             assertThat(result.points()).isNull();
             assertThat(result.membershipLevel()).isNull();
+        }
+
+        @Test
+        @DisplayName("應該在使用者已停權時回 404")
+        void shouldReturnNotFoundWhenUserSuspended() {
+            when(userRepository.findProfileByUsername(USERNAME)).thenReturn(Optional.of(createTestProjection(false)));
+
+            assertThatThrownBy(() -> userService.getUserProfile(USERNAME, false))
+                    .isInstanceOfSatisfying(ApiException.class, ex -> {
+                        assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                        assertThat(ex.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND);
+                    });
+            verifyNoInteractions(userMapper);
         }
 
         @Test
@@ -221,6 +280,32 @@ class UserProfileVisibilityTest {
             assertThat(result.location()).isNull();
             assertThat(result.membershipLevel()).isNull();
             assertThat(result.joinedAt()).isEqualTo(JOINED_AT);
+        }
+    }
+
+    @Nested
+    @DisplayName("UserMapper.toPublicProfileResponse - 顯示名稱與簡介")
+    class MapperDisplayNameBioTests {
+
+        @Test
+        @DisplayName("應該在顯示名稱與簡介設為隱藏時回傳 null")
+        void shouldHideDisplayNameAndBioWhenHidden() {
+            UserProfileResponse result = new UserMapper().toPublicProfileResponse(
+                    createTestProjection(), Map.of("displayName", false, "bio", false));
+
+            assertThat(result.displayName()).isNull();
+            assertThat(result.bio()).isNull();
+            assertThat(result.username()).isEqualTo(USERNAME);
+        }
+
+        @Test
+        @DisplayName("應該在顯示名稱與簡介設為公開時回傳原值")
+        void shouldShowDisplayNameAndBioWhenVisible() {
+            UserProfileResponse result = new UserMapper().toPublicProfileResponse(
+                    createTestProjection(), Map.of("displayName", true, "bio", true));
+
+            assertThat(result.displayName()).isEqualTo("TestDisplay");
+            assertThat(result.bio()).isEqualTo("Hello world");
         }
     }
 

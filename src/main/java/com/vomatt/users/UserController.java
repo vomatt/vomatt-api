@@ -15,6 +15,8 @@ import com.vomatt.users.dto.UserProfileResponse;
 import com.vomatt.common.security.UserPrincipal;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import com.vomatt.users.UserService;
+import com.vomatt.votes.VoteService;
+import com.vomatt.votes.dto.VoteResponse;
 import jakarta.validation.Valid;
 import com.vomatt.common.audit.Auditable;
 import io.swagger.v3.oas.annotations.Operation;
@@ -37,6 +39,7 @@ public class UserController {
     private static final Logger log = LoggerFactory.getLogger(UserController.class);
 
     private final UserService userService;
+    private final VoteService voteService;
 
     @GetMapping("/me")
     @CommonApiResponses
@@ -64,6 +67,19 @@ public class UserController {
             @PathVariable String username) {
         UserProfileResponse profile = userService.getUserProfile(username, false);
         return ResponseEntity.ok(ApiResponse.ok(profile));
+    }
+
+    @GetMapping("/{username}/votes")
+    @PublicApiResponse
+    @Operation(summary = "Get a user's Polls", description = "Public. The user's Open and Ended Polls, most recently "
+            + "opened first (cursor-paged); Scheduled and Cancelled Polls are left out")
+    public ResponseEntity<ApiResponse<CursorResponse<VoteResponse>>> getUserPolls(
+            @Parameter(description = "Username", required = true) @PathVariable String username,
+            @Parameter(description = "上一頁回傳的 nextCursor") @RequestParam(required = false) String cursor,
+            @Parameter(description = "每頁筆數（1–50，預設 20）") @RequestParam(required = false) Integer limit,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(voteService.getUserPolls(username, cursor, limit,
+                principal != null ? principal.userId() : null)));
     }
 
     @PatchMapping("/me")

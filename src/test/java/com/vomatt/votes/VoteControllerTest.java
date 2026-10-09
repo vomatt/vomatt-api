@@ -23,6 +23,8 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableHandlerMethodArgumentResolver;
 import org.springframework.http.MediaType;
+import org.springframework.http.server.PathContainer;
+import org.springframework.web.util.pattern.PathPatternParser;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -36,6 +38,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -322,14 +325,38 @@ class VoteControllerTest {
     // ─── public vs authenticated vote paths ───────────────────────────────────
 
     @Test
-    @DisplayName("Poll 詳情與結果公開；/my、投票狀態、投票者清單、留言需登入")
-    void shouldExposeOnlyDetailAndResultsPublicly() {
-        assertThat(isPublic("GET", "/api/votes/abc")).isTrue();
-        assertThat(isPublic("GET", "/api/votes/abc/results")).isTrue();
+    @DisplayName("Poll 詳情、結果、留言與回覆公開讀取；/my、投票狀態、投票者清單與留言寫入需登入")
+    void shouldExposeOnlyDetailResultsAndCommentReadsPublicly() {
+        String id = UUID.randomUUID().toString();
+        assertThat(isPublic("GET", "/api/votes/" + id)).isTrue();
+        assertThat(isPublic("GET", "/api/votes/" + id + "/results")).isTrue();
+        assertThat(isPublic("GET", "/api/votes/" + id + "/comments")).isTrue();
+        assertThat(isPublic("GET", "/api/votes/" + id + "/comments/def/replies")).isTrue();
         assertThat(isPublic("GET", "/api/votes/my")).isFalse();
-        assertThat(isPublic("GET", "/api/votes/abc/my-vote-status")).isFalse();
-        assertThat(isPublic("GET", "/api/votes/abc/voters")).isFalse();
-        assertThat(isPublic("GET", "/api/votes/abc/comments")).isFalse();
-        assertThat(isPublic("GET", "/api/votes/abc/comments/def/replies")).isFalse();
+        assertThat(isPublic("GET", "/api/votes/" + id + "/my-vote-status")).isFalse();
+        assertThat(isPublic("GET", "/api/votes/" + id + "/voters")).isFalse();
+        assertThat(isPublic("POST", "/api/votes/" + id + "/comments")).isFalse();
+        assertThat(isPublic("POST", "/api/votes/" + id + "/comments/def/like")).isFalse();
+        assertThat(isPublic("PUT", "/api/votes/" + id + "/comments/def")).isFalse();
+    }
+
+    @Test
+    @DisplayName("PUBLIC_GET 本身不放行具名子路徑，不依賴 AUTHENTICATED_VOTES 排在前面")
+    void shouldKeepNamedVoteRoutesAuthenticated() {
+        // Spring Security 7 matches with PathPatternParser
+        PathPatternParser parser = PathPatternParser.defaultInstance;
+        Predicate<String> publicGet = path -> Arrays.stream(SecurityEndpoints.PUBLIC_GET)
+                .anyMatch(p -> parser.parse(p).matches(PathContainer.parsePath(path)));
+        String id = UUID.randomUUID().toString();
+
+        assertThat(publicGet.test("/api/votes/" + id)).isTrue();
+        assertThat(publicGet.test("/api/votes/" + id + "/results")).isTrue();
+        assertThat(publicGet.test("/api/votes/" + id + "/comments")).isTrue();
+        assertThat(publicGet.test("/api/votes/my")).isFalse();
+        assertThat(publicGet.test("/api/votes/notifications")).isFalse();
+        assertThat(publicGet.test("/api/votes/my/comments")).isFalse();
+        // hex-only route names are not UUIDs
+        assertThat(publicGet.test("/api/votes/dead-beef")).isFalse();
+        assertThat(publicGet.test("/api/votes/ad-feed/results")).isFalse();
     }
 }

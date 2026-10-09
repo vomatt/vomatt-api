@@ -61,7 +61,7 @@ public class VoteService {
     private final NotificationReadRepository notificationReadRepository;
 
     public VoteResponse createVote(CreateVoteRequest request, String creatorId) {
-        validateCreateVoteRequest(request);
+        validateCreateVoteRequest(request, request.getStartTime());
 
         User creator = userRepository.findById(UUID.fromString(creatorId))
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
@@ -101,11 +101,13 @@ public class VoteService {
         if (vote.getStatus() != VoteStatus.SCHEDULED) {
             throw ApiException.badRequest(MessageKey.VOTE_NOT_EDITABLE);
         }
-        validateCreateVoteRequest(request);
+        // An omitted start time keeps the scheduled one; create's "now" default would open the Poll on edit
+        OffsetDateTime startTime = request.getStartTime() != null ? request.getStartTime() : vote.getStartTime();
+        validateCreateVoteRequest(request, startTime);
 
         vote.setTitle(request.getTitle());
         vote.setDescription(request.getDescription());
-        vote.setStartTime(request.getStartTime() != null ? request.getStartTime() : OffsetDateTime.now());
+        vote.setStartTime(startTime);
         vote.setEndTime(request.getEndTime());
         vote.setAnonymous(request.isAnonymous());
         if (request.getVoterVisibility() != null) {
@@ -182,6 +184,24 @@ public class VoteService {
             OffsetDateTime.now(), size + 1);
         return CursorResponse.of(rows, size, v -> Cursor.of(v.getEndTime(), v.getId()),
             page -> ended ? withUnread(page, toResponses(page, userId), userUuid) : toResponses(page, userId));
+    }
+
+    /**
+     * A user's public profile list: their Open and Ended Polls, most recently opened first (cursor-paged).
+     * Scheduled Polls and Polls Cancelled before opening are left out.
+     *
+     * @param userId viewer, or null when signed out
+     */
+    @Transactional(readOnly = true)
+    public CursorResponse<VoteResponse> getUserPolls(String username, String cursor, Integer limit, String userId) {
+        // Suspended users are hidden, same as user search
+        User creator = userRepository.findByUsername(username).filter(User::isActive)
+            .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
+        int size = CursorResponse.limit(limit);
+        List<Vote> rows = voteListRepository.findByCreator(creator.getId(), Cursor.decode(cursor), OffsetDateTime.now(),
+            size + 1);
+        return CursorResponse.of(rows, size, v -> Cursor.of(v.getStartTime(), v.getId()),
+            page -> toResponses(page, userId));
     }
 
     // Ended tab: unread when the Poll produced an Ended Notification (it opened) that the user hasn't read
@@ -403,7 +423,8 @@ public class VoteService {
         }
     }
 
-    private void validateCreateVoteRequest(CreateVoteRequest request) {
+    // startTime null means the Poll opens now
+    private void validateCreateVoteRequest(CreateVoteRequest request, OffsetDateTime startTime) {
         if (request.isAllowMultipleChoices()) {
             throw ApiException.badRequest(MessageKey.VOTE_MULTIPLE_NOT_ALLOWED);
         }
@@ -422,11 +443,11 @@ public class VoteService {
             }
 
             // equal start and end would never open (and would read as a cancelled Scheduled Poll)
-            if (request.getStartTime() != null && !request.getEndTime().isAfter(request.getStartTime())) {
+            if (startTime != null && !request.getEndTime().isAfter(startTime)) {
                 throw ApiException.badRequest(MessageKey.VOTE_END_BEFORE_START);
             }
 
-            OffsetDateTime maxEndTime = (request.getStartTime() != null ? request.getStartTime() : OffsetDateTime.now())
+            OffsetDateTime maxEndTime = (startTime != null ? startTime : OffsetDateTime.now())
                 .plus(voteConfig.getMaxVoteDuration());
             if (request.getEndTime().isAfter(maxEndTime)) {
                 throw ApiException.badRequest(MessageKey.VOTE_DURATION_EXCEEDED, voteConfig.getMaxVoteDuration().toDays());

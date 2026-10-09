@@ -14,6 +14,7 @@ public interface UserProfileProjection {
     OffsetDateTime getCreatedAt();
     Long getTotalPolls();
     Long getTotalVotes();
+    Boolean getActive();
     // 可控制顯示的擴展欄位
     String getEmail();
     String getFirstName();

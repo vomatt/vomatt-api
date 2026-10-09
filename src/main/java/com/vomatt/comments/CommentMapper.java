@@ -21,7 +21,9 @@ public class CommentMapper {
         }
         dto.setCreatedAt(comment.getCreatedAt());
         dto.setUpdatedAt(comment.getUpdatedAt());
-        dto.setEdited(!comment.getCreatedAt().equals(comment.getUpdatedAt()));
+        // Soft delete also bumps updated_at, so a deleted placeholder is never "edited"
+        dto.setEdited(!comment.isDeleted() && comment.getCreatedAt() != null && comment.getUpdatedAt() != null
+                && comment.getUpdatedAt().isAfter(comment.getCreatedAt()));
         dto.setLikeCount(likeCount);
         dto.setLikedByCurrentUser(isLikedByCurrentUser);
         return dto;

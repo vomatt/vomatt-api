@@ -69,7 +69,9 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserProfileResponse getUserProfile(String username, boolean isVisibility) {
         // Use Projection to fetch profile and statistics in one query, avoiding N+1
+        // Suspended users are hidden, same as user search and their Poll list
         UserProfileProjection projection = userRepository.findProfileByUsername(username)
+            .filter(p -> Boolean.TRUE.equals(p.getActive()))
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
 
         // Query target user's visibility settings
@@ -132,12 +134,12 @@ public class UserService {
     }
 
     /**
-     * Load user's field visibility settings, default all controllable fields to false (hidden)
+     * Load user's field visibility settings; unset fields fall back to their default (display name and bio public)
      */
     private Map<String, Boolean> loadVisibilitySettings(UUID userId, boolean isVisibility) {
-        // Initialize all fields to false
         Map<String, Boolean> settings = Arrays.stream(VisibilityField.values())
-                .collect(Collectors.toMap(VisibilityField::getFieldName, f -> isVisibility));
+                .collect(Collectors.toMap(VisibilityField::getFieldName,
+                        f -> isVisibility || f.isVisibleByDefault()));
 
         // Load configured values from database
         List<UserPreference> prefs = preferenceRepository

@@ -1,11 +1,14 @@
 package com.vomatt.common.response;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
+@Schema(description = "Envelope of every API response, success or error")
 public record ApiResponse<T>(
-        boolean success,
-        T data,
-        String message,
-        String errorCode,
-        String error
+        @Schema(description = "true on success, false on error", example = "true") boolean success,
+        @Schema(description = "Response payload; null on errors (a few business errors carry structured data) and on operations without a result", nullable = true) T data,
+        @Schema(description = "Localized text following Accept-Language. On success it is usually null, except operations that attach a toast-ready text; on error it is the error message", example = "Operation completed", nullable = true) String message,
+        @Schema(description = "Stable machine-readable error code (lowercase, dot-separated); branch on this, not on `message`. Null on success", example = "vote.not_found", nullable = true) String errorCode,
+        @Schema(description = "Legacy duplicate of `message` on errors; null on success. Use `message` instead", example = "Poll not found", nullable = true) String error
 ) {
 
     public static <T> ApiResponse<T> ok(T data) {

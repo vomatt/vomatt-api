@@ -4,12 +4,12 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.UUID;
 
-@Schema(description = "通用動作回應；用於不需特定欄位的成功回應或簡單的 id/status 回傳")
+@Schema(description = "Generic action result, used when an operation has no specific payload or only returns an id/status")
 public record SimpleResultResponse(
-        @Schema(description = "操作是否成功", example = "true") boolean success,
-        @Schema(description = "受影響資源 ID（可為 null）") UUID id,
-        @Schema(description = "受影響資源狀態（可為 null）", example = "approved") String status,
-        @Schema(description = "附加訊息（可為 null）") String message
+        @Schema(description = "Whether the operation succeeded", example = "true") boolean success,
+        @Schema(description = "ID of the affected resource; null when the operation does not target a single resource", example = "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70", nullable = true) UUID id,
+        @Schema(description = "New status of the affected resource; null when not applicable", example = "approved", nullable = true) String status,
+        @Schema(description = "Additional message; null when none", example = "Done", nullable = true) String message
 ) {
 
     public static SimpleResultResponse ok() {

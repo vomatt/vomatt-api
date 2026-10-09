@@ -5,10 +5,10 @@ import java.util.function.Function;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-@Schema(description = "Cursor 分頁回應容器")
+@Schema(description = "Cursor-paged list container; pass `nextCursor` back as `cursor` to fetch the next page")
 public record CursorResponse<T>(
-        @Schema(description = "本頁資料") List<T> items,
-        @Schema(description = "下一頁 cursor（不透明字串）；null 表示沒有下一頁") String nextCursor
+        @Schema(description = "Items of this page") List<T> items,
+        @Schema(description = "Opaque cursor of the next page; null when this is the last page", example = "MDE5OWMzYTItN2I1ZS03YzFkLTlhNGYtM2UyYjFkNWM2ZjcwfDQy", nullable = true) String nextCursor
 ) {
 
     public static final int DEFAULT_LIMIT = 20;

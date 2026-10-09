@@ -103,7 +103,7 @@ public class VoteController {
     private static final String EX_POLL_SCHEDULED = POLL_1 + POLL_COUNTS_NONE + POLL_OPTIONS_SEALED + POLL_2 + POLL_NO_OPTION;
     /** Ended Poll: counts are visible. */
     private static final String EX_POLL_ENDED = POLL_1 + POLL_COUNTS_ENDED + POLL_OPTIONS_ENDED + POLL_2 + POLL_MY_OPTION;
-    private static final String EX_PAGE_OF_POLLS = "{ \"success\": true, \"data\": { \"items\": [ { \"id\": \"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05\", "
+    public static final String EX_PAGE_OF_POLLS = "{ \"success\": true, \"data\": { \"items\": [ { \"id\": \"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05\", "
             + "\"title\": \"Which language should we use for the next side project?\", \"creatorUsername\": \"alice\", "
             + "\"startTime\": \"2026-10-12T09:00:00+08:00\", \"endTime\": \"2026-10-19T09:00:00+08:00\", \"votingActive\": true, "
             + "\"participantCount\": 42, \"commentCount\": 7, \"voterVisibility\": \"OWNER\", \"myOptionId\": null, "

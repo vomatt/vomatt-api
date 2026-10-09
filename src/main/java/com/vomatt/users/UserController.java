@@ -15,6 +15,7 @@ import com.vomatt.users.dto.UserProfileResponse;
 import com.vomatt.common.security.UserPrincipal;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import com.vomatt.users.UserService;
+import com.vomatt.votes.VoteController;
 import com.vomatt.votes.VoteService;
 import com.vomatt.votes.dto.VoteResponse;
 import jakarta.validation.Valid;
@@ -60,7 +61,8 @@ public class UserController {
             **Behavior**: returns the caller's own profile with every field, ignoring visibility settings. \
             Unlike the public profile, nothing is masked; `visibilitySettings` reports what other users see \
             on `GET /api/users/{username}` (unset fields use their defaults: `displayName` and `bio` public, the rest hidden). \
-            `totalPolls` counts Polls the user created, `totalVotes` counts Polls the user holds a Ballot in.
+            `totalPolls` counts Polls the user created that have opened (Open and Ended; not Scheduled or Cancelled before opening), \
+            `totalVotes` counts Polls the user holds a Ballot in.
             **Side effects**: none
             **Errors**:
             - 404 `user.not_found`: the account no longer exists""")
@@ -108,11 +110,12 @@ public class UserController {
             **Auth**: public (the response is the same whether or not the caller is signed in)
             **Precondition**: none
             **Behavior**: returns the public view of a user. `username`, `joinedAt`, `totalPolls` and `totalVotes` are always present. \
-            `email`, `firstName`, `lastName`, `location`, `points` and `membershipLevel` are `null` unless the owner made them visible \
-            (hidden by default). `displayName` and `bio` are public by default and are currently always returned.
+            Every optional field is `null` unless the owner made it visible: `displayName` and `bio` are visible by default, \
+            `email`, `firstName`, `lastName`, `location`, `points` and `membershipLevel` are hidden by default. \
+            `totalPolls` counts only Polls that have opened (Open and Ended), matching `GET /api/users/{username}/votes`.
             **Side effects**: none
             **Errors**:
-            - 404 `user.not_found`: no user has this username""")
+            - 404 `user.not_found`: no user has this username, or the user is suspended""")
     public ResponseEntity<ApiResponse<UserProfileResponse>> getUserProfile(
             @Parameter(description = "Username of the user to look up", required = true, example = "alice")
             @PathVariable String username) {
@@ -122,12 +125,27 @@ public class UserController {
 
     @GetMapping("/{username}/votes")
     @PublicApiResponse
-    @Operation(summary = "Get a user's Polls", description = "Public. The user's Open and Ended Polls, most recently "
-            + "opened first (cursor-paged); Scheduled and Cancelled Polls are left out")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
+            content = @Content(examples = @ExampleObject(name = "Page", value = VoteController.EX_PAGE_OF_POLLS)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No active user with this username (errorCode `user.not_found`)",
+            content = @Content(schema = @Schema(ref = "#/components/schemas/" + OpenAPIConfig.ERROR_SCHEMA),
+                    examples = @ExampleObject(value = """
+                            {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
+    @Operation(summary = "Get a user's Polls", description = """
+            **Auth**: public (optional login fills the viewer-specific fields of each Poll, e.g. the caller's Ballot)
+            **Precondition**: the user exists and is not suspended
+            **Behavior**: the Polls the user created that have opened (Open and Ended), most recently opened first, \
+            cursor-paged (`limit` 1-50, default 20; out-of-range values are clamped). Scheduled Polls and Polls \
+            Cancelled before opening are left out, so the count matches `totalPolls` on the public profile. \
+            `nextCursor` is `null` on the last page.
+            **Side effects**: none
+            **Errors**:
+            - 404 `user.not_found`: no user has this username, or the user is suspended
+            - 400 `common.cursor_invalid`: `cursor` was not issued by this endpoint""")
     public ResponseEntity<ApiResponse<CursorResponse<VoteResponse>>> getUserPolls(
-            @Parameter(description = "Username", required = true) @PathVariable String username,
-            @Parameter(description = "上一頁回傳的 nextCursor") @RequestParam(required = false) String cursor,
-            @Parameter(description = "每頁筆數（1–50，預設 20）") @RequestParam(required = false) Integer limit,
+            @Parameter(description = "Username of the Poll creator", required = true, example = "alice") @PathVariable String username,
+            @Parameter(description = "`nextCursor` from the previous page; omit for the first page") @RequestParam(required = false) String cursor,
+            @Parameter(description = "Page size, 1-50 (default 20); out-of-range values are clamped", example = "20") @RequestParam(required = false) Integer limit,
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(voteService.getUserPolls(username, cursor, limit,
                 principal != null ? principal.userId() : null)));

@@ -31,6 +31,7 @@ sequenceDiagram
 | Search | `GET /api/votes?q={text}` | 同 Explore | 比對標題與描述，**不比對選項文字**；至少 2 個字元；可與 `tag`、`status`、`sort` 合用 |
 | 我的 Poll（進行中） | `GET /api/votes/my` | 最快結束優先 | 需登入。包含自己建立的 **Scheduled** 與 Open，以及自己有 Ballot 的 Open |
 | 我的 Poll（已結束） | `GET /api/votes/my?status=ended` | 最近結束優先 | 含 Cancelled；每筆有 `unread`（Ended Notification 是否未讀） |
+| 使用者公開頁的 Poll | `GET /api/users/{username}/votes` | 最近開放優先 | 公開；只列該使用者建立且已開放的 Poll（Open、Ended），不含 Scheduled 與開放前就取消的。不支援 `status` / `sort` / `tag` / `q`。細節見 [profile.md](profile.md) |
 
 ### 參數
 

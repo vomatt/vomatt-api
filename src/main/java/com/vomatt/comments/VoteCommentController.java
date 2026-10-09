@@ -281,7 +281,7 @@ public class VoteCommentController {
                     **Auth**: required
                     **Precondition**: the caller is the author and the Comment is not deleted. Works on both Comments and Replies, in any Poll state
                     **Behavior**: replaces the text. The Poll in the path is not checked; the Comment is looked up by `commentId` only
-                    **Side effects**: `updatedAt` moves forward, so `edited` becomes true (it is derived: `updatedAt` more than 1 second after `createdAt`). Likes are kept
+                    **Side effects**: `updatedAt` moves forward, so `edited` becomes true (it is derived: `updatedAt` after `createdAt`, and never true for a deleted placeholder). Likes are kept
                     **Errors**:
                     - 403 `comment.forbidden`: the caller is not the author
                     - 404 `comment.not_found`: Comment does not exist or is deleted

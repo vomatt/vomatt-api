@@ -31,11 +31,11 @@ public class CommentDto {
     @Schema(description = "Creation time (ISO-8601 with offset)", example = "2026-10-09T12:34:56+08:00")
     private OffsetDateTime createdAt;
 
-    @Schema(description = "Last modification time (ISO-8601 with offset). Equals createdAt until the text is edited",
+    @Schema(description = "Last modification time (ISO-8601 with offset). Equals createdAt until the text is edited (a soft delete also moves it forward)",
             example = "2026-10-09T12:40:02+08:00")
     private OffsetDateTime updatedAt;
 
-    @Getter(onMethod_ = @Schema(description = "True once the text was edited after posting (updatedAt is more than 1 second after createdAt)",
+    @Getter(onMethod_ = @Schema(description = "True once the text was edited after posting (updatedAt is after createdAt). Always false for a deleted placeholder",
             example = "false"))
     private boolean isEdited;
 

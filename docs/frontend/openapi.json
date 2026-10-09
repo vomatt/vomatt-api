@@ -832,7 +832,7 @@
             "type" : "boolean"
           },
           "edited" : {
-            "description" : "True once the text was edited after posting (updatedAt is more than 1 second after createdAt)",
+            "description" : "True once the text was edited after posting (updatedAt is after createdAt). Always false for a deleted placeholder",
             "example" : false,
             "type" : "boolean"
           },
@@ -871,7 +871,7 @@
             "type" : "string"
           },
           "updatedAt" : {
-            "description" : "Last modification time (ISO-8601 with offset). Equals createdAt until the text is edited",
+            "description" : "Last modification time (ISO-8601 with offset). Equals createdAt until the text is edited (a soft delete also moves it forward)",
             "example" : "2026-10-09T12:40:02+08:00",
             "format" : "date-time",
             "type" : "string"
@@ -1385,7 +1385,7 @@
             "type" : "integer"
           },
           "totalPolls" : {
-            "description" : "Number of Polls the user created",
+            "description" : "Number of Polls the user created that have opened (Open and Ended; Scheduled and Cancelled-before-opening excluded)",
             "example" : 4,
             "format" : "int32",
             "type" : "integer"
@@ -1863,13 +1863,13 @@
         "nullable" : true,
         "properties" : {
           "bio" : {
-            "description" : "Bio; public by default, null if the user never set one",
+            "description" : "Bio; null if the owner hid it (public by default) or never set one",
             "example" : "Poll enthusiast",
             "nullable" : true,
             "type" : "string"
           },
           "displayName" : {
-            "description" : "Display name; public by default, null if the user never set one",
+            "description" : "Display name; null if the owner hid it (public by default) or never set one",
             "example" : "Alice",
             "nullable" : true,
             "type" : "string"
@@ -1918,7 +1918,7 @@
             "type" : "integer"
           },
           "totalPolls" : {
-            "description" : "Number of Polls the user created",
+            "description" : "Number of Polls the user created that have opened (Open and Ended; Scheduled and Cancelled-before-opening excluded)",
             "example" : 4,
             "format" : "int32",
             "type" : "integer"
@@ -5229,7 +5229,7 @@
     },
     "/api/users/me" : {
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: returns the caller's own profile with every field, ignoring visibility settings. Unlike the public profile, nothing is masked; `visibilitySettings` reports what other users see on `GET /api/users/{username}` (unset fields use their defaults: `displayName` and `bio` public, the rest hidden). `totalPolls` counts Polls the user created, `totalVotes` counts Polls the user holds a Ballot in.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: the account no longer exists",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: returns the caller's own profile with every field, ignoring visibility settings. Unlike the public profile, nothing is masked; `visibilitySettings` reports what other users see on `GET /api/users/{username}` (unset fields use their defaults: `displayName` and `bio` public, the rest hidden). `totalPolls` counts Polls the user created that have opened (Open and Ended; not Scheduled or Cancelled before opening), `totalVotes` counts Polls the user holds a Ballot in.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: the account no longer exists",
         "operationId" : "getMyProfile",
         "responses" : {
           "200" : {
@@ -5777,7 +5777,7 @@
     },
     "/api/users/{username}" : {
       "get" : {
-        "description" : "**Auth**: public (the response is the same whether or not the caller is signed in)\n**Precondition**: none\n**Behavior**: returns the public view of a user. `username`, `joinedAt`, `totalPolls` and `totalVotes` are always present. `email`, `firstName`, `lastName`, `location`, `points` and `membershipLevel` are `null` unless the owner made them visible (hidden by default). `displayName` and `bio` are public by default and are currently always returned.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username",
+        "description" : "**Auth**: public (the response is the same whether or not the caller is signed in)\n**Precondition**: none\n**Behavior**: returns the public view of a user. `username`, `joinedAt`, `totalPolls` and `totalVotes` are always present. Every optional field is `null` unless the owner made it visible: `displayName` and `bio` are visible by default, `email`, `firstName`, `lastName`, `location`, `points` and `membershipLevel` are hidden by default. `totalPolls` counts only Polls that have opened (Open and Ended), matching `GET /api/users/{username}/votes`.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended",
         "operationId" : "getUserProfile",
         "parameters" : [ {
           "description" : "Username of the user to look up",
@@ -5855,6 +5855,120 @@
           }
         },
         "summary" : "Get user public profile",
+        "tags" : [ "User" ]
+      }
+    },
+    "/api/users/{username}/votes" : {
+      "get" : {
+        "description" : "**Auth**: public (optional login fills the viewer-specific fields of each Poll, e.g. the caller's Ballot)\n**Precondition**: the user exists and is not suspended\n**Behavior**: the Polls the user created that have opened (Open and Ended), most recently opened first, cursor-paged (`limit` 1-50, default 20; out-of-range values are clamped). Scheduled Polls and Polls Cancelled before opening are left out, so the count matches `totalPolls` on the public profile. `nextCursor` is `null` on the last page.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended\n- 400 `common.cursor_invalid`: `cursor` was not issued by this endpoint",
+        "operationId" : "getUserPolls",
+        "parameters" : [ {
+          "description" : "Username of the Poll creator",
+          "example" : "alice",
+          "in" : "path",
+          "name" : "username",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "description" : "`nextCursor` from the previous page; omit for the first page",
+          "in" : "query",
+          "name" : "cursor",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "description" : "Page size, 1-50 (default 20); out-of-range values are clamped",
+          "example" : 20,
+          "in" : "query",
+          "name" : "limit",
+          "required" : false,
+          "schema" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "Page" : {
+                    "description" : "Page",
+                    "value" : {
+                      "data" : {
+                        "items" : [ {
+                          "commentCount" : 7,
+                          "creatorUsername" : "alice",
+                          "endTime" : "2026-10-19T09:00:00+08:00",
+                          "id" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05",
+                          "myOptionId" : null,
+                          "options" : [ {
+                            "text" : "Java",
+                            "votes" : null
+                          }, {
+                            "text" : "Kotlin",
+                            "votes" : null
+                          } ],
+                          "participantCount" : 42,
+                          "startTime" : "2026-10-12T09:00:00+08:00",
+                          "title" : "Which language should we use for the next side project?",
+                          "voterVisibility" : "OWNER",
+                          "votingActive" : true
+                        } ],
+                        "nextCursor" : "MDE5OWYyYTMtNWI3ZS03ZDQwLWExYzgtOWUzYjJmNmQ0YzA1fDIwMjYtMTAtMTlUMDE6MDA6MDBa"
+                      },
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseCursorResponseVoteResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Resource not found (errorCode e.g. `vote.not_found`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Get a user's Polls",
         "tags" : [ "User" ]
       }
     },
@@ -7003,7 +7117,7 @@
         "tags" : [ "Vote Comment" ]
       },
       "put" : {
-        "description" : "**Auth**: required\n**Precondition**: the caller is the author and the Comment is not deleted. Works on both Comments and Replies, in any Poll state\n**Behavior**: replaces the text. The Poll in the path is not checked; the Comment is looked up by `commentId` only\n**Side effects**: `updatedAt` moves forward, so `edited` becomes true (it is derived: `updatedAt` more than 1 second after `createdAt`). Likes are kept\n**Errors**:\n- 403 `comment.forbidden`: the caller is not the author\n- 404 `comment.not_found`: Comment does not exist or is deleted\n",
+        "description" : "**Auth**: required\n**Precondition**: the caller is the author and the Comment is not deleted. Works on both Comments and Replies, in any Poll state\n**Behavior**: replaces the text. The Poll in the path is not checked; the Comment is looked up by `commentId` only\n**Side effects**: `updatedAt` moves forward, so `edited` becomes true (it is derived: `updatedAt` after `createdAt`, and never true for a deleted placeholder). Likes are kept\n**Errors**:\n- 403 `comment.forbidden`: the caller is not the author\n- 404 `comment.not_found`: Comment does not exist or is deleted\n",
         "operationId" : "updateComment",
         "parameters" : [ {
           "description" : "Poll ID",

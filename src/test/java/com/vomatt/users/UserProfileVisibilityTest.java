@@ -133,6 +133,43 @@ class UserProfileVisibilityTest {
             assertThat(result.totalVotes()).isEqualTo(10);
             assertThat(result.visibilitySettings()).containsEntry("email", false);
         }
+
+        @Test
+        @DisplayName("應該在未設定時將顯示名稱與簡介預設為公開、其餘預設隱藏")
+        void shouldShowDisplayNameAndBioByDefault() {
+            // Given
+            User user = createTestUser();
+            when(userRepository.findById(USER_UUID)).thenReturn(Optional.of(user));
+            when(userRepository.findProfileByUsername(USERNAME)).thenReturn(Optional.of(createTestProjection()));
+            when(preferenceRepository.findByUserIdAndKeyStartingWith(USER_UUID, "visibility."))
+                    .thenReturn(Collections.emptyList());
+
+            // When
+            userService.getMyProfile(USER_ID);
+
+            // Then
+            verify(userMapper).toMyProfileResponse(eq(user), eq(5), eq(10), argThat(v ->
+                    Boolean.TRUE.equals(v.get("displayName")) && Boolean.TRUE.equals(v.get("bio"))
+                            && Boolean.FALSE.equals(v.get("email")) && Boolean.FALSE.equals(v.get("location"))));
+        }
+
+        @Test
+        @DisplayName("應該在使用者隱藏顯示名稱後回報為隱藏")
+        void shouldHideDisplayNameWhenConfigured() {
+            // Given
+            User user = createTestUser();
+            when(userRepository.findById(USER_UUID)).thenReturn(Optional.of(user));
+            when(userRepository.findProfileByUsername(USERNAME)).thenReturn(Optional.of(createTestProjection()));
+            when(preferenceRepository.findByUserIdAndKeyStartingWith(USER_UUID, "visibility."))
+                    .thenReturn(List.of(createPref("visibility.displayName", "false")));
+
+            // When
+            userService.getMyProfile(USER_ID);
+
+            // Then
+            verify(userMapper).toMyProfileResponse(eq(user), eq(5), eq(10),
+                    argThat(v -> Boolean.FALSE.equals(v.get("displayName")) && Boolean.TRUE.equals(v.get("bio"))));
+        }
     }
 
     // ─── getUserProfile（公開）─────────────────────────────────────────────────

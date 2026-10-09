@@ -1,5 +1,7 @@
 package com.vomatt.users;
 
+import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserPreference;
@@ -15,12 +17,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -68,6 +72,10 @@ class UserProfileVisibilityTest {
     }
 
     private UserProfileProjection createTestProjection() {
+        return createTestProjection(true);
+    }
+
+    private UserProfileProjection createTestProjection(boolean active) {
         return new UserProfileProjection() {
             @Override public UUID getId() { return USER_UUID; }
             @Override public String getUsername() { return USERNAME; }
@@ -76,6 +84,7 @@ class UserProfileVisibilityTest {
             @Override public OffsetDateTime getCreatedAt() { return JOINED_AT; }
             @Override public Long getTotalPolls() { return 5L; }
             @Override public Long getTotalVotes() { return 10L; }
+            @Override public Boolean getActive() { return active; }
             @Override public String getEmail() { return "test@example.com"; }
             @Override public String getFirstName() { return "Test"; }
             @Override public String getLastName() { return "User"; }
@@ -208,6 +217,19 @@ class UserProfileVisibilityTest {
             assertThat(result.location()).isNull();
             assertThat(result.points()).isNull();
             assertThat(result.membershipLevel()).isNull();
+        }
+
+        @Test
+        @DisplayName("應該在使用者已停權時回 404")
+        void shouldReturnNotFoundWhenUserSuspended() {
+            when(userRepository.findProfileByUsername(USERNAME)).thenReturn(Optional.of(createTestProjection(false)));
+
+            assertThatThrownBy(() -> userService.getUserProfile(USERNAME, false))
+                    .isInstanceOfSatisfying(ApiException.class, ex -> {
+                        assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                        assertThat(ex.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND);
+                    });
+            verifyNoInteractions(userMapper);
         }
 
         @Test

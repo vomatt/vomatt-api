@@ -69,7 +69,9 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserProfileResponse getUserProfile(String username, boolean isVisibility) {
         // Use Projection to fetch profile and statistics in one query, avoiding N+1
+        // Suspended users are hidden, same as user search and their Poll list
         UserProfileProjection projection = userRepository.findProfileByUsername(username)
+            .filter(p -> Boolean.TRUE.equals(p.getActive()))
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
 
         // Query target user's visibility settings

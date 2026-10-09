@@ -216,6 +216,7 @@ CREATE TABLE IF NOT EXISTS vomatt.audit_logs (
 -- =============================================================================
 CREATE INDEX IF NOT EXISTS idx_users_active                ON vomatt.users (active);
 CREATE INDEX IF NOT EXISTS idx_votes_creator_id            ON vomatt.votes (creator_id);
+CREATE INDEX IF NOT EXISTS idx_votes_creator_start_id      ON vomatt.votes (creator_id, start_time DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_votes_active_time           ON vomatt.votes (is_active, start_time, end_time);
 CREATE INDEX IF NOT EXISTS idx_votes_vote_type             ON vomatt.votes (vote_type);
 CREATE INDEX IF NOT EXISTS idx_votes_start_id              ON vomatt.votes (start_time DESC, id DESC);

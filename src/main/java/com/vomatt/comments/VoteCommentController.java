@@ -20,6 +20,7 @@ import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.response.SimpleResultResponse;
 import com.vomatt.common.annotation.CommonApiResponses;
+import com.vomatt.common.annotation.PublicApiResponse;
 import com.vomatt.comments.dto.CommentDto;
 import com.vomatt.common.security.UserPrincipal;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -58,9 +59,9 @@ public class VoteCommentController {
     }
 
     @GetMapping
-    @CommonApiResponses
+    @PublicApiResponse
     @Operation(summary = "Get comments for a vote",
-            description = "Top-level comments of a Poll, newest first (cursor-paged), each with replyCount. "
+            description = "Public. Top-level comments of a Poll, newest first (cursor-paged), each with replyCount. "
                     + "A deleted comment that still has replies is kept as a placeholder (isDeleted, no text or author)")
     public ResponseEntity<ApiResponse<CursorResponse<CommentDto>>> getComments(
             @Parameter(description = "Vote ID", required = true) @PathVariable String voteId,
@@ -68,12 +69,12 @@ public class VoteCommentController {
             @Parameter(description = "每頁筆數（1–50，預設 20）") @RequestParam(required = false) Integer limit,
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(
-                commentService.getCommentsByVote(voteId, cursor, limit, principal.userId())));
+                commentService.getCommentsByVote(voteId, cursor, limit, principal != null ? principal.userId() : null)));
     }
 
     @GetMapping("/{commentId}/replies")
-    @CommonApiResponses
-    @Operation(summary = "Get replies of a comment", description = "Replies under a top-level comment, oldest first (cursor-paged)")
+    @PublicApiResponse
+    @Operation(summary = "Get replies of a comment", description = "Public. Replies under a top-level comment, oldest first (cursor-paged)")
     public ResponseEntity<ApiResponse<CursorResponse<CommentDto>>> getReplies(
             @Parameter(description = "Vote ID", required = true) @PathVariable String voteId,
             @Parameter(description = "Top-level comment ID", required = true) @PathVariable UUID commentId,
@@ -81,7 +82,7 @@ public class VoteCommentController {
             @Parameter(description = "每頁筆數（1–50，預設 20）") @RequestParam(required = false) Integer limit,
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(
-                commentService.getReplies(voteId, commentId, cursor, limit, principal.userId())));
+                commentService.getReplies(voteId, commentId, cursor, limit, principal != null ? principal.userId() : null)));
     }
 
     @PutMapping("/{commentId}")

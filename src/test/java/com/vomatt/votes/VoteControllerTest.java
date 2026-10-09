@@ -322,14 +322,17 @@ class VoteControllerTest {
     // ─── public vs authenticated vote paths ───────────────────────────────────
 
     @Test
-    @DisplayName("Poll 詳情與結果公開；/my、投票狀態、投票者清單、留言需登入")
-    void shouldExposeOnlyDetailAndResultsPublicly() {
+    @DisplayName("Poll 詳情、結果、留言與回覆公開讀取；/my、投票狀態、投票者清單與留言寫入需登入")
+    void shouldExposeOnlyDetailResultsAndCommentReadsPublicly() {
         assertThat(isPublic("GET", "/api/votes/abc")).isTrue();
         assertThat(isPublic("GET", "/api/votes/abc/results")).isTrue();
+        assertThat(isPublic("GET", "/api/votes/abc/comments")).isTrue();
+        assertThat(isPublic("GET", "/api/votes/abc/comments/def/replies")).isTrue();
         assertThat(isPublic("GET", "/api/votes/my")).isFalse();
         assertThat(isPublic("GET", "/api/votes/abc/my-vote-status")).isFalse();
         assertThat(isPublic("GET", "/api/votes/abc/voters")).isFalse();
-        assertThat(isPublic("GET", "/api/votes/abc/comments")).isFalse();
-        assertThat(isPublic("GET", "/api/votes/abc/comments/def/replies")).isFalse();
+        assertThat(isPublic("POST", "/api/votes/abc/comments")).isFalse();
+        assertThat(isPublic("POST", "/api/votes/abc/comments/def/like")).isFalse();
+        assertThat(isPublic("PUT", "/api/votes/abc/comments/def")).isFalse();
     }
 }

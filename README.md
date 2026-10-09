@@ -28,7 +28,9 @@ Vomatt 投票社群後端。架構沿用 sachmis-api（domain-driven 套件 + �
 | lookups | `/api/lookups/**` | 字典表查詢 |
 | admin | `/api/admin/**` | 標籤、字典表管理（需 ADMIN） |
 
-回應格式統一為 `ApiResponse<T>`：`{ success, data, message, errorCode, error }`；分頁為 `PageResponse<T>`（`content / total / page(1-based) / limit`）。
+回應格式統一為 `ApiResponse<T>`：`{ success, data, message, errorCode, error }`；分頁為 `CursorResponse<T>`（`items / nextCursor`；`limit` 預設 20、上限 50）。
+
+前端串接請見 [docs/frontend/README.md](docs/frontend/README.md)（Swagger 用法、全域慣例、名詞對照）。
 
 既有資料庫從舊 schema 升級：`psql "$DB" -v ON_ERROR_STOP=1 -f src/main/resources/db/migrations/2026-10-02-sachmis-arch.sql`（單一交易，執行前先備份並確認檔頭的時區假設）。
 

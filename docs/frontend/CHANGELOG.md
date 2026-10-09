@@ -10,6 +10,7 @@
 - 契約來源改為 `docs/frontend/openapi.json`（由測試產生）；根目錄舊的 `openapi.yaml`（Next.js 時期）已封存至 `docs/archive/`，不再維護。
 - OpenAPI 的 `summary` / `description` / `@Schema` 說明一律改為英文，並補上各端點的權限、前置條件、副作用、錯誤與範例。
 - OpenAPI：所有 2xx 回應補上 response schema；回 201 的端點（建立 Poll、建立留言 / 回覆、後台新增字典項）不再多列一個 200。
+- OpenAPI 版本改為 3.0（`nullable: true` 會正確輸出；3.1 會丟掉），產生的 TS 型別可為 null 的欄位會是 `T | null`。
 - 未登入可讀取留言與回覆：`GET /api/votes/{voteId}/comments`、`GET /api/votes/{voteId}/comments/{commentId}/replies` 為公開端點（發留言、按讚仍需登入）。
 - 公開 Poll 路徑只比對 UUID：`GET /api/votes/{voteId}` 為公開，`GET /api/votes/my` 等具名子路徑仍需登入。
 - 個人資料的可見度預設：`displayName`、`bio` 在未設定時 `visibilitySettings` 回報為公開（與公開個人頁實際輸出一致）。

@@ -2,20 +2,21 @@ package com.vomatt.common.config;
 
 import com.vomatt.common.filter.RateLimitFilter;
 import com.vomatt.common.security.JwtAuthFilter;
+import com.vomatt.common.security.JwtAuthenticationEntryPoint;
+import com.vomatt.common.security.JwtAccessDeniedHandler;
 import com.vomatt.common.security.SecurityEndpoints;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -35,6 +36,8 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
     private final RateLimitFilter rateLimitFilter;
+    private final JwtAuthenticationEntryPoint authenticationEntryPoint;
+    private final JwtAccessDeniedHandler accessDeniedHandler;
 
     // 正式環境須設為實際前端網域（逗號分隔）；搭配 allowCredentials 不可用萬用字元
     @Value("${app.security.cors-allowed-origins}")
@@ -48,7 +51,8 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(ex -> ex
-                        .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler))
                 .authorizeHttpRequests(auth -> auth
                         // Spring Security 7: FORWARD/ERROR dispatch 需明確放行
                         .dispatcherTypeMatchers(FORWARD, ERROR).permitAll()
@@ -75,6 +79,8 @@ public class SecurityConfig {
         config.setAllowedOrigins(corsAllowedOrigins);
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(Arrays.asList("Content-Type", "Authorization", "Accept"));
+        // Not CORS-safelisted; the frontend reads it on 429
+        config.setExposedHeaders(List.of(HttpHeaders.RETRY_AFTER));
         config.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

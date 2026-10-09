@@ -5,19 +5,19 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
 /**
- * 驗證 email OTP 並完成登入/註冊的請求。
+ * Request to verify an email OTP and complete login / signup.
  */
-@Schema(description = "驗證 email OTP 的請求")
+@Schema(description = "Request to verify an email OTP")
 public record VerifyOtpRequest(
 
-        @Schema(description = "電子郵件", example = "user@example.com")
+        @Schema(description = "Email address the OTP was sent to. Required in practice: a missing or blank value yields 400 auth.identifier.required", example = "user@example.com")
         @Email String email,
 
-        @Schema(description = "信件收到的 OTP 驗證碼", requiredMode = Schema.RequiredMode.REQUIRED,
+        @Schema(description = "OTP code received by email", requiredMode = Schema.RequiredMode.REQUIRED,
                 example = "123456")
         @NotBlank String code,
 
-        @Schema(description = "是否限制管理員才可登入；填 \"true\" 僅 admin 帳號驗證通過",
+        @Schema(description = "Set to \"true\" to restrict to existing admin accounts (admin console login). Any other value, or null, means no restriction",
                 example = "false", allowableValues = {"true", "false"}, nullable = true)
         String checkRole
 ) {

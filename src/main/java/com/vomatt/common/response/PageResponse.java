@@ -5,12 +5,12 @@ import org.springframework.data.domain.Page;
 
 import java.util.List;
 
-@Schema(description = "分頁回應容器")
+@Schema(description = "Offset-style page container (page number and total count); most list endpoints use CursorResponse instead")
 public record PageResponse<T>(
-        @Schema(description = "本頁資料") List<T> content,
-        @Schema(description = "資料總筆數", example = "123") long total,
-        @Schema(description = "目前頁碼（1-based）", example = "1") int page,
-        @Schema(description = "每頁筆數", example = "20") int limit
+        @Schema(description = "Items of this page") List<T> content,
+        @Schema(description = "Total number of items across all pages", example = "123") long total,
+        @Schema(description = "Current page number (1-based)", example = "1") int page,
+        @Schema(description = "Page size", example = "20") int limit
 ) {
 
     public static <T> PageResponse<T> of(List<T> content, long total, int page, int limit) {

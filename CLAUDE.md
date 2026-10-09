@@ -81,6 +81,12 @@ src/main/java/com/vomatt/
 - Controller 端點必須有 `@Operation` + `@CommonApiResponses`/`@PublicApiResponse`；DTO 欄位加 `@Schema`；不得回傳泛型 `Map`/`Object`（動態結構除外）
 - 測試：Controller 用 `standaloneSetup`、Service 用 `@ExtendWith(MockitoExtension.class)`
 
+### 前端 API 文件維護
+- 新增 / 修改端點：`@Operation(description)` 依範本寫 Auth / Precondition / Behavior / Side effects / Errors；request 與 response 至少一個 `@ExampleObject`
+- OpenAPI 文字（`summary`、`description`、`@Schema`）一律英文
+- 契約或 `MessageKey` 變更後執行 `./mvnw test -Dsnapshot.update=true` 重新產生 `docs/frontend/openapi.json` 與 `error-codes.md`（皆勿手改），並一併提交
+- 契約變更記錄在 `docs/frontend/CHANGELOG.md`，breaking 標 💥
+
 ### 命名規範
 - **類別**：駝峰式 (PascalCase)
   - Controller：`UserController`

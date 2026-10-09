@@ -4,17 +4,17 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 /**
- * LINE Login 請求；後端會以 code + redirectUri 向 LINE 換取 access token / id token。
+ * LINE Login request; the server exchanges {@code code} + {@code redirectUri} with LINE for an access token / id token.
  */
-@Schema(description = "LINE 登入請求")
+@Schema(description = "LINE login request")
 public record LineAuthRequest(
 
-        @Schema(description = "LINE OAuth 授權後拿到的 code",
+        @Schema(description = "Authorization code returned by LINE after the user authorizes",
                 requiredMode = Schema.RequiredMode.REQUIRED,
                 example = "abc123def456")
         @NotBlank String code,
 
-        @Schema(description = "與 LINE 端設定一致的 redirect URI",
+        @Schema(description = "Redirect URI used in the LINE authorization request; must match the one registered with LINE",
                 requiredMode = Schema.RequiredMode.REQUIRED,
                 example = "https://app.example.com/auth/line/callback")
         @NotBlank String redirectUri

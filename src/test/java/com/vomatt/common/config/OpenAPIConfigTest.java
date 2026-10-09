@@ -9,6 +9,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OpenAPIConfigTest {
 
@@ -36,5 +37,27 @@ class OpenAPIConfigTest {
         List<String> urls = build("prod").getServers().stream().map(Server::getUrl).toList();
 
         assertEquals(List.of(PROD_URL, DEV_URL), urls);
+    }
+
+    @Test
+    @DisplayName("應該註冊共用錯誤schema與範例")
+    void shouldRegisterErrorSchemaAndExamples() {
+        var components = build("dev").getComponents();
+
+        assertTrue(components.getSchemas().get(OpenAPIConfig.ERROR_SCHEMA).getProperties()
+                .keySet().containsAll(List.of("success", "data", "message", "errorCode", "error")));
+        assertTrue(components.getExamples().keySet().containsAll(List.of(
+                OpenAPIConfig.EX_VALIDATION, OpenAPIConfig.EX_UNAUTHORIZED, OpenAPIConfig.EX_FORBIDDEN,
+                OpenAPIConfig.EX_NOT_FOUND, OpenAPIConfig.EX_RATE_LIMITED)));
+        assertTrue(components.getSecuritySchemes().containsKey("bearerAuth"));
+    }
+
+    @Test
+    @DisplayName("應該設定info.description並指向前端文件")
+    void shouldSetInfoDescription() {
+        String description = build("dev").getInfo().getDescription();
+
+        assertTrue(description.contains("errorCode"));
+        assertTrue(description.contains("docs/frontend/README.md"));
     }
 }

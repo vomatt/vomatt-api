@@ -3,6 +3,7 @@ package com.vomatt.common.filter;
 import com.vomatt.common.config.RateLimitConfig;
 import com.vomatt.common.redis.RedisOperationException;
 import com.vomatt.common.redis.RedisService;
+import com.vomatt.common.security.SecurityTestSupport;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,7 +41,7 @@ class RateLimitFilterTest {
         config.setEnabled(true);
         config.setPaths(List.of("/api/auth/**"));
         config.setLimit(new RateLimitConfig.Limit(300, 60));
-        filter = new RateLimitFilter(redisService, config);
+        filter = new RateLimitFilter(redisService, config, SecurityTestSupport.errorWriter());
     }
 
     @Test
@@ -70,6 +71,21 @@ class RateLimitFilterTest {
         verify(chain, never()).doFilter(any(), any());
         assertThat(response.getStatus()).isEqualTo(429);
         assertThat(response.getContentAsString()).contains("請求過於頻繁");
+        assertThat(response.getContentAsString()).contains("\"errorCode\":\"common.rate_limited\"");
+        assertThat(Long.parseLong(response.getHeader("Retry-After"))).isBetween(1L, 60L);
+    }
+
+    @Test
+    void shouldReturnEnglishMessageWhenAcceptLanguageIsEn() throws Exception {
+        when(redisService.incrementAndExpire(eq("rate:limit"), anyString(), any(Duration.class))).thenReturn(301L);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/auth/send-otp");
+        request.addHeader("Accept-Language", "en");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, mock(FilterChain.class));
+
+        assertThat(response.getContentAsString()).contains("Too many requests");
     }
 
     @Test
@@ -124,6 +140,7 @@ class RateLimitFilterTest {
 
         verify(chain, never()).doFilter(any(), any());
         assertThat(response.getStatus()).isEqualTo(429);
+        assertThat(response.getHeader("Retry-After")).isNull();
     }
 
     @Test

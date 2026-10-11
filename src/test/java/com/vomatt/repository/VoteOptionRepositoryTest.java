@@ -18,7 +18,7 @@ class VoteOptionRepositoryTest extends PostgresRepositoryTest {
     @Autowired VoteOptionRepository voteOptionRepository;
 
     @Test
-    @DisplayName("應該在 Poll 儲存後依 displayOrder 讀回選項")
+    @DisplayName("should read options back in displayOrder after Poll is saved")
     void shouldReturnOptionsInDisplayOrderWhenPollSaved() {
         User owner = persistUser("owner");
         OffsetDateTime now = OffsetDateTime.now();

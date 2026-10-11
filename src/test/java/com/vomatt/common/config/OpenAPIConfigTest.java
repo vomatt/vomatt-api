@@ -24,7 +24,7 @@ class OpenAPIConfigTest {
     }
 
     @Test
-    @DisplayName("應該在dev profile時把Development排在第一個")
+    @DisplayName("should list Development first when profile is dev")
     void shouldListDevFirstWhenProfileIsDev() {
         List<String> urls = build("dev").getServers().stream().map(Server::getUrl).toList();
 
@@ -32,7 +32,7 @@ class OpenAPIConfigTest {
     }
 
     @Test
-    @DisplayName("應該在非dev profile時把Production排在第一個")
+    @DisplayName("should list Production first when profile is not dev")
     void shouldListProdFirstWhenProfileIsNotDev() {
         List<String> urls = build("prod").getServers().stream().map(Server::getUrl).toList();
 
@@ -40,7 +40,7 @@ class OpenAPIConfigTest {
     }
 
     @Test
-    @DisplayName("應該註冊共用錯誤schema與範例")
+    @DisplayName("should register shared error schemas and examples")
     void shouldRegisterErrorSchemaAndExamples() {
         var components = build("dev").getComponents();
 
@@ -53,7 +53,7 @@ class OpenAPIConfigTest {
     }
 
     @Test
-    @DisplayName("應該設定info.description並指向前端文件")
+    @DisplayName("should set info.description pointing to the frontend docs")
     void shouldSetInfoDescription() {
         String description = build("dev").getInfo().getDescription();
 

@@ -210,7 +210,7 @@ class LookupServiceTest {
             CreateLookupRequest req = new CreateLookupRequest();
             req.setLookupType("CITY");
             req.setLookupKey("KHH");
-            req.setLookupValue(StringNode.valueOf("高雄"));
+            req.setLookupValue(StringNode.valueOf("Kaohsiung"));
 
             Lookup saved = buildLookup("CITY", "KHH", true, false);
             LookupDto dto = buildDto("CITY", "KHH");
@@ -224,7 +224,7 @@ class LookupServiceTest {
             assertThat(result.lookupKey()).isEqualTo("KHH");
             verify(lookupRepository).save(any(Lookup.class));
             verify(redisService).delete(CacheNamespaces.LOOKUP_BY_TYPE, "CITY");
-            // 非前端字典不需清前端快取
+            // Non-frontend lookups do not need to evict the frontend cache
             verify(redisService, never()).delete(eq(CacheNamespaces.LOOKUP_FRONTEND), anyString());
         }
 
@@ -234,7 +234,7 @@ class LookupServiceTest {
             CreateLookupRequest req = new CreateLookupRequest();
             req.setLookupType("CITY");
             req.setLookupKey("TPE");
-            req.setLookupValue(StringNode.valueOf("台北"));
+            req.setLookupValue(StringNode.valueOf("Taipei"));
 
             when(lookupRepository.existsByLookupTypeAndLookupKey("CITY", "TPE")).thenReturn(true);
 
@@ -265,7 +265,7 @@ class LookupServiceTest {
 
             verify(lookupRepository).save(argThat(l -> !l.getIsActive()));
             verify(lookupRepository, never()).delete(any());
-            // 前端字典須同時清 type 與 frontend 快取
+            // Frontend lookups must evict both the type and frontend caches
             verify(redisService).delete(CacheNamespaces.LOOKUP_BY_TYPE, "CITY");
             verify(redisService).delete(eq(CacheNamespaces.LOOKUP_FRONTEND), anyString());
         }

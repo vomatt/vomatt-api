@@ -99,7 +99,7 @@ class BallotPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該在再次投票時整張取代 Ballot，舊選項減一、新選項加一")
+    @DisplayName("should replace whole Ballot on revote, decrementing old option and incrementing new one")
     void shouldReplaceBallotWhenUserVotesAgain() {
         cast(voter, optionA);
         VoteResponse response = cast(voter, optionB);
@@ -116,7 +116,7 @@ class BallotPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該在重複投同一選項時不重複計數")
+    @DisplayName("should not double count when voting the same option again")
     void shouldNotDoubleCountWhenSameOptionCastTwice() {
         cast(voter, optionA);
         cast(voter, optionA);
@@ -126,7 +126,7 @@ class BallotPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該在同一使用者併發投票時只留下一張 Ballot 且計數一致")
+    @DisplayName("should keep a single Ballot with consistent counts when same user votes concurrently")
     void shouldKeepSingleBallotWhenSameUserCastsConcurrently() throws Exception {
         List<Callable<Object>> calls = new ArrayList<>();
         for (int i = 0; i < 16; i++) {
@@ -145,7 +145,7 @@ class BallotPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該在撤回時刪除整張 Ballot 並釋放計數")
+    @DisplayName("should delete whole Ballot and release counts on withdraw")
     void shouldRetractBallotAndReleaseCount() {
         cast(voter, optionA);
 
@@ -159,7 +159,7 @@ class BallotPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該在沒有 Ballot 時撤回仍成功且不改變計數")
+    @DisplayName("should succeed without changing counts when withdrawing with no Ballot")
     void shouldRetractIdempotentlyWhenNoBallot() {
         voteService.retract(poll.getId().toString(), voter.getId().toString());
         voteService.retract(poll.getId().toString(), voter.getId().toString());
@@ -168,7 +168,7 @@ class BallotPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該在投票者刪除帳號後仍維持計數一致")
+    @DisplayName("should keep counts consistent after voter deletes account")
     void shouldKeepCountsConsistentWhenVoterAccountDeleted() {
         cast(voter, optionA);
 

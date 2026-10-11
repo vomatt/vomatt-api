@@ -99,7 +99,7 @@ class VoteServiceTest {
         when(voteRepository.save(any(Vote.class))).thenAnswer(inv -> {
             Vote v = inv.getArgument(0);
             if (v.getId() == null) {
-                setId(v, UUID.randomUUID()); // 模擬 DB 分配 ID
+                setId(v, UUID.randomUUID()); // simulate DB-assigned ID
             }
             v.getOptions().stream().filter(o -> o.getId() == null).forEach(o -> setId(o, UUID.randomUUID()));
             return v;
@@ -119,7 +119,7 @@ class VoteServiceTest {
     class CreateVoteTests {
 
         @Test
-        @DisplayName("應該在選項數量不足時拋出 400 VOTE_OPTIONS_MIN")
+        @DisplayName("should throw 400 VOTE_OPTIONS_MIN when too few options")
         void shouldThrowWhenTooFewOptions() {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
 
@@ -135,7 +135,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在選項數量超過上限時拋出 400 VOTE_OPTIONS_MAX")
+        @DisplayName("should throw 400 VOTE_OPTIONS_MAX when too many options")
         void shouldThrowWhenTooManyOptions() {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(2);
@@ -152,7 +152,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在結束時間已過去時拋出 400 VOTE_END_TIME_PAST")
+        @DisplayName("should throw 400 VOTE_END_TIME_PAST when end time is in the past")
         void shouldThrowWhenEndTimeInPast() {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
@@ -167,7 +167,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在要求複選時拋出 400 VOTE_MULTIPLE_NOT_ALLOWED")
+        @DisplayName("should throw 400 VOTE_MULTIPLE_NOT_ALLOWED when multiple choice is requested")
         void shouldRejectCreateWhenMultipleChoicesRequested() {
             CreateVoteRequest request = new CreateVoteRequest();
             request.setTitle("Test");
@@ -181,7 +181,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在結束時間等於開始時間時拋出 400 VOTE_END_BEFORE_START")
+        @DisplayName("should throw 400 VOTE_END_BEFORE_START when end time equals start time")
         void shouldRejectCreateWhenEndEqualsStart() {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
@@ -197,7 +197,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在找不到建立者時拋出 404 USER_NOT_FOUND")
+        @DisplayName("should throw 404 USER_NOT_FOUND when creator is not found")
         void shouldThrowWhenCreatorNotFound() {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
@@ -212,7 +212,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該成功建立投票並附上選項")
+        @DisplayName("should create Poll with options")
         void shouldCreateVote() {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
@@ -243,7 +243,7 @@ class VoteServiceTest {
     class GetVoteTests {
 
         @Test
-        @DisplayName("應該在找不到投票時拋出 404 VOTE_NOT_FOUND")
+        @DisplayName("should throw 404 VOTE_NOT_FOUND when Poll is not found")
         void shouldThrowWhenVoteNotFound() {
             when(voteRepository.findById(voteId)).thenReturn(Optional.empty());
             assertThatThrownBy(() -> voteService.getVote(voteId.toString(), null))
@@ -251,7 +251,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該成功回傳投票")
+        @DisplayName("should return Poll")
         void shouldReturnVoteWhenFound() {
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             stubConvertToVoteResponse(vote);
@@ -270,7 +270,7 @@ class VoteServiceTest {
     class CastVoteTests {
 
         @Test
-        @DisplayName("應該在投票不存在或已停用時拋出 404 VOTE_NOT_FOUND")
+        @DisplayName("should throw 404 VOTE_NOT_FOUND when Poll does not exist or is disabled")
         void shouldThrowWhenVoteNotActive() {
             when(voteRepository.findById(voteId)).thenReturn(Optional.empty());
 
@@ -282,7 +282,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在單選投票傳入多個選項時拋出 400 VOTE_MULTIPLE_NOT_ALLOWED")
+        @DisplayName("should throw 400 VOTE_MULTIPLE_NOT_ALLOWED when multiple options are sent to single-choice Poll")
         void shouldThrowWhenMultipleChoicesNotAllowed() {
             vote.setActive(true);
             vote.setAllowMultipleChoices(false);
@@ -298,7 +298,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在選項不屬於該投票時拋出 400 VOTE_OPTION_NOT_IN_VOTE")
+        @DisplayName("should throw 400 VOTE_OPTION_NOT_IN_VOTE when option does not belong to Poll")
         void shouldThrowWhenOptionBelongsToDifferentVote() {
             vote.setActive(true);
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
@@ -329,7 +329,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在 Poll 已結束時以 vote.ended 拒絕投票")
+        @DisplayName("should reject vote with vote.ended when Poll has ended")
         void shouldRejectVoteWhenPollEndedWithVoteEndedCode() {
             vote.setEndTime(OffsetDateTime.now().minusMinutes(1));
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
@@ -340,7 +340,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在 Poll 尚未開始時拒絕投票")
+        @DisplayName("should reject vote when Poll has not started")
         void shouldRejectVoteWhenPollScheduled() {
             vote.setStartTime(OffsetDateTime.now().plusHours(1));
             vote.setEndTime(OffsetDateTime.now().plusDays(1));
@@ -351,7 +351,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在 Poll 已結束時以 vote.ended 拒絕移除選擇")
+        @DisplayName("should reject removing selection with vote.ended when Poll has ended")
         void shouldRejectRemovalWhenPollEnded() {
             vote.setEndTime(OffsetDateTime.now().minusMinutes(1));
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
@@ -362,7 +362,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在 Poll 已結束時以 vote.ended 拒絕撤回")
+        @DisplayName("should reject withdraw with vote.ended when Poll has ended")
         void shouldRejectRetractionWhenPollEnded() {
             vote.setEndTime(OffsetDateTime.now().minusMinutes(1));
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
@@ -373,7 +373,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在檢視者有 Ballot 時回傳 myOptionId")
+        @DisplayName("should return myOptionId when viewer has a Ballot")
         void shouldReturnMyOptionIdWhenViewerHasBallot() {
             UUID optionId = UUID.randomUUID();
             setId(option, optionId);
@@ -393,7 +393,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在 Poll Open 時對 /results 回 403 vote.results.sealed")
+        @DisplayName("should return 403 vote.results.sealed for /results while Poll is Open")
         void shouldReturnForbiddenForResultsWhenPollOpen() {
             vote.setEndTime(OffsetDateTime.now().plusDays(1));
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
@@ -403,7 +403,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在 Poll Ended 後回傳結果")
+        @DisplayName("should return results after Poll has Ended")
         void shouldReturnResultsWhenPollEnded() {
             vote.setEndTime(OffsetDateTime.now().minusMinutes(1));
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
@@ -413,7 +413,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在 GET 詳情時於 Poll Open 期間封存選項票數")
+        @DisplayName("should seal option counts on GET detail while Poll is Open")
         void shouldOmitOptionCountsOnGetWhenPollOpen() {
             setId(option, UUID.randomUUID());
             option.setDisplayOrder(0);
@@ -429,7 +429,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在未登入時 myOptionId 為 null")
+        @DisplayName("should have null myOptionId when not signed in")
         void shouldReturnNullMyOptionIdWhenSignedOut() {
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             stubConvertToVoteResponse(vote);
@@ -455,14 +455,14 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在可見度為 NOBODY 時連發起人也看不到投票者")
+        @DisplayName("should hide voters even from owner when visibility is NOBODY")
         void shouldHideVotersWhenVisibilityIsNobody() {
             endedWith(com.vomatt.entity.VoterVisibility.NOBODY);
             assertHidden(userId.toString());
         }
 
         @Test
-        @DisplayName("應該在可見度為 OWNER 時只開放給發起人")
+        @DisplayName("should show voters only to owner when visibility is OWNER")
         void shouldShowVotersOnlyToOwnerWhenVisibilityIsOwner() {
             endedWith(com.vomatt.entity.VoterVisibility.OWNER);
             when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of());
@@ -472,7 +472,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在可見度為 SIGNED_IN 時開放給任何登入使用者")
+        @DisplayName("should show voters to any signed-in user when visibility is SIGNED_IN")
         void shouldShowVotersToAnySignedInUserWhenVisibilityIsSignedIn() {
             endedWith(com.vomatt.entity.VoterVisibility.SIGNED_IN);
             when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of());
@@ -482,7 +482,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在 Poll 尚未結束時拒絕查看投票者")
+        @DisplayName("should reject viewing voters when Poll has not ended")
         void shouldRejectVotersWhenPollOpen() {
             vote.setEndTime(OffsetDateTime.now().plusDays(1));
             vote.setVoterVisibility(com.vomatt.entity.VoterVisibility.SIGNED_IN);
@@ -514,7 +514,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在 Poll 已開始時拒絕編輯")
+        @DisplayName("should reject edit when Poll has started")
         void shouldRejectEditWhenPollOpen() {
             vote.setEndTime(OffsetDateTime.now().plusDays(1));
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
@@ -525,7 +525,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在非發起人編輯時回 403")
+        @DisplayName("should return 403 when non-owner edits")
         void shouldRejectEditWhenNotOwner() {
             scheduled();
 
@@ -534,7 +534,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在編輯 Scheduled Poll 時取代題目與選項")
+        @DisplayName("should replace title and options when editing Scheduled Poll")
         void shouldReplaceFieldsAndOptionsWhenScheduledPollEdited() {
             scheduled();
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
@@ -552,7 +552,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在編輯未帶 startTime 時保留原開始時間（不因編輯而開放）")
+        @DisplayName("should keep original start time when edit omits startTime (edit does not open the Poll)")
         void shouldKeepStartTimeWhenEditOmitsIt() {
             scheduled();
             OffsetDateTime originalStart = vote.getStartTime();
@@ -571,7 +571,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在編輯未帶 startTime 時以原開始時間驗證結束時間")
+        @DisplayName("should validate end time against original start time when edit omits startTime")
         void shouldValidateEndTimeAgainstKeptStartTime() {
             scheduled();
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
@@ -586,7 +586,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在編輯標籤時調整 usage_count：移除的減一、新增的加一")
+        @DisplayName("should adjust usage_count when editing tags: decrement removed, increment added")
         void shouldAdjustTagUsageWhenTagsEdited() {
             Tag kept = setId(new Tag("Kept", "kept", null, 1), UUID.randomUUID());
             Tag dropped = setId(new Tag("Dropped", "dropped", null, 2), UUID.randomUUID());
@@ -614,7 +614,7 @@ class VoteServiceTest {
     class DeactivateVoteTests {
 
         @Test
-        @DisplayName("應該在非建立者嘗試停用時拋出 403 VOTE_FORBIDDEN")
+        @DisplayName("should throw 403 VOTE_FORBIDDEN when non-creator tries to disable")
         void shouldThrowWhenNotCreator() {
             User creator = User.builder().id(UUID.randomUUID()).build(); // different from userId
             vote.setCreator(creator);
@@ -628,7 +628,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("建立者應該能成功停用投票")
+        @DisplayName("creator should be able to disable Poll")
         void shouldDeactivateWhenCreator() {
             vote.setCreator(user);
             vote.setActive(true);
@@ -647,7 +647,7 @@ class VoteServiceTest {
     // ─── hasUserVoted ─────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("hasUserVoted 應該委派至 repository")
+    @DisplayName("hasUserVoted should delegate to repository")
     void shouldDelegateHasUserVotedToRepository() {
         when(userVoteRepository.existsByUserIdAndVoteId(userId, voteId)).thenReturn(true);
         assertThat(voteService.hasUserVoted(voteId.toString(), userId.toString())).isTrue();
@@ -660,7 +660,7 @@ class VoteServiceTest {
     class CreateVoteWithTags {
 
         @Test
-        @DisplayName("應該在建立投票時關聯標籤並更新 usageCount")
+        @DisplayName("should link tags and update usageCount when creating Poll")
         void shouldCreateVoteWithTags() {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
@@ -683,7 +683,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在 tagIds 包含不存在的 ID 時拋出 400 TAG_IDS_INVALID")
+        @DisplayName("should throw 400 TAG_IDS_INVALID when tagIds contains nonexistent ID")
         void shouldThrowWhenTagIdNotFound() {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
@@ -708,7 +708,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("應該在不帶 tagIds 時正常建立投票")
+        @DisplayName("should create Poll normally without tagIds")
         void shouldCreateVoteWithoutTags() {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);

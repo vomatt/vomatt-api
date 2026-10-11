@@ -23,17 +23,17 @@ public class JwtUtil {
     private final SecretKey key;
     private final long expirationSeconds;
 
-    // HS256 需要 ≥256 bits（32 bytes）的密鑰；對齊 JWT_SECRET ≥32 字元規範
+    // HS256 needs a key of >= 256 bits (32 bytes); matches the JWT_SECRET >= 32 characters rule
     private static final int MIN_SECRET_BYTES = 32;
 
     public JwtUtil(@Value("${jwt.secret}") String secret, @Value("${jwt.expiration-seconds}") long expirationSeconds) {
-        // 啟動時（bean 建立）就驗證密鑰長度，於組態錯誤時 fail-fast，
-        // 而非等到第一次簽發/驗證 token 時才由 JJWT 隱性失敗
+        // Validate the key length at startup (bean creation) to fail fast on misconfiguration,
+        // instead of JJWT failing implicitly on the first token sign/verify
         byte[] secretBytes = secret == null ? new byte[0] : secret.getBytes(StandardCharsets.UTF_8);
         if (secretBytes.length < MIN_SECRET_BYTES) {
             throw new IllegalStateException(
-                    "jwt.secret 過短：HS256 需至少 " + MIN_SECRET_BYTES + " bytes（256 bits），目前僅 "
-                            + secretBytes.length + " bytes。請設定足夠長的 JWT_SECRET（≥32 字元）。");
+                    "jwt.secret is too short: HS256 needs at least " + MIN_SECRET_BYTES + " bytes (256 bits), got only "
+                            + secretBytes.length + " bytes. Set a long enough JWT_SECRET (>= 32 characters).");
         }
         this.key = Keys.hmacShaKeyFor(secretBytes);
         this.expirationSeconds = expirationSeconds;

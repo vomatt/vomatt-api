@@ -23,13 +23,13 @@ public class GlobalExceptionHandler {
     private final LocalizedMessageService messageService;
 
     /**
-     * 處理業務例外（{@link ApiException}）。
+     * Handles business exceptions ({@link ApiException}).
      *
-     * <p>回應型別為 {@code ApiResponse<Object>}（而非既有的 {@code ApiResponse<Void>}）——
-     * 這是承載 {@link ApiException#getData()} 的侵入性最小做法：{@link ApiResponse} record
-     * 本身不改動（其他 handler 與既有呼叫端完全不受影響），僅在此處依 data 是否存在，
-     * 直接組出對應的 {@code ApiResponse} 實例。無 data 時走既有 {@link ApiResponse#error} 靜態工廠
-     * （行為與擴充前完全一致，data 恆為 null）；有 data 時才用 record 的正典建構子附上結構化資料。</p>
+     * <p>The response type is {@code ApiResponse<Object>} (not the existing {@code ApiResponse<Void>}):
+     * this is the least invasive way to carry {@link ApiException#getData()}. The {@link ApiResponse} record
+     * itself is unchanged (other handlers and existing callers are unaffected); only here, depending on whether data exists,
+     * we build the matching {@code ApiResponse} instance. Without data it uses the existing {@link ApiResponse#error} static factory
+     * (same behavior as before, data is always null); with data it uses the record's canonical constructor to attach it.</p>
      */
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ApiResponse<Object>> handleApiException(ApiException ex) {
@@ -71,7 +71,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(ApiResponse.error(message, MessageKey.COMMON_TYPE_MISMATCH.code()));
     }
 
-    /** 非法輸入（例：路徑中的 UUID 格式錯誤、無法產生 slug 的標籤名）視為 400，而非被兜底成 500。 */
+    /** Illegal input (e.g. malformed UUID in the path, a tag name that cannot produce a slug) is a 400, not caught as a 500 by the fallback. */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex) {
         log.debug("Illegal argument: {}", ex.getMessage());
@@ -80,12 +80,12 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 處理授權失敗（403）。
-     * Spring Security 6 在 method-security（{@code @PreAuthorize}）失敗時，
-     * 會於 DispatcherServlet 內丟出 {@link org.springframework.security.authorization.AuthorizationDeniedException}，
-     * 它是 {@link AccessDeniedException} 的子類；filter-chain 來源亦同。
-     * 單一 handler 即可涵蓋兩種來源，避免被 {@code Exception.class} 兜底handler 誤判為 500。
-     * 授權失敗屬預期情況，僅以 WARN 記錄訊息（不印 stacktrace），避免日誌噪音。
+     * Handles authorization failures (403).
+     * When method security ({@code @PreAuthorize}) fails, Spring Security 6
+     * throws {@link org.springframework.security.authorization.AuthorizationDeniedException} inside the DispatcherServlet,
+     * a subclass of {@link AccessDeniedException}; the same applies to the filter chain.
+     * One handler covers both sources, so they are not misreported as 500 by the {@code Exception.class} fallback handler.
+     * Authorization failures are expected, so only the message is logged at WARN (no stack trace) to avoid log noise.
      */
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
@@ -96,9 +96,9 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 處理 Redis 正確性關鍵寫入/讀取失敗（503）。
-     * OTP 寫入、refresh token reuse 偵測等改為拋出型後，Redis 故障會冒泡到此；
-     * 回 503（可重試）而非被 {@code Exception.class} 兜底成 500，並以 WARN 記錄（非預期但屬基礎設施抖動）。
+     * Handles failures of correctness-critical Redis writes/reads (503).
+     * Since OTP writes, refresh token reuse detection, etc. now throw, Redis failures bubble up here;
+     * return 503 (retryable) instead of the {@code Exception.class} fallback 500, logged at WARN (unexpected, but infrastructure flakiness).
      */
     @ExceptionHandler(com.vomatt.common.redis.RedisOperationException.class)
     public ResponseEntity<ApiResponse<Void>> handleRedisFailure(com.vomatt.common.redis.RedisOperationException ex) {

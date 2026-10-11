@@ -14,13 +14,13 @@ import java.util.UUID;
 
 public class UUIDv7Generator implements BeforeExecutionGenerator {
 
-    // 共用單一 generator：thread-safe，且保留毫秒內的單調遞增狀態，
-    // 避免每次呼叫都重建（既浪費也喪失同毫秒排序保證）。
+    // Share a single generator: it is thread-safe and keeps the monotonic state within a millisecond,
+    // avoiding a rebuild on every call (which is wasteful and loses the same-millisecond ordering guarantee).
     private static final NoArgGenerator GENERATOR = Generators.timeBasedEpochGenerator();
 
     /**
-     * 供非 entity-id 情境（例：E2 POS {@code checkoutId}，僅記憶體產生、不落地）直接產生 UUID v7，
-     * 複用同一個共用 generator instance，不額外重建。
+     * Generates a UUID v7 directly for non-entity-id cases (e.g. E2 POS {@code checkoutId}, generated in memory only and never persisted),
+     * reusing the same shared generator instance instead of building a new one.
      */
     public static UUID generateId() {
         return GENERATOR.generate();

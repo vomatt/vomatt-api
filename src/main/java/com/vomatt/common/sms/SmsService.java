@@ -1,7 +1,7 @@
 package com.vomatt.common.sms;
 
 /**
- * SMS 發送介面，目前提供 NoOp 實作，可接入 Twilio / AWS SNS 等服務。
+ * SMS sending interface. Currently only a NoOp implementation exists; can be wired to Twilio / AWS SNS, etc.
  */
 public interface SmsService {
 

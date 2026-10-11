@@ -66,7 +66,7 @@ class VoteCommentServiceTest {
     }
 
     @Test
-    @DisplayName("應該每頁一次載入讚數與是否已按讚")
+    @DisplayName("should load like counts and liked state once per page")
     void shouldLoadLikesPerPage() {
         Vote vote = new Vote();
         ReflectionTestUtils.setField(vote, "id", voteId);
@@ -92,7 +92,7 @@ class VoteCommentServiceTest {
     }
 
     @Test
-    @DisplayName("應該在 Poll 不存在時回 404")
+    @DisplayName("should return 404 when Poll does not exist")
     void shouldThrowWhenPollMissing() {
         when(voteRepository.existsById(voteId)).thenReturn(false);
 

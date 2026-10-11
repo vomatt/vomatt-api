@@ -15,7 +15,7 @@ public class RedisConfig {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
 
-        // Jackson 3 已內建 Java time 支援，使用 builder 預設設定即可
+        // Jackson 3 has built-in Java time support; the builder defaults are enough
         GenericJacksonJsonRedisSerializer serializer = GenericJacksonJsonRedisSerializer.builder().build();
         StringRedisSerializer stringSerializer = new StringRedisSerializer();
 

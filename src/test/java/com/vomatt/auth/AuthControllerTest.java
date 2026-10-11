@@ -45,7 +45,7 @@ class AuthControllerTest {
 
     @BeforeEach
     void setUp() {
-        // standaloneSetup: 不需要 Spring Boot context，不連接資料庫
+        // standaloneSetup: no Spring Boot context, no database connection
         mockMvc = MockMvcBuilders.standaloneSetup(authController)
                 .setControllerAdvice(new GlobalExceptionHandler(messageService))
                 .build();
@@ -75,7 +75,7 @@ class AuthControllerTest {
 
     @Test
     void verifyOtp_withWrongCode_shouldReturn401() throws Exception {
-        when(messageService.resolve(any(MessageKey.class))).thenReturn("驗證碼錯誤或已過期");
+        when(messageService.resolve(any(MessageKey.class))).thenReturn("Invalid or expired verification code");
         when(authService.verifyOtp(anyString(), any(), anyString(), anyBoolean())).thenThrow(
                 ApiException.unauthorized(MessageKey.AUTH_INVALID_OTP));
 

@@ -39,7 +39,7 @@ class VoteMapperTest {
     }
 
     @Test
-    @DisplayName("應該在 Poll Open 時隱藏各選項票數，但 Turnout 仍可見")
+    @DisplayName("should hide option counts while Poll is Open but keep Turnout visible")
     void shouldOmitOptionCountsWhenPollOpen() {
         VoteResponse response = mapper.toResponse(poll(now.minusHours(1), now.plusDays(1)),
                 List.of(option("A", 3), option("B", 1)));
@@ -49,7 +49,7 @@ class VoteMapperTest {
     }
 
     @Test
-    @DisplayName("應該在 Poll Scheduled 時隱藏各選項票數")
+    @DisplayName("should hide option counts when Poll is Scheduled")
     void shouldOmitOptionCountsWhenPollScheduled() {
         VoteResponse response = mapper.toResponse(poll(now.plusHours(1), now.plusDays(1)), List.of(option("A", 0)));
 
@@ -57,7 +57,7 @@ class VoteMapperTest {
     }
 
     @Test
-    @DisplayName("應該在 Poll Ended 後公開各選項票數")
+    @DisplayName("should reveal option counts after Poll has Ended")
     void shouldRevealOptionCountsWhenPollEnded() {
         VoteResponse response = mapper.toResponse(poll(now.minusDays(2), now.minusDays(1)),
                 List.of(option("A", 3), option("B", 1)));
@@ -67,7 +67,7 @@ class VoteMapperTest {
     }
 
     @Test
-    @DisplayName("應該以 Participant 為分母計算 Support")
+    @DisplayName("should compute Support with Participant as denominator")
     void shouldComputeSupportFromParticipants() {
         VoteResultResponse results = mapper.toResultResponse(poll(now.minusDays(2), now.minusDays(1)),
                 List.of(option("A", 3), option("B", 1)));

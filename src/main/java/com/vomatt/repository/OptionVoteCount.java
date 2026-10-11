@@ -3,7 +3,7 @@ package com.vomatt.repository;
 import java.util.UUID;
 
 /**
- * Projection 介面：查詢各選項的投票計數，避免 Object[] 不安全轉型
+ * Projection interface: per-option vote counts, avoiding unsafe Object[] casts
  */
 public interface OptionVoteCount {
     UUID getOptionId();

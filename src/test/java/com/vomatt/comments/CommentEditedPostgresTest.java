@@ -51,7 +51,7 @@ class CommentEditedPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該在新留言寫入後建立與更新時間完全相同")
+    @DisplayName("should have identical created and updated times when a new comment is written")
     void shouldStoreEqualTimestampsOnInsert() {
         CommentDto dto = reload(post("hi"));
 
@@ -60,7 +60,7 @@ class CommentEditedPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該在建立後立即編輯時標記為已編輯")
+    @DisplayName("should mark as edited when edited immediately after creation")
     void shouldMarkEditedWhenUpdatedImmediately() {
         UUID id = post("hi");
         UpdateCommentRequest request = new UpdateCommentRequest();

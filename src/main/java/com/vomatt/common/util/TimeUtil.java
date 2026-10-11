@@ -24,12 +24,12 @@ public final class TimeUtil {
     private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
 
     /**
-     * 依台北時區（UTC+8）認定「營業日」（M1 出勤打卡用）。
+     * Determines the "business day" in the Taipei time zone (UTC+8) (used by M1 attendance clock-in).
      *
-     * <p>JVM 未設定預設時區（{@code application.yml} 無 {@code time-zone} 設定），
-     * 故不可依賴 {@code LocalDate.now()}/系統預設時區，需顯式轉換至 {@code Asia/Taipei}。
-     * {@code instant} 為任一時區的即時時刻（{@link OffsetDateTime} 內部皆為同一瞬間），
-     * 轉換後取台北當地日期。</p>
+     * <p>The JVM has no default time zone configured ({@code application.yml} has no {@code time-zone} setting),
+     * so do not rely on {@code LocalDate.now()} / the system default time zone; convert explicitly to {@code Asia/Taipei}.
+     * {@code instant} is a point in time in any time zone ({@link OffsetDateTime} always represents the same instant internally),
+     * converted to the local date in Taipei.</p>
      */
     public static LocalDate taipeiBusinessDate(OffsetDateTime instant) {
         return instant.atZoneSameInstant(TAIPEI_ZONE).toLocalDate();
@@ -37,7 +37,7 @@ public final class TimeUtil {
 
     private static final DateTimeFormatter TAIPEI_TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
 
-    /** 任一時區的即時時刻 → 台北當地時間 "HH:mm"（M1 出勤打卡顯示用）。 */
+    /** Point in time in any time zone -> Taipei local time "HH:mm" (for M1 attendance clock-in display). */
     public static String taipeiTimeOfDay(OffsetDateTime instant) {
         return instant.atZoneSameInstant(TAIPEI_ZONE).format(TAIPEI_TIME_FORMAT);
     }

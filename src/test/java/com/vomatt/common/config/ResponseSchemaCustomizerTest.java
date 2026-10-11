@@ -49,7 +49,7 @@ class ResponseSchemaCustomizerTest {
     }
 
     @Test
-    @DisplayName("應該在2xx回應缺少schema時補上完整泛型回傳型別")
+    @DisplayName("should fill in the full generic return type when a 2xx response has no schema")
     void shouldFillSchemaFromGenericReturnTypeWhenMissing() throws Exception {
         Operation op = customizer.customize(operation("200"), handler());
 
@@ -59,7 +59,7 @@ class ResponseSchemaCustomizerTest {
     }
 
     @Test
-    @DisplayName("應該在同時有201時移除通用200")
+    @DisplayName("should remove the generic 200 when a 201 is also present")
     void shouldDropGenericOkWhenCreatedDeclared() throws Exception {
         Operation op = customizer.customize(operation("200", "201"), handler());
 
@@ -68,7 +68,7 @@ class ResponseSchemaCustomizerTest {
     }
 
     @Test
-    @DisplayName("應該把被參照的schema註冊進components")
+    @DisplayName("should register referenced schemas into components")
     void shouldRegisterReferencedSchemasInComponents() throws Exception {
         customizer.customize(operation("200"), handler());
         OpenAPI openApi = new OpenAPI().components(new Components());

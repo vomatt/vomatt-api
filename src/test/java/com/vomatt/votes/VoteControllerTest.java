@@ -84,7 +84,7 @@ class VoteControllerTest {
                 principal, null, AuthorityUtils.createAuthorityList("ROLE_USER")));
     }
 
-    /** 模擬 SecurityConfig：路徑是否落在任一公開白名單（未登入可存取） */
+    /** Mimics SecurityConfig: whether the path matches any public allowlist (accessible without sign-in) */
     private static boolean isPublic(String method, String path) {
         AntPathMatcher matcher = new AntPathMatcher();
         // authenticated sub-paths are matched before PUBLIC_GET
@@ -137,7 +137,7 @@ class VoteControllerTest {
         }
 
         @Test
-        @DisplayName("應該在 status=ended 帶 sort 時回 400")
+        @DisplayName("should return 400 when status=ended is given with sort")
         void shouldRejectSortWhenStatusEnded() throws Exception {
             mockMvc.perform(get("/api/votes").param("status", "ended").param("sort", "newest"))
                     .andExpect(status().isBadRequest())
@@ -181,7 +181,7 @@ class VoteControllerTest {
         @Test
         @DisplayName("Should return 400 when voteId is not a valid UUID")
         void shouldReturn400WhenInvalidUuid() throws Exception {
-            // VoteService 以 UUID.fromString 解析 id，無效字串丟 IllegalArgumentException → 400
+            // VoteService parses id with UUID.fromString; invalid strings throw IllegalArgumentException -> 400
             when(voteService.getVote("not-a-uuid", null))
                     .thenThrow(new IllegalArgumentException("Invalid UUID string: not-a-uuid"));
 
@@ -231,7 +231,7 @@ class VoteControllerTest {
         }
 
         @Test
-        @DisplayName("應該在缺少 endTime 時回傳 400")
+        @DisplayName("should return 400 when endTime is missing")
         void shouldRejectCreateWhenEndTimeMissing() throws Exception {
             authenticate();
 
@@ -289,13 +289,13 @@ class VoteControllerTest {
     class RetractTests {
 
         @Test
-        @DisplayName("撤回需登入：不在任何公開白名單")
+        @DisplayName("withdraw requires sign-in: not in any public allowlist")
         void shouldRequireAuthentication() {
             assertThat(isPublic("DELETE", "/api/votes/abc/vote")).isFalse();
         }
 
         @Test
-        @DisplayName("應該在撤回成功時回傳 200 與 myOptionId 為 null 的 Poll")
+        @DisplayName("should return 200 and Poll with null myOptionId when withdraw succeeds")
         void shouldReturn200WhenRetracted() throws Exception {
             authenticate();
             String voteId = UUID.randomUUID().toString();
@@ -310,7 +310,7 @@ class VoteControllerTest {
         }
 
         @Test
-        @DisplayName("應該在 Poll 已結束時回傳 errorCode vote.ended")
+        @DisplayName("should return errorCode vote.ended when Poll has ended")
         void shouldReturnVoteEndedWhenPollEnded() throws Exception {
             authenticate();
             String voteId = UUID.randomUUID().toString();
@@ -325,7 +325,7 @@ class VoteControllerTest {
     // ─── public vs authenticated vote paths ───────────────────────────────────
 
     @Test
-    @DisplayName("Poll 詳情、結果、留言與回覆公開讀取；/my、投票狀態、投票者清單與留言寫入需登入")
+    @DisplayName("Poll detail, results, comments and replies are publicly readable; /my, vote status, voter list and comment writes require sign-in")
     void shouldExposeOnlyDetailResultsAndCommentReadsPublicly() {
         String id = UUID.randomUUID().toString();
         assertThat(isPublic("GET", "/api/votes/" + id)).isTrue();
@@ -341,7 +341,7 @@ class VoteControllerTest {
     }
 
     @Test
-    @DisplayName("PUBLIC_GET 本身不放行具名子路徑，不依賴 AUTHENTICATED_VOTES 排在前面")
+    @DisplayName("PUBLIC_GET alone does not permit named sub-paths, without relying on AUTHENTICATED_VOTES ordering first")
     void shouldKeepNamedVoteRoutesAuthenticated() {
         // Spring Security 7 matches with PathPatternParser
         PathPatternParser parser = PathPatternParser.defaultInstance;

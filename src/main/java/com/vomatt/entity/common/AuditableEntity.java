@@ -11,7 +11,7 @@ import lombok.experimental.SuperBuilder;
 import java.time.OffsetDateTime;
 
 /**
- * 需要 updated_at 的 Entity 基底類別，繼承 BaseEntity。 updated_at 建立時等於 created_at，之後每次更新時刷新。
+ * Base class for entities that need updated_at; extends BaseEntity. updated_at equals created_at on creation and is refreshed on every update.
  */
 @Getter
 @SuperBuilder

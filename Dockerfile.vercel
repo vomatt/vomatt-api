@@ -1,5 +1,5 @@
-# Vercel Container Images（Beta）：Vercel 偵測到此檔會自動 build、推到 VCR 並以 Fluid compute 執行
-# 本地驗證：docker build -f Dockerfile.vercel -t vomatt-api .
+# Vercel Container Images (Beta): when Vercel detects this file it builds the image, pushes it to VCR, and runs it on Fluid compute
+# Local check: docker build -f Dockerfile.vercel -t vomatt-api .
 
 # ---- build ----
 FROM eclipse-temurin:25-jdk AS build
@@ -15,10 +15,10 @@ RUN ./mvnw -q -B package -DskipTests \
 FROM eclipse-temurin:25-jre
 WORKDIR /app
 COPY --from=build /app ./
-# Vercel 冷啟動時 CPU 很少：C1-only JIT + AOT cache（JEP 514）縮短啟動時間
+# Vercel cold starts get little CPU: C1-only JIT + AOT cache (JEP 514) shorten startup
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
-# AOT cache 訓練：啟動到 context refresh 即結束；啟動期不連 DB / Redis，只需佔位環境變數
+# AOT cache training: exits once the context refreshes; startup does not connect to DB / Redis, so placeholder env vars are enough
 RUN DB_URL=jdbc:postgresql://localhost/x DB_PASSWORD=x JWT_SECRET=aot-training-placeholder-secret-0123456789 \
     java -XX:AOTCacheOutput=app.aot -Dspring.context.exit=onRefresh -jar vomatt-api-0.0.1-SNAPSHOT.jar
-# Vercel 預設把流量送到 port 80，可用專案環境變數 PORT 覆寫
+# Vercel routes traffic to port 80 by default; override with the project env var PORT
 CMD ["sh", "-c", "exec java -XX:AOTCache=app.aot -Dserver.port=${PORT:-80} -jar vomatt-api-0.0.1-SNAPSHOT.jar"]

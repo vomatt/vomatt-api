@@ -38,18 +38,18 @@ public class AuthService {
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    // P6-#21：Jackson 3 的 JsonMapper/ObjectMapper 為 thread-safe，應以單例重用
-    // （每次 build 會重建 serializer/deserializer 快取，浪費資源）。Apple 登入解析
-    // JWT header / payload 共用此單例。
+    // P6-#21: Jackson 3 JsonMapper/ObjectMapper is thread-safe and should be reused as a singleton
+    // (each build recreates the serializer/deserializer caches, which is wasteful). Apple login
+    // shares this singleton for parsing the JWT header / payload.
     private static final tools.jackson.databind.json.JsonMapper JSON_MAPPER =
             tools.jackson.databind.json.JsonMapper.builder().build();
 
-    // P6-#21：Apple JWKS 短 TTL 記憶體快取，避免每次 Apple 登入都重新打 JWKS endpoint。
-    // 自包含於 AuthService（不引入 Redis）；以 volatile holder + 時間戳實作，讀多寫少場景下
-    // 偶發重複抓取可接受（不需鎖）。
+    // P6-#21: short-TTL in-memory cache for Apple JWKS, so each Apple login does not hit the JWKS endpoint.
+    // Self-contained in AuthService (no Redis); implemented as a volatile holder + timestamp. With mostly
+    // reads and rare writes, an occasional duplicate fetch is acceptable (no lock needed).
     private static final Duration APPLE_JWKS_CACHE_TTL = Duration.ofMinutes(10);
 
-    /** Apple JWKS 快取 holder：keys 為已解析的公鑰清單，fetchedAt 為抓取時間。 */
+    /** Apple JWKS cache holder: keys is the parsed public key list, fetchedAt is the fetch time. */
     private record AppleJwksCache(List<java.util.Map<String, Object>> keys, Instant fetchedAt) {
         boolean isFresh() {
             return Duration.between(fetchedAt, Instant.now()).compareTo(APPLE_JWKS_CACHE_TTL) < 0;
@@ -161,15 +161,15 @@ public class AuthService {
     public AuthResponse verifyOtp(String email, String phone, String code, boolean checkRole) {
         if (email != null && !email.isBlank()) {
             String normalizedEmail = email.toLowerCase().trim();
-            // P5-#13：admin 登入流程的角色檢查必須在「消耗 OTP / 建帳號 / 寄歡迎信」之前完成。
-            // 否則非 admin 嘗試會先把 OTP 燒掉、自動建帳號、寄信，最後才回 403。
+            // P5-#13: the admin login role check must run before "consume OTP / create account / send welcome email".
+            // Otherwise a non-admin attempt would burn the OTP, auto-create an account and send an email before returning 403.
             if (checkRole) {
                 requireExistingAdminByEmail(normalizedEmail);
             }
             return verifyEmailOtp(normalizedEmail, code);
         } else if (phone != null && !phone.isBlank()) {
             String normalizedPhone = phone.trim();
-            // P5-#13：phone 路徑同樣須在消耗 OTP 前驗角色（雙路徑皆涵蓋）。
+            // P5-#13: the phone path must also check the role before consuming the OTP (both paths covered).
             if (checkRole) {
                 requireExistingAdminByPhone(normalizedPhone);
             }
@@ -180,8 +180,8 @@ public class AuthService {
     }
 
     /**
-     * P5-#13：要求 email 對應的既有帳號存在且為 ADMIN，否則拋 403。
-     * 在 {@link #consumeOtp} 之前呼叫，確保被拒絕的 admin 嘗試不會消耗 OTP、不會建帳號、不會寄信。
+     * P5-#13: requires an existing account for the email with the ADMIN role; otherwise throws 403.
+     * Called before {@link #consumeOtp} so a rejected admin attempt does not consume the OTP, create an account or send email.
      */
     private void requireExistingAdminByEmail(String normalizedEmail) {
         userRepository.findByEmail(normalizedEmail)
@@ -189,7 +189,7 @@ public class AuthService {
                 .orElseThrow(() -> ApiException.forbidden(MessageKey.AUTH_ADMIN_FORBIDDEN));
     }
 
-    /** P5-#13：phone 版的既有 ADMIN 帳號檢查，語意同 {@link #requireExistingAdminByEmail}。 */
+    /** P5-#13: phone variant of the existing ADMIN account check; same semantics as {@link #requireExistingAdminByEmail}. */
     private void requireExistingAdminByPhone(String normalizedPhone) {
         userRepository.findByPhoneNumber(normalizedPhone)
                 .filter(u -> List.of(u.getRoles()).contains(UserRole.ADMIN))
@@ -200,14 +200,14 @@ public class AuthService {
         OtpRecord otp = consumeOtp(OTP_EMAIL_NS, normalizedEmail, code);
 
         String defaultName = "signup".equals(otp.type()) ? normalizedEmail.split("@")[0] : "";
-        // 使用者已透過 OTP 證明掌握該 email → 視為已驗證
+        // The user proved ownership of the email via OTP -> treat as verified
         User user = findOrCreateUserByEmail(normalizedEmail, defaultName, "email_otp", true);
 
         if ("signup".equals(otp.type())) {
             try {
                 emailService.sendWelcomeEmail(normalizedEmail, user.getDisplayName());
             } catch (Exception ex) {
-                log.warn("歡迎信發送失敗: {}", ex.getMessage());
+                log.warn("Failed to send welcome email: {}", ex.getMessage());
             }
         }
 
@@ -222,7 +222,7 @@ public class AuthService {
 
     private static final int MAX_OTP_ATTEMPTS = 5;
 
-    /** 失敗計數 counter 的 namespace 後綴；與 OTP 同 key、原子 INCR（P1-#7）。 */
+    /** Namespace suffix for the failure counter; same key as the OTP, atomic INCR (P1-#7). */
     private static final String OTP_FAIL_SUFFIX = ":fail";
 
     private OtpRecord consumeOtp(String namespace, String key, String code) {
@@ -232,19 +232,19 @@ public class AuthService {
             throw ApiException.unauthorized(MessageKey.AUTH_OTP_INVALID_OR_EXPIRED);
         }
 
-        // P5-#19：常數時間比對，避免以早退（short-circuit）洩漏 OTP 前綴的 timing side-channel。
-        // MessageDigest.isEqual 在長度相同時逐 byte 比對且不早退；長度不同時雖會早退，但 OTP 為固定 6 碼。
+        // P5-#19: constant-time comparison so a short-circuit does not leak the OTP prefix via a timing side-channel.
+        // MessageDigest.isEqual compares every byte without early exit when lengths match; it exits early on a length mismatch, but the OTP is always 6 digits.
         boolean codeMatches = MessageDigest.isEqual(
                 rec.code().getBytes(StandardCharsets.UTF_8),
                 code.getBytes(StandardCharsets.UTF_8));
         if (!codeMatches) {
-            // P1-#7：失敗計數以獨立 counter 原子 INCR，避免「get→比對→set」並發互相覆蓋而繞過上限。
-            // TTL 對齊 OTP 剩餘壽命（至少 1 秒），OTP 到期計數一併到期。
+            // P1-#7: failures are counted with a separate atomic INCR counter, so concurrent "get -> compare -> set" cannot overwrite each other and bypass the limit.
+            // TTL matches the OTP's remaining lifetime (at least 1 second), so the counter expires with the OTP.
             String failNs = namespace + OTP_FAIL_SUFFIX;
             long remainingSeconds = otpTtlSeconds - Duration.between(rec.createdAt(), Instant.now()).getSeconds();
             long fails = redisService.incrementAndExpire(failNs, key, Duration.ofSeconds(Math.max(remainingSeconds, 1)));
             if (fails >= MAX_OTP_ATTEMPTS) {
-                // 達上限：刪除 OTP 與計數，使後續嘗試一律失效（含正確碼）
+                // Limit reached: delete the OTP and counter so all later attempts fail (including the correct code)
                 redisService.delete(namespace, key);
                 redisService.delete(failNs, key);
                 throw ApiException.unauthorized(MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS);
@@ -295,7 +295,7 @@ public class AuthService {
         String name = (String) response.getOrDefault("name", "");
         String picture = (String) response.get("picture");
 
-        // Google tokeninfo 的 email_verified 多回字串 "true"/"false"，少數情況回布林；穩健解析
+        // Google tokeninfo usually returns email_verified as the string "true"/"false", occasionally as a boolean; parse defensively
         boolean emailVerified = "true".equals(String.valueOf(response.get("email_verified")));
 
         User user = findOrCreateUserByEmail(email.toLowerCase().trim(), name, "google", emailVerified);
@@ -369,8 +369,8 @@ public class AuthService {
         String displayName = (String) lineProfile.getOrDefault("displayName", "");
         String pictureUrl = (String) lineProfile.get("pictureUrl");
 
-        // LINE 只在 email 已驗證時才於 verify endpoint 回傳 email；找不到時合成的
-        // line_<userId>@line.oauth 為唯一、非攻擊者可指定的受害者真實 email → 兩種情況皆視為安全已驗證
+        // LINE's verify endpoint only returns the email when it is verified; otherwise the synthesized
+        // line_<userId>@line.oauth is unique and cannot be set by an attacker to a victim's real email -> both cases are safely treated as verified
         User user = findOrCreateUserByEmail(email.toLowerCase().trim(), displayName, "line", true);
         if (pictureUrl != null && user.getAvatarUrl() == null) {
             user.setAvatarUrl(pictureUrl);
@@ -383,8 +383,8 @@ public class AuthService {
 
     @SuppressWarnings("unchecked")
     public AuthResponse appleLogin(String idToken, String fullName) {
-        // P6-#16：JWKS 取得（外部呼叫 + null 防護 + 5xx/連線失敗分類）獨立於 try 之外，
-        // 確保「Apple/網路故障」拋出的 503 外部錯誤不會被下方寬鬆 catch 吃掉、誤報為 401 登入失敗。
+        // P6-#16: JWKS fetching (external call + null guard + 5xx/connection failure classification) stays outside the try,
+        // so a 503 external error from an Apple/network failure is not swallowed by the broad catch below and misreported as a 401 login failure.
         List<java.util.Map<String, Object>> keys = fetchAppleJwks();
 
         try {
@@ -395,7 +395,7 @@ public class AuthService {
             byte[] headerBytes = java.util.Base64.getUrlDecoder().decode(parts[0]);
             var headerMap = JSON_MAPPER.readValue(headerBytes, java.util.Map.class);
             String kid = (String) headerMap.get("kid");
-            // P6-#16：header 無 kid → 無法定位公鑰，屬無效 token（憑證問題）→ 401。
+            // P6-#16: no kid in the header -> cannot locate the public key; invalid token (credential problem) -> 401.
             if (kid == null)
                 throw ApiException.unauthorized(MessageKey.AUTH_APPLE_INVALID_TOKEN);
 
@@ -432,20 +432,21 @@ public class AuthService {
                 throw ApiException.unauthorized(MessageKey.AUTH_APPLE_TOKEN_EXPIRED);
             }
 
-            // TODO(apple-nonce): 完整 anti-replay 需「後端發 nonce → 存 Redis → client 帶給 Apple
-            //   → Apple 在 id_token 回傳 nonce → 後端於此比對並消費」。目前 controller/DTO 尚無 nonce
-            //   發放流程，整套 nonce store 基礎設施超出本批範圍。此處先預留比對點：若 payload 含 nonce
-            //   則記錄，待 client 與 nonce store 就緒後改為強制比對。本批以 email_verified 為實際堵漏重點。
+            // TODO(apple-nonce): full anti-replay needs "backend issues nonce -> store in Redis -> client passes it to Apple
+            //   -> Apple returns the nonce in id_token -> backend compares and consumes it here". The controller/DTO has no
+            //   nonce issuing flow yet, and the nonce store infrastructure is out of scope for this batch. This is a placeholder
+            //   check: if the payload contains a nonce, log it; enforce the comparison once the client and nonce store are ready.
+            //   This batch relies on email_verified as the actual fix.
             Object nonce = payload.get("nonce");
             if (nonce != null) {
-                log.debug("Apple id_token 含 nonce，待 nonce store 就緒後比對（目前僅預留）");
+                log.debug("Apple id_token contains a nonce; it will be checked once the nonce store is ready (placeholder only)");
             }
 
             String email = (String) payload.get("email");
             if (email == null)
                 throw ApiException.unauthorized(MessageKey.AUTH_APPLE_NO_EMAIL);
 
-            // Apple id_token 的 email_verified 多回字串 "true"，少數情況回布林 true；穩健解析
+            // Apple id_token usually returns email_verified as the string "true", occasionally as boolean true; parse defensively
             boolean emailVerified = "true".equals(String.valueOf(payload.get("email_verified")));
 
             User user = findOrCreateUserByEmail(email.toLowerCase().trim(),
@@ -461,18 +462,18 @@ public class AuthService {
     }
 
     /**
-     * 取得並快取 Apple 公鑰清單（JWKS）。
+     * Fetches and caches Apple's public key list (JWKS).
      *
-     * <p>P6-#16 / P6-#21：</p>
+     * <p>P6-#16 / P6-#21:</p>
      * <ul>
-     *   <li><b>快取</b>：命中且未過期（10 分鐘 TTL）則直接回傳，避免每次 Apple 登入都重打 JWKS endpoint。</li>
-     *   <li><b>外部故障分類</b>：與 Apple JWKS endpoint 溝通時的 5xx / 連線失敗（皆為
-     *       {@link RestClientException} 子類，含 {@code HttpServerErrorException}、{@code ResourceAccessException}）
-     *       → 拋 503 {@link MessageKey#COMMON_SERVICE_UNAVAILABLE}，<b>不</b>誤報為 401 登入失敗。</li>
-     *   <li><b>null 防護</b>：回應 body 為 null、{@code keys} 為 null 或空 → 同視為上游回應異常 → 503。</li>
+     *   <li><b>Cache</b>: returns directly on a fresh hit (10-minute TTL), so each Apple login does not hit the JWKS endpoint.</li>
+     *   <li><b>External failure classification</b>: 5xx / connection failures talking to the Apple JWKS endpoint (all
+     *       {@link RestClientException} subclasses, including {@code HttpServerErrorException}, {@code ResourceAccessException})
+     *       -> throw 503 {@link MessageKey#COMMON_SERVICE_UNAVAILABLE}, <b>not</b> misreported as a 401 login failure.</li>
+     *   <li><b>Null guard</b>: a null response body, or null or empty {@code keys} -> treated as an abnormal upstream response -> 503.</li>
      * </ul>
      *
-     * @return 已解析、非空的公鑰清單
+     * @return the parsed, non-empty public key list
      */
     @SuppressWarnings("unchecked")
     private List<java.util.Map<String, Object>> fetchAppleJwks() {
@@ -485,19 +486,19 @@ public class AuthService {
         try {
             jwks = restClient.get().uri(appleJwksUrl).retrieve().body(java.util.Map.class);
         } catch (RestClientException ex) {
-            // Apple JWKS endpoint 5xx / 連線逾時 / DNS 失敗 → 上游/外部服務故障，可重試（503），非憑證問題
-            log.warn("Apple JWKS 取得失敗（外部服務）：{}", ex.getMessage());
+            // Apple JWKS endpoint 5xx / connection timeout / DNS failure -> upstream/external service failure, retryable (503), not a credential problem
+            log.warn("Failed to fetch Apple JWKS (external service): {}", ex.getMessage());
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
         }
 
         if (jwks == null || jwks.get("keys") == null) {
-            log.warn("Apple JWKS 回應異常：body 或 keys 為 null");
+            log.warn("Abnormal Apple JWKS response: body or keys is null");
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
         }
 
         List<java.util.Map<String, Object>> keys = (List<java.util.Map<String, Object>>) jwks.get("keys");
         if (keys.isEmpty()) {
-            log.warn("Apple JWKS 回應異常：keys 為空");
+            log.warn("Abnormal Apple JWKS response: keys is empty");
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
         }
 
@@ -508,21 +509,21 @@ public class AuthService {
     // ── Shared ────────────────────────────────────────────────────────
 
     /**
-     * 依 email 找出或建立 User。
+     * Finds or creates a User by email.
      *
-     * <p>{@code emailVerified} 是防帳號接管（account takeover）的關鍵閘門：</p>
+     * <p>{@code emailVerified} is the key gate against account takeover:</p>
      * <ul>
-     *   <li><b>已驗證</b>（true）：OAuth provider 已為此 email 背書（或使用者已透過 OTP
-     *       證明掌握該 email），合併到既有帳號或建立新帳號皆安全 → 維持 find-or-create。</li>
-     *   <li><b>未驗證</b>（false）：攻擊者可在 OAuth provider 任意設定受害者 email，
-     *       <b>不得</b>合併到既有帳號，也<b>不得</b>建立新帳號，直接拋
-     *       {@link MessageKey#AUTH_EMAIL_NOT_VERIFIED}。</li>
+     *   <li><b>Verified</b> (true): the OAuth provider vouches for this email (or the user proved ownership
+     *       via OTP), so merging into an existing account or creating a new one is safe -> find-or-create.</li>
+     *   <li><b>Unverified</b> (false): an attacker can set a victim's email at the OAuth provider, so we
+     *       <b>must not</b> merge into an existing account nor create a new one; throw
+     *       {@link MessageKey#AUTH_EMAIL_NOT_VERIFIED}.</li>
      * </ul>
      */
     @Transactional
     User findOrCreateUserByEmail(String email, String fullName, String authMethod, boolean emailVerified) {
         if (!emailVerified) {
-            // email 未經 provider 驗證 → 拒絕合併或建立，避免帳號接管
+            // Email not verified by the provider -> refuse to merge or create, preventing account takeover
             throw ApiException.unauthorized(MessageKey.AUTH_EMAIL_NOT_VERIFIED);
         }
         return userRepository.findByEmail(email).orElseGet(() -> {
@@ -550,7 +551,7 @@ public class AuthService {
     }
 
     /**
-     * 由 email local part（或固定前綴）產生唯一 username：只保留 [a-z0-9_]，最長 40 字，後綴 4 碼亂數避開撞名。
+     * Generates a unique username from the email local part (or a fixed prefix): keeps only [a-z0-9_], at most 40 chars, plus a 4-digit random suffix to avoid collisions.
      */
     private String generateUsername(String seed) {
         String base = seed.toLowerCase().replaceAll("[^a-z0-9_]", "");
@@ -564,7 +565,7 @@ public class AuthService {
     }
 
     public AuthResponse buildAuthResponse(User user) {
-        // 封禁檢查：四條登入路徑（OTP/Google/LINE/Apple、phone）皆 funnel 經此，集中阻擋
+        // Ban check: all login paths (OTP/Google/LINE/Apple, phone) funnel through here, so they are blocked in one place
         if (!user.isActive()) {
             throw ApiException.forbidden(MessageKey.AUTH_ACCOUNT_BANNED);
         }

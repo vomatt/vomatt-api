@@ -109,7 +109,7 @@ class UserProfileVisibilityTest {
     class GetMyProfileTests {
 
         @Test
-        @DisplayName("應該回傳認證使用者的所有欄位")
+        @DisplayName("should return all fields for authenticated user")
         void shouldReturnAllFieldsForMyProfile() {
             // Given
             User user = createTestUser();
@@ -144,7 +144,7 @@ class UserProfileVisibilityTest {
         }
 
         @Test
-        @DisplayName("應該在未設定時將顯示名稱與簡介預設為公開、其餘預設隱藏")
+        @DisplayName("should default display name and bio to public and others to hidden when unset")
         void shouldShowDisplayNameAndBioByDefault() {
             // Given
             User user = createTestUser();
@@ -163,7 +163,7 @@ class UserProfileVisibilityTest {
         }
 
         @Test
-        @DisplayName("應該在使用者隱藏顯示名稱後回報為隱藏")
+        @DisplayName("should report display name as hidden after user hides it")
         void shouldHideDisplayNameWhenConfigured() {
             // Given
             User user = createTestUser();
@@ -181,14 +181,14 @@ class UserProfileVisibilityTest {
         }
     }
 
-    // ─── getUserProfile（公開）─────────────────────────────────────────────────
+    // ─── getUserProfile (public)─────────────────────────────────────────────────
 
     @Nested
-    @DisplayName("getUserProfile - 公開查詢")
+    @DisplayName("getUserProfile - public lookup")
     class GetUserProfileTests {
 
         @Test
-        @DisplayName("應該在所有欄位隱藏時回傳 null")
+        @DisplayName("should return null when all fields are hidden")
         void shouldReturnOnlyBaseFieldsWhenAllHidden() {
             // Given
             UserProfileProjection projection = createTestProjection();
@@ -220,7 +220,7 @@ class UserProfileVisibilityTest {
         }
 
         @Test
-        @DisplayName("應該在使用者已停權時回 404")
+        @DisplayName("should return 404 when user is suspended")
         void shouldReturnNotFoundWhenUserSuspended() {
             when(userRepository.findProfileByUsername(USERNAME)).thenReturn(Optional.of(createTestProjection(false)));
 
@@ -233,7 +233,7 @@ class UserProfileVisibilityTest {
         }
 
         @Test
-        @DisplayName("應該在設定 visibility.email=true 後顯示 email")
+        @DisplayName("should show email after visibility.email=true is set")
         void shouldReturnVisibleFieldsWhenConfigured() {
             // Given
             UserProfileProjection projection = createTestProjection();
@@ -261,14 +261,14 @@ class UserProfileVisibilityTest {
         }
     }
 
-    // ─── UserMapper 實際遮罩行為 ────────────────────────────────────────────────
+    // ─── UserMapper actual masking behavior ────────────────────────────────────────────────
 
     @Nested
     @DisplayName("UserMapper.toPublicProfileResponse")
     class MapperMaskingTests {
 
         @Test
-        @DisplayName("應該只輸出 visibility=true 的欄位，其餘為 null")
+        @DisplayName("should output only visibility=true fields and null for the rest")
         void shouldMaskHiddenFields() {
             UserProfileResponse result = new UserMapper().toPublicProfileResponse(
                     createTestProjection(), Map.of("email", true, "points", true));
@@ -284,11 +284,11 @@ class UserProfileVisibilityTest {
     }
 
     @Nested
-    @DisplayName("UserMapper.toPublicProfileResponse - 顯示名稱與簡介")
+    @DisplayName("UserMapper.toPublicProfileResponse - display name and bio")
     class MapperDisplayNameBioTests {
 
         @Test
-        @DisplayName("應該在顯示名稱與簡介設為隱藏時回傳 null")
+        @DisplayName("should return null when display name and bio are hidden")
         void shouldHideDisplayNameAndBioWhenHidden() {
             UserProfileResponse result = new UserMapper().toPublicProfileResponse(
                     createTestProjection(), Map.of("displayName", false, "bio", false));
@@ -299,7 +299,7 @@ class UserProfileVisibilityTest {
         }
 
         @Test
-        @DisplayName("應該在顯示名稱與簡介設為公開時回傳原值")
+        @DisplayName("should return original values when display name and bio are public")
         void shouldShowDisplayNameAndBioWhenVisible() {
             UserProfileResponse result = new UserMapper().toPublicProfileResponse(
                     createTestProjection(), Map.of("displayName", true, "bio", true));
@@ -316,7 +316,7 @@ class UserProfileVisibilityTest {
     class UpdateVisibilityTests {
 
         @Test
-        @DisplayName("應該成功更新顯示設定")
+        @DisplayName("should update visibility settings")
         void shouldUpdateVisibilitySettings() {
             // Given
             User user = createTestUser();
@@ -326,7 +326,7 @@ class UserProfileVisibilityTest {
             when(preferenceRepository.save(any(UserPreference.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
 
-            // 更新後查詢返回新設定
+            // query after update returns the new settings
             UserPreference savedPref = createPref("visibility.email", "true");
             when(preferenceRepository.findByUserIdAndKeyStartingWith(USER_UUID, "visibility."))
                     .thenReturn(List.of(savedPref));
@@ -341,7 +341,7 @@ class UserProfileVisibilityTest {
         }
 
         @Test
-        @DisplayName("應該忽略未知的欄位名稱")
+        @DisplayName("should ignore unknown field names")
         void shouldIgnoreUnknownVisibilityFields() {
             // Given
             User user = createTestUser();
@@ -353,9 +353,9 @@ class UserProfileVisibilityTest {
             Map<String, Boolean> result = userService.updateVisibility(
                     USER_ID, Map.of("unknownField", true, "anotherBad", false));
 
-            // Then — 未知欄位不會寫入
+            // Then — unknown fields are not written
             verify(preferenceRepository, never()).save(any(UserPreference.class));
-            // 所有已知欄位預設為 false
+            // all known fields default to false
             assertThat(result).containsEntry("email", false);
             assertThat(result).containsEntry("firstName", false);
             assertThat(result).doesNotContainKeys("unknownField", "anotherBad");
@@ -369,7 +369,7 @@ class UserProfileVisibilityTest {
     class VisibilityFieldTests {
 
         @Test
-        @DisplayName("應該正確生成偏好設定 key")
+        @DisplayName("should generate preference key correctly")
         void shouldGenerateCorrectPreferenceKey() {
             assertThat(VisibilityField.EMAIL.preferenceKey()).isEqualTo("visibility.email");
             assertThat(VisibilityField.FIRST_NAME.preferenceKey()).isEqualTo("visibility.firstName");
@@ -377,14 +377,14 @@ class UserProfileVisibilityTest {
         }
 
         @Test
-        @DisplayName("應該從欄位名稱查找列舉值")
+        @DisplayName("should look up enum value from field name")
         void shouldFindByFieldName() {
             assertThat(VisibilityField.fromFieldName("email")).contains(VisibilityField.EMAIL);
             assertThat(VisibilityField.fromFieldName("unknown")).isEmpty();
         }
 
         @Test
-        @DisplayName("應該從偏好 key 解析欄位名稱")
+        @DisplayName("should parse field name from preference key")
         void shouldExtractFieldName() {
             assertThat(VisibilityField.extractFieldName("visibility.email")).isEqualTo("email");
             assertThat(VisibilityField.extractFieldName("noprefix")).isEqualTo("noprefix");

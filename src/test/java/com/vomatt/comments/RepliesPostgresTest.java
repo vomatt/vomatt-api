@@ -70,7 +70,7 @@ class RepliesPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該在回覆「回覆」時掛到同一則頂層留言下")
+    @DisplayName("should attach to the same top-level comment when replying to a reply")
     void shouldAttachReplyToRootWhenReplyingToReply() {
         CommentDto root = post("root", null);
         CommentDto reply = post("reply", root.getId());
@@ -83,7 +83,7 @@ class RepliesPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該讓回覆依舊到新分頁")
+    @DisplayName("should paginate replies from oldest to newest")
     void shouldListRepliesOldestFirst() {
         CommentDto root = post("root", null);
         for (int i = 0; i < 5; i++) {
@@ -94,7 +94,7 @@ class RepliesPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該在刪除有回覆的留言時保留佔位，回覆全刪後佔位消失")
+    @DisplayName("should keep a placeholder when a comment with replies is deleted, and drop it once all replies are deleted")
     void shouldKeepPlaceholderWhenDeletedCommentHasReplies() {
         CommentDto root = post("root", null);
         CommentDto reply = post("reply", root.getId());
@@ -113,7 +113,7 @@ class RepliesPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該讓 commentCount 含回覆、不含已刪除")
+    @DisplayName("should count replies but not deleted comments in commentCount")
     void shouldCountRepliesInCommentCount() {
         CommentDto root = post("root", null);
         post("reply", root.getId());
@@ -125,7 +125,7 @@ class RepliesPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該拒絕回覆其他 Poll 的留言")
+    @DisplayName("should reject replying to a comment from another Poll")
     void shouldRejectReplyToCommentOfAnotherPoll() {
         Vote other = persistPoll(user, OffsetDateTime.now().minusHours(1), OffsetDateTime.now().plusDays(1), "X", "Y");
         em.flush();

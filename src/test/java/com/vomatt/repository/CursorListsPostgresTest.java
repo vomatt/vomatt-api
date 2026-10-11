@@ -41,7 +41,7 @@ class CursorListsPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該讓留言依新到舊分頁、不含已刪除、不重複")
+    @DisplayName("should paginate comments newest first, excluding deleted, without duplicates")
     void shouldPageCommentsNewestFirstWithoutDeleted() {
         User user = persistUser("cl-" + UUID.randomUUID());
         OffsetDateTime now = OffsetDateTime.now();
@@ -66,7 +66,7 @@ class CursorListsPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該讓使用者搜尋依 username 分頁且不重複")
+    @DisplayName("should paginate user search by username without duplicates")
     void shouldPageUserSearchByUsername() {
         String marker = "us" + System.nanoTime();
         for (String suffix : List.of("d", "a", "c", "b", "e")) {
@@ -83,7 +83,7 @@ class CursorListsPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該讓熱門標籤依使用次數分頁，同分時不重複也不遺漏")
+    @DisplayName("should paginate popular tags by usage count with no duplicates or gaps on ties")
     void shouldPagePopularTagsWithTies() {
         List<UUID> ids = new ArrayList<>();
         int[] usage = { 5, 3, 3, 3, 1 };

@@ -53,7 +53,7 @@ class UserPollsPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該列出使用者的 Open 與 Ended Poll，排除 Scheduled 與開放前就取消的，依開放時間新到舊")
+    @DisplayName("should list user's Open and Ended Polls, excluding Scheduled and cancelled-before-open, by start time newest first")
     void shouldListUserPollsExcludingScheduled() {
         poll(owner, "open", now.minusHours(1), now.plusDays(1));
         poll(owner, "ended", now.minusDays(3), now.minusDays(1));
@@ -66,7 +66,7 @@ class UserPollsPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該以 cursor 分頁且不重複")
+    @DisplayName("should paginate by cursor without duplicates")
     void shouldPageWithCursor() {
         poll(owner, "newest", now.minusHours(1), now.plusDays(1));
         poll(owner, "middle", now.minusHours(2), now.plusDays(1));
@@ -81,7 +81,7 @@ class UserPollsPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該在使用者已停權時回 404")
+    @DisplayName("should return 404 when user is suspended")
     void shouldReturnNotFoundWhenUserSuspended() {
         poll(owner, "open", now.minusHours(1), now.plusDays(1));
         owner.setActive(false);
@@ -94,7 +94,7 @@ class UserPollsPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該在使用者不存在時回 404")
+    @DisplayName("should return 404 when user does not exist")
     void shouldReturnNotFoundWhenUserMissing() {
         assertThatThrownBy(() -> voteService.getUserPolls("nobody-" + System.nanoTime(), null, null, null))
                 .isInstanceOfSatisfying(ApiException.class, ex -> {

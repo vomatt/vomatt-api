@@ -13,7 +13,7 @@ import com.vomatt.common.i18n.MessageKey;
 class VoteListOrderTest {
 
     @Test
-    @DisplayName("應該預設為 open + newest")
+    @DisplayName("should default to open + newest")
     void shouldDefaultToOpenNewest() {
         assertThat(VoteListOrder.of(null, null)).isEqualTo(VoteListOrder.NEWEST);
         assertThat(VoteListOrder.of("open", "closing")).isEqualTo(VoteListOrder.CLOSING);
@@ -21,7 +21,7 @@ class VoteListOrderTest {
     }
 
     @Test
-    @DisplayName("應該在 status=ended 帶 sort 時拒絕")
+    @DisplayName("should reject when status=ended is given with sort")
     void shouldRejectSortWhenStatusEnded() {
         assertThatThrownBy(() -> VoteListOrder.of("ended", "closing"))
                 .isInstanceOfSatisfying(ApiException.class,
@@ -29,7 +29,7 @@ class VoteListOrderTest {
     }
 
     @Test
-    @DisplayName("應該拒絕未知的 status 與 sort（含 scheduled）")
+    @DisplayName("should reject unknown status and sort (including scheduled)")
     void shouldRejectUnknownValues() {
         assertThatThrownBy(() -> VoteListOrder.of("scheduled", null))
                 .isInstanceOfSatisfying(ApiException.class,

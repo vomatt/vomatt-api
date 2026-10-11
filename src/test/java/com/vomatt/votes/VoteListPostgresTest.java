@@ -69,7 +69,7 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該讓 Feed 只含 Open Poll，依開放時間新到舊，不含 Scheduled 與 Ended")
+    @DisplayName("should include only Open Polls in Feed, by start time newest first, excluding Scheduled and Ended")
     void shouldExcludeScheduledFromExplore() {
         poll("old-open", now.minusDays(3), now.plusDays(1));
         poll("new-open", now.minusHours(1), now.plusDays(5));
@@ -81,7 +81,7 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該讓 closing 依結束時間由近到遠")
+    @DisplayName("should sort closing by end time soonest first")
     void shouldOrderByClosingSoonest() {
         poll("closes-late", now.minusDays(1), now.plusDays(9));
         poll("closes-soon", now.minusDays(1), now.plusHours(2));
@@ -90,7 +90,7 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該讓 Ended 依結束時間新到舊")
+    @DisplayName("should sort Ended by end time newest first")
     void shouldOrderEndedByMostRecentlyEnded() {
         poll("ended-long-ago", now.minusDays(9), now.minusDays(5));
         poll("ended-recently", now.minusDays(9), now.minusHours(1));
@@ -100,7 +100,7 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該在 cursor 分頁時不重複也不遺漏（含相同排序鍵）")
+    @DisplayName("should paginate by cursor without duplicates or gaps (including equal sort keys)")
     void shouldNotRepeatItemsAcrossCursorPages() {
         OffsetDateTime sameStart = now.minusHours(2);
         List<String> expected = new ArrayList<>();
@@ -114,7 +114,7 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該在列表項目附上 myOptionId、participantCount 與 commentCount（含回覆、不含已刪除）")
+    @DisplayName("should attach myOptionId, participantCount and commentCount to list items (including replies, excluding deleted)")
     void shouldAttachSelectionTurnoutAndCommentCount() {
         Vote voted = poll("voted", now.minusHours(1), now.plusDays(1));
         poll("untouched", now.minusHours(2), now.plusDays(1));
@@ -144,7 +144,7 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該讓每頁查詢數固定，不隨筆數成長")
+    @DisplayName("should keep query count per page constant regardless of row count")
     void shouldUseConstantQueriesPerPage() {
         User voter = persistUser("list-q-" + System.nanoTime());
         for (int i = 0; i < 12; i++) {
@@ -174,7 +174,7 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該以兩字中文搜尋題目與描述，不比對選項文字")
+    @DisplayName("should search title and description with two-character Chinese query, not option text")
     void shouldFindPollsByTwoCharacterChineseQuery() {
         poll("今天午餐吃什麼", now.minusHours(1), now.plusDays(1));
         Vote byDescription = poll("週末計畫", now.minusHours(2), now.plusDays(1));
@@ -187,7 +187,7 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該忽略大小寫，且搜尋已結束的 Poll 時依結束時間排序")
+    @DisplayName("should ignore case and sort by end time when searching Ended Polls")
     void shouldSearchEndedPollsCaseInsensitively() {
         poll("Best IDE ever", now.minusDays(3), now.minusDays(2));
         poll("which ide now", now.minusDays(3), now.minusHours(1));
@@ -197,7 +197,7 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該把 % 與 _ 當成一般字元")
+    @DisplayName("should treat % and _ as literal characters")
     void shouldEscapeLikeWildcardsInQuery() {
         poll("100% sure", now.minusHours(1), now.plusDays(1));
         poll("1000 sure", now.minusHours(2), now.plusDays(1));
@@ -209,7 +209,7 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該拒絕少於 2 個字的搜尋字串")
+    @DisplayName("should reject search query shorter than 2 characters")
     void shouldRejectQueryShorterThanTwoChars() {
         assertThatThrownBy(() -> voteService.listVotes(VoteListOrder.NEWEST, null, "午", null, null, null))
                 .isInstanceOfSatisfying(ApiException.class,
@@ -217,7 +217,7 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該讓兩字查詢可走 bigram GIN index")
+    @DisplayName("should let two-character query use bigram GIN index")
     void shouldUseBigramIndexForTwoCharacterQuery() {
         em.createNativeQuery("SET LOCAL enable_seqscan = off").executeUpdate();
         @SuppressWarnings("unchecked")

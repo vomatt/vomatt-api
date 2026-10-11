@@ -2,7 +2,7 @@ package com.vomatt.common.i18n;
 
 public enum MessageKey {
 
-    // === 通用 ===
+    // === Common ===
     COMMON_BAD_REQUEST("common.bad_request"),
     COMMON_INTERNAL_ERROR("common.internal_error"),
     COMMON_SERVICE_UNAVAILABLE("common.service_unavailable"),

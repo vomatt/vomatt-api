@@ -30,7 +30,7 @@ class CommentMapperTest {
     }
 
     @Test
-    @DisplayName("應該在新留言（兩個時間戳相同）時不標記為已編輯")
+    @DisplayName("should not mark as edited when comment is new (both timestamps equal)")
     void shouldNotMarkNewCommentEdited() {
         OffsetDateTime at = OffsetDateTime.now();
 
@@ -38,7 +38,7 @@ class CommentMapperTest {
     }
 
     @Test
-    @DisplayName("應該在建立後一秒內更新時也標記為已編輯")
+    @DisplayName("should mark as edited when updated within one second of creation")
     void shouldMarkEditedWhenUpdatedWithinOneSecond() {
         OffsetDateTime at = OffsetDateTime.now();
 
@@ -46,7 +46,7 @@ class CommentMapperTest {
     }
 
     @Test
-    @DisplayName("應該在留言已刪除時不標記為已編輯")
+    @DisplayName("should not mark as edited when comment is deleted")
     void shouldNotMarkDeletedCommentEdited() {
         OffsetDateTime at = OffsetDateTime.now();
         VoteComment c = comment(at, at.plusMinutes(10));
@@ -56,7 +56,7 @@ class CommentMapperTest {
     }
 
     @Test
-    @DisplayName("應該在時間戳為 null 時不拋例外")
+    @DisplayName("should not throw when timestamps are null")
     void shouldNotFailWhenTimestampsMissing() {
         assertThat(mapper.toDto(comment(null, null), 0, false).isEdited()).isFalse();
     }

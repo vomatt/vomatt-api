@@ -62,8 +62,8 @@ class AuthServiceTest {
     }
 
     /**
-     * 以 deep-stub 串接 RestClient 的 fluent chain，讓 {@code restClient.get().uri(...).retrieve().body(Map.class)}
-     * 回傳指定 body（或在 retrieve 時拋出指定例外，模擬 Apple JWKS endpoint 故障）。
+     * Deep-stubs the RestClient fluent chain so that {@code restClient.get().uri(...).retrieve().body(Map.class)}
+     * returns the given body (or throws the given exception on retrieve, simulating an Apple JWKS endpoint failure).
      */
     @SuppressWarnings({ "unchecked", "rawtypes" })
     private void stubJwksFetch(java.util.Map<String, Object> body, RuntimeException retrieveError) {
@@ -119,7 +119,7 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.sendOtp("user@example.com", null, null, false))
                 .isInstanceOf(com.vomatt.common.redis.RedisOperationException.class);
-        // OTP 寫入失敗時不得寄出查無的 OTP 信
+        // When the OTP write fails, must not send an email with an OTP that cannot be looked up
         verify(emailService, org.mockito.Mockito.never()).sendVerificationEmail(anyString(), anyString());
         verify(emailService, org.mockito.Mockito.never()).sendPreSignupEmail(anyString(), anyString());
     }
@@ -163,7 +163,7 @@ class AuthServiceTest {
 
     @Test
     void verifyOtp_withWrongCode_shouldIncrementAtomicFailCounter() {
-        // P1-#7：失敗計數改用原子 INCR（獨立 counter），防並發繞過 5 次上限
+        // P1-#7: failure count uses atomic INCR (separate counter) to prevent concurrent bypass of the 5-attempt limit
         OtpRecord otpRecord = new OtpRecord("123456", "login", Instant.now(), 0);
         when(redisService.get(eq("otp:email"), eq("user@example.com"), eq(OtpRecord.class))).thenReturn(otpRecord);
         when(redisService.incrementAndExpire(eq("otp:email:fail"), eq("user@example.com"), any(Duration.class)))
@@ -187,7 +187,7 @@ class AuthServiceTest {
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS));
 
-        // 達上限後一併刪除 OTP 與計數，使後續嘗試一律失效
+        // On reaching the limit, delete both the OTP and the counter so all further attempts fail
         verify(redisService).delete("otp:email", "user@example.com");
         verify(redisService).delete("otp:email:fail", "user@example.com");
     }
@@ -211,11 +211,11 @@ class AuthServiceTest {
         verify(redisService).delete("otp:email", "user@example.com");
     }
 
-    // ── verifyOtp checkRole（P5-#13：消耗 OTP / 建帳號 / 寄信前先驗角色）────────
+    // ── verifyOtp checkRole (P5-#13: check role before consuming OTP / creating account / sending email) ────────
 
     @Test
     void verifyOtp_checkRoleEmail_nonAdmin_shouldThrow403WithoutConsumingOtpOrCreatingAccount() {
-        // 非 admin 既有帳號嘗試 admin 登入 → 必須在 consumeOtp/建帳號/寄信之前回 403
+        // Existing non-admin account attempts admin login -> must return 403 before consumeOtp/account creation/email
         User customer = User.builder().id(UUID.randomUUID()).email("user@example.com")
                 .displayName("Customer").roles(new String[] { "user" }).build();
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(customer));
@@ -225,7 +225,7 @@ class AuthServiceTest {
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey())
                         .isEqualTo(MessageKey.AUTH_ADMIN_FORBIDDEN));
 
-        // OTP 不可被消耗（不讀也不刪）、帳號不可建立、歡迎信不可寄出
+        // OTP must not be consumed (neither read nor deleted), no account created, no welcome email sent
         verify(redisService, org.mockito.Mockito.never()).get(anyString(), anyString(), any(Class.class));
         verify(redisService, org.mockito.Mockito.never()).delete(anyString(), anyString());
         verify(userRepository, org.mockito.Mockito.never()).save(any());
@@ -234,7 +234,7 @@ class AuthServiceTest {
 
     @Test
     void verifyOtp_checkRoleEmail_noUser_shouldThrow403WithoutConsumingOtp() {
-        // email 查無帳號 + checkRole=true → 同樣在消耗 OTP 前回 403
+        // No account for email + checkRole=true -> also return 403 before consuming OTP
         when(userRepository.findByEmail("ghost@example.com")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.verifyOtp("ghost@example.com", null, "123456", true))
@@ -248,7 +248,7 @@ class AuthServiceTest {
 
     @Test
     void verifyOtp_checkRolePhone_nonAdmin_shouldThrow403WithoutConsumingOtp() {
-        // phone 路徑同樣涵蓋：非 admin → 消耗 OTP 前回 403
+        // Phone path covered too: non-admin -> 403 before consuming OTP
         User customer = User.builder().id(UUID.randomUUID()).phoneNumber("0912345678")
                 .displayName("Customer").roles(new String[] { "user" }).build();
         when(userRepository.findByPhoneNumber("0912345678")).thenReturn(Optional.of(customer));
@@ -264,7 +264,7 @@ class AuthServiceTest {
 
     @Test
     void verifyOtp_checkRoleEmail_admin_shouldConsumeOtpAndReturnToken() {
-        // admin 既有帳號 + 正確 OTP → 正常完成（角色檢查通過後才消耗 OTP）
+        // Existing admin account + correct OTP -> completes normally (OTP consumed only after role check passes)
         OtpRecord otpRecord = new OtpRecord("123456", "login", Instant.now(), 0);
         User admin = User.builder().id(UUID.randomUUID()).email("admin@example.com")
                 .displayName("Admin").roles(new String[] { "admin" }).build();
@@ -280,11 +280,11 @@ class AuthServiceTest {
         verify(redisService).delete("otp:email", "admin@example.com");
     }
 
-    // ── consumeOtp 常數時間比對（P5-#19）─────────────────────────────────
+    // ── consumeOtp constant-time comparison (P5-#19) ─────────────────────────────────
 
     @Test
     void verifyOtp_wrongCodeSameLength_shouldRejectViaConstantTimeCompare() {
-        // 同長度錯誤碼仍被拒絕（常數時間比對不影響正確性）
+        // Wrong code of the same length is still rejected (constant-time comparison does not affect correctness)
         OtpRecord otpRecord = new OtpRecord("123456", "login", Instant.now(), 0);
         when(redisService.get(eq("otp:email"), eq("user@example.com"), eq(OtpRecord.class))).thenReturn(otpRecord);
         when(redisService.incrementAndExpire(eq("otp:email:fail"), eq("user@example.com"), any(Duration.class)))
@@ -294,7 +294,7 @@ class AuthServiceTest {
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_INVALID_OTP));
 
-        // 錯誤碼不得刪除 OTP（仍可於上限內重試）
+        // A wrong code must not delete the OTP (retries still allowed within the limit)
         verify(redisService, org.mockito.Mockito.never()).delete("otp:email", "user@example.com");
     }
 
@@ -312,7 +312,7 @@ class AuthServiceTest {
 
         assertThat(response.token()).isEqualTo("new-access");
         assertThat(response.refreshToken()).isEqualTo("new-refresh");
-        // AuthService.refresh 不應自行 sign access token，access token 來自 RotateResult
+        // AuthService.refresh must not sign the access token itself; it comes from RotateResult
         verify(jwtUtil, org.mockito.Mockito.never()).generateToken(anyString(), anyString(), any());
     }
 
@@ -337,25 +337,25 @@ class AuthServiceTest {
                         .isEqualTo(MessageKey.AUTH_SUSPICIOUS_LOGIN));
     }
 
-    // ── findOrCreateUserByEmail：emailVerified 防帳號接管 ────────────
+    // ── findOrCreateUserByEmail: emailVerified prevents account takeover ────────────
 
     @Test
     void findOrCreateUserByEmail_existingEmailButUnverified_shouldThrowEmailNotVerified() {
-        // email 撞到既有帳號但未驗證 → 必須在查 DB 之前就拒絕，拋 AUTH_EMAIL_NOT_VERIFIED
+        // Email matches an existing account but is unverified -> must reject before querying the DB, throw AUTH_EMAIL_NOT_VERIFIED
         assertThatThrownBy(() ->
                 authService.findOrCreateUserByEmail("victim@example.com", "Attacker", "google", false))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey())
                         .isEqualTo(MessageKey.AUTH_EMAIL_NOT_VERIFIED));
 
-        // 未驗證情境下絕不可查 DB、合併或建立帳號
+        // When unverified, never query the DB, merge, or create an account
         verify(userRepository, org.mockito.Mockito.never()).findByEmail(anyString());
         verify(userRepository, org.mockito.Mockito.never()).save(any());
     }
 
     @Test
     void findOrCreateUserByEmail_newEmailButUnverified_shouldThrowAndNotCreate() {
-        // email 未驗證 → 不得建立帳號（同樣在查 DB 前拒絕）
+        // Email unverified -> must not create an account (also rejected before querying the DB)
         assertThatThrownBy(() ->
                 authService.findOrCreateUserByEmail("new@example.com", "Someone", "google", false))
                 .isInstanceOf(ApiException.class)
@@ -367,7 +367,7 @@ class AuthServiceTest {
 
     @Test
     void findOrCreateUserByEmail_existingEmailAndVerified_shouldReturnExistingUser() {
-        // email 已驗證 → 維持 find-or-create，合併安全
+        // Email verified -> keep find-or-create; merging is safe
         User existing = User.builder().id(UUID.randomUUID()).email("user@example.com")
                 .displayName("User").roles(new String[] { "user" }).build();
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(existing));
@@ -380,7 +380,7 @@ class AuthServiceTest {
 
     @Test
     void findOrCreateUserByEmail_newEmailAndVerified_shouldCreateUser() {
-        // email 已驗證且帳號不存在 → 建立新帳號
+        // Email verified and account does not exist -> create a new account
         when(userRepository.findByEmail("fresh@example.com")).thenReturn(Optional.empty());
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -390,7 +390,7 @@ class AuthServiceTest {
         assertThat(result.getEmail()).isEqualTo("fresh@example.com");
         assertThat(result.getDisplayName()).isEqualTo("Fresh");
         assertThat(result.getAuthMethod()).isEqualTo("google");
-        // username 由 email local part 自動產生：<local>_<4 碼>
+        // username is generated from the email local part: <local>_<4 digits>
         assertThat(result.getUsername()).matches("fresh_\\d{4}");
         assertThat(result.getRoles()).containsExactly("user");
         assertThat(result.isActive()).isTrue();
@@ -400,7 +400,7 @@ class AuthServiceTest {
     @Test
     void findOrCreateUserByEmail_usernameCollision_shouldRetryUntilUnique() {
         when(userRepository.findByEmail("fresh@example.com")).thenReturn(Optional.empty());
-        // 第一次產生的 username 已被佔用，第二次才可用
+        // The first generated username is taken; the second one is available
         when(userRepository.existsByUsername(anyString())).thenReturn(true, false);
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -408,7 +408,7 @@ class AuthServiceTest {
 
         verify(userRepository, org.mockito.Mockito.times(2)).existsByUsername(anyString());
         assertThat(result.getUsername()).matches("fresh_\\d{4}");
-        // fullName 為空時 displayName 退回 email local part
+        // When fullName is empty, displayName falls back to the email local part
         assertThat(result.getDisplayName()).isEqualTo("fresh");
     }
 
@@ -425,7 +425,7 @@ class AuthServiceTest {
         assertThat(result.getDisplayName()).isEqualTo("0912345678");
     }
 
-    // ── buildAuthResponse：active=false（停權）檢查 ───────────────────────────
+    // ── buildAuthResponse: active=false (suspended) check ───────────────────────────
 
     @Test
     void buildAuthResponse_inactiveUser_shouldThrowForbidden() {
@@ -456,16 +456,16 @@ class AuthServiceTest {
         assertThat(response.user().email()).isEqualTo("ok@example.com");
         assertThat(response.user().username()).isEqualTo("ok_user");
         assertThat(response.user().roles()).containsExactly("user");
-        // 登入成功會更新 lastLoginAt
+        // Successful login updates lastLoginAt
         assertThat(user.getLastLoginAt()).isNotNull();
         verify(userRepository).save(user);
     }
 
-    // ── appleLogin（P6-#16 外部故障分類 + #21 JWKS 快取）──────────────────
+    // ── appleLogin (P6-#16 external failure classification + #21 JWKS cache) ──────────────────
 
     @Test
     void appleLogin_whenJwksBodyNull_shouldThrowExternalServiceUnavailableNot401() {
-        // JWKS 回應 body 為 null → 視為上游回應異常 → 503，而非誤報 401 登入失敗
+        // JWKS response body is null -> treated as an upstream error -> 503, not a misleading 401 login failure
         stubJwksFetch(null, null);
 
         assertThatThrownBy(() -> authService.appleLogin("a.b.c", null))
@@ -480,7 +480,7 @@ class AuthServiceTest {
 
     @Test
     void appleLogin_whenJwksKeysNull_shouldThrowExternalServiceUnavailableNot401() {
-        // body 非 null 但 keys 為 null → 同視為上游異常 → 503
+        // Body not null but keys is null -> also an upstream error -> 503
         stubJwksFetch(java.util.Map.of("foo", "bar"), null);
 
         assertThatThrownBy(() -> authService.appleLogin("a.b.c", null))
@@ -491,7 +491,7 @@ class AuthServiceTest {
 
     @Test
     void appleLogin_whenJwksEndpoint5xx_shouldThrowExternalServiceUnavailableNot401() {
-        // Apple JWKS endpoint 5xx → 外部服務故障 → 503，非 401
+        // Apple JWKS endpoint 5xx -> external service failure -> 503, not 401
         var serverError = new org.springframework.web.client.HttpServerErrorException(
                 org.springframework.http.HttpStatus.BAD_GATEWAY);
         stubJwksFetch(null, serverError);
@@ -508,7 +508,7 @@ class AuthServiceTest {
 
     @Test
     void appleLogin_whenJwksConnectivityFailure_shouldThrowExternalServiceUnavailableNot401() {
-        // 連線失敗（ResourceAccessException）→ 外部服務故障 → 503
+        // Connection failure (ResourceAccessException) -> external service failure -> 503
         var ioError = new org.springframework.web.client.ResourceAccessException("connect timed out");
         stubJwksFetch(null, ioError);
 
@@ -520,7 +520,7 @@ class AuthServiceTest {
 
     @Test
     void appleLogin_whenTokenHeaderMissingKid_shouldThrow401InvalidToken() {
-        // JWKS 正常，但 token header 無 kid → 無法定位公鑰 → 401 invalid_token（憑證問題，非 503）
+        // JWKS OK, but token header has no kid -> cannot locate public key -> 401 invalid_token (credential problem, not 503)
         java.util.Map<String, Object> jwks = java.util.Map.of(
                 "keys", java.util.List.of(java.util.Map.of("kid", "real-kid", "n", "AQAB", "e", "AQAB")));
         stubJwksFetch(jwks, null);
@@ -541,13 +541,13 @@ class AuthServiceTest {
 
     @Test
     void appleLogin_secondCallWithinTtl_shouldNotRefetchJwks() {
-        // P6-#21：TTL（10 分鐘）內第二次 Apple 登入不應重打 JWKS endpoint（快取命中）
+        // P6-#21: a second Apple login within the TTL (10 minutes) must not refetch the JWKS endpoint (cache hit)
         java.util.Map<String, Object> jwks = java.util.Map.of(
                 "keys", java.util.List.of(java.util.Map.of("kid", "real-kid", "n", "AQAB", "e", "AQAB")));
         stubJwksFetch(jwks, null);
 
-        // 用「header 無 kid」讓兩次呼叫都在 JWKS 取得之後、簽章驗證之前以 401 收斂，
-        // 但 JWKS 已成功抓取並快取；重點在於驗證 restClient.get() 只被呼叫一次。
+        // Use "header without kid" so both calls end with 401 after fetching JWKS but before signature verification,
+        // while JWKS has been fetched and cached; the point is to verify restClient.get() is called only once.
         String header = base64Url("{\"alg\":\"RS256\"}");
         String payload = base64Url("{\"iss\":\"https://appleid.apple.com\"}");
         String idToken = header + "." + payload + ".c2ln";
@@ -555,7 +555,7 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.appleLogin(idToken, null)).isInstanceOf(ApiException.class);
         assertThatThrownBy(() -> authService.appleLogin(idToken, null)).isInstanceOf(ApiException.class);
 
-        // JWKS 僅抓取一次（第二次走快取）
+        // JWKS fetched only once (second call hits the cache)
         verify(restClient, org.mockito.Mockito.times(1)).get();
     }
 

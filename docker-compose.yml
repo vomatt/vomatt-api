@@ -1,5 +1,6 @@
-# 本地開發用 Postgres + Redis（OrbStack / Docker）：docker compose up -d
-# 首次啟動自動執行 db/schema.sql；重建 schema：docker compose down -v
+# Frontend integration: docker compose up -d --build -> API + Swagger at http://localhost:8080/swagger-ui.html
+# Backend development, DB only: docker compose up -d postgres redis, then ./mvnw spring-boot:run
+# db/schema.sql runs automatically on first start; to rebuild the schema: docker compose down -v
 services:
   postgres:
     image: postgres:17
@@ -10,9 +11,43 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 2s
+      retries: 30
+
   redis:
     image: redis:7
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      retries: 30
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.vercel
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # No env_file: .env points DB_URL at localhost, unreachable from inside the container
+    environment:
+      PORT: 8080
+      DB_URL: jdbc:postgresql://postgres:5432/postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: redis
+      JWT_SECRET: local-dev-only-jwt-secret-0123456789abcdef
+      EMAIL_ENABLED: "false"
+      SWAGGER_ENABLED: "true"
+      # No SMTP locally; mail health would keep /actuator/health DOWN
+      MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
+
 volumes:
   pgdata:

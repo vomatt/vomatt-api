@@ -47,8 +47,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * standaloneSetup + 以 {@link AuthorizationManagerBeforeMethodInterceptor#preAuthorize()} 包裝 controller，
- * 讓類別層級 {@code @PreAuthorize("hasRole('ADMIN')")} 在不啟動 Spring context 的情況下實際生效。
+ * standaloneSetup + wraps the controller with {@link AuthorizationManagerBeforeMethodInterceptor#preAuthorize()},
+ * so the class-level {@code @PreAuthorize("hasRole('ADMIN')")} actually takes effect without starting a Spring context.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AdminTagController")
@@ -76,7 +76,7 @@ class AdminTagControllerTest {
         SecurityContextHolder.clearContext();
     }
 
-    /** JwtAuthFilter 將 roles claim 映射為 ROLE_<UPPER> authorities */
+    /** JwtAuthFilter maps the roles claim to ROLE_<UPPER> authorities */
     private static void authenticateAs(String role) {
         UserPrincipal principal = new UserPrincipal(role + "-id", role + "@test.com", List.of(role));
         Authentication auth = new UsernamePasswordAuthenticationToken(principal, null,
@@ -84,7 +84,7 @@ class AdminTagControllerTest {
         SecurityContextHolder.getContext().setAuthentication(auth);
     }
 
-    /** 未帶 token 的請求在 filter chain 中為 anonymous authentication */
+    /** Requests without a token are anonymous authentication in the filter chain */
     private static void anonymous() {
         SecurityContextHolder.getContext().setAuthentication(new AnonymousAuthenticationToken(
                 "key", "anonymousUser", AuthorityUtils.createAuthorityList("ROLE_ANONYMOUS")));
@@ -104,7 +104,7 @@ class AdminTagControllerTest {
     }
 
     @Test
-    @DisplayName("controller 類別層級須掛 @PreAuthorize(hasRole('ADMIN'))，且路徑受 AUTHENTICATED_ADMIN 保護")
+    @DisplayName("should have class-level @PreAuthorize(hasRole('ADMIN')) and paths protected by AUTHENTICATED_ADMIN")
     void classLevelPreAuthorizeAndAdminPath() {
         PreAuthorize preAuthorize = AdminTagController.class.getAnnotation(PreAuthorize.class);
         assertThat(preAuthorize).isNotNull();
@@ -137,7 +137,7 @@ class AdminTagControllerTest {
         }
 
         @Test
-        @DisplayName("USER 角色應被拒絕並回傳 403")
+        @DisplayName("should reject with 403 when role is USER")
         void shouldReturn403WhenUser() throws Exception {
             authenticateAs("user");
             CreateTagRequest request = new CreateTagRequest();
@@ -153,7 +153,7 @@ class AdminTagControllerTest {
         }
 
         @Test
-        @DisplayName("未認證（anonymous）請求應被拒絕並回傳 403")
+        @DisplayName("should reject with 403 when request is unauthenticated (anonymous)")
         void shouldReturn403WhenUnauthenticated() throws Exception {
             anonymous();
             CreateTagRequest request = new CreateTagRequest();

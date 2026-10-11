@@ -39,7 +39,7 @@ public class SecurityConfig {
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
     private final JwtAccessDeniedHandler accessDeniedHandler;
 
-    // 正式環境須設為實際前端網域（逗號分隔）；搭配 allowCredentials 不可用萬用字元
+    // In production, set to the actual frontend domains (comma-separated); wildcards are not allowed with allowCredentials
     @Value("${app.security.cors-allowed-origins}")
     private List<String> corsAllowedOrigins;
 
@@ -54,7 +54,7 @@ public class SecurityConfig {
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
                 .authorizeHttpRequests(auth -> auth
-                        // Spring Security 7: FORWARD/ERROR dispatch 需明確放行
+                        // Spring Security 7: FORWARD/ERROR dispatches must be permitted explicitly
                         .dispatcherTypeMatchers(FORWARD, ERROR).permitAll()
                         // Public: Swagger UI & OpenAPI docs
                         .requestMatchers(SecurityEndpoints.PUBLIC_SWAGGER).permitAll()

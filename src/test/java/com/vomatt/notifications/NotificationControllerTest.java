@@ -62,7 +62,7 @@ class NotificationControllerTest {
     }
 
     @Test
-    @DisplayName("應該回傳未讀數")
+    @DisplayName("should return the unread count")
     void shouldReturnUnreadCount() throws Exception {
         when(notificationService.countUnread(USER_ID)).thenReturn(new UnreadCountResponse(3));
 
@@ -72,7 +72,7 @@ class NotificationControllerTest {
     }
 
     @Test
-    @DisplayName("應該標記已讀")
+    @DisplayName("should mark as read")
     void shouldMarkRead() throws Exception {
         String voteId = UUID.randomUUID().toString();
 
@@ -83,7 +83,7 @@ class NotificationControllerTest {
     }
 
     @Test
-    @DisplayName("應該在沒有該通知時回 404")
+    @DisplayName("should return 404 when the notification does not exist")
     void shouldReturn404WhenNoNotification() throws Exception {
         String voteId = UUID.randomUUID().toString();
         doThrow(ApiException.notFound(MessageKey.NOTIFICATION_NOT_FOUND))

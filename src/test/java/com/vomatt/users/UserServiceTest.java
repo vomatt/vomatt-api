@@ -34,7 +34,7 @@ class UserServiceTest {
     @InjectMocks UserService userService;
 
     @Test
-    @DisplayName("應該在刪除帳號前先從選項計數釋放該使用者的 Ballot")
+    @DisplayName("should release user's Ballot from option counts before deleting account")
     void shouldReleaseBallotCountsBeforeDeletingUser() {
         UUID id = UUID.randomUUID();
         User user = User.builder().id(id).username("u").build();

@@ -128,7 +128,7 @@ class RateLimitFilterTest {
 
     @Test
     void whenRedisDownOnAuthEndpoint_shouldFailClosed() throws Exception {
-        // P5-#4：Redis 故障時認證端點改 fail-closed，避免 OTP 暴力破解
+        // P5-#4: auth endpoints fail closed when Redis is down, to prevent OTP brute force
         when(redisService.incrementAndExpire(anyString(), anyString(), any(Duration.class)))
                 .thenThrow(new RedisOperationException("Redis down", null));
 
@@ -145,7 +145,7 @@ class RateLimitFilterTest {
 
     @Test
     void whenRedisDownOnNonAuthEndpoint_shouldFailOpen() throws Exception {
-        // 非認證端點維持 fail-open，Redis 故障不影響可用性
+        // Non-auth endpoints stay fail-open; a Redis outage does not affect availability
         config.setPaths(List.of("/api/auth/**", "/api/sensitive/**"));
         when(redisService.incrementAndExpire(anyString(), anyString(), any(Duration.class)))
                 .thenThrow(new RedisOperationException("Redis down", null));
@@ -162,7 +162,7 @@ class RateLimitFilterTest {
 
     @Test
     void whenXForwardedForPresent_shouldUseLastSegment() throws Exception {
-        // P1-#6：取最右側（平台 edge 附加）IP，client 無法靠偽造左側 XFF 繞過限流
+        // P1-#6: take the rightmost IP (appended by the platform edge); clients cannot bypass rate limiting by forging left-side XFF
         when(redisService.incrementAndExpire(anyString(), anyString(), any(Duration.class))).thenReturn(1L);
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/auth/send-otp");

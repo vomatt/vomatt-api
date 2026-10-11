@@ -46,7 +46,7 @@ class VoteCommentControllerTest {
     }
 
     @Test
-    @DisplayName("應該在未登入時回傳留言（不帶使用者）")
+    @DisplayName("should return comments when not logged in (no user)")
     void shouldListCommentsWhenSignedOut() throws Exception {
         when(commentService.getCommentsByVote(eq(voteId), isNull(), isNull(), isNull()))
                 .thenReturn(new CursorResponse<>(List.of(), null));
@@ -57,7 +57,7 @@ class VoteCommentControllerTest {
     }
 
     @Test
-    @DisplayName("應該在未登入時回傳回覆（不帶使用者）")
+    @DisplayName("should return replies when not logged in (no user)")
     void shouldListRepliesWhenSignedOut() throws Exception {
         UUID commentId = UUID.randomUUID();
         when(commentService.getReplies(eq(voteId), eq(commentId), isNull(), isNull(), isNull()))

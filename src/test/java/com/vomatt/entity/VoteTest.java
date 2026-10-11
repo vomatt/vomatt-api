@@ -20,13 +20,13 @@ class VoteTest {
     }
 
     @Test
-    @DisplayName("應該在開始時間未到時為 Scheduled")
+    @DisplayName("should be Scheduled when start time has not arrived")
     void shouldBeScheduledWhenStartTimeInFuture() {
         assertThat(poll(now.plusHours(1), now.plusDays(1)).getStatus()).isEqualTo(VoteStatus.SCHEDULED);
     }
 
     @Test
-    @DisplayName("應該在開始後、結束前為 Open")
+    @DisplayName("should be Open when after start and before end")
     void shouldBeOpenBetweenStartAndEnd() {
         Vote vote = poll(now.minusHours(1), now.plusDays(1));
         assertThat(vote.getStatus()).isEqualTo(VoteStatus.OPEN);
@@ -34,7 +34,7 @@ class VoteTest {
     }
 
     @Test
-    @DisplayName("應該在結束時間已過時為 Ended")
+    @DisplayName("should be Ended when end time has passed")
     void shouldBeEndedWhenEndTimePassed() {
         Vote vote = poll(now.minusDays(2), now.minusDays(1));
         assertThat(vote.getStatus()).isEqualTo(VoteStatus.ENDED);
@@ -42,13 +42,13 @@ class VoteTest {
     }
 
     @Test
-    @DisplayName("應該讓 Ended 優先於 Scheduled（結束時間早於開始時間）")
+    @DisplayName("should prefer Ended over Scheduled when end time is before start time")
     void shouldPreferEndedOverScheduled() {
         assertThat(poll(now.plusDays(1), now.minusMinutes(1)).getStatus()).isEqualTo(VoteStatus.ENDED);
     }
 
     @Test
-    @DisplayName("應該在 Close Open Poll 時立即結束")
+    @DisplayName("should end immediately when closing an Open Poll")
     void shouldEndOpenPollWhenClosed() {
         Vote vote = poll(now.minusHours(1), now.plusDays(1));
 
@@ -60,7 +60,7 @@ class VoteTest {
     }
 
     @Test
-    @DisplayName("應該在 Close Scheduled Poll 時取消，結束時間早於開始時間")
+    @DisplayName("should cancel with end time before start time when closing a Scheduled Poll")
     void shouldEndScheduledPollWhenClosed() {
         OffsetDateTime start = now.plusDays(1);
         Vote vote = poll(start, now.plusDays(2));
@@ -72,7 +72,7 @@ class VoteTest {
     }
 
     @Test
-    @DisplayName("應該在 Close 已結束的 Poll 時不改變結束時間")
+    @DisplayName("should not change end time when closing an already Ended Poll")
     void shouldNotChangeEndTimeWhenClosingEndedPoll() {
         OffsetDateTime end = now.minusDays(1);
         Vote vote = poll(now.minusDays(2), end);

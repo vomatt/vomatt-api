@@ -22,7 +22,7 @@ class CursorResponseTest {
     }
 
     @Test
-    @DisplayName("應該在多取一筆時回傳下一頁 cursor 並只保留 limit 筆")
+    @DisplayName("should return a next-page cursor and keep only limit items when one extra item is fetched")
     void shouldReturnNextCursorWhenMorePagesExist() {
         List<Row> rows = List.of(new Row(3, UUID.randomUUID()), new Row(2, UUID.randomUUID()), new Row(1, UUID.randomUUID()));
 
@@ -36,7 +36,7 @@ class CursorResponseTest {
     }
 
     @Test
-    @DisplayName("應該在沒有更多資料時回傳 null cursor")
+    @DisplayName("should return a null cursor when there is no more data")
     void shouldReturnNullCursorWhenLastPage() {
         List<Row> rows = List.of(new Row(1, UUID.randomUUID()));
 
@@ -48,7 +48,7 @@ class CursorResponseTest {
     }
 
     @Test
-    @DisplayName("應該在時間 cursor 編碼後能還原同一時間點與 id")
+    @DisplayName("should restore the same timestamp and id when a time cursor is encoded and decoded")
     void shouldRoundTripTimeCursor() {
         OffsetDateTime time = OffsetDateTime.of(2026, 10, 5, 12, 0, 0, 123_456_000, ZoneOffset.ofHours(8));
         UUID id = UUID.randomUUID();
@@ -61,7 +61,7 @@ class CursorResponseTest {
     }
 
     @Test
-    @DisplayName("應該在 cursor 格式錯誤時拋出 400 COMMON_CURSOR_INVALID")
+    @DisplayName("should throw 400 COMMON_CURSOR_INVALID when cursor is malformed")
     void shouldRejectMalformedCursor() {
         assertThatThrownBy(() -> Cursor.decode("not-a-cursor"))
                 .isInstanceOfSatisfying(ApiException.class, ex -> {
@@ -71,7 +71,7 @@ class CursorResponseTest {
     }
 
     @Test
-    @DisplayName("應該在 cursor 排序鍵種類不符（例如拿到別的列表的 cursor）時拋出 400 COMMON_CURSOR_INVALID")
+    @DisplayName("should throw 400 COMMON_CURSOR_INVALID when cursor sort key kind mismatches (e.g. a cursor from another list)")
     void shouldRejectCursorWhenKeyKindMismatch() {
         Cursor fromTagList = Cursor.decode(Cursor.of(42L, UUID.randomUUID()).encode());
         Cursor fromUserList = Cursor.decode(Cursor.of("alice", UUID.randomUUID()).encode());
@@ -85,7 +85,7 @@ class CursorResponseTest {
     }
 
     @Test
-    @DisplayName("應該把 limit 限制在 1 到 50 之間，未指定時為 20")
+    @DisplayName("should clamp limit to 1..50 and default to 20 when unspecified")
     void shouldClampLimit() {
         assertThat(CursorResponse.limit(null)).isEqualTo(20);
         assertThat(CursorResponse.limit(0)).isEqualTo(1);

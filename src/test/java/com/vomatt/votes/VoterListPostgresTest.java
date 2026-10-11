@@ -26,7 +26,7 @@ class VoterListPostgresTest extends PostgresRepositoryTest {
     @Autowired VoteService voteService;
 
     @Test
-    @DisplayName("應該在 cursor 分頁時不重複也不遺漏投票者")
+    @DisplayName("should paginate voters by cursor without duplicates or gaps")
     void shouldNotRepeatVotersAcrossCursorPages() {
         User owner = persistUser("vl-owner");
         OffsetDateTime now = OffsetDateTime.now();

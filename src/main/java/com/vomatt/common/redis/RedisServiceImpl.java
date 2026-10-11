@@ -28,22 +28,22 @@ public class RedisServiceImpl implements RedisService {
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
 
-    // P5-#10：INCR + 首次 PEXPIRE 以單一 Lua 原子執行，杜絕「INCR 與 EXPIRE 之間崩潰留下無 TTL 孤兒 key」。
-    // 用 raw bytes eval（key/TTL 皆為原始位元組），避免 value serializer 把數字參數加引號破壞 PEXPIRE。
+    // P5-#10: INCR + first PEXPIRE run atomically in one Lua script, so a crash between INCR and EXPIRE cannot leave an orphan key without TTL.
+    // Eval with raw bytes (key/TTL are raw bytes) so the value serializer does not quote the numeric argument and break PEXPIRE.
     private static final byte[] INCR_AND_EXPIRE_LUA = (
             "local c = redis.call('INCR', KEYS[1]) "
             + "if c == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end "
             + "return c").getBytes(StandardCharsets.UTF_8);
 
-    // P1-#18：HSET + 「僅在 key 尚無 TTL 時設 TTL」以單一 Lua 原子執行，
-    // 取代原本「HSET → getExpire 探測 → expire」的三段（多一次 RTT + TTL 競態）。
-    // value/field 用 template 既有 serializer 序列化，確保與 opsForHash().get 讀回一致。
+    // P1-#18: HSET + "set TTL only if the key has no TTL yet" run atomically in one Lua script,
+    // replacing the old three steps "HSET -> getExpire probe -> expire" (an extra RTT + a TTL race).
+    // value/field are serialized with the template's existing serializer so they read back consistently via opsForHash().get.
     private static final byte[] HSET_AND_EXPIRE_LUA = (
             "redis.call('HSET', KEYS[1], ARGV[1], ARGV[2]) "
             + "if redis.call('PTTL', KEYS[1]) == -1 then redis.call('PEXPIRE', KEYS[1], ARGV[3]) end "
             + "return 1").getBytes(StandardCharsets.UTF_8);
 
-    // ── 基本 String value ────────────────────────────────────────────
+    // ── Basic String value ───────────────────────────────────────────
 
     @Override
     public void set(String cacheName, String key, Object value, Duration timeout) {
@@ -122,7 +122,7 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public long deleteByPrefix(String cacheName, String keyPrefix) {
-        // 完整匹配模式：cacheName:keyPrefix*
+        // Full match pattern: cacheName:keyPrefix*
         String matchPattern = CacheKeyUtil.buildKey(cacheName, keyPrefix) + "*";
         try {
             ScanOptions options = ScanOptions.scanOptions().match(matchPattern).count(500).build();
@@ -185,8 +185,8 @@ public class RedisServiceImpl implements RedisService {
     }
 
     /**
-     * P1-#18：以單一 Lua 原子完成 HSET + 「僅在 key 尚無 TTL 時設 TTL」，省去 getExpire 探測的額外 RTT 與競態。
-     * value/field 以 template 既有 serializer 序列化，確保 {@code opsForHash().get} 能正確讀回。
+     * P1-#18: atomically performs HSET + "set TTL only if the key has no TTL yet" in one Lua script, avoiding the extra RTT and race of a getExpire probe.
+     * value/field are serialized with the template's existing serializer so {@code opsForHash().get} reads them back correctly.
      */
     @SuppressWarnings("unchecked")
     private void hSetAndExpireAtomic(String cacheKey, String field, Object value, Duration ttl) {
@@ -249,7 +249,7 @@ public class RedisServiceImpl implements RedisService {
             RedisSerializer<String> keySer = (RedisSerializer<String>) redisTemplate.getKeySerializer();
             byte[] keyBytes = keySer.serialize(cacheKey);
             byte[] ttlBytes = Long.toString(ttl.toMillis()).getBytes(StandardCharsets.UTF_8);
-            // INCR 與首次 PEXPIRE 以單一 Lua script 原子執行（raw bytes，不經 value serializer）。
+            // INCR and the first PEXPIRE run atomically in one Lua script (raw bytes, bypassing the value serializer).
             Long count = redisTemplate.execute((RedisCallback<Long>) connection -> connection.scriptingCommands()
                     .eval(INCR_AND_EXPIRE_LUA, ReturnType.INTEGER, 1, keyBytes, ttlBytes));
             if (count == null) {

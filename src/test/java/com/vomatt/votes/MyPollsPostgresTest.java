@@ -51,7 +51,7 @@ class MyPollsPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該讓 open 分頁含我建立與我投過的 Poll、含我的 Scheduled，依即將截止排序")
+    @DisplayName("should include Polls I created or voted in, plus my Scheduled ones, in open tab sorted by closing soonest")
     void shouldIncludeParticipatedPollsInMyPolls() {
         poll(me, "mine-scheduled", now.plusHours(1), now.plusDays(3));
         poll(me, "mine-open", now.minusHours(1), now.plusDays(2));
@@ -63,7 +63,7 @@ class MyPollsPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該讓 ended 分頁依結束時間新到舊")
+    @DisplayName("should sort ended tab by end time newest first")
     void shouldListEndedPollsMostRecentFirst() {
         poll(me, "mine-ended-long-ago", now.minusDays(9), now.minusDays(5));
         voteIn(poll(other, "voted-ended-recently", now.minusDays(9), now.minusHours(1)));

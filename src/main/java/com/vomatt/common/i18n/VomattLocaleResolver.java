@@ -7,12 +7,12 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * 三層 Locale 解析：
- * 1. Accept-Language header（當前實作）
- * 2. zh-TW fallback（預設）
+ * Three-tier locale resolution:
+ * 1. Accept-Language header (current implementation)
+ * 2. zh-TW fallback (default)
  *
- * Phase 2：已登入用戶可從 Profile.preferredLocale 取得偏好語系，
- * 需在 SecurityContext 就緒後（HandlerInterceptor.preHandle）覆寫 LocaleContextHolder。
+ * Phase 2: logged-in users can get their preferred locale from Profile.preferredLocale;
+ * this requires overriding LocaleContextHolder after the SecurityContext is ready (HandlerInterceptor.preHandle).
  */
 public class VomattLocaleResolver extends AcceptHeaderLocaleResolver {
 

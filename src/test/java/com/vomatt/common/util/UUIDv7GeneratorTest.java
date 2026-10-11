@@ -8,15 +8,15 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * P5-#11：generator 改為 static final 共用單例。驗證仍能產生
- * 非 null、版本為 7（時序可排序）且彼此相異的 UUID。
+ * P5-#11: the generator is now a shared static final singleton. Verifies it still produces
+ * non-null, version 7 (time-sortable), mutually distinct UUIDs.
  */
 class UUIDv7GeneratorTest {
 
     private final UUIDv7Generator generator = new UUIDv7Generator();
 
     private UUID generate() {
-        // session / owner / currentValue 在 BeforeExecutionGenerator 實作中未被使用，傳 null 即可。
+        // session / owner / currentValue are unused by the BeforeExecutionGenerator implementation, so null is fine.
         return (UUID) generator.generate(null, null, null, EventType.INSERT);
     }
 
@@ -25,7 +25,7 @@ class UUIDv7GeneratorTest {
         UUID id = generate();
 
         assertThat(id).isNotNull();
-        // UUID v7：version nibble 為 7
+        // UUID v7: version nibble is 7
         assertThat(id.version()).isEqualTo(7);
     }
 
@@ -35,7 +35,7 @@ class UUIDv7GeneratorTest {
         UUID second = generate();
 
         assertThat(first).isNotEqualTo(second);
-        // v7 以時間戳為高位元，後產生者排序不小於先產生者（同毫秒由單調計數器遞增保證遞增）。
+        // v7 puts the timestamp in the high bits, so later UUIDs sort no lower than earlier ones (within the same millisecond a monotonic counter guarantees increase).
         assertThat(second.compareTo(first)).isGreaterThanOrEqualTo(0);
     }
 

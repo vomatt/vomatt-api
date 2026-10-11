@@ -1,19 +1,19 @@
 -- =============================================================================
--- 舊 schema（帳密登入 / Role 表 / TIMESTAMP）→ 新 schema（db/schema.sql，sachmis 架構）一次性遷移
+-- One-time migration: old schema (password login / Role table / TIMESTAMP) -> new schema (db/schema.sql, sachmis architecture)
 --
--- 執行：psql "$DB" -v ON_ERROR_STOP=1 -f 2026-10-02-sachmis-arch.sql
--- 單一交易：任何一步失敗即整批回滾。執行前請先備份。
+-- Run: psql "$DB" -v ON_ERROR_STOP=1 -f 2026-10-02-sachmis-arch.sql
+-- Single transaction: any failing step rolls back everything. Back up before running.
 --
--- ⚠ 時區假設：舊欄位為 TIMESTAMP（無時區），由應用以 JVM 本地時間寫入。
---   下方 SET LOCAL TimeZone 決定舊值被解讀成哪個時區；舊服務若非跑在 UTC，請改成實際時區
---   （例：'Asia/Taipei'）。
+-- WARNING time zone assumption: old columns are TIMESTAMP (no time zone), written by the app in JVM local time.
+--   SET LOCAL TimeZone below decides which zone old values are read as; if the old service did not run in UTC, change it to the actual zone
+--   (e.g. 'Asia/Taipei').
 --
--- 資料處理：
---   * users：roles 由 user_roles/roles 轉成 text[]；email 正規化為小寫（OTP 以小寫比對）；
---     移除密碼與登入鎖定欄位。既有使用者改以同一 email 走 OTP / OAuth 登入即可沿用帳號。
---   * 刪除：roles、user_roles、refresh_tokens、password_reset_tokens、user_activities
---     （refresh token 改存 Redis → 所有使用者需重新登入）。
---   * user_rankings / user_ratings：舊程式從未寫入，直接以新定義重建。
+-- Data handling:
+--   * users: roles converted from user_roles/roles to text[]; email normalized to lowercase (OTP matches lowercase);
+--     password and login-lockout columns removed. Existing users keep their account by logging in via OTP / OAuth with the same email.
+--   * Dropped: roles, user_roles, refresh_tokens, password_reset_tokens, user_activities
+--     (refresh tokens now live in Redis -> all users must log in again).
+--   * user_rankings / user_ratings: never written by the old code, so recreated with the new definition.
 -- =============================================================================
 
 BEGIN;
@@ -22,7 +22,7 @@ SET LOCAL search_path TO vomatt;
 SET LOCAL TimeZone = 'UTC';
 
 -- -----------------------------------------------------------------------------
--- 0. 前置檢查：email 轉小寫後不可撞號
+-- 0. Pre-check: emails must not collide after lowercasing
 -- -----------------------------------------------------------------------------
 DO $$
 DECLARE dup text;
@@ -32,12 +32,12 @@ BEGIN
         WHERE email IS NOT NULL GROUP BY lower(trim(email)) HAVING count(*) > 1
     ) d;
     IF dup IS NOT NULL THEN
-        RAISE EXCEPTION 'email 轉小寫後重複，請先人工合併帳號：%', dup;
+        RAISE EXCEPTION 'duplicate emails after lowercasing, merge accounts manually first: %', dup;
     END IF;
 END $$;
 
 -- -----------------------------------------------------------------------------
--- 1. users：角色改 text[]、新增 OAuth 欄位、移除密碼相關欄位
+-- 1. users: roles to text[], add OAuth columns, drop password-related columns
 -- -----------------------------------------------------------------------------
 ALTER TABLE users
     ADD COLUMN roles       TEXT[] NOT NULL DEFAULT ARRAY['user'],
@@ -67,13 +67,13 @@ ALTER TABLE users
     ADD CONSTRAINT chk_users_identifier CHECK (email IS NOT NULL OR phone_number IS NOT NULL);
 
 -- -----------------------------------------------------------------------------
--- 2. 移除不再使用的表
+-- 2. Drop tables no longer used
 -- -----------------------------------------------------------------------------
 DROP TABLE IF EXISTS user_roles, roles, refresh_tokens, password_reset_tokens, user_activities,
     user_rankings, user_ratings;
 
 -- -----------------------------------------------------------------------------
--- 3. lookup（舊環境可能未建）
+-- 3. lookup (may not exist in old environments)
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS lookup (
     id             UUID         PRIMARY KEY,
@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS lookup (
 );
 
 -- -----------------------------------------------------------------------------
--- 4. audit_logs：user_id 改字串且不設 FK（使用者刪除後稽核仍保留）
+-- 4. audit_logs: user_id becomes a string with no FK (audit records survive user deletion)
 -- -----------------------------------------------------------------------------
 DO $$
 DECLARE c record;
@@ -108,7 +108,7 @@ ALTER TABLE audit_logs
     ALTER COLUMN username TYPE VARCHAR(254);
 
 -- -----------------------------------------------------------------------------
--- 5. 所有 TIMESTAMP → TIMESTAMPTZ（依上方 TimeZone 解讀舊值），預設值統一 now()
+-- 5. All TIMESTAMP -> TIMESTAMPTZ (old values read using the TimeZone above), defaults unified to now()
 -- -----------------------------------------------------------------------------
 DO $$
 DECLARE c record;
@@ -123,7 +123,7 @@ BEGIN
 END $$;
 
 -- -----------------------------------------------------------------------------
--- 6. 重建 RANKING / RATING 表（Phase 2 預留）
+-- 6. Recreate RANKING / RATING tables (reserved for Phase 2)
 -- -----------------------------------------------------------------------------
 CREATE TABLE user_rankings (
     id            UUID        PRIMARY KEY,
@@ -147,7 +147,7 @@ CREATE TABLE user_ratings (
 );
 
 -- -----------------------------------------------------------------------------
--- 7. 索引：移除舊 idx_*（多數與 UNIQUE 重複），改建 schema.sql 的索引組合
+-- 7. Indexes: drop old idx_* (mostly duplicates of UNIQUE) and create the schema.sql index set
 -- -----------------------------------------------------------------------------
 DO $$
 DECLARE i record;

@@ -21,7 +21,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * 平台使用者。登入方式為 Email/手機 OTP 或 Google / LINE / Apple OAuth，不保存密碼。
+ * Platform user. Signs in via Email/phone OTP or Google / LINE / Apple OAuth; no password is stored.
  */
 @Entity
 @Table(name = "users")
@@ -35,7 +35,7 @@ public class User extends AuditableEntity {
     @Column(name = "username", nullable = false, unique = true, length = 50)
     private String username;
 
-    /** 手機 OTP 註冊者可為 null。 */
+    /** Null for users who registered via phone OTP. */
     @Column(name = "email", unique = true, length = 254)
     private String email;
 
@@ -65,7 +65,7 @@ public class User extends AuditableEntity {
     @Column(name = "membership_level", nullable = false, length = 20)
     private String membershipLevel = "BASIC";
 
-    /** false 即停權：所有登入路徑與 refresh rotation 皆拒絕。 */
+    /** false means suspended: all login paths and refresh rotation are rejected. */
     @Builder.Default
     @Column(name = "active", nullable = false)
     private boolean active = true;

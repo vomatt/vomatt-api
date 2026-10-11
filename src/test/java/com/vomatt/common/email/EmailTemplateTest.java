@@ -12,8 +12,8 @@ import java.util.Locale;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 以純 Thymeleaf engine（不啟動 Spring context）渲染 email 模板，驗證驗證碼與 i18n 標題正確輸出。
- * message source 與 {@code I18nConfig} 相同：{@code classpath:i18n/messages}。
+ * Renders the email template with a plain Thymeleaf engine (no Spring context) and verifies the code and i18n title are output correctly.
+ * The message source matches {@code I18nConfig}: {@code classpath:i18n/messages}.
  */
 class EmailTemplateTest {
 

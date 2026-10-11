@@ -1,27 +1,27 @@
-# 認證流程（Auth Flow）
+# Auth Flow
 
-涵蓋 Email OTP、手機 OTP、Google / LINE / Apple 登入、refresh、logout 與 401 處理。各端點的欄位、型別與錯誤範例請看 Swagger 的 **Auth** 區塊；本文只描述跨多支 API 的流程。全域慣例見 [conventions.md](conventions.md)。
+Covers Email OTP, phone OTP, Google / LINE / Apple sign-in, refresh, logout, and 401 handling. For each endpoint's fields, types, and error examples, see the **Auth** section in Swagger; this document only describes flows that span multiple APIs. For global conventions, see [conventions.md](conventions.md).
 
-所有 `/api/auth/**` 端點都是公開的（不帶 `Authorization`），並受限流保護（見 conventions §5）。
+All `/api/auth/**` endpoints are public (no `Authorization`) and are rate limited (see conventions §5).
 
-## 1. Token 與效期
+## 1. Tokens and lifetimes
 
-| Token | 預設效期 | 設定 | 說明 |
+| Token | Default lifetime | Setting | Notes |
 |-------|----------|------|------|
-| access token（`token`） | 1 小時 | `JWT_EXPIRATION_SECONDS`（預設 3600） | JWT，無狀態；以 `Authorization: Bearer <token>` 帶入受保護端點 |
-| refresh token（`refreshToken`） | 30 天 | `JWT_REFRESH_EXPIRATION_DAYS`（預設 30） | 不透明字串（UUID），存在伺服器 Redis；**單次使用**，每次 refresh 都會換一組新的 |
-| refresh grace window | 10 秒 | `JWT_REFRESH_GRACE_SECONDS`（預設 10） | 見 §6 |
+| access token (`token`) | 1 hour | `JWT_EXPIRATION_SECONDS` (default 3600) | JWT, stateless; send as `Authorization: Bearer <token>` to protected endpoints |
+| refresh token (`refreshToken`) | 30 days | `JWT_REFRESH_EXPIRATION_DAYS` (default 30) | Opaque string (UUID) stored in server-side Redis; **single use**, every refresh issues a new pair |
+| refresh grace window | 10 seconds | `JWT_REFRESH_GRACE_SECONDS` (default 10) | See §6 |
 
-存放建議：
+Storage recommendations:
 
-- Web：access token 放記憶體；refresh token 目前由前端自行保存（API 不會設 cookie），請避免被第三方腳本讀取（嚴格 CSP、不載入不信任的腳本），並避免寫進 log。
-- App：兩者都放系統安全儲存（Keychain / Keystore）。
-- 每次 login 或 refresh 回應都要**同時覆寫**兩個 token；舊的 refresh token 之後不能再用。
-- `user` 只在 login / signup 回應出現，refresh 回應的 `user` 是 `null`，請保留登入時的資料。
+- Web: keep the access token in memory. The refresh token is currently stored by the frontend itself (the API does not set cookies); keep it out of reach of third-party scripts (strict CSP, no untrusted scripts) and never write it to logs.
+- App: store both in the system secure storage (Keychain / Keystore).
+- On every login or refresh response, **overwrite both** tokens; the old refresh token cannot be used afterwards.
+- `user` is only present in login / signup responses. In refresh responses `user` is `null`, so keep the data from login.
 
-## 2. Email OTP 登入 / 註冊
+## 2. Email OTP login / signup
 
-同一組端點處理登入與註冊：伺服器依 email 是否已註冊決定，不需要前端指定。
+The same endpoints handle both login and signup: the server decides based on whether the email is already registered, so the frontend does not need to specify it.
 
 ```mermaid
 sequenceDiagram
@@ -37,13 +37,13 @@ sequenceDiagram
     Note over App: Store both tokens, go to signed-in state
 ```
 
-| 步驟 | API | 備註 |
+| Step | API | Notes |
 |------|-----|------|
-| 1（選用） | `POST /api/auth/check-email` | 只用來決定文案是「登入」還是「註冊」 |
-| 2 | `POST /api/auth/send-otp` | OTP 預設 180 秒有效；同一 email 重寄有冷卻（預設 180 秒） |
-| 3 | `POST /api/auth/verify-otp` | 成功即消耗 OTP；新 email 會自動建帳號 |
+| 1 (optional) | `POST /api/auth/check-email` | Only used to decide whether the copy says "Log in" or "Sign up" |
+| 2 | `POST /api/auth/send-otp` | OTP is valid for 180 seconds by default; resending to the same email has a cooldown (default 180 seconds) |
+| 3 | `POST /api/auth/verify-otp` | Success consumes the OTP; a new email automatically creates an account |
 
-## 3. 手機 OTP 登入 / 註冊
+## 3. Phone OTP login / signup
 
 ```mermaid
 sequenceDiagram
@@ -56,12 +56,12 @@ sequenceDiagram
     API-->>App: 200 { token, refreshToken, user }
 ```
 
-- `type` 省略等同 `login`，此時手機號必須已註冊，否則 400 `auth.phone.not_registered`。新號碼請送 `type: "signup"`。
-- `verify-otp` 沒有 `type`：號碼不存在就建立帳號，存在就登入。
+- Omitting `type` is the same as `login`; the phone number must then already be registered, otherwise 400 `auth.phone.not_registered`. For new numbers, send `type: "signup"`.
+- `verify-otp` has no `type`: if the number does not exist an account is created; if it exists the user is logged in.
 
-## 4. Google / LINE / Apple 登入
+## 4. Google / LINE / Apple sign-in
 
-三者的共通點：前端先向 provider 取得憑證，再交給後端換 JWT。後端只信任 provider 已驗證的 email，未驗證會回 401 `auth.email_not_verified`（避免帳號被他人用未驗證 email 接管）。
+What the three have in common: the frontend first obtains a credential from the provider, then hands it to the backend in exchange for a JWT. The backend only trusts emails the provider has verified; an unverified email returns 401 `auth.email_not_verified` (to prevent account takeover via an unverified email).
 
 ```mermaid
 sequenceDiagram
@@ -82,11 +82,11 @@ sequenceDiagram
     API-->>App: 200 { token, refreshToken, user }
 ```
 
-| Provider | 送給後端的資料 | 注意 |
+| Provider | Data sent to the backend | Notes |
 |----------|----------------|------|
-| Google | `idToken` | audience 必須是本專案的 Google client ID |
-| LINE | `code` + `redirectUri` | `redirectUri` 必須與授權時使用的相同；若 LINE 沒給 email，後端用 `line_<userId>@line.oauth` 代替，所以 `user.email` 不會是 `null` |
-| Apple | `idToken` + `fullName` | Apple 只在**第一次授權**提供姓名，要在那次就送 `fullName`；Apple 金鑰端點故障時回 503，可重試 |
+| Google | `idToken` | The audience must be this project's Google client ID |
+| LINE | `code` + `redirectUri` | `redirectUri` must match the one used during authorization; if LINE provides no email, the backend uses `line_<userId>@line.oauth` instead, so `user.email` is never `null` |
+| Apple | `idToken` + `fullName` | Apple only provides the name on the **first authorization**, so send `fullName` that time; if Apple's key endpoint is down the backend returns 503, which can be retried |
 
 ## 5. Logout
 
@@ -99,11 +99,11 @@ sequenceDiagram
     Note over App: Always clear both tokens locally
 ```
 
-- 只撤銷傳入的那組 refresh token，其他裝置不受影響。
-- 傳入未知或已撤銷的 token 也回 200，所以前端不用處理失敗，請無條件清除本機 token。
-- access token 是無狀態的，logout 後在到期前技術上仍有效；前端必須丟棄它。
+- Only the refresh token passed in is revoked; other devices are unaffected.
+- An unknown or already-revoked token also returns 200, so the frontend has no failure to handle; always clear the local tokens unconditionally.
+- The access token is stateless and technically remains valid after logout until it expires; the frontend must discard it.
 
-## 6. Refresh 與 rotation
+## 6. Refresh and rotation
 
 ```mermaid
 sequenceDiagram
@@ -118,27 +118,27 @@ sequenceDiagram
     API-->>App: 200
 ```
 
-Rotation 規則（`RefreshTokenService`）：
+Rotation rules (`RefreshTokenService`):
 
-1. 每次 refresh 都會**消耗**傳入的 refresh token，回傳新的 access token 與新的 refresh token。
-2. **Grace window（預設 10 秒）**：同一個舊 refresh token 在視窗內再次送來（例如兩個分頁或兩個請求同時 refresh），會拿到**完全相同的那組新 token**，不會失敗，也不會被當成攻擊。
-3. **Reuse 偵測**：舊 token 已被消耗、又超出 grace window 才被送來（可能是 token 外洩），後端會**撤銷該使用者所有裝置的全部 refresh token**，並回 401 `auth.suspicious_login`。前端收到後必須清除本機 token、強制登出並導向登入頁，提示「為了安全已登出所有裝置，請重新登入」。
-4. refresh 時會重新讀取使用者的最新 roles，角色異動在下次 refresh 後生效（最長一個 access token 效期）。
-5. 使用者不存在或被停權時，refresh 回 401 `auth.refresh_token.invalid`，並撤銷該使用者所有 refresh token。
+1. Every refresh **consumes** the refresh token passed in and returns a new access token and a new refresh token.
+2. **Grace window (default 10 seconds)**: if the same old refresh token is sent again within the window (e.g. two tabs or two requests refreshing at the same time), it gets **exactly the same new token pair**, without failing and without being treated as an attack.
+3. **Reuse detection**: if an old token that was already consumed is sent after the grace window (possibly a leaked token), the backend **revokes all refresh tokens on all of that user's devices** and returns 401 `auth.suspicious_login`. On receiving it, the frontend must clear local tokens, force logout, redirect to the login page, and show a message like "For your security, all devices have been signed out. Please log in again."
+4. Refresh reloads the user's latest roles, so role changes take effect after the next refresh (at most one access token lifetime).
+5. If the user does not exist or is suspended, refresh returns 401 `auth.refresh_token.invalid` and revokes all of that user's refresh tokens.
 
-## 7. 401 處理策略
+## 7. 401 handling strategy
 
-`errorCode` 決定動作（不要只看 status）：
+The `errorCode` decides the action (do not look at the status alone):
 
-| errorCode | 來源 | 動作 |
+| errorCode | Source | Action |
 |-----------|------|------|
-| `auth.token.expired` | 受保護端點 | refresh 一次，成功後重送原請求 |
-| `auth.token.invalid` | 受保護端點 | 清除 token，導向登入頁 |
-| `common.unauthorized` | 受保護端點（沒帶 token） | 清除 token，導向登入頁 |
-| `auth.refresh_token.invalid` | `/api/auth/refresh` | refresh token 無效或過期，清除 token 並導向登入頁 |
-| `auth.suspicious_login` | `/api/auth/refresh` | 同上，並顯示安全提示 |
+| `auth.token.expired` | Protected endpoint | Refresh once, then retry the original request on success |
+| `auth.token.invalid` | Protected endpoint | Clear tokens, redirect to the login page |
+| `common.unauthorized` | Protected endpoint (no token sent) | Clear tokens, redirect to the login page |
+| `auth.refresh_token.invalid` | `/api/auth/refresh` | Refresh token is invalid or expired; clear tokens and redirect to the login page |
+| `auth.suspicious_login` | `/api/auth/refresh` | Same as above, plus show a security notice |
 
-**單一 in-flight refresh**：多個請求可能同時收到 `auth.token.expired`。前端必須只送出**一個** refresh，其他請求排隊等結果：
+**Single in-flight refresh**: several requests may receive `auth.token.expired` at the same time. The frontend must send only **one** refresh, with the other requests queued waiting for its result:
 
 ```ts
 let refreshing: Promise<void> | null = null;
@@ -154,46 +154,46 @@ async function request(input, init) {
 }
 ```
 
-- 重送只做**一次**；重送後仍 401 就登出。
-- `doRefresh` 失敗（401 或網路錯誤以外的任何失敗）→ 清除 token、導向登入頁，所有排隊中的請求一併失敗。
-- 即使多分頁同時 refresh，伺服器的 grace window 也會讓它們拿到同一組 token；但仍建議用 `BroadcastChannel` / storage event 同步，避免後到的分頁覆寫成較舊的 token。
-- 不要對 `/api/auth/**` 的 401 再套用 refresh 邏輯（會造成無限迴圈）。
+- Retry only **once**; if the retry still gets 401, log out.
+- If `doRefresh` fails (401, or any failure other than a network error) -> clear tokens, redirect to the login page, and fail all queued requests.
+- Even when several tabs refresh at once, the server's grace window gives them the same token pair; still, syncing via `BroadcastChannel` / storage events is recommended so a later tab does not overwrite with an older token.
+- Do not apply the refresh logic to 401s from `/api/auth/**` (it would cause an infinite loop).
 
-## 8. 停權使用者（`User.active=false`）
+## 8. Suspended users (`User.active=false`)
 
-| 時機 | 回應 |
+| When | Response |
 |------|------|
-| 任何登入方式（OTP / Google / LINE / Apple） | 403 `auth.account_banned`，不發 token |
-| refresh | 401 `auth.refresh_token.invalid`，且該使用者所有 refresh token 被撤銷 |
-| 已持有、尚未過期的 access token | 不會被立即擋下，最長可再用到 access token 到期；到期後 refresh 失敗即登出 |
+| Any login method (OTP / Google / LINE / Apple) | 403 `auth.account_banned`; no token issued |
+| refresh | 401 `auth.refresh_token.invalid`, and all of that user's refresh tokens are revoked |
+| An access token already held and not yet expired | Not blocked immediately; it can be used until the access token expires, after which refresh fails and the user is logged out |
 
-UI：登入時收到 `auth.account_banned` 顯示「此帳號已被停用」，不要重試。
+UI: on `auth.account_banned` at login, show "This account has been suspended" and do not retry.
 
-## 9. 管理後台登入（`checkRole`）
+## 9. Admin console login (`checkRole`)
 
-`send-otp` 與 `verify-otp` 的 `checkRole: "true"`（字串）只給後台使用：
+`checkRole: "true"` (a string) on `send-otp` and `verify-otp` is only for the admin console:
 
-- 帳號必須**已存在且角色含 `admin`**，否則 403 `auth.admin.forbidden`。
-- 檢查發生在寄送 / 消耗 OTP 之前，所以不會因此建立新帳號或燒掉 OTP。
-- 一般使用者端不要送 `checkRole`（省略或 `"false"`）。
-- 這只是登入入口的限制；`/api/admin/**` 仍由 JWT 的角色把關（非 admin 回 403 `common.forbidden`）。
+- The account must **already exist and have the `admin` role**, otherwise 403 `auth.admin.forbidden`.
+- The check happens before the OTP is sent / consumed, so it never creates a new account or burns an OTP.
+- Regular user clients must not send `checkRole` (omit it or send `"false"`).
+- This only restricts the login entry point; `/api/admin/**` is still guarded by the JWT's roles (non-admins get 403 `common.forbidden`).
 
-## 10. 常見錯誤
+## 10. Common errors
 
-| errorCode | HTTP | 何時發生 | 建議 UI |
+| errorCode | HTTP | When it happens | Suggested UI |
 |-----------|------|----------|---------|
-| `auth.identifier.required` | 400 | email / phone 皆未提供 | 提示填寫 |
-| `auth.otp.resend_cooldown` | 400 | 冷卻期內重寄；`message` 含剩餘秒數 | 倒數後才可重寄 |
-| `auth.email.send_failed` / `auth.sms.send_failed` | 400 | 信件 / 簡訊寄送失敗 | 提示稍後重試 |
-| `auth.phone.not_registered` | 400 | `type=login` 但號碼未註冊 | 導向註冊流程（`type=signup`） |
-| `auth.otp.invalid_or_expired` | 401 | 沒有有效的 OTP（過期、已使用、從未寄送） | 引導重新寄送 |
-| `auth.invalid_otp` | 401 | 驗證碼錯誤 | 提示重新輸入 |
-| `auth.otp.too_many_attempts` | 401 | 連續錯 5 次，OTP 已作廢 | 要求重新寄送 |
-| `auth.admin.forbidden` | 403 | `checkRole` 但不是 admin | 顯示無權限 |
-| `auth.account_banned` | 403 | 帳號被停權 | 顯示帳號已停用 |
-| `auth.email_not_verified` | 401 | OAuth provider 的 email 未驗證 | 提示改用其他登入方式 |
-| `auth.google.*` / `auth.line.*` / `auth.apple.*` | 400 / 401 | provider 憑證無效或後端未設定 | 提示改用其他方式或稍後重試 |
-| `common.service_unavailable` | 503 | Apple 金鑰端點故障 | 可重試（指數退避） |
-| `auth.refresh_token.invalid` | 401 | refresh token 無效、過期或使用者被停權 | 清除 token，導向登入 |
-| `auth.suspicious_login` | 401 | 偵測到 refresh token 重複使用，全部 session 已終止 | 清除 token，導向登入並顯示安全提示 |
-| `common.rate_limited` | 429 | 超過限流 | 依 `Retry-After` 倒數 |
+| `auth.identifier.required` | 400 | Neither email nor phone provided | Prompt the user to fill it in |
+| `auth.otp.resend_cooldown` | 400 | Resent during the cooldown; `message` includes the remaining seconds | Allow resend only after the countdown |
+| `auth.email.send_failed` / `auth.sms.send_failed` | 400 | Failed to send the email / SMS | Ask the user to retry later |
+| `auth.phone.not_registered` | 400 | `type=login` but the number is not registered | Go to the signup flow (`type=signup`) |
+| `auth.otp.invalid_or_expired` | 401 | No valid OTP (expired, already used, or never sent) | Guide the user to resend |
+| `auth.invalid_otp` | 401 | Wrong code | Ask the user to re-enter |
+| `auth.otp.too_many_attempts` | 401 | 5 wrong attempts in a row; the OTP has been invalidated | Require a resend |
+| `auth.admin.forbidden` | 403 | `checkRole` but not an admin | Show no permission |
+| `auth.account_banned` | 403 | Account is suspended | Show that the account is suspended |
+| `auth.email_not_verified` | 401 | The OAuth provider's email is not verified | Suggest another login method |
+| `auth.google.*` / `auth.line.*` / `auth.apple.*` | 400 / 401 | Provider credential is invalid or the backend is not configured | Suggest another method or retry later |
+| `common.service_unavailable` | 503 | Apple key endpoint is down | Retry (exponential backoff) |
+| `auth.refresh_token.invalid` | 401 | Refresh token is invalid, expired, or the user is suspended | Clear tokens, redirect to login |
+| `auth.suspicious_login` | 401 | Refresh token reuse detected; all sessions have been terminated | Clear tokens, redirect to login and show a security notice |
+| `common.rate_limited` | 429 | Rate limit exceeded | Count down using `Retry-After` |

@@ -56,7 +56,7 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該在 Poll 結束時通知發起人與 Participant，不通知旁觀者")
+    @DisplayName("should notify the creator and Participants but not bystanders when a Poll ends")
     void shouldNotifyOwnerAndParticipantsWhenPollEnded() {
         ballot(participant, poll(now.minusDays(2), now.minusHours(1)));
         poll(now.minusHours(1), now.plusDays(1));  // still Open: no notification yet
@@ -67,7 +67,7 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該不通知已撤回的使用者（不再持有 Ballot）")
+    @DisplayName("should not notify users who withdrew (no longer hold a Ballot)")
     void shouldNotNotifyRetractedUser() {
         poll(now.minusDays(2), now.minusHours(1));  // participant retracted: no Ballot row left
 
@@ -75,7 +75,7 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該不為取消的 Scheduled Poll 產生通知")
+    @DisplayName("should not create notifications for a cancelled Scheduled Poll")
     void shouldNotNotifyWhenScheduledPollCancelled() {
         Vote scheduled = poll(now.plusDays(1), now.plusDays(2));
         scheduled.deactivate();
@@ -84,7 +84,7 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該在提前 Close 後立即出現通知")
+    @DisplayName("should show the notification immediately when a Poll is closed early")
     void shouldNotifyImmediatelyWhenClosedEarly() {
         Vote open = poll(now.minusHours(1), now.plusDays(3));
         ballot(participant, open);
@@ -96,7 +96,7 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該能冪等地標記已讀，並更新未讀數")
+    @DisplayName("should mark as read idempotently and update the unread count")
     void shouldMarkNotificationReadIdempotently() {
         Vote ended = poll(now.minusDays(2), now.minusHours(1));
         poll(now.minusDays(3), now.minusHours(2));
@@ -110,7 +110,7 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該在使用者沒有該通知時回 404")
+    @DisplayName("should return 404 when the user does not have the notification")
     void shouldRejectMarkingPollWithoutNotification() {
         Vote ended = poll(now.minusDays(2), now.minusHours(1));
         em.flush();
@@ -121,7 +121,7 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該在 My Polls 已結束分頁標示 unread，已讀與取消的 Poll 為 false")
+    @DisplayName("should flag unread on the My Polls ended tab, false for read and cancelled Polls")
     void shouldFlagUnreadInEndedMyPolls() {
         Vote unreadPoll = poll(now.minusDays(2), now.minusHours(1));
         Vote readPoll = poll(now.minusDays(3), now.minusHours(2));

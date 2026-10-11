@@ -16,7 +16,7 @@ Please generate Git commit messages for this project according to the following 
     - `ci`: Changes to CI/CD configuration files and scripts
 
 ### 2. Language and Tone
-- **Content Language:** Use **Traditional Chinese** (繁體中文) for all content.
+- **Content Language:** Use **Traditional Chinese** for all content.
 - **Description Tone:** Use the imperative mood for the description (subject line), for example:
     - `feat(api): 新增訂單查詢 API`
     - `fix(auth): 修正 token 驗證邏輯`

@@ -16,7 +16,7 @@ class UserProfilePostgresTest extends PostgresRepositoryTest {
     @Autowired UserRepository userRepository;
 
     @Test
-    @DisplayName("應該只把 Open 與 Ended 的 Poll 算進 totalPolls")
+    @DisplayName("should count only Open and Ended Polls in totalPolls")
     void shouldCountOnlyOpenedPolls() {
         OffsetDateTime now = OffsetDateTime.now();
         User owner = persistUser("pp-" + System.nanoTime());
@@ -34,7 +34,7 @@ class UserProfilePostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("應該在使用者已停權時回報 active=false")
+    @DisplayName("should report active=false when user is suspended")
     void shouldReportSuspendedUser() {
         User owner = persistUser("ps-" + System.nanoTime());
         owner.setActive(false);

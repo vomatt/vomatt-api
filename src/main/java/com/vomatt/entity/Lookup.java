@@ -31,8 +31,8 @@ public class Lookup extends AuditableEntity {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "lookup_value", nullable = false, columnDefinition = "json")
     /**
-     * JSON 值（物件 / 陣列 / 純量）。刻意宣告為 Object：Hibernate 7.2 的 JSON mapper 只支援 Jackson 2，
-     * 無法產生 Jackson 3 的 JsonNode；Object 讓兩邊都以 Map / List / 純量往返。
+     * JSON value (object / array / scalar). Deliberately declared as Object: Hibernate 7.2's JSON mapper only supports Jackson 2
+     * and cannot produce a Jackson 3 JsonNode; Object lets both sides round-trip as Map / List / scalar.
      */
     private Object lookupValue;
 

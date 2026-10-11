@@ -17,8 +17,8 @@ public class LocalizedMessageService {
     }
 
     /**
-     * 供 GlobalExceptionHandler 處理舊有寫死字串時使用：
-     * 若 code 為有效 key 則回翻譯結果，否則直接回傳原字串（向下相容）。
+     * Used by GlobalExceptionHandler to handle legacy hard-coded strings:
+     * if code is a valid key, return the translation; otherwise return the original string (backward compatible).
      */
     public String resolveOrFallback(String code, Object... args) {
         try {

@@ -51,7 +51,7 @@ class UserControllerTest {
     }
 
     @Test
-    @DisplayName("應該在未登入時回傳使用者公開的 Poll 列表")
+    @DisplayName("should return user's public Poll list when not signed in")
     void shouldListUserPollsWhenSignedOut() throws Exception {
         VoteResponse poll = new VoteResponse();
         poll.setTitle("Lunch?");
@@ -65,7 +65,7 @@ class UserControllerTest {
     }
 
     @Test
-    @DisplayName("應該讓 /api/users/{username}/votes 公開，/api/users/me/votes 仍需登入")
+    @DisplayName("should make /api/users/{username}/votes public while /api/users/me/votes still requires sign-in")
     void shouldExposeUserPollsPublicly() {
         PathPatternParser parser = PathPatternParser.defaultInstance;
         assertThat(Arrays.stream(SecurityEndpoints.PUBLIC_GET)

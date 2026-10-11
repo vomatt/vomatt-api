@@ -20,7 +20,7 @@ public record ApiResponse<T>(
     }
 
     /**
-     * 成功並附帶 i18n 訊息（例：「預約建立成功」）供前端 toast 顯示。
+     * Success with an i18n message (e.g. "Booking created") for the frontend to show as a toast.
      */
     public static <T> ApiResponse<T> ok(T data, String message) {
         return new ApiResponse<>(true, data, message, null, null);

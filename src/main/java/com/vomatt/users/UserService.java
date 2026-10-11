@@ -40,7 +40,7 @@ public class UserService {
     private final RefreshTokenService refreshTokenService;
     private final VoteOptionRepository voteOptionRepository;
 
-    /** 本人或 ADMIN 可刪除帳號；刪除同時撤銷該使用者所有 refresh token。 */
+    /** The user themself or an ADMIN can delete the account; deletion also revokes all of the user's refresh tokens. */
     @Transactional
     public void deleteUser(String userId, UserPrincipal principal) {
         if (!principal.userId().equals(userId) && !principal.roles().contains(UserRole.ADMIN)) {

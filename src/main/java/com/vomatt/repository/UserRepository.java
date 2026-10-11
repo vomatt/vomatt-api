@@ -52,8 +52,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     List<User> findByUsernameIgnoreCase(@Param("username") String username);
 
     /**
-     * 一次查詢取得 User profile 與統計數字（避免 N+1）。totalPolls 只算已開放的 Poll（Open、Ended），
-     * 與公開頁的 Poll 列表一致：不含 Scheduled 與開放前就取消的。
+     * Fetch the User profile and stats in one query (avoids N+1). totalPolls counts only Polls that have opened (Open, Ended),
+     * consistent with the Poll list on the public page: excludes Scheduled ones and those cancelled before opening.
      */
     @Query("SELECT u.id AS id, u.username AS username, u.displayName AS displayName, u.bio AS bio, " +
            "u.createdAt AS createdAt, u.email AS email, u.firstName AS firstName, " +

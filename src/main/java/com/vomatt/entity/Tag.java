@@ -44,7 +44,7 @@ public class Tag extends AuditableEntity {
     }
 
     /**
-     * Slug 自動生成：英文轉小寫 + 空格轉連字號，中日韓字符保留
+     * Auto-generates the slug: English lowercased + spaces to hyphens, CJK characters kept
      */
     public static String generateSlug(String name) {
         String slug = name.trim()
@@ -52,7 +52,7 @@ public class Tag extends AuditableEntity {
                 .replaceAll("\\s+", "-")
                 .replaceAll("[^a-z0-9\\-\\u4e00-\\u9fff\\u3040-\\u309f\\u30a0-\\u30ff]", "");
         if (slug.isBlank()) {
-            throw new IllegalArgumentException("無法從名稱生成有效的 slug: " + name);
+            throw new IllegalArgumentException("Cannot generate a valid slug from name: " + name);
         }
         return slug;
     }

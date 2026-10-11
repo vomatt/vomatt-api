@@ -4,8 +4,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 /**
- * SMS NoOp 實作，僅記錄 log。
- * 正式環境請替換為 Twilio / AWS SNS 等實作。
+ * NoOp SMS implementation that only writes a log.
+ * Replace with a Twilio / AWS SNS implementation in production.
  */
 @Slf4j
 @Service

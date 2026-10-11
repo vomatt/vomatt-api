@@ -23,9 +23,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 驗證 {@link GlobalExceptionHandler} 對授權失敗例外的處理。
- * 使用 standaloneSetup（不啟動 Spring context、不連 DB），
- * 註冊一個會丟授權例外的測試 controller，並將 handler 設為 controllerAdvice。
+ * Verifies how {@link GlobalExceptionHandler} handles authorization-failure exceptions.
+ * Uses standaloneSetup (no Spring context, no DB),
+ * registers a test controller that throws authorization exceptions, and sets the handler as controllerAdvice.
  */
 @ExtendWith(MockitoExtension.class)
 class GlobalExceptionHandlerTest {
@@ -37,9 +37,9 @@ class GlobalExceptionHandlerTest {
 
     @BeforeEach
     void setUp() {
-        // 讓 i18n resolve 回傳非 null 字串，避免測試依賴實際 properties
+        // Make i18n resolve return a non-null string so the test does not depend on the real properties
         lenient().when(messageService.resolve(any(MessageKey.class)))
-                .thenReturn("沒有權限執行此操作");
+                .thenReturn("You do not have permission to perform this action");
 
         GlobalExceptionHandler handler = new GlobalExceptionHandler(messageService);
         mockMvc = MockMvcBuilders.standaloneSetup(new TestController())
@@ -58,7 +58,7 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void authorizationDeniedException_returns403() throws Exception {
-        // AuthorizationDeniedException 是 method-security（@PreAuthorize）失敗時實際丟出的子類
+        // AuthorizationDeniedException is the subclass actually thrown when method security (@PreAuthorize) fails
         mockMvc.perform(get("/test/authorization-denied"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.success").value(false))
@@ -67,7 +67,7 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void apiException_withoutData_returnsNullData_backwardCompatible() throws Exception {
-        // 既有無 data 的 ApiException 行為不變：data 恆為 null（Phase 0 擴充前後一致）
+        // Existing ApiException without data is unchanged: data is always null (same before and after the Phase 0 extension)
         mockMvc.perform(get("/test/api-exception-no-data"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.success").value(false))
@@ -76,7 +76,7 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void apiException_withData_returns422AndStructuredData() throws Exception {
-        // Phase 0 錯誤 envelope 擴充：422 + 結構化 data（例：{distanceM: 384}）
+        // Phase 0 error envelope extension: 422 + structured data (e.g. {distanceM: 384})
         mockMvc.perform(get("/test/api-exception-with-data"))
                 .andExpect(status().is(422))
                 .andExpect(jsonPath("$.success").value(false))
@@ -85,7 +85,7 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void illegalArgumentException_returns400BadRequest() throws Exception {
-        // 無效 UUID path id、無法產生 slug 的標籤名稱等 IllegalArgumentException 應回 400，而非 500
+        // IllegalArgumentException (invalid UUID path id, tag name that cannot produce a slug, etc.) should return 400, not 500
         mockMvc.perform(get("/test/illegal-argument"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
@@ -125,7 +125,7 @@ class GlobalExceptionHandlerTest {
     record OutOfRangeData(int distanceM) {
     }
 
-    /** 最小化的 AuthorizationResult，僅供建構 AuthorizationDeniedException 使用 */
+    /** Minimal AuthorizationResult, used only to construct AuthorizationDeniedException */
     static class DeniedResult implements AuthorizationResult {
         @Override
         public boolean isGranted() {

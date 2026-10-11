@@ -7,8 +7,8 @@ import org.springframework.http.HttpStatus;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * {@link ApiException} 單元測試：涵蓋既有靜態工廠的向後相容行為，以及
- * {@code unprocessable}（422）與攜帶結構化 {@code data} 的 {@code withData}。
+ * {@link ApiException} unit tests: covers backward-compatible behavior of the existing static factories, plus
+ * {@code unprocessable} (422) and {@code withData} carrying structured {@code data}.
  */
 class ApiExceptionTest {
 

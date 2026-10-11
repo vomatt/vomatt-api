@@ -12,12 +12,12 @@ import java.util.UUID;
 public interface UserPreferenceRepository extends JpaRepository<UserPreference, UUID> {
 
     /**
-     * 批次查詢指定前綴的偏好設定（如 visibility.*）
+     * Batch-fetch preferences with the given prefix (e.g. visibility.*)
      */
     List<UserPreference> findByUserIdAndKeyStartingWith(UUID userId, String keyPrefix);
 
     /**
-     * 查詢單一偏好設定
+     * Fetch a single preference
      */
     Optional<UserPreference> findByUserIdAndKey(UUID userId, String key);
 }

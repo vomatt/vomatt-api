@@ -17,13 +17,13 @@ public record PageResponse<T>(
         return new PageResponse<>(content, total, page, limit);
     }
 
-    // 由 Spring Data Page 轉成 PageResponse；page 採 1-based。
+    // Converts a Spring Data Page into a PageResponse; page is 1-based.
     public static <T> PageResponse<T> from(Page<T> page) {
         return new PageResponse<>(page.getContent(), page.getTotalElements(),
                 page.getNumber() + 1, page.getSize());
     }
 
-    // 由 Spring Data Page + 轉換器（entity → dto）建構。
+    // Builds from a Spring Data Page + a mapper (entity -> dto).
     public static <S, T> PageResponse<T> from(Page<S> page, java.util.function.Function<S, T> mapper) {
         return new PageResponse<>(page.getContent().stream().map(mapper).toList(),
                 page.getTotalElements(), page.getNumber() + 1, page.getSize());

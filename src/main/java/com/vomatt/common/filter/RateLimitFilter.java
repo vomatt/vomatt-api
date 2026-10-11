@@ -37,7 +37,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return rateLimitConfig.getPaths().stream().noneMatch(p -> pathMatcher.match(p, uri));
     }
 
-    /** 認證端點 pattern；Redis 故障時此類端點 fail-closed（防 OTP 暴力破解）。 */
+    /** Auth endpoint patterns; these fail closed when Redis is down (prevents OTP brute force). */
     private static final String AUTH_PATH_PATTERN = "/api/auth/**";
 
     @Override
@@ -47,8 +47,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
         long now = Instant.now().getEpochSecond();
         Long count = countRequest(request, now / limit.getWindowSeconds(), limit);
         if (count == null) {
-            // P5-#4：Redis 故障時，認證端點 fail-closed（擋下，回 429）避免 OTP 暴力破解；
-            // 其餘端點維持 fail-open（放行）以保可用性。
+            // P5-#4: when Redis is down, auth endpoints fail closed (blocked with 429) to prevent OTP brute force;
+            // other endpoints fail open (allowed) to preserve availability.
             // No Retry-After here: waiting does not bring Redis back.
             if (pathMatcher.match(AUTH_PATH_PATTERN, request.getRequestURI())) {
                 errorWriter.write(request, response, HttpStatus.TOO_MANY_REQUESTS.value(), MessageKey.COMMON_RATE_LIMITED);
@@ -75,10 +75,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     /**
-     * 解析真實 client IP（P1-#6）。
+     * Resolves the real client IP (P1-#6).
      *
-     * <p>本服務部署在平台代理（Zeabur）後，{@code X-Forwarded-For} 由可信 edge 附加。
-     * 取<strong>最右側</strong>非空 IP——client 可任意偽造左側段落，但無法控制 edge 附加在最右的那一段，
-     * 故以最右側為準可防「每請求換假 IP 繞過限流」。無 XFF 時退回 {@code remoteAddr}。</p>
+     * <p>This service runs behind the platform proxy (Zeabur), and {@code X-Forwarded-For} is appended by the trusted edge.
+     * Take the <strong>rightmost</strong> non-empty IP: the client can forge the left segments but cannot control the rightmost one appended by the edge,
+     * so using the rightmost prevents bypassing rate limits with a fake IP per request. Without XFF, fall back to {@code remoteAddr}.</p>
      */
 }

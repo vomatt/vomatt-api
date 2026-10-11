@@ -3,11 +3,11 @@ package com.vomatt.common.util;
 import jakarta.servlet.http.HttpServletRequest;
 
 /**
- * 解析真實 client IP 的共用 utility。
+ * Shared utility for resolving the real client IP.
  *
- * <p>本服務部署在平台代理（Zeabur）後，{@code X-Forwarded-For} 由可信 edge 附加。
- * 取<strong>最右側</strong>非空 IP——client 可任意偽造左側段落，但無法控制 edge 附加在最右的那一段。
- * 無 XFF 時退回 {@code remoteAddr}。</p>
+ * <p>This service runs behind a platform proxy (Zeabur); {@code X-Forwarded-For} is appended by a trusted edge.
+ * Takes the <strong>rightmost</strong> non-empty IP: the client can forge the left segments freely, but cannot control the rightmost one appended by the edge.
+ * Falls back to {@code remoteAddr} when there is no XFF.</p>
  *
  */
 public final class ClientIpResolver {

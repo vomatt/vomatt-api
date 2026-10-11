@@ -65,7 +65,7 @@ class RefreshTokenServiceTest {
     ListAppender<ILoggingEvent> logAppender;
     Logger serviceLogger;
 
-    /** 建立帶指定 roles 的 User（id 由 userId 解析）；banned=true 對應 active=false */
+    /** Builds a User with the given roles (id parsed from userId); banned=true maps to active=false */
     private User userWithRoles(String userId, boolean banned, String... roles) {
         return User.builder()
                 .id(UUID.fromString(userId))
@@ -121,7 +121,7 @@ class RefreshTokenServiceTest {
 
         when(redisService.get(GRACE_NS, oldToken, RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getAndDelete(NAMESPACE, oldToken, RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
-        // Step 4 重查 User：未封禁、roles 與 token 內一致
+        // Step 4 reload User: not banned, roles match the token
         when(userRepository.findById(UUID.fromString(userId)))
                 .thenReturn(Optional.of(userWithRoles(userId, false, "user")));
         when(jwtUtil.generateToken(eq(userId), eq("user@example.com"), eq(List.of("user")))).thenReturn("new-access-token");
@@ -134,7 +134,7 @@ class RefreshTokenServiceTest {
         assertThat(result.data().userId()).isEqualTo(userId);
         assertThat(result.data().roles()).isEqualTo(List.of("user"));
 
-        // GRACE 仍為單獨 fail-soft 寫入（race 碰面點），其餘正確性關鍵寫入收斂為單一 MULTI/EXEC（P1-#17）。
+        // GRACE remains a separate fail-soft write (race rendezvous point); the other correctness-critical writes are combined into a single MULTI/EXEC (P1-#17).
         InOrder inOrder = inOrder(redisService);
         inOrder.verify(redisService).set(eq(GRACE_NS), eq(oldToken), eq(result), eq(Duration.ofSeconds(10)));
 
@@ -181,34 +181,34 @@ class RefreshTokenServiceTest {
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
                 userId, "race@example.com", List.of("user"));
 
-        // 第一個進入的 thread 拿到 data；第二個進入的 thread 拿到 null（GETDEL 已被消耗）
+        // The first thread in gets data; the second thread gets null (GETDEL already consumed)
         AtomicBoolean getAndDeleteConsumed = new AtomicBoolean(false);
         when(redisService.getAndDelete(NAMESPACE, oldToken, RefreshTokenService.RefreshTokenData.class))
                 .thenAnswer(inv -> getAndDeleteConsumed.compareAndSet(false, true) ? data : null);
 
-        // Step 4 重查 User：未封禁
+        // Step 4 reload User: not banned
         when(userRepository.findById(UUID.fromString(userId)))
                 .thenReturn(Optional.of(userWithRoles(userId, false, "user")));
 
-        // jwtUtil 對同 data 回固定 token（模擬決定性 access token；實際 JWT 因 iat 不同會有差，但 grace cache 解決這個）
+        // jwtUtil returns a fixed token for the same data (simulates a deterministic access token; real JWTs differ by iat, but the grace cache handles that)
         when(jwtUtil.generateToken(eq(userId), eq("race@example.com"), eq(List.of("user"))))
                 .thenReturn("concurrent-access-token");
 
-        // grace cache 行為：第一次寫入後，後續查詢回該結果
+        // grace cache behavior: after the first write, subsequent lookups return that result
         AtomicReference<RefreshTokenService.RotateResult> graceStore = new AtomicReference<>();
         when(redisService.get(eq(GRACE_NS), eq(oldToken), eq(RefreshTokenService.RotateResult.class)))
                 .thenAnswer(inv -> graceStore.get());
         // capture grace set
-        // 不能直接 stub void set，改用 doAnswer
+        // Cannot stub void set directly; use doAnswer instead
         org.mockito.Mockito.doAnswer(inv -> {
             graceStore.set(inv.getArgument(2));
             return null;
         }).when(redisService).set(eq(GRACE_NS), eq(oldToken), any(RefreshTokenService.RotateResult.class), any(Duration.class));
 
-        // 第二 caller 走 consumed 路徑：getAndDelete null → CONSUMED_NS 也回 null 才能走 grace
-        // 為求 grace 命中順序正確，CONSUMED_NS 查詢必須在 grace check 之後；但我們的 rotate 流程是先 grace 後 getAndDelete
-        // 所以第二 caller：grace check（命中 graceStore，因為第一 caller 已寫入）→ 直接 return
-        // 不會走到 getAndDelete／consumed
+        // Second caller takes the consumed path: getAndDelete null -> CONSUMED_NS must also return null to reach grace
+        // For grace hits to be ordered correctly, the CONSUMED_NS lookup must come after the grace check; our rotate flow does grace first, then getAndDelete
+        // So the second caller: grace check (hits graceStore because the first caller already wrote it) -> returns directly
+        // Never reaches getAndDelete/consumed
 
         int parties = 2;
         CountDownLatch start = new CountDownLatch(1);
@@ -234,7 +234,7 @@ class RefreshTokenServiceTest {
             try {
                 ready.countDown();
                 start.await();
-                // 小延遲確保 f1 先寫入 grace
+                // Small delay ensures f1 writes grace first
                 Thread.sleep(20);
                 r2.set(service.rotate(oldToken));
             } catch (InterruptedException ie) {
@@ -276,7 +276,7 @@ class RefreshTokenServiceTest {
         verify(redisService).delete(USER_IDX_NS, "user-victim");
     }
 
-    // ── rotate: Step 4 重查 User —— 封禁阻擋 ────────────────────────
+    // ── rotate: Step 4 reload User -- ban blocks ────────────────────────
 
     @Test
     void rotate_bannedUser_returnsNullAndRevokesAll() {
@@ -288,17 +288,17 @@ class RefreshTokenServiceTest {
         when(redisService.get(GRACE_NS, oldToken, RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getAndDelete(NAMESPACE, oldToken, RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
         when(redisService.hGetAll(USER_IDX_NS, userId)).thenReturn(Map.of("t1", "1"));
-        // 重查回停權 User
+        // Reload returns a suspended User
         when(userRepository.findById(UUID.fromString(userId)))
                 .thenReturn(Optional.of(userWithRoles(userId, true, "admin")));
 
         RefreshTokenService.RotateResult result = service.rotate(oldToken);
 
         assertThat(result).isNull();
-        // 封禁者須撤銷所有 session
+        // Banned users must have all sessions revoked
         verify(redisService).delete(NAMESPACE, "t1");
         verify(redisService).delete(USER_IDX_NS, userId);
-        // 不得簽發新 access token
+        // Must not issue a new access token
         verify(jwtUtil, never()).generateToken(anyString(), anyString(), any());
     }
 
@@ -321,19 +321,19 @@ class RefreshTokenServiceTest {
         verify(jwtUtil, never()).generateToken(anyString(), anyString(), any());
     }
 
-    // ── rotate: Step 4 重查 User —— roles 以最新為準 ────────────────
+    // ── rotate: Step 4 reload User -- latest roles win ────────────────
 
     @Test
     void rotate_rolesChanged_signsNewTokenWithFreshRoles() {
         String oldToken = "stale-roles-token";
         String userId = UUID.randomUUID().toString();
-        // token 內舊 roles 為 admin（被拔權前簽發）
+        // Old roles in the token are admin (issued before the role was revoked)
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
                 userId, "demoted@example.com", List.of("admin"));
 
         when(redisService.get(GRACE_NS, oldToken, RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getAndDelete(NAMESPACE, oldToken, RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
-        // 現行 User roles 已降為 user
+        // Current User roles have been downgraded to user
         when(userRepository.findById(UUID.fromString(userId)))
                 .thenReturn(Optional.of(userWithRoles(userId, false, "user")));
         when(jwtUtil.generateToken(eq(userId), eq("demoted@example.com"), any())).thenReturn("fresh-access");
@@ -343,13 +343,13 @@ class RefreshTokenServiceTest {
         assertThat(result).isNotNull();
         assertThat(result.newAccessToken()).isEqualTo("fresh-access");
 
-        // access token 必須以 fresh roles（user）簽發，而非舊 roles（admin）
+        // Access token must be issued with fresh roles (user), not old roles (admin)
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<String>> rolesCaptor = ArgumentCaptor.forClass(List.class);
         verify(jwtUtil).generateToken(eq(userId), eq("demoted@example.com"), rolesCaptor.capture());
         assertThat(rolesCaptor.getValue()).containsExactly("user");
 
-        // 寫入 NAMESPACE 的新 RefreshTokenData 也須用 fresh roles（現由 execInTransaction 的 RedisWrite 帶入）
+        // The new RefreshTokenData written to NAMESPACE must also use fresh roles (now passed via execInTransaction's RedisWrite)
         ArgumentCaptor<List<RedisService.RedisWrite>> writesCaptor = ArgumentCaptor.captor();
         verify(redisService).execInTransaction(writesCaptor.capture());
         RefreshTokenService.RefreshTokenData namespaceData = writesCaptor.getValue().stream()
@@ -358,7 +358,7 @@ class RefreshTokenServiceTest {
                 .findFirst().orElseThrow();
         assertThat(namespaceData.roles()).containsExactly("user");
 
-        // RotateResult.data 亦為 fresh
+        // RotateResult.data is fresh too
         assertThat(result.data().roles()).containsExactly("user");
     }
 
@@ -399,7 +399,7 @@ class RefreshTokenServiceTest {
         verify(redisService).hSetOrThrow(eq(USER_IDX_NS), eq("user-5"), eq(token), eq("1"), eq(Duration.ofDays(30)));
     }
 
-    // ── 正確性關鍵寫入失敗須拋出（P5-#3 / P5-#8）─────────────────────────
+    // ── Correctness-critical write failures must throw (P5-#3 / P5-#8) ─────────────────────────
 
     @Test
     void generate_whenUserIndexWriteFails_propagatesException() {
@@ -412,7 +412,7 @@ class RefreshTokenServiceTest {
 
     @Test
     void rotate_whenTransactionFails_propagatesException() {
-        // P1-#17：正確性關鍵寫入收斂為單一 MULTI/EXEC；交易失敗須整批拋出（fail-fast）。
+        // P1-#17: correctness-critical writes are combined into a single MULTI/EXEC; a transaction failure must throw for the whole batch (fail-fast).
         String oldToken = "old-token";
         String userId = UUID.randomUUID().toString();
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(

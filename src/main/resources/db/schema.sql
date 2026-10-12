@@ -251,13 +251,20 @@ CREATE INDEX IF NOT EXISTS idx_votes_search_bigrams ON vomatt.votes USING GIN (s
 -- Comment replies (one level): parent_id only points to top-level comments
 ALTER TABLE vomatt.vote_comments ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES vomatt.vote_comments (id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS idx_vote_comments_parent ON vomatt.vote_comments (parent_id, created_at, id);
--- One Ballot row per user per Poll (was UNIQUE (user_id, vote_id, option_id)); fails if existing data has duplicates
--- Create before dropping the old one, so duplicates abort here and the old constraint stays
-CREATE UNIQUE INDEX IF NOT EXISTS user_votes_user_id_vote_id_key ON vomatt.user_votes (user_id, vote_id);
-ALTER TABLE vomatt.user_votes DROP CONSTRAINT IF EXISTS user_votes_user_id_vote_id_option_id_key;
+-- One Ballot row per user per Poll (was UNIQUE (user_id, vote_id, option_id)).
+-- A DO block is atomic: if duplicates make the CREATE fail, the old constraint and index stay even when psql
+-- continues past errors. To dedup first, keep the latest row per (user_id, vote_id), then run reconcile-vote-counts.sql:
+--   DELETE FROM vomatt.user_votes a USING vomatt.user_votes b
+--   WHERE a.user_id = b.user_id AND a.vote_id = b.vote_id AND a.id < b.id;
+DO $$
+BEGIN
+    CREATE UNIQUE INDEX IF NOT EXISTS user_votes_user_id_vote_id_key ON vomatt.user_votes (user_id, vote_id);
+    ALTER TABLE vomatt.user_votes DROP CONSTRAINT IF EXISTS user_votes_user_id_vote_id_option_id_key;
+    -- Prefix of the new unique index
+    DROP INDEX IF EXISTS vomatt.idx_user_votes_user_vote;
+END $$;
 -- Redundant indexes: prefixes of other indexes, or low-selectivity columns no query filters on
 DROP INDEX IF EXISTS vomatt.idx_votes_creator_id;
-DROP INDEX IF EXISTS vomatt.idx_user_votes_user_vote;
 DROP INDEX IF EXISTS vomatt.idx_users_active;
 DROP INDEX IF EXISTS vomatt.idx_votes_vote_type;
 DROP INDEX IF EXISTS vomatt.idx_votes_active_time;

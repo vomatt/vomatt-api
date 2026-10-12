@@ -22,6 +22,16 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class VoteListRepository {
 
+    /**
+     * Ids of Polls the user owns or holds a Ballot in. A UNION lets each branch use its own index; an
+     * {@code creator_id = :userId OR EXISTS (...)} predicate cannot, and scans every Poll.
+     * Shared by the "my Polls" list and Ended Notifications; changing it changes both.
+     */
+    static final String MY_POLL_IDS = """
+            (SELECT uv.vote_id FROM vomatt.user_votes uv WHERE uv.user_id = :userId
+             UNION
+             SELECT c.id FROM vomatt.votes c WHERE c.creator_id = :userId)""";
+
     private final EntityManager em;
 
     /**
@@ -83,7 +93,7 @@ public class VoteListRepository {
     public List<Vote> findMine(UUID userId, boolean ended, Cursor after, OffsetDateTime now, int limit) {
         String direction = ended ? " DESC" : " ASC";
         StringBuilder sql = new StringBuilder("SELECT v.* FROM vomatt.votes v WHERE v.id IN ")
-                .append(NotificationReadRepository.MY_POLL_IDS);
+                .append(MY_POLL_IDS);
         sql.append(ended ? " AND v.end_time <= :now" : " AND v.end_time > :now");
         if (after != null) {
             sql.append(" AND (v.end_time, v.id) ").append(ended ? "<" : ">").append(" (:afterKey, :afterId)");

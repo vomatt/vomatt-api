@@ -180,7 +180,7 @@ class RateLimitFilterTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"GET", "HEAD", "OPTIONS"})
-    void shouldSkipReadsOutsideAuthPaths(String method) throws Exception {
+    void shouldSkipCountingWhenReadOutsideAuthPaths(String method) throws Exception {
         config.setPaths(List.of("/api/auth/**", "/api/votes/**"));
         FilterChain chain = mock(FilterChain.class);
 
@@ -193,14 +193,15 @@ class RateLimitFilterTest {
     }
 
     @Test
-    void shouldCountWritesOnConfiguredNonAuthPaths() throws Exception {
+    void shouldCountInSeparateBucketWhenWriteOnNonAuthPath() throws Exception {
         config.setPaths(List.of("/api/auth/**", "/api/votes/**"));
-        when(redisService.incrementAndExpire(eq("rate:limit"), anyString(), any(Duration.class))).thenReturn(301L);
+        when(redisService.incrementAndExpire(eq("rate:limit:write"), anyString(), any(Duration.class))).thenReturn(301L);
 
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/votes/abc/vote");
         MockHttpServletResponse response = new MockHttpServletResponse();
         filter.doFilter(request, response, mock(FilterChain.class));
 
         assertThat(response.getStatus()).isEqualTo(429);
+        verify(redisService, never()).incrementAndExpire(eq("rate:limit"), anyString(), any(Duration.class));
     }
 }

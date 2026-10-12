@@ -204,12 +204,12 @@ public class AuthService {
         // The user proved ownership of the email via OTP -> treat as verified
         User user = findOrCreateUserByEmail(normalizedEmail, defaultName, "email_otp", true);
 
+        AuthResponse response = buildAuthResponse(user);
         if ("signup".equals(otp.type())) {
-            // Sent in the background so SMTP latency does not delay the login response
+            // Sent only after the login succeeded, in the background so SMTP latency does not delay the response
             emailService.sendWelcomeEmail(normalizedEmail, user.getDisplayName(), LocaleContextHolder.getLocale());
         }
-
-        return buildAuthResponse(user);
+        return response;
     }
 
     private AuthResponse verifyPhoneOtp(String phone, String code) {

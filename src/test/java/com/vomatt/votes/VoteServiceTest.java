@@ -27,6 +27,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -96,14 +97,18 @@ class VoteServiceTest {
     }
 
     private void stubSaveAssignsId() {
+        List<Vote> saved = new ArrayList<>();
         when(voteRepository.save(any(Vote.class))).thenAnswer(inv -> {
             Vote v = inv.getArgument(0);
             if (v.getId() == null) {
                 setId(v, UUID.randomUUID()); // simulate DB-assigned ID
             }
             v.getOptions().stream().filter(o -> o.getId() == null).forEach(o -> setId(o, UUID.randomUUID()));
+            saved.add(v);
             return v;
         });
+        // The response is reloaded with its options after saving
+        when(voteRepository.findByIdWithOptions(any(UUID.class))).thenAnswer(inv -> Optional.of(saved.getLast()));
     }
 
     private CreateVoteRequest.VoteOptionRequest buildOption(String text) {

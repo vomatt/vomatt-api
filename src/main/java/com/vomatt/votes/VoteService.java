@@ -7,6 +7,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -237,12 +238,12 @@ public class VoteService {
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
 
         userVoteRepository.lockBallot(userId, voteId);
-        List<UserVote> previous = userVoteRepository.findByUserIdAndVoteId(userUuid, voteUuid);
-        boolean unchanged = previous.size() == 1 && previous.getFirst().getOption().getId().equals(optionUuid);
+        Optional<UserVote> previous = userVoteRepository.findByUserIdAndVoteId(userUuid, voteUuid);
+        boolean unchanged = previous.filter(b -> b.getOption().getId().equals(optionUuid)).isPresent();
         if (!unchanged) {
-            List<UUID> releasedOptionIds = deleteBallots(previous);
+            Optional<UUID> releasedOptionId = previous.map(this::deleteBallot);
             userVoteRepository.save(new UserVote(user, vote, option, ipAddress));
-            releasedOptionIds.forEach(id -> voteOptionRepository.adjustVoteCount(id, -1));
+            releasedOptionId.ifPresent(id -> voteOptionRepository.adjustVoteCount(id, -1));
             voteOptionRepository.adjustVoteCount(optionUuid, 1);
             log.info("User {} cast ballot on vote {} for option {}", userId, voteId, optionUuid);
         }
@@ -256,8 +257,8 @@ public class VoteService {
         requireOpen(findVote(voteUuid));
 
         userVoteRepository.lockBallot(userId, voteId);
-        deleteBallots(userVoteRepository.findByUserIdAndVoteId(UUID.fromString(userId), voteUuid))
-            .forEach(id -> voteOptionRepository.adjustVoteCount(id, -1));
+        userVoteRepository.findByUserIdAndVoteId(UUID.fromString(userId), voteUuid)
+            .ifPresent(ballot -> voteOptionRepository.adjustVoteCount(deleteBallot(ballot), -1));
         log.info("User {} retracted ballot in vote {}", userId, voteId);
 
         return convertToVoteResponse(voteUuid, userId);
@@ -271,8 +272,7 @@ public class VoteService {
 
         userVoteRepository.lockBallot(userId, voteId);
         userVoteRepository.findByUserIdAndVoteIdAndOptionId(userUuid, voteUuid, UUID.fromString(optionId))
-            .ifPresent(ballot -> deleteBallots(List.of(ballot))
-                .forEach(id -> voteOptionRepository.adjustVoteCount(id, -1)));
+            .ifPresent(ballot -> voteOptionRepository.adjustVoteCount(deleteBallot(ballot), -1));
         log.info("User {} removed vote from option {} in vote {}", userId, optionId, voteId);
 
         return convertToVoteResponse(voteUuid, userId);
@@ -346,15 +346,14 @@ public class VoteService {
     }
 
     private VoteResponse convertToVoteResponse(UUID voteId, String userId) {
+        // JOIN FETCH avoids additional queries for options
         Vote vote = voteRepository.findByIdWithOptions(voteId)
             .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
         return toResponses(List.of(vote), userId).getFirst();
     }
 
     private VoteResponse convertToVoteResponse(Vote vote, String userId) {
-        // Use JOIN FETCH to avoid additional queries for options
-        Vote voteWithOptions = voteRepository.findByIdWithOptions(vote.getId()).orElse(vote);
-        return toResponses(List.of(voteWithOptions), userId).getFirst();
+        return convertToVoteResponse(vote.getId(), userId);
     }
 
     // Fixed queries per page: options / tags / creators via batch fetching, Selections and comment counts one query each
@@ -397,13 +396,12 @@ public class VoteService {
         }
     }
 
-    // Deletes Ballot rows and returns the options whose counts must be released
-    private List<UUID> deleteBallots(List<UserVote> ballots) {
-        List<UUID> optionIds = ballots.stream().map(b -> b.getOption().getId()).toList();
-        userVoteRepository.deleteAll(ballots);
+    // Deletes the Ballot row and returns the option whose count must be released
+    private UUID deleteBallot(UserVote ballot) {
+        userVoteRepository.delete(ballot);
         // Hibernate flushes inserts before deletes; flush now so a replacing Ballot cannot hit UNIQUE (user_id, vote_id)
         userVoteRepository.flush();
-        return optionIds;
+        return ballot.getOption().getId();
     }
 
     private List<Tag> findTags(List<UUID> tagIds) {

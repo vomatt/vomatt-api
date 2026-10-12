@@ -17,7 +17,7 @@ import com.vomatt.entity.UserVote;
 @Repository
 public interface UserVoteRepository extends JpaRepository<UserVote, UUID> {
 
-    List<UserVote> findByUserIdAndVoteId(UUID userId, UUID voteId);
+    Optional<UserVote> findByUserIdAndVoteId(UUID userId, UUID voteId);
 
     boolean existsByUserIdAndVoteId(UUID userId, UUID voteId);
 

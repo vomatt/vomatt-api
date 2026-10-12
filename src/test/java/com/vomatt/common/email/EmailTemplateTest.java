@@ -58,7 +58,7 @@ class EmailTemplateTest {
     }
 
     @Test
-    void shouldRenderWelcomeEmailInBothLocales() throws Exception {
+    void shouldRenderWelcomeEmailWhenLocaleIsZhTwOrEn() throws Exception {
         emailService.sendWelcomeEmail("a@example.com", "Amy", ZH_TW);
         assertThat(sentHtml()).contains("您好 Amy", "投下您的第一票").doesNotContain("??");
 

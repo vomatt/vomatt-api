@@ -14,6 +14,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @Slf4j
 @RestControllerAdvice
@@ -106,6 +107,15 @@ public class GlobalExceptionHandler {
         String message = messageService.resolve(MessageKey.COMMON_SERVICE_UNAVAILABLE);
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(ApiResponse.error(message, MessageKey.COMMON_SERVICE_UNAVAILABLE.code()));
+    }
+
+    /** Unknown paths are a 404, not caught as a 500 (with a stack trace) by the fallback. */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNoResource(NoResourceFoundException ex) {
+        log.debug("No resource: {}", ex.getResourcePath());
+        String message = messageService.resolve(MessageKey.COMMON_NOT_FOUND);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(message, MessageKey.COMMON_NOT_FOUND.code()));
     }
 
     @ExceptionHandler(Exception.class)

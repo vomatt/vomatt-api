@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
@@ -92,8 +93,21 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.errorCode").value(MessageKey.COMMON_BAD_REQUEST.code()));
     }
 
+    @Test
+    void shouldReturn404WhenPathHasNoHandler() throws Exception {
+        mockMvc.perform(get("/test/no-resource"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.errorCode").value(MessageKey.COMMON_NOT_FOUND.code()));
+    }
+
     @RestController
     static class TestController {
+
+        @GetMapping("/test/no-resource")
+        public String noResource() throws Exception {
+            throw new NoResourceFoundException(org.springframework.http.HttpMethod.GET, "/test/no-resource", "test/no-resource");
+        }
 
         @GetMapping("/test/illegal-argument")
         public String illegalArgument() {

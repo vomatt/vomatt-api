@@ -25,7 +25,13 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env.staging}
       REDIS_HOST: redis
       JWT_SECRET: local-dev-only-jwt-secret-0123456789abcdef
-      EMAIL_ENABLED: "false"
+      # Real email when .env.staging sets EMAIL_ENABLED=true plus MAIL_*; otherwise read the OTP from Redis
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@vomatt.com}
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
       SWAGGER_ENABLED: "true"
       MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}

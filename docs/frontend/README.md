@@ -34,6 +34,14 @@ Same API image and local Redis, but Postgres is the shared staging (test machine
 DB_URL=jdbc:postgresql://<staging-host>:5432/<db>
 DB_USER=<user>
 DB_PASSWORD=<password>
+
+# Optional: send real OTP emails instead of reading them from Redis
+EMAIL_ENABLED=true
+EMAIL_FROM=<sender>
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=<smtp-user>
+MAIL_PASSWORD=<smtp-password>
 ```
 
 `DB_URL` must not contain `?...` query parameters: the app appends its own (`?reWriteBatchedInserts=...`), so a second `?` breaks the URL. Copy the host and database only.

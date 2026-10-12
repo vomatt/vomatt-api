@@ -13,6 +13,7 @@ import com.vomatt.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -203,15 +204,12 @@ public class AuthService {
         // The user proved ownership of the email via OTP -> treat as verified
         User user = findOrCreateUserByEmail(normalizedEmail, defaultName, "email_otp", true);
 
+        AuthResponse response = buildAuthResponse(user);
         if ("signup".equals(otp.type())) {
-            try {
-                emailService.sendWelcomeEmail(normalizedEmail, user.getDisplayName());
-            } catch (Exception ex) {
-                log.warn("Failed to send welcome email: {}", ex.getMessage());
-            }
+            // Sent only after the login succeeded, in the background so SMTP latency does not delay the response
+            emailService.sendWelcomeEmail(normalizedEmail, user.getDisplayName(), LocaleContextHolder.getLocale());
         }
-
-        return buildAuthResponse(user);
+        return response;
     }
 
     private AuthResponse verifyPhoneOtp(String phone, String code) {

@@ -434,12 +434,10 @@ class RefreshTokenServiceTest {
         String token = "revoke-token";
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
                 "user-6", "rv@example.com", List.of("user"));
-        when(redisService.get(NAMESPACE, token, RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
-        when(redisService.delete(NAMESPACE, token)).thenReturn(true);
+        when(redisService.getAndDelete(NAMESPACE, token, RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
 
         service.revoke(token);
 
-        verify(redisService).delete(NAMESPACE, token);
         verify(redisService).hDelete(USER_IDX_NS, "user-6", token);
     }
 

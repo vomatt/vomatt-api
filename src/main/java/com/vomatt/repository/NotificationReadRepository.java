@@ -24,9 +24,8 @@ public class NotificationReadRepository {
     private static final String NOTIFIED_POLLS = """
             FROM vomatt.votes v
             WHERE v.end_time <= :now AND v.end_time > v.start_time
-              AND (v.creator_id = :userId
-                   OR EXISTS (SELECT 1 FROM vomatt.user_votes uv WHERE uv.vote_id = v.id AND uv.user_id = :userId))
-            """;
+              AND v.id IN %s
+            """.formatted(VoteListRepository.MY_POLL_IDS);
 
     private final EntityManager em;
 

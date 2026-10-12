@@ -14,13 +14,8 @@ import com.vomatt.entity.VoteOption;
 @Repository
 public interface VoteOptionRepository extends JpaRepository<VoteOption, UUID> {
 
-    List<VoteOption> findByVoteIdOrderByDisplayOrderAsc(UUID voteId);
-
     @Query("SELECT vo FROM VoteOption vo WHERE vo.vote.id = :voteId ORDER BY vo.displayOrder ASC, vo.createdAt ASC")
     List<VoteOption> findByVoteIdOrderByDisplayOrder(@Param("voteId") UUID voteId);
-
-    @Query("SELECT COUNT(mv) FROM UserVote mv WHERE mv.option.id = :optionId")
-    long countVotesByOptionId(@Param("optionId") UUID optionId);
 
     /** Atomic +/- on the stored option count; never read-modify-write. */
     @Modifying(flushAutomatically = true, clearAutomatically = true)

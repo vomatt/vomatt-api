@@ -2,6 +2,11 @@
 
 Contract changes that affect the frontend. 💥 BREAKING means frontend code must change. See [openapi.json](openapi.json) for the contract snapshot and [error-codes.md](error-codes.md) for error codes.
 
+## 2026-10-12
+
+- Deprecated (still working, to be removed in a later 💥 release): `DELETE /api/votes/{voteId}/vote/{optionId}` → use `DELETE /api/votes/{voteId}/vote`; `GET /api/votes/{voteId}/my-vote-status` → use `myOptionId` in `GET /api/votes/{voteId}`.
+- Write requests under `/api/votes/**` and `/api/users/**` (POST / PUT / PATCH / DELETE) are now rate limited per IP, with a counter separate from `/api/auth/**`, and may return 429 `common.rate_limited` with `Retry-After`; GET requests are not limited.
+
 ## 2026-10-09
 
 - 💥 BREAKING 401 / 403 responses (filter layer) now carry an `ApiResponse` body with `errorCode` (previously the body was empty): `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`, `common.forbidden`. The frontend uses `errorCode` to decide whether to refresh (see [auth-flow.md](auth-flow.md)).

@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -136,12 +137,11 @@ public class RefreshTokenService {
      * Invalidates a refresh token (logout)
      */
     public void revoke(String token) {
-        RefreshTokenData data = redisService.get(NAMESPACE, token, RefreshTokenData.class);
-        boolean deleted = redisService.delete(NAMESPACE, token);
-        if (deleted && data != null) {
+        RefreshTokenData data = redisService.getAndDelete(NAMESPACE, token, RefreshTokenData.class);
+        if (data != null) {
             redisService.hDelete(USER_IDX_NS, data.userId(), token);
         }
-        log.debug("Refresh token revoked, found={}", deleted);
+        log.debug("Refresh token revoked, found={}", data != null);
     }
 
     /**
@@ -163,13 +163,8 @@ public class RefreshTokenService {
      */
     private String sha256Prefix(String token, int prefixLen) {
         try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(token.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder(prefixLen);
-            for (int i = 0; i < digest.length && sb.length() < prefixLen; i++) {
-                sb.append(String.format("%02x", digest[i]));
-            }
-            return sb.substring(0, Math.min(prefixLen, sb.length()));
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest).substring(0, prefixLen);
         } catch (NoSuchAlgorithmException e) {
             // SHA-256 is guaranteed to exist in the JVM; this path should never happen
             return "unknown";

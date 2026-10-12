@@ -18,7 +18,7 @@ import lombok.ToString;
 
 @Entity
 @Table(name = "user_votes", uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"user_id", "vote_id", "option_id"})
+    @UniqueConstraint(columnNames = {"user_id", "vote_id"})
 })
 @Getter
 @Setter

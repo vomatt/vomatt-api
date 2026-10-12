@@ -74,7 +74,7 @@ class ErrorCodesDocTest {
     @Test
     @DisplayName("should pass when every MessageKey has zh-TW and English messages")
     void shouldHaveBothLocalesForEveryMessageKey() throws IOException {
-        Properties zh = load("messages_zh_TW.properties", "messages.properties");
+        Properties zh = load("messages.properties");
         Properties en = load("messages_en.properties");
         for (MessageKey key : MessageKey.values()) {
             assertTrue(zh.containsKey(key.code()), "missing zh-TW message: " + key.code());
@@ -95,7 +95,7 @@ class ErrorCodesDocTest {
     }
 
     private String render() throws IOException {
-        Properties zh = load("messages_zh_TW.properties", "messages.properties");
+        Properties zh = load("messages.properties");
         Properties en = load("messages_en.properties");
 
         Map<String, Set<Integer>> statuses = new TreeMap<>();

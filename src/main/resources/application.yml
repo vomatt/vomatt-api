@@ -163,3 +163,6 @@ rate-limit:
     window-seconds: 60
   paths:
     - /api/auth/**
+    # writes only (GET/HEAD/OPTIONS skipped outside /api/auth); separate per-IP bucket from auth
+    - /api/votes/**
+    - /api/users/**

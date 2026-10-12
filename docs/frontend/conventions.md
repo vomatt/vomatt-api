@@ -59,7 +59,8 @@ List endpoints return `ApiResponse<CursorResponse<T>>`:
 
 ## 5. Rate limiting
 
-- Currently only `/api/auth/**` is rate limited (configured in `rate-limit.paths`); other paths are not.
-- Counted per client IP; default 300 requests per 60 seconds (fixed window). Exceeding it returns 429 + `Retry-After`.
+- Rate limited (configured in `rate-limit.paths`): every request under `/api/auth/**`, and write requests (POST / PUT / PATCH / DELETE) under `/api/votes/**` and `/api/users/**`. GET / HEAD / OPTIONS requests outside `/api/auth/**` are not limited.
+- All limited requests from one IP share one counter.
+- Counted per client IP; default 300 requests per 60 seconds (fixed window). Auth and write requests use separate counters, so heavy voting does not block login or token refresh. Exceeding it returns 429 + `Retry-After`.
 - If Redis fails, `/api/auth/**` fails closed (returns 429 directly) while other paths are let through.
 - Frontend: on 429, count down using `Retry-After` and disable the submit button during the countdown. When the rate limiter itself is down, auth endpoints return 429 without `Retry-After`; show "try again later".

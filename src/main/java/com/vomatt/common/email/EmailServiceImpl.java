@@ -7,17 +7,21 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.MessageSource;
-import org.springframework.mail.SimpleMailMessage;
+import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
+import java.time.Year;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 
 /**
- * Gmail implementation of EmailService
+ * SMTP implementation of EmailService (HTML templates under {@code templates/email}, text from {@code messages*.properties})
  */
 @Slf4j
 @Service
@@ -27,121 +31,61 @@ public class EmailServiceImpl implements EmailService {
     private final JavaMailSender mailSender;
     private final TemplateEngine templateEngine;
     private final MessageSource messageSource;
-    private final LocaleService localeService;
 
     @Value("${app.email.from:noreply@vomatt.com}")
     private String fromEmail;
 
-    @Value("${app.email.enabled:false}")
-    private boolean emailEnabled;
+    @Value("${otp.ttl-seconds:180}")
+    private long otpTtlSeconds;
 
-    /**
-     * Send pre-signup email verification code using HTML template with auto-detected locale from request
-     */
     @Override
     public void sendPreSignupEmail(String to, String verificationCode) {
-        Locale requestLocale = localeService.getCurrentRequestLocale();
-        sendVerificationEmail(to, verificationCode, true, requestLocale);
+        sendVerificationEmail(to, verificationCode, true);
     }
 
-    /**
-     * Send pre-signup email verification code with custom locale
-     */
-    @Override
-    public void sendPreSignupEmail(String to, String verificationCode, Locale locale) {
-        sendVerificationEmail(to, verificationCode, true, locale);
-    }
-
-    /**
-     * Send email verification code using HTML template with auto-detected locale from request
-     */
     @Override
     public void sendVerificationEmail(String to, String verificationCode) {
-        Locale requestLocale = localeService.getCurrentRequestLocale();
-        sendVerificationEmail(to, verificationCode, false, requestLocale);
+        sendVerificationEmail(to, verificationCode, false);
     }
 
-    /**
-     * Send verification email with custom locale
-     */
-    @Override
-    public void sendVerificationEmail(String to, String verificationCode, Locale locale) {
-        sendVerificationEmail(to, verificationCode, false, locale);
-    }
-
-    /**
-     * Private method to send verification email with i18n support
-     */
-    private void sendVerificationEmail(String to, String verificationCode, boolean isPreSignup, Locale locale) {
+    private void sendVerificationEmail(String to, String verificationCode, boolean isPreSignup) {
         try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, "utf-8");
-
-            helper.setFrom(fromEmail);
-            helper.setTo(to);
-
-            // Get localized subject
-            String subject = messageSource.getMessage("email.verification.subject", null, locale);
-            helper.setSubject(subject);
-
-            // Create Thymeleaf context with locale
-            Context context = new Context(locale);
-            context.setVariable("verificationCode", verificationCode);
-            context.setVariable("isPreSignup", isPreSignup);
-
-            // Choose appropriate template
-            String templateName = isPreSignup ? "email/pre-signup-email-verification" : "email/email-verification";
-            String htmlContent = templateEngine.process(templateName, context);
-            helper.setText(htmlContent, true);
-
-            mailSender.send(mimeMessage);
-            log.info("Verification email ({}) sent successfully to: {}", isPreSignup ? "pre-signup" : "login", to);
-
+            send(to, "email.verification.subject", "email/email-verification", LocaleContextHolder.getLocale(),
+                    Map.of("verificationCode", verificationCode,
+                            "isPreSignup", isPreSignup,
+                            // the email states the real OTP lifetime, rounded up to whole minutes
+                            "expiryMinutes", (otpTtlSeconds + 59) / 60));
+            log.info("Verification email ({}) sent to: {}", isPreSignup ? "pre-signup" : "login", to);
         } catch (MessagingException | RuntimeException e) {
             log.error("Failed to send verification email to: {}", to, e);
             throw new RuntimeException("Failed to send verification email", e);
         }
     }
 
-    /**
-     * Send welcome email to new member using HTML template with i18n support
-     */
+    @Async
     @Override
-    public void sendWelcomeEmail(String to, String username) {
-        Locale requestLocale = localeService.getCurrentRequestLocale();
-        sendWelcomeEmail(to, username, requestLocale);
-    }
-
-    /**
-     * Send welcome email with custom locale
-     */
     public void sendWelcomeEmail(String to, String username, Locale locale) {
         try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, "utf-8");
-
-            helper.setFrom(fromEmail);
-            helper.setTo(to);
-
-            // Get localized subject
-            String subject = messageSource.getMessage("email.welcome.subject", null, locale);
-            helper.setSubject(subject);
-
-            // Create Thymeleaf context with locale
-            Context context = new Context(locale);
-            context.setVariable("username", username);
-
-            // Process welcome email template
-            String htmlContent = templateEngine.process("email/welcome-email", context);
-            helper.setText(htmlContent, true);
-
-            mailSender.send(mimeMessage);
-            log.info("Welcome email sent successfully to: {} with locale: {}", to, locale);
-
+            send(to, "email.welcome.subject", "email/welcome-email", locale, Map.of("username", Objects.toString(username, "")));
+            log.info("Welcome email sent to: {} with locale: {}", to, locale);
         } catch (MessagingException | RuntimeException e) {
             log.error("Failed to send welcome email to: {}", to, e);
-            throw new RuntimeException("Failed to send welcome email", e);
         }
     }
 
+    private void send(String to, String subjectKey, String template, Locale locale, Map<String, Object> variables)
+            throws MessagingException {
+        MimeMessage mimeMessage = mailSender.createMimeMessage();
+        MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, "utf-8");
+        helper.setFrom(fromEmail);
+        helper.setTo(to);
+        helper.setSubject(messageSource.getMessage(subjectKey, null, locale));
+
+        Context context = new Context(locale, variables);
+        // a String, so MessageFormat does not render it as "2,026"
+        context.setVariable("year", String.valueOf(Year.now().getValue()));
+        helper.setText(templateEngine.process(template, context), true);
+
+        mailSender.send(mimeMessage);
+    }
 }

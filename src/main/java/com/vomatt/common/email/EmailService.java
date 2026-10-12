@@ -3,44 +3,20 @@ package com.vomatt.common.email;
 import java.util.Locale;
 
 /**
- * EmailService interface with i18n support
+ * Sends transactional emails; {@link EmailServiceNoOp} stands in when {@code app.email.enabled=false}.
  */
 public interface EmailService {
 
-    /**
-     * Send pre-signup email verification code
-     */
+    /** Sends the OTP for a new address (sign-up). Throws when delivery fails. */
     void sendPreSignupEmail(String to, String verificationCode);
 
-    /**
-     * Send login verification email
-     */
+    /** Sends the OTP for a registered address (login). Throws when delivery fails. */
     void sendVerificationEmail(String to, String verificationCode);
 
     /**
-     * Send pre-signup email verification code with locale support
+     * Sends the welcome email in the background; failures are only logged.
+     *
+     * @param locale captured by the caller, because the background thread has no request locale
      */
-    default void sendPreSignupEmail(String to, String verificationCode, Locale locale) {
-        sendPreSignupEmail(to, verificationCode);
-    }
-
-    /**
-     * Send login verification email with locale support
-     */
-    default void sendVerificationEmail(String to, String verificationCode, Locale locale) {
-        sendVerificationEmail(to, verificationCode);
-    }
-
-
-    /**
-     * Send welcome email to new user
-     */
-    void sendWelcomeEmail(String to, String username);
-
-    /**
-     * Send welcome email with locale support
-     */
-    default void sendWelcomeEmail(String to, String username, Locale locale) {
-        sendWelcomeEmail(to, username);
-    }
+    void sendWelcomeEmail(String to, String username, Locale locale);
 }

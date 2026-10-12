@@ -229,7 +229,7 @@ class AuthServiceTest {
         verify(redisService, org.mockito.Mockito.never()).get(anyString(), anyString(), any(Class.class));
         verify(redisService, org.mockito.Mockito.never()).delete(anyString(), anyString());
         verify(userRepository, org.mockito.Mockito.never()).save(any());
-        verify(emailService, org.mockito.Mockito.never()).sendWelcomeEmail(anyString(), anyString());
+        verify(emailService, org.mockito.Mockito.never()).sendWelcomeEmail(anyString(), anyString(), any());
     }
 
     @Test

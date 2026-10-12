@@ -13,6 +13,7 @@ import com.vomatt.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -204,11 +205,8 @@ public class AuthService {
         User user = findOrCreateUserByEmail(normalizedEmail, defaultName, "email_otp", true);
 
         if ("signup".equals(otp.type())) {
-            try {
-                emailService.sendWelcomeEmail(normalizedEmail, user.getDisplayName());
-            } catch (Exception ex) {
-                log.warn("Failed to send welcome email: {}", ex.getMessage());
-            }
+            // Sent in the background so SMTP latency does not delay the login response
+            emailService.sendWelcomeEmail(normalizedEmail, user.getDisplayName(), LocaleContextHolder.getLocale());
         }
 
         return buildAuthResponse(user);

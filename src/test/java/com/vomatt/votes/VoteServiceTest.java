@@ -250,7 +250,7 @@ class VoteServiceTest {
         @Test
         @DisplayName("should throw 404 VOTE_NOT_FOUND when Poll is not found")
         void shouldThrowWhenVoteNotFound() {
-            when(voteRepository.findById(voteId)).thenReturn(Optional.empty());
+            when(voteRepository.findByIdWithOptions(voteId)).thenReturn(Optional.empty());
             assertThatThrownBy(() -> voteService.getVote(voteId.toString(), null))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
         }
@@ -258,7 +258,6 @@ class VoteServiceTest {
         @Test
         @DisplayName("should return Poll")
         void shouldReturnVoteWhenFound() {
-            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             stubConvertToVoteResponse(vote);
 
             VoteResponse result = voteService.getVote(voteId.toString(), null);
@@ -385,7 +384,6 @@ class VoteServiceTest {
             option.setText("A");
             option.setDisplayOrder(0);
             vote.addOption(option);
-            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             stubConvertToVoteResponse(vote);
             com.vomatt.repository.BallotSelection selection = mock(com.vomatt.repository.BallotSelection.class);
             when(selection.getVoteId()).thenReturn(voteId);
@@ -424,7 +422,6 @@ class VoteServiceTest {
             option.setDisplayOrder(0);
             ReflectionTestUtils.setField(option, "voteCount", 5);
             vote.addOption(option);
-            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             stubConvertToVoteResponse(vote);
 
             VoteResponse result = voteService.getVote(voteId.toString(), null);
@@ -436,7 +433,6 @@ class VoteServiceTest {
         @Test
         @DisplayName("should have null myOptionId when not signed in")
         void shouldReturnNullMyOptionIdWhenSignedOut() {
-            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             stubConvertToVoteResponse(vote);
 
             assertThat(voteService.getVote(voteId.toString(), null).getMyOptionId()).isNull();

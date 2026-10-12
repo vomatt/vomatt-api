@@ -143,8 +143,7 @@ public class VoteService {
     /** @param userId viewer, or null when signed out */
     @Transactional(readOnly = true)
     public VoteResponse getVote(String voteId, String userId) {
-        Vote vote = findVote(UUID.fromString(voteId));
-        return convertToVoteResponse(vote, userId);
+        return convertToVoteResponse(UUID.fromString(voteId), userId);
     }
 
     /**
@@ -248,7 +247,7 @@ public class VoteService {
             log.info("User {} cast ballot on vote {} for option {}", userId, voteId, optionUuid);
         }
 
-        return convertToVoteResponse(voteUuid, userId);
+        return ballotResponse(voteUuid, optionUuid);
     }
 
     /** Retraction: withdraws the user's whole Ballot; succeeds even when there is none. */
@@ -261,7 +260,7 @@ public class VoteService {
             .ifPresent(ballot -> voteOptionRepository.adjustVoteCount(deleteBallot(ballot), -1));
         log.info("User {} retracted ballot in vote {}", userId, voteId);
 
-        return convertToVoteResponse(voteUuid, userId);
+        return ballotResponse(voteUuid, null);
     }
 
     /** Removes the user's Selection of one option (kept for API compatibility; same as a Retraction when it matches). */
@@ -354,6 +353,14 @@ public class VoteService {
 
     private VoteResponse convertToVoteResponse(Vote vote, String userId) {
         return convertToVoteResponse(vote.getId(), userId);
+    }
+
+    // After a Ballot change the caller already knows the Selection, so skip looking it up.
+    // The Poll is still reloaded: adjustVoteCount clears the persistence context and the counts changed.
+    private VoteResponse ballotResponse(UUID voteId, UUID myOptionId) {
+        VoteResponse response = convertToVoteResponse(voteId, null);
+        response.setMyOptionId(myOptionId == null ? null : myOptionId.toString());
+        return response;
     }
 
     // Fixed queries per page: options / tags / creators via batch fetching, Selections and comment counts one query each

@@ -7,6 +7,8 @@ import com.vomatt.common.security.SecurityTestSupport;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -150,7 +152,7 @@ class RateLimitFilterTest {
         when(redisService.incrementAndExpire(anyString(), anyString(), any(Duration.class)))
                 .thenThrow(new RedisOperationException("Redis down", null));
 
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/sensitive/op");
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/sensitive/op");
         MockHttpServletResponse response = new MockHttpServletResponse();
         FilterChain chain = mock(FilterChain.class);
 
@@ -174,5 +176,31 @@ class RateLimitFilterTest {
 
         verify(redisService).incrementAndExpire(eq("rate:limit"),
                 org.mockito.ArgumentMatchers.startsWith("5.6.7.8:"), any(Duration.class));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"GET", "HEAD", "OPTIONS"})
+    void shouldSkipReadsOutsideAuthPaths(String method) throws Exception {
+        config.setPaths(List.of("/api/auth/**", "/api/votes/**"));
+        FilterChain chain = mock(FilterChain.class);
+
+        MockHttpServletRequest request = new MockHttpServletRequest(method, "/api/votes/abc");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilter(request, response, chain);
+
+        verify(chain).doFilter(request, response);
+        verifyNoInteractions(redisService);
+    }
+
+    @Test
+    void shouldCountWritesOnConfiguredNonAuthPaths() throws Exception {
+        config.setPaths(List.of("/api/auth/**", "/api/votes/**"));
+        when(redisService.incrementAndExpire(eq("rate:limit"), anyString(), any(Duration.class))).thenReturn(301L);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/votes/abc/vote");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilter(request, response, mock(FilterChain.class));
+
+        assertThat(response.getStatus()).isEqualTo(429);
     }
 }

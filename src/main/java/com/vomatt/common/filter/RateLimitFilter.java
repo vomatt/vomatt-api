@@ -19,6 +19,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.Set;
 
 @Slf4j
 @Component
@@ -34,11 +35,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request) {
         if (!rateLimitConfig.isEnabled()) return true;
         String uri = request.getRequestURI();
+        // Outside auth only writes count (Ballots, Comments, likes...); reads stay unlimited
+        if (READ_METHODS.contains(request.getMethod()) && !pathMatcher.match(AUTH_PATH_PATTERN, uri)) return true;
         return rateLimitConfig.getPaths().stream().noneMatch(p -> pathMatcher.match(p, uri));
     }
 
     /** Auth endpoint patterns; these fail closed when Redis is down (prevents OTP brute force). */
     private static final String AUTH_PATH_PATTERN = "/api/auth/**";
+
+    // OPTIONS: CORS preflights precede authenticated cross-origin GETs and must not count either
+    private static final Set<String> READ_METHODS = Set.of("GET", "HEAD", "OPTIONS");
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -73,12 +79,4 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return null;
         }
     }
-
-    /**
-     * Resolves the real client IP (P1-#6).
-     *
-     * <p>This service runs behind the platform proxy (Zeabur), and {@code X-Forwarded-For} is appended by the trusted edge.
-     * Take the <strong>rightmost</strong> non-empty IP: the client can forge the left segments but cannot control the rightmost one appended by the edge,
-     * so using the rightmost prevents bypassing rate limits with a fake IP per request. Without XFF, fall back to {@code remoteAddr}.</p>
-     */
 }

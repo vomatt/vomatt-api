@@ -163,3 +163,6 @@ rate-limit:
     window-seconds: 60
   paths:
     - /api/auth/**
+    # writes only (GET is skipped outside /api/auth); shares the per-IP bucket with auth
+    - /api/votes/**
+    - /api/users/**

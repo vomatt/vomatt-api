@@ -355,11 +355,11 @@ public class VoteController {
 
     @DeleteMapping("/{voteId}/vote/{optionId}")
     @CommonApiResponses
-    @Operation(summary = "Retract a Ballot by option", description = """
+    @Operation(summary = "Retract a Ballot by option", deprecated = true, description = """
             **Auth**: required
             **Precondition**: the Poll is Open (not Scheduled, not Ended)
             **Behavior**: kept for compatibility; withdraws the caller's Ballot only if it chose `optionId` (same effect as a Retraction then). \
-            Succeeds without change when the caller's Ballot chose another option or none exists. Prefer `DELETE /api/votes/{voteId}/vote`.
+            Succeeds without change when the caller's Ballot chose another option or none exists. Deprecated: use `DELETE /api/votes/{voteId}/vote`.
             **Side effects**: Turnout -1 when a Ballot was removed.
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist
@@ -465,10 +465,10 @@ public class VoteController {
 
     @GetMapping("/{voteId}/my-vote-status")
     @CommonApiResponses
-    @Operation(summary = "Get my Ballot status", description = """
+    @Operation(summary = "Get my Ballot status", deprecated = true, description = """
             **Auth**: required
             **Precondition**: none
-            **Behavior**: tells whether the caller holds a Ballot in the Poll and which option it chose. Works in any Poll state. An unknown Poll ID is not an error: `hasVoted` is false.
+            **Behavior**: deprecated, use `myOptionId` in `GET /api/votes/{voteId}`. Tells whether the caller holds a Ballot in the Poll and which option it chose. Works in any Poll state. An unknown Poll ID is not an error: `hasVoted` is false.
             **Side effects**: none
             **Errors**: none specific to this endpoint (only the common 400 / 401 / 429)
             """)

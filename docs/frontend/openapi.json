@@ -7702,7 +7702,8 @@
     },
     "/api/votes/{voteId}/my-vote-status" : {
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: tells whether the caller holds a Ballot in the Poll and which option it chose. Works in any Poll state. An unknown Poll ID is not an error: `hasVoted` is false.\n**Side effects**: none\n**Errors**: none specific to this endpoint (only the common 400 / 401 / 429)\n",
+        "deprecated" : true,
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: deprecated, use `myOptionId` in `GET /api/votes/{voteId}`. Tells whether the caller holds a Ballot in the Poll and which option it chose. Works in any Poll state. An unknown Poll ID is not an error: `hasVoted` is false.\n**Side effects**: none\n**Errors**: none specific to this endpoint (only the common 400 / 401 / 429)\n",
         "operationId" : "getMyVoteStatus",
         "parameters" : [ {
           "description" : "Poll ID",
@@ -8249,7 +8250,8 @@
     },
     "/api/votes/{voteId}/vote/{optionId}" : {
       "delete" : {
-        "description" : "**Auth**: required\n**Precondition**: the Poll is Open (not Scheduled, not Ended)\n**Behavior**: kept for compatibility; withdraws the caller's Ballot only if it chose `optionId` (same effect as a Retraction then). Succeeds without change when the caller's Ballot chose another option or none exists. Prefer `DELETE /api/votes/{voteId}/vote`.\n**Side effects**: Turnout -1 when a Ballot was removed.\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist\n- 400 `vote.ended`: the Poll has Ended; Ballots are frozen\n- 400 `vote.not_allowed`: the Poll is still Scheduled\n",
+        "deprecated" : true,
+        "description" : "**Auth**: required\n**Precondition**: the Poll is Open (not Scheduled, not Ended)\n**Behavior**: kept for compatibility; withdraws the caller's Ballot only if it chose `optionId` (same effect as a Retraction then). Succeeds without change when the caller's Ballot chose another option or none exists. Deprecated: use `DELETE /api/votes/{voteId}/vote`.\n**Side effects**: Turnout -1 when a Ballot was removed.\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist\n- 400 `vote.ended`: the Poll has Ended; Ballots are frozen\n- 400 `vote.not_allowed`: the Poll is still Scheduled\n",
         "operationId" : "removeVote",
         "parameters" : [ {
           "description" : "Poll ID",

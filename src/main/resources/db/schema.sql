@@ -93,7 +93,8 @@ CREATE TABLE IF NOT EXISTS vomatt.user_votes (
     ip_address VARCHAR(45),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (user_id, vote_id, option_id)
+    -- Polls are single-choice: one Ballot row per user per Poll
+    UNIQUE (user_id, vote_id)
 );
 
 -- For RANKING / RATING poll types (Phase 2, no entity / service yet)
@@ -214,16 +215,11 @@ CREATE TABLE IF NOT EXISTS vomatt.audit_logs (
 -- =============================================================================
 -- INDEXES (UNIQUE columns already have an index; not duplicated here)
 -- =============================================================================
-CREATE INDEX IF NOT EXISTS idx_users_active                ON vomatt.users (active);
-CREATE INDEX IF NOT EXISTS idx_votes_creator_id            ON vomatt.votes (creator_id);
 CREATE INDEX IF NOT EXISTS idx_votes_creator_start_id      ON vomatt.votes (creator_id, start_time DESC, id DESC);
-CREATE INDEX IF NOT EXISTS idx_votes_active_time           ON vomatt.votes (is_active, start_time, end_time);
-CREATE INDEX IF NOT EXISTS idx_votes_vote_type             ON vomatt.votes (vote_type);
 CREATE INDEX IF NOT EXISTS idx_votes_start_id              ON vomatt.votes (start_time DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_votes_end_id                ON vomatt.votes (end_time, id);
 CREATE INDEX IF NOT EXISTS idx_vote_options_vote_order     ON vomatt.vote_options (vote_id, display_order);
 CREATE INDEX IF NOT EXISTS idx_user_votes_vote_option      ON vomatt.user_votes (vote_id, option_id);
-CREATE INDEX IF NOT EXISTS idx_user_votes_user_vote        ON vomatt.user_votes (user_id, vote_id);
 CREATE INDEX IF NOT EXISTS idx_user_votes_vote_created     ON vomatt.user_votes (vote_id, created_at, id);
 CREATE INDEX IF NOT EXISTS idx_user_rankings_vote_id       ON vomatt.user_rankings (vote_id);
 CREATE INDEX IF NOT EXISTS idx_user_ratings_vote_id        ON vomatt.user_ratings (vote_id);
@@ -255,3 +251,13 @@ CREATE INDEX IF NOT EXISTS idx_votes_search_bigrams ON vomatt.votes USING GIN (s
 -- Comment replies (one level): parent_id only points to top-level comments
 ALTER TABLE vomatt.vote_comments ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES vomatt.vote_comments (id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS idx_vote_comments_parent ON vomatt.vote_comments (parent_id, created_at, id);
+-- One Ballot row per user per Poll (was UNIQUE (user_id, vote_id, option_id)); fails if existing data has duplicates
+-- Create before dropping the old one, so duplicates abort here and the old constraint stays
+CREATE UNIQUE INDEX IF NOT EXISTS user_votes_user_id_vote_id_key ON vomatt.user_votes (user_id, vote_id);
+ALTER TABLE vomatt.user_votes DROP CONSTRAINT IF EXISTS user_votes_user_id_vote_id_option_id_key;
+-- Redundant indexes: prefixes of other indexes, or low-selectivity columns no query filters on
+DROP INDEX IF EXISTS vomatt.idx_votes_creator_id;
+DROP INDEX IF EXISTS vomatt.idx_user_votes_user_vote;
+DROP INDEX IF EXISTS vomatt.idx_users_active;
+DROP INDEX IF EXISTS vomatt.idx_votes_vote_type;
+DROP INDEX IF EXISTS vomatt.idx_votes_active_time;

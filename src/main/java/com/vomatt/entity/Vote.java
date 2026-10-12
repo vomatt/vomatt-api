@@ -143,10 +143,6 @@ public class Vote extends AuditableEntity {
         option.setVote(null);
     }
 
-    public long getTotalVotes() {
-        return userVotes.size();
-    }
-
     /**
      * Close: an Open Poll ends now; a Scheduled Poll is cancelled (ends before it ever starts);
      * an Ended Poll keeps its real end time.

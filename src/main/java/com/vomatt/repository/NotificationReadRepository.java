@@ -20,13 +20,21 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class NotificationReadRepository {
 
+    /**
+     * Ids of Polls the user owns or holds a Ballot in. A UNION lets each branch use its own index; an
+     * {@code creator_id = :userId OR EXISTS (...)} predicate cannot, and scans every Poll.
+     */
+    static final String MY_POLL_IDS = """
+            (SELECT uv.vote_id FROM vomatt.user_votes uv WHERE uv.user_id = :userId
+             UNION
+             SELECT c.id FROM vomatt.votes c WHERE c.creator_id = :userId)""";
+
     // Ended, opened at some point (a cancelled Scheduled Poll ends before its start time), and owned or participated in
     private static final String NOTIFIED_POLLS = """
             FROM vomatt.votes v
             WHERE v.end_time <= :now AND v.end_time > v.start_time
-              AND (v.creator_id = :userId
-                   OR EXISTS (SELECT 1 FROM vomatt.user_votes uv WHERE uv.vote_id = v.id AND uv.user_id = :userId))
-            """;
+              AND v.id IN %s
+            """.formatted(MY_POLL_IDS);
 
     private final EntityManager em;
 

@@ -82,11 +82,8 @@ public class VoteListRepository {
     @SuppressWarnings("unchecked")
     public List<Vote> findMine(UUID userId, boolean ended, Cursor after, OffsetDateTime now, int limit) {
         String direction = ended ? " DESC" : " ASC";
-        StringBuilder sql = new StringBuilder("""
-                SELECT v.* FROM vomatt.votes v
-                WHERE (v.creator_id = :userId
-                       OR EXISTS (SELECT 1 FROM vomatt.user_votes uv WHERE uv.vote_id = v.id AND uv.user_id = :userId))
-                """);
+        StringBuilder sql = new StringBuilder("SELECT v.* FROM vomatt.votes v WHERE v.id IN ")
+                .append(NotificationReadRepository.MY_POLL_IDS);
         sql.append(ended ? " AND v.end_time <= :now" : " AND v.end_time > :now");
         if (after != null) {
             sql.append(" AND (v.end_time, v.id) ").append(ended ? "<" : ">").append(" (:afterKey, :afterId)");

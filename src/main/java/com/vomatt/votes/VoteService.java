@@ -346,7 +346,9 @@ public class VoteService {
     }
 
     private VoteResponse convertToVoteResponse(UUID voteId, String userId) {
-        return convertToVoteResponse(findVote(voteId), userId);
+        Vote vote = voteRepository.findByIdWithOptions(voteId)
+            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
+        return toResponses(List.of(vote), userId).getFirst();
     }
 
     private VoteResponse convertToVoteResponse(Vote vote, String userId) {
@@ -399,6 +401,8 @@ public class VoteService {
     private List<UUID> deleteBallots(List<UserVote> ballots) {
         List<UUID> optionIds = ballots.stream().map(b -> b.getOption().getId()).toList();
         userVoteRepository.deleteAll(ballots);
+        // Hibernate flushes inserts before deletes; flush now so a replacing Ballot cannot hit UNIQUE (user_id, vote_id)
+        userVoteRepository.flush();
         return optionIds;
     }
 

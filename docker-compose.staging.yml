@@ -1,0 +1,31 @@
+# API + local Redis against the staging (test machine) Postgres.
+# Usage: docker compose -f docker-compose.staging.yml --env-file .env.staging up -d --build
+services:
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      retries: 30
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.vercel
+    ports:
+      - "8080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: 8080
+      DB_URL: ${DB_URL:?set DB_URL in .env.staging}
+      DB_USER: ${DB_USER:?set DB_USER in .env.staging}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env.staging}
+      REDIS_HOST: redis
+      JWT_SECRET: local-dev-only-jwt-secret-0123456789abcdef
+      EMAIL_ENABLED: "false"
+      SWAGGER_ENABLED: "true"
+      MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}

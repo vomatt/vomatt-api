@@ -26,6 +26,26 @@ docker compose up -d --build
 
 Older Docker installs (e.g. OrbStack without the compose plugin) use `docker-compose` instead of `docker compose`.
 
+### Against the staging DB
+
+Same API image and local Redis, but Postgres is the shared staging (test machine) database. Ask a backend developer for the credentials and put them in `.env.staging` (gitignored):
+
+```bash
+DB_URL=jdbc:postgresql://<staging-host>:5432/<db>
+DB_USER=<user>
+DB_PASSWORD=<password>
+```
+
+`DB_URL` must not contain `?...` query parameters: the app appends its own (`?reWriteBatchedInserts=...`), so a second `?` breaks the URL. Copy the host and database only.
+
+```bash
+docker compose -f docker-compose.staging.yml --env-file .env.staging up -d --build
+```
+
+- API / Swagger / OTP lookup: same URLs and command as above (`docker compose -f docker-compose.staging.yml exec redis redis-cli GET otp:email:<email>`)
+- Data is shared with everyone on staging and cannot be reset locally; avoid creating junk data
+- Stop: `docker compose -f docker-compose.staging.yml down`
+
 Swagger is not available in production.
 
 ## Suggested reading order

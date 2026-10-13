@@ -15,7 +15,7 @@ import jakarta.persistence.Query;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Keyset pages of Polls for Feed / Explore / Search (Public Polls only) and My Polls (any Audience). SQL is assembled from constant fragments only;
+ * Keyset pages of Polls for Feed / Explore / Search (Public Polls only) and My Polls (any Audience, Invite-only ones the user is invited to included). SQL is assembled from constant fragments only;
  * every value is a bound parameter.
  */
 @Repository
@@ -23,14 +23,16 @@ import lombok.RequiredArgsConstructor;
 public class VoteListRepository {
 
     /**
-     * Ids of Polls the user owns or holds a Ballot in. A UNION lets each branch use its own index; an
+     * Ids of Polls the user owns, holds a Ballot in or is invited to. A UNION lets each branch use its own index; an
      * {@code creator_id = :userId OR EXISTS (...)} predicate cannot, and scans every Poll.
      * Shared by the "my Polls" list and Ended Notifications; changing it changes both.
      */
     static final String MY_POLL_IDS = """
             (SELECT uv.vote_id FROM vomatt.user_votes uv WHERE uv.user_id = :userId
              UNION
-             SELECT c.id FROM vomatt.votes c WHERE c.creator_id = :userId)""";
+             SELECT c.id FROM vomatt.votes c WHERE c.creator_id = :userId
+             UNION
+             SELECT i.vote_id FROM vomatt.vote_invitees i WHERE i.user_id = :userId)""";
 
     private final EntityManager em;
 

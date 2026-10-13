@@ -8,6 +8,8 @@ import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.security.SecurityEndpoints;
 import com.vomatt.common.security.UserPrincipal;
 import com.vomatt.votes.dto.CreateVoteRequest;
+import com.vomatt.votes.dto.InviteeResponse;
+import com.vomatt.votes.dto.InviteesRequest;
 import com.vomatt.votes.dto.VoteResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,6 +41,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -189,6 +192,115 @@ class VoteControllerTest {
             mockMvc.perform(get("/api/votes/{voteId}", "not-a-uuid"))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.errorCode").value(MessageKey.COMMON_BAD_REQUEST.code()));
+        }
+    }
+
+    // ─── /api/votes/{voteId}/invitees ─────────────────────────────────────────
+
+    @Nested
+    @DisplayName("/api/votes/{voteId}/invitees")
+    class InviteeTests {
+
+        private final String voteId = UUID.randomUUID().toString();
+        private final String inviteeId = UUID.randomUUID().toString();
+
+        @Test
+        @DisplayName("should require sign-in when managing Invitees")
+        void shouldRequireAuthenticationWhenManagingInvitees() {
+            assertThat(isPublic("GET", "/api/votes/" + voteId + "/invitees")).isFalse();
+            assertThat(isPublic("POST", "/api/votes/" + voteId + "/invitees")).isFalse();
+            assertThat(isPublic("DELETE", "/api/votes/" + voteId + "/invitees/" + inviteeId)).isFalse();
+        }
+
+        @Test
+        @DisplayName("should return 200 with Invitees and their Ballot flag when the owner lists them")
+        void shouldReturn200WhenOwnerListsInvitees() throws Exception {
+            authenticate();
+            when(voteService.getInvitees(voteId, USER_ID))
+                    .thenReturn(List.of(new InviteeResponse(inviteeId, "bob", true, null)));
+
+            mockMvc.perform(get("/api/votes/{voteId}/invitees", voteId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data[0].userId").value(inviteeId))
+                    .andExpect(jsonPath("$.data[0].hasBallot").value(true));
+        }
+
+        @Test
+        @DisplayName("should return 200 with the new list when the owner adds Invitees")
+        void shouldReturn200WhenOwnerAddsInvitees() throws Exception {
+            authenticate();
+            when(voteService.addInvitees(eq(voteId), any(InviteesRequest.class), eq(USER_ID)))
+                    .thenReturn(List.of(new InviteeResponse(inviteeId, "bob", false, null)));
+
+            mockMvc.perform(post("/api/votes/{voteId}/invitees", voteId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"userIds\": [\"" + inviteeId + "\"]}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data[0].username").value("bob"));
+        }
+
+        @Test
+        @DisplayName("should return 400 when adding Invitees with an empty list")
+        void shouldReturn400WhenUserIdsEmpty() throws Exception {
+            authenticate();
+
+            mockMvc.perform(post("/api/votes/{voteId}/invitees", voteId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"userIds\": []}"))
+                    .andExpect(status().isBadRequest());
+            verify(voteService, never()).addInvitees(any(), any(), any());
+        }
+
+        private String ids(int count) {
+            return Stream.generate(() -> "\"" + UUID.randomUUID() + "\"").limit(count).collect(Collectors.joining(","));
+        }
+
+        private void assertValidationFailed(String path, String body) throws Exception {
+            authenticate();
+            mockMvc.perform(post(path, voteId).contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errorCode").value(MessageKey.COMMON_VALIDATION_FAILED.code()));
+            verify(voteService, never()).addInvitees(any(), any(), any());
+            verify(voteService, never()).createVote(any(), any());
+        }
+
+        @Test
+        @DisplayName("should return 400 common.validation_failed when adding more than 100 Invitees")
+        void shouldReturn400WhenTooManyUserIds() throws Exception {
+            assertValidationFailed("/api/votes/{voteId}/invitees", "{\"userIds\": [" + ids(101) + "]}");
+        }
+
+        @Test
+        @DisplayName("should return 400 common.validation_failed when an added Invitee ID is null")
+        void shouldReturn400WhenUserIdNull() throws Exception {
+            assertValidationFailed("/api/votes/{voteId}/invitees", "{\"userIds\": [null]}");
+        }
+
+        private static final String POLL_BODY = "{\"title\":\"Q\",\"endTime\":\"2099-01-01T00:00:00Z\","
+                + "\"options\":[{\"text\":\"A\"},{\"text\":\"B\"}],\"audience\":\"INVITE_ONLY\",\"inviteeIds\":[";
+
+        @Test
+        @DisplayName("should return 400 common.validation_failed when creating with more than 100 inviteeIds")
+        void shouldReturn400WhenTooManyInviteeIdsOnCreate() throws Exception {
+            assertValidationFailed("/api/votes", POLL_BODY + ids(101) + "]}");
+        }
+
+        @Test
+        @DisplayName("should return 400 common.validation_failed when creating with a null inviteeId")
+        void shouldReturn400WhenInviteeIdNullOnCreate() throws Exception {
+            assertValidationFailed("/api/votes", POLL_BODY + "null]}");
+        }
+
+        @Test
+        @DisplayName("should return 400 vote.invitee.has_ballot when the Invitee holds a Ballot")
+        void shouldReturn400WhenInviteeHoldsBallot() throws Exception {
+            authenticate();
+            when(voteService.removeInvitee(voteId, inviteeId, USER_ID))
+                    .thenThrow(ApiException.badRequest(MessageKey.VOTE_INVITEE_HAS_BALLOT));
+
+            mockMvc.perform(delete("/api/votes/{voteId}/invitees/{userId}", voteId, inviteeId))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errorCode").value(MessageKey.VOTE_INVITEE_HAS_BALLOT.code()));
         }
     }
 

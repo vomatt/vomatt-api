@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
@@ -140,6 +141,29 @@ public class Vote extends AuditableEntity {
             throw ApiException.badRequest(MessageKey.VOTE_NOT_EDITABLE);
         }
         this.audience = audience;
+    }
+
+    /**
+     * Who can reach the Poll at all: nobody once Deleted; an Invite-only Poll only its owner and Invitees.
+     *
+     * @param viewerId  caller, or null when signed out
+     * @param isInvitee asked only for a signed-in non-owner of an Invite-only Poll
+     */
+    public boolean isVisibleTo(String viewerId, BooleanSupplier isInvitee) {
+        if (deletedAt != null) {
+            return false;
+        }
+        return audience != Audience.INVITE_ONLY || isOwnedBy(viewerId) || (viewerId != null && isInvitee.getAsBoolean());
+    }
+
+    /** Invitees can be added or removed while the Poll is Scheduled or Open. */
+    public void checkInviteesEditable(OffsetDateTime now) {
+        if (audience != Audience.INVITE_ONLY) {
+            throw ApiException.badRequest(MessageKey.VOTE_INVITEE_NOT_INVITE_ONLY);
+        }
+        if (statusAt(now) == VoteStatus.ENDED) {
+            throw ApiException.badRequest(MessageKey.VOTE_ENDED);
+        }
     }
 
     /** @param userId caller, or null when signed out */

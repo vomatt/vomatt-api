@@ -97,6 +97,16 @@ CREATE TABLE IF NOT EXISTS vomatt.user_votes (
     UNIQUE (user_id, vote_id)
 );
 
+-- Invitees of an Invite-only Poll: only they and the owner can reach it. The surrogate id leaves room for email Invitees
+CREATE TABLE IF NOT EXISTS vomatt.vote_invitees (
+    id         UUID        PRIMARY KEY,
+    vote_id    UUID        NOT NULL REFERENCES vomatt.votes (id) ON DELETE CASCADE,
+    user_id    UUID        NOT NULL REFERENCES vomatt.users (id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (vote_id, user_id)
+);
+
 -- For RANKING / RATING poll types (Phase 2, no entity / service yet)
 CREATE TABLE IF NOT EXISTS vomatt.user_rankings (
     id            UUID        PRIMARY KEY,
@@ -221,6 +231,7 @@ CREATE INDEX IF NOT EXISTS idx_votes_end_id                ON vomatt.votes (end_
 CREATE INDEX IF NOT EXISTS idx_vote_options_vote_order     ON vomatt.vote_options (vote_id, display_order);
 CREATE INDEX IF NOT EXISTS idx_user_votes_vote_option      ON vomatt.user_votes (vote_id, option_id);
 CREATE INDEX IF NOT EXISTS idx_user_votes_vote_created     ON vomatt.user_votes (vote_id, created_at, id);
+CREATE INDEX IF NOT EXISTS idx_vote_invitees_user_id       ON vomatt.vote_invitees (user_id);
 CREATE INDEX IF NOT EXISTS idx_user_rankings_vote_id       ON vomatt.user_rankings (vote_id);
 CREATE INDEX IF NOT EXISTS idx_user_ratings_vote_id        ON vomatt.user_ratings (vote_id);
 CREATE INDEX IF NOT EXISTS idx_vote_comments_vote_created  ON vomatt.vote_comments (vote_id, created_at) WHERE is_deleted = FALSE;

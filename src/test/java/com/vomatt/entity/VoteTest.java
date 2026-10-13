@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -193,5 +194,63 @@ class VoteTest {
         Vote vote = posted(now.minusMinutes(1), now.plusHours(1), now.plusDays(1));
         vote.setDeletedAt(now);
         assertThat(vote.canDeleteAt(now, WINDOW)).isFalse();
+    }
+
+    // ─── Audience access ─────────────────────────────────────────────────────
+
+    private Vote ownedBy(UUID ownerId, Audience audience) {
+        Vote vote = poll(now.minusHours(1), now.plusDays(1));
+        vote.setCreator(User.builder().id(ownerId).build());
+        vote.setAudience(audience);
+        return vote;
+    }
+
+    @Test
+    @DisplayName("should show an Invite-only Poll only to its owner and Invitees when looked up")
+    void shouldShowInviteOnlyPollOnlyToOwnerAndInviteesWhenLookedUp() {
+        UUID ownerId = UUID.randomUUID();
+        Vote vote = ownedBy(ownerId, Audience.INVITE_ONLY);
+        String stranger = UUID.randomUUID().toString();
+
+        assertThat(vote.isVisibleTo(ownerId.toString(), () -> { throw new AssertionError("owner needs no Invitee lookup"); })).isTrue();
+        assertThat(vote.isVisibleTo(stranger, () -> true)).isTrue();
+        assertThat(vote.isVisibleTo(stranger, () -> false)).isFalse();
+        assertThat(vote.isVisibleTo(null, () -> true)).isFalse();
+    }
+
+    @Test
+    @DisplayName("should show Public and Unlisted Polls to anyone, and a Deleted Poll to nobody, when looked up")
+    void shouldShowByAudienceAndDeletionWhenLookedUp() {
+        UUID ownerId = UUID.randomUUID();
+        assertThat(ownedBy(ownerId, Audience.PUBLIC).isVisibleTo(null, () -> false)).isTrue();
+        assertThat(ownedBy(ownerId, Audience.UNLISTED).isVisibleTo(null, () -> false)).isTrue();
+
+        Vote deleted = ownedBy(ownerId, Audience.INVITE_ONLY);
+        deleted.setDeletedAt(now);
+        assertThat(deleted.isVisibleTo(ownerId.toString(), () -> true)).isFalse();
+    }
+
+    @Test
+    @DisplayName("should allow Invitee changes when an Invite-only Poll is Scheduled or Open")
+    void shouldAllowInviteeChangesWhenScheduledOrOpen() {
+        for (Vote vote : new Vote[] { poll(now.plusHours(1), now.plusDays(1)), poll(now.minusHours(1), now.plusDays(1)) }) {
+            vote.setAudience(Audience.INVITE_ONLY);
+            vote.checkInviteesEditable(now);
+        }
+    }
+
+    @Test
+    @DisplayName("should refuse Invitee changes when the Poll is Ended or not Invite-only")
+    void shouldRefuseInviteeChangesWhenEndedOrNotInviteOnly() {
+        Vote ended = poll(now.minusDays(2), now.minusDays(1));
+        ended.setAudience(Audience.INVITE_ONLY);
+        assertThatThrownBy(() -> ended.checkInviteesEditable(now))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_ENDED));
+
+        Vote unlisted = poll(now.minusHours(1), now.plusDays(1));
+        unlisted.setAudience(Audience.UNLISTED);
+        assertThatThrownBy(() -> unlisted.checkInviteesEditable(now))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_INVITEE_NOT_INVITE_ONLY));
     }
 }

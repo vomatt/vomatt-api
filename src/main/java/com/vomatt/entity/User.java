@@ -18,6 +18,7 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -96,7 +97,7 @@ public class User extends AuditableEntity {
 
     /** The one email normalization: sign-up / sign-in lookups and email Invitees must agree on it. */
     public static String normalizeEmail(String email) {
-        return email.toLowerCase().trim();
+        return email.trim().toLowerCase(Locale.ROOT);
     }
 
     public void deductPoints(int points) {

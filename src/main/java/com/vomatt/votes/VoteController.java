@@ -124,7 +124,9 @@ public class VoteController {
             An address of a registered user invites that user; any other address is a pending email Invitee until someone verifies it at sign-up / sign-in.
             **Side effects**: usage count of each attached tag +1 for a PUBLIC Poll (UNLISTED and INVITE_ONLY Polls are not counted); \
             each user Invitee gets an unread Invitation notification (unread count, `unread` on My Polls `status=open`); each new pending email Invitee \
-            is sent an invitation email linking to the Poll (only when email is enabled) and gets the Invitation notification once bound; the creation is audit-logged.
+            is sent an invitation email linking to the Poll (only when email is enabled) \
+            (at most once per address per Poll, even after removing and re-adding it, and at most `EMAIL_INVITATION_DAILY_LIMIT` (default 200) per owner per day; \
+            over the limit the Invitee is still added and only the email is skipped) and gets the Invitation notification once bound; the creation is audit-logged.
             **Errors**:
                     - 400 `vote.invitee.not_invite_only`: `inviteeIds` or `inviteeEmails` is not empty but `audience` is not INVITE_ONLY
                     - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` (or a registered address in `inviteeEmails`) is not an existing user or is suspended
@@ -177,7 +179,8 @@ public class VoteController {
             **Side effects**: all options are replaced, so option IDs change; tag usage counts are adjusted for added / removed tags \
             and for an Audience change (only PUBLIC Polls are counted). `inviteeIds` replaces the user Invitees and `inviteeEmails` the pending email Invitees; \
             an Audience other than INVITE_ONLY removes them all. Each new user Invitee gets an unread Invitation notification, including one removed and invited again; \
-            each newly added pending email Invitee is sent an invitation email.
+            each newly added pending email Invitee is sent an invitation email (at most once per address per Poll, even after removing and re-adding it, and at most `EMAIL_INVITATION_DAILY_LIMIT` (default 200) per owner per day; \
+            over the limit the Invitee is still added and only the email is skipped).
             **Errors**:
             - 403 `vote.forbidden`: the caller is not the owner
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
@@ -643,6 +646,8 @@ public class VoteController {
             Returns the full Invitee list.
             **Side effects**: `inviteeCount` grows (pending email Invitees included); each new user Invitee gets an unread Invitation notification \
             (again unread for one removed and invited again) and later the Ended Notification; each new pending email Invitee is sent an invitation email \
+            (at most once per address per Poll, even after removing and re-adding it, and at most `EMAIL_INVITATION_DAILY_LIMIT` (default 200) per owner per day; \
+            over the limit the Invitee is still added and only the email is skipped) \
             linking to the Poll (only when email is enabled) and gets both notifications once bound; the action is audit-logged.
             **Errors**:
             - 400 `vote.invitee.not_invite_only`: the Poll is not INVITE_ONLY

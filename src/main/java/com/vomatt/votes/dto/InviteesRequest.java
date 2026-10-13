@@ -8,6 +8,8 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import io.swagger.v3.oas.annotations.media.Schema;
+import com.vomatt.entity.User;
+
 import lombok.Data;
 
 @Data
@@ -26,6 +28,11 @@ public class InviteesRequest {
             + "(a suspended one is rejected with 400 `vote.invitee.ids_invalid`); any other address becomes a pending email Invitee and gets an invitation email",
             example = "[\"carol@example.com\"]", nullable = true)
     private List<@NotNull(message = "Invitee email cannot be null") @Email(message = "Invalid invitee email") @Size(max = 254, message = "Invitee email cannot exceed 254 characters") String> emails;
+
+    // Normalized like sign-in before validation, so padded or upper-case input is accepted and stored the same way
+    public void setEmails(List<String> emails) {
+        this.emails = emails == null ? null : emails.stream().map(e -> e == null ? null : User.normalizeEmail(e)).toList();
+    }
 
     @AssertTrue(message = "At least one user or email must be invited")
     @Schema(hidden = true)

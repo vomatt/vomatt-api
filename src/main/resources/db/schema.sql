@@ -290,6 +290,13 @@ ALTER TABLE vomatt.vote_invitees DROP CONSTRAINT IF EXISTS chk_vote_invitees_use
 ALTER TABLE vomatt.vote_invitees ADD CONSTRAINT chk_vote_invitees_user_or_email CHECK (num_nonnulls(user_id, email) = 1);
 CREATE UNIQUE INDEX IF NOT EXISTS uk_vote_invitees_vote_email ON vomatt.vote_invitees (vote_id, email) WHERE email IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_vote_invitees_email ON vomatt.vote_invitees (email) WHERE email IS NOT NULL;
+-- Addresses a Poll's invitation email went to: sent once per Poll + address, even after the Invitee is removed and re-added
+CREATE TABLE IF NOT EXISTS vomatt.vote_invitation_emails (
+    vote_id UUID         NOT NULL REFERENCES vomatt.votes (id) ON DELETE CASCADE,
+    email   VARCHAR(254) NOT NULL,
+    sent_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (vote_id, email)
+);
 -- One Ballot row per user per Poll (was UNIQUE (user_id, vote_id, option_id)).
 -- A DO block is atomic: if duplicates make the CREATE fail, the old constraint and index stay even when psql
 -- continues past errors. To dedup first, keep the latest row per (user_id, vote_id), then run reconcile-vote-counts.sql:

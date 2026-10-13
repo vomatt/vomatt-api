@@ -36,28 +36,45 @@ public interface InviteeRepository extends JpaRepository<Invitee, UUID> {
     List<InviteeStatus> findStatuses(@Param("voteId") UUID voteId);
 
     /**
-     * Binding step 1: turns email Invitees into user Invitees, except on Polls where the user already is an
-     * Invitee or the owner. Only for an email the user has verified.
+     * The one binding predicate, for a pending email row aliased {@code i}: the user is neither already an Invitee of
+     * that Poll nor its owner. Shared by every binding statement so they agree on which rows bind.
      */
-    @Modifying(flushAutomatically = true)
-    @Query(value = """
-            UPDATE vomatt.vote_invitees i SET user_id = :userId, email = NULL, updated_at = now()
-            WHERE i.email = :email
-              AND NOT EXISTS (SELECT 1 FROM vomatt.vote_invitees u WHERE u.vote_id = i.vote_id AND u.user_id = :userId)
-              AND NOT EXISTS (SELECT 1 FROM vomatt.votes v WHERE v.id = i.vote_id AND v.creator_id = :userId)""",
-            nativeQuery = true)
-    int bindEmail(@Param("userId") UUID userId, @Param("email") String email);
+    String BINDABLE = """
+            (NOT EXISTS (SELECT 1 FROM vomatt.vote_invitees u WHERE u.vote_id = i.vote_id AND u.user_id = :userId)
+             AND NOT EXISTS (SELECT 1 FROM vomatt.votes v WHERE v.id = i.vote_id AND v.creator_id = :userId))""";
+
+    @Query(value = "SELECT i.id FROM vomatt.vote_invitees i WHERE i.email = :email", nativeQuery = true)
+    List<UUID> findIdsByEmail(@Param("email") String email);
 
     /**
-     * Binding step 2: drops the email rows step 1 skipped, as duplicates of the user (or the owner). Rows added after
-     * step 1 stay pending and bind at the next verified sign-in.
+     * Binding step 2, per pending row: adds the user Invitee in its place. An INSERT rather than an UPDATE of the email
+     * row, because ON CONFLICT DO NOTHING absorbs an owner inviting the same user concurrently: an UPDATE would hit
+     * UNIQUE (vote_id, user_id) and roll back the whole sign-up. Step 3 then drops the email row either way.
      */
     @Modifying(flushAutomatically = true)
     @Query(value = """
-            DELETE FROM vomatt.vote_invitees i
-            WHERE i.email = :email
-              AND (EXISTS (SELECT 1 FROM vomatt.vote_invitees u WHERE u.vote_id = i.vote_id AND u.user_id = :userId)
-                   OR EXISTS (SELECT 1 FROM vomatt.votes v WHERE v.id = i.vote_id AND v.creator_id = :userId))""",
+            INSERT INTO vomatt.vote_invitees (id, vote_id, user_id, created_at, updated_at)
+            SELECT :id, i.vote_id, :userId, i.created_at, now() FROM vomatt.vote_invitees i
+            WHERE i.id = :rowId AND """ + BINDABLE + """
+
+            ON CONFLICT (vote_id, user_id) DO NOTHING""", nativeQuery = true)
+    int bindEmailRow(@Param("id") UUID id, @Param("rowId") UUID rowId, @Param("userId") UUID userId);
+
+    /**
+     * Binding step 3: drops the email rows that are no longer bindable, i.e. now covered by a user row (bound in step 2
+     * or invited before) or the owner's own address. Rows added after step 2 stay pending and bind at the next sign-in.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query(value = "DELETE FROM vomatt.vote_invitees i WHERE i.email = :email AND NOT " + BINDABLE, nativeQuery = true)
+    int deleteUnbindableEmail(@Param("userId") UUID userId, @Param("email") String email);
+
+    @Query(value = "SELECT EXISTS (SELECT 1 FROM vomatt.vote_invitation_emails WHERE vote_id = :voteId AND email = :email)",
             nativeQuery = true)
-    int deleteDuplicateEmail(@Param("userId") UUID userId, @Param("email") String email);
+    boolean isInvitationSent(@Param("voteId") UUID voteId, @Param("email") String email);
+
+    /** Records that the Poll's invitation went to this address, so it is never sent there again. */
+    @Modifying
+    @Query(value = "INSERT INTO vomatt.vote_invitation_emails (vote_id, email) VALUES (:voteId, :email) ON CONFLICT DO NOTHING",
+            nativeQuery = true)
+    void recordInvitationSent(@Param("voteId") UUID voteId, @Param("email") String email);
 }

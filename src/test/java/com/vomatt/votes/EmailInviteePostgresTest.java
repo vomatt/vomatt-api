@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -20,6 +21,7 @@ import com.vomatt.entity.Vote;
 import com.vomatt.repository.InviteeRepository;
 import com.vomatt.repository.NotificationReadRepository;
 import com.vomatt.repository.PostgresRepositoryTest;
+import com.vomatt.votes.dto.CreateVoteRequest;
 import com.vomatt.votes.dto.InviteeResponse;
 import com.vomatt.votes.dto.InviteesRequest;
 import com.vomatt.votes.dto.VoteResponse;
@@ -51,13 +53,11 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
         return voteService.addInvitees(poll.getId().toString(), request, owner.getId().toString());
     }
 
-    // Stands in for the find-or-create path in auth once the address is verified
+    // What the find-or-create path in auth runs once the address is verified
     private User signUpAndBind(String email) {
         User user = User.builder().username("em-carol-" + System.nanoTime()).email(email).build();
         em.persist(user);
-        notificationReadRepository.deleteReadsForEmailBinding(user.getId(), email);
-        inviteeRepository.bindEmail(user.getId(), email);
-        inviteeRepository.deleteDuplicateEmail(user.getId(), email);
+        voteService.bindEmailInvitees(user);
         em.clear();
         return user;
     }
@@ -115,9 +115,7 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
         assertThatThrownBy(() -> voteService.getVote(poll.getId().toString(), carol.getId().toString()))
                 .isInstanceOf(ApiException.class);
 
-        notificationReadRepository.deleteReadsForEmailBinding(carol.getId(), carolEmail);
-        inviteeRepository.bindEmail(carol.getId(), carolEmail);
-        inviteeRepository.deleteDuplicateEmail(carol.getId(), carolEmail);
+        voteService.bindEmailInvitees(carol);
         em.clear();
 
         // The stale read row is gone, so the Invitation is unread; once the Poll Ends, the Ended Notification follows
@@ -137,9 +135,8 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
         em.persist(new Invitee(poll, carolEmail));
         em.flush();
 
-        assertThat(inviteeRepository.bindEmail(carol.getId(), carolEmail)).isZero();
-        assertThat(inviteeRepository.deleteDuplicateEmail(carol.getId(), carolEmail)).isEqualTo(1);
-        assertThat(inviteeRepository.bindEmail(carol.getId(), carolEmail)).isZero();
+        voteService.bindEmailInvitees(carol);
+        voteService.bindEmailInvitees(carol);
         em.clear();
 
         assertThat(inviteeRepository.findByVoteId(poll.getId())).singleElement()
@@ -181,5 +178,53 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
         em.persist(new Invitee(poll, owner, carolEmail));
 
         assertThatThrownBy(() -> em.flush()).hasMessageContaining("chk_vote_invitees_user_or_email");
+    }
+
+    @Test
+    @DisplayName("should keep a removed pending email's sent record, so re-adding it sends no second invitation")
+    void shouldKeepSentRecordWhenEmailRemovedAndReAdded() {
+        inviteEmail(carolEmail);
+        voteService.removeEmailInvitee(poll.getId().toString(), carolEmail, owner.getId().toString());
+        em.flush();
+
+        assertThat(inviteeRepository.isInvitationSent(poll.getId(), carolEmail)).isTrue();
+        assertThat(inviteEmail(carolEmail)).singleElement().satisfies(i -> assertThat(i.email()).isEqualTo(carolEmail));
+    }
+
+    @Test
+    @DisplayName("should keep a user listed by ID and by account email on edit instead of deleting and re-adding them")
+    void shouldKeepUserInviteeWhenListedByEmailOnEdit() {
+        User carol = User.builder().username("em-carol-" + System.nanoTime()).email(carolEmail).build();
+        em.persist(carol);
+        Vote scheduled = persistPoll(owner, now.plusDays(1), now.plusDays(2), "A", "B");
+        scheduled.setAudience(Audience.INVITE_ONLY);
+        em.persist(new Invitee(scheduled, carol));
+        em.flush();
+        notificationReadRepository.markRead(carol.getId(), scheduled.getId(), now);
+        UUID before = inviteeRepository.findByVoteId(scheduled.getId()).getFirst().getId();
+        em.clear();
+
+        CreateVoteRequest edit = new CreateVoteRequest();
+        edit.setTitle("Edited");
+        edit.setOptions(List.of(option("A"), option("B")));
+        edit.setStartTime(now.plusDays(1));
+        edit.setEndTime(now.plusDays(2));
+        edit.setInviteeIds(List.of());
+        edit.setInviteeEmails(List.of(carolEmail));
+        voteService.updateVote(scheduled.getId().toString(), edit, owner.getId().toString());
+        em.flush();
+        em.clear();
+
+        assertThat(inviteeRepository.findByVoteId(scheduled.getId())).singleElement()
+                .satisfies(i -> assertThat(i.getId()).isEqualTo(before));
+        // Not a new Invitee, so the read Invitation stays read
+        assertThat(notificationReadRepository.isNotified(carol.getId(), scheduled.getId(), now)).isTrue();
+        assertThat(notificationReadRepository.countUnread(carol.getId(), now)).isZero();
+    }
+
+    private static CreateVoteRequest.VoteOptionRequest option(String text) {
+        CreateVoteRequest.VoteOptionRequest option = new CreateVoteRequest.VoteOptionRequest();
+        option.setText(text);
+        return option;
     }
 }

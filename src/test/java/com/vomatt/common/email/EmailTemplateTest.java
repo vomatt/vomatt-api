@@ -83,6 +83,12 @@ class EmailTemplateTest {
     }
 
     @Test
+    void shouldMaskAddressWhenLoggingInvitation() {
+        assertThat(EmailServiceImpl.mask("carol@example.com")).isEqualTo("c***@example.com");
+        assertThat(EmailServiceImpl.mask("broken")).isEqualTo("***");
+    }
+
+    @Test
     void shouldKeepVoteIdTokenWhenPollPathDefaultResolved() {
         // Same placeholder as application.yml / EmailServiceImpl: the braces of {voteId} must survive resolution
         assertThat(new StandardEnvironment().resolvePlaceholders("${EMAIL_POLL_PATH_UNSET:/votes/{voteId}}"))

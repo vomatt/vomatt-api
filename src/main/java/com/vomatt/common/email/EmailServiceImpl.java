@@ -90,10 +90,16 @@ public class EmailServiceImpl implements EmailService {
                     Map.of("inviterName", Objects.toString(inviterName, ""),
                             "pollTitle", pollTitle,
                             "pollUrl", siteUrl + pollPath.replace("{voteId}", pollId.toString())));
-            log.info("Invitation email for vote {} sent to: {}", pollId, to);
+            log.info("Invitation email for vote {} sent to: {}", pollId, mask(to));
         } catch (MessagingException | RuntimeException e) {
-            log.error("Failed to send invitation email for vote {} to: {}", pollId, to, e);
+            log.error("Failed to send invitation email for vote {} to: {}", pollId, mask(to), e);
         }
+    }
+
+    // The invitee has no account yet, so their address stays out of the logs: a***@domain
+    static String mask(String email) {
+        int at = email.indexOf('@');
+        return at <= 0 ? "***" : email.charAt(0) + "***" + email.substring(at);
     }
 
     private void send(String to, String subjectKey, String template, Locale locale, Map<String, Object> variables)

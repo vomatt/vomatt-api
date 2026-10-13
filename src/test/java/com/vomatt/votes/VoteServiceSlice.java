@@ -1,9 +1,12 @@
 package com.vomatt.votes;
 
+import org.mockito.Mockito;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
 import com.vomatt.common.email.EmailServiceNoOp;
+import com.vomatt.common.redis.RedisService;
 import com.vomatt.repository.NotificationReadRepository;
 import com.vomatt.repository.VoteListRepository;
 
@@ -12,4 +15,10 @@ import com.vomatt.repository.VoteListRepository;
 @Import({ VoteService.class, VoteMapper.class, VoteConfigurationProperties.class, VoteListRepository.class,
         NotificationReadRepository.class, EmailServiceNoOp.class })
 public class VoteServiceSlice {
+
+    // No Redis in the slice: the invitation email counter always reads 0, so the daily limit never applies
+    @Bean
+    RedisService redisService() {
+        return Mockito.mock(RedisService.class);
+    }
 }

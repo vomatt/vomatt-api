@@ -9,9 +9,8 @@ import com.vomatt.common.security.JwtUtil;
 import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.sms.SmsService;
 import com.vomatt.entity.User;
-import com.vomatt.repository.InviteeRepository;
-import com.vomatt.repository.NotificationReadRepository;
 import com.vomatt.repository.UserRepository;
+import com.vomatt.votes.VoteService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,7 +18,6 @@ import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -63,8 +61,7 @@ public class AuthService {
     private volatile AppleJwksCache appleJwksCache;
 
     private final UserRepository userRepository;
-    private final InviteeRepository inviteeRepository;
-    private final NotificationReadRepository notificationReadRepository;
+    private final VoteService voteService;
     private final TransactionTemplate transactionTemplate;
     private final RedisService redisService;
     private final EmailService emailService;
@@ -542,14 +539,11 @@ public class AuthService {
                         .build();
                 return userRepository.save(newUser);
             });
-            notificationReadRepository.deleteReadsForEmailBinding(user.getId(), email);
-            inviteeRepository.bindEmail(user.getId(), email);
-            inviteeRepository.deleteDuplicateEmail(user.getId(), email);
+            voteService.bindEmailInvitees(user);
             return user;
         });
     }
 
-    @Transactional
     User findOrCreateUserByPhone(String phone) {
         return userRepository.findByPhoneNumber(phone).orElseGet(() -> {
             User newUser = User.builder()

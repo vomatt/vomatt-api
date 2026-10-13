@@ -9,9 +9,8 @@ import com.vomatt.common.security.JwtUtil;
 import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.sms.SmsService;
 import com.vomatt.entity.User;
-import com.vomatt.repository.InviteeRepository;
-import com.vomatt.repository.NotificationReadRepository;
 import com.vomatt.repository.UserRepository;
+import com.vomatt.votes.VoteService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.inOrder;
@@ -46,9 +46,7 @@ class AuthServiceTest {
     @Mock
     UserRepository userRepository;
     @Mock
-    InviteeRepository inviteeRepository;
-    @Mock
-    NotificationReadRepository notificationReadRepository;
+    VoteService voteService;
     @Mock
     TransactionTemplate transactionTemplate;
     @Mock
@@ -447,11 +445,9 @@ class AuthServiceTest {
 
         authService.verifyOtp(" Carol@Example.com", null, "123456", false);
 
-        var order = inOrder(userRepository, notificationReadRepository, inviteeRepository);
+        var order = inOrder(userRepository, voteService);
         order.verify(userRepository).save(any(User.class));
-        order.verify(notificationReadRepository).deleteReadsForEmailBinding(carolId, "carol@example.com");
-        order.verify(inviteeRepository).bindEmail(carolId, "carol@example.com");
-        order.verify(inviteeRepository).deleteDuplicateEmail(carolId, "carol@example.com");
+        order.verify(voteService).bindEmailInvitees(argThat(u -> carolId.equals(u.getId()) && "carol@example.com".equals(u.getEmail())));
         verify(transactionTemplate).execute(any());
     }
 
@@ -468,8 +464,7 @@ class AuthServiceTest {
 
         authService.googleLogin("id-token");
 
-        verify(inviteeRepository).bindEmail(carol.getId(), "carol@example.com");
-        verify(inviteeRepository).deleteDuplicateEmail(carol.getId(), "carol@example.com");
+        verify(voteService).bindEmailInvitees(carol);
     }
 
     @Test
@@ -482,9 +477,7 @@ class AuthServiceTest {
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_EMAIL_NOT_VERIFIED));
 
-        verify(inviteeRepository, never()).bindEmail(any(), anyString());
-        verify(notificationReadRepository, never()).deleteReadsForEmailBinding(any(), anyString());
-        verify(inviteeRepository, never()).deleteDuplicateEmail(any(), anyString());
+        verify(voteService, never()).bindEmailInvitees(any());
     }
 
     @Test

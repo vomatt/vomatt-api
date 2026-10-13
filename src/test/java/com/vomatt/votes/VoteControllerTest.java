@@ -46,6 +46,7 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
@@ -317,6 +318,18 @@ class VoteControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data[0].email").value("carol@example.com"))
                     .andExpect(jsonPath("$.data[0].userId").doesNotExist());
+        }
+
+        @Test
+        @DisplayName("should trim and lower-case added emails before validating them, like sign-in")
+        void shouldNormalizeEmailsWhenPadded() throws Exception {
+            authenticate();
+
+            mockMvc.perform(post("/api/votes/{voteId}/invitees", voteId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"emails\": [\"  Carol@Example.COM \"]}"))
+                    .andExpect(status().isOk());
+            verify(voteService).addInvitees(eq(voteId), argThat(r -> r.getEmails().equals(List.of("carol@example.com"))), eq(USER_ID));
         }
 
         @Test

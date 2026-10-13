@@ -70,16 +70,15 @@ public class NotificationReadRepository {
     }
 
     /**
-     * Binding step 0: forgets the user's read state for the Polls whose email Invitee of theirs is about to become a user
-     * Invitee ({@link InviteeRepository#bindEmail}), so the Invitation reaches them unread like any newly added Invitee.
+     * Binding step 1: forgets the user's read state for the Polls whose email Invitee of theirs is about to bind
+     * ({@link InviteeRepository#BINDABLE}), so the Invitation reaches them unread like any newly added Invitee.
      */
     public void deleteReadsForEmailBinding(UUID userId, String email) {
         em.createNativeQuery("""
                 DELETE FROM vomatt.notification_reads r
                 WHERE r.user_id = :userId
-                  AND r.vote_id IN (SELECT i.vote_id FROM vomatt.vote_invitees i WHERE i.email = :email)
-                  AND NOT EXISTS (SELECT 1 FROM vomatt.vote_invitees u WHERE u.vote_id = r.vote_id AND u.user_id = :userId)
-                  AND NOT EXISTS (SELECT 1 FROM vomatt.votes v WHERE v.id = r.vote_id AND v.creator_id = :userId)""")
+                  AND EXISTS (SELECT 1 FROM vomatt.vote_invitees i WHERE i.email = :email AND i.vote_id = r.vote_id AND """
+                + InviteeRepository.BINDABLE + ")")
                 .setParameter("userId", userId)
                 .setParameter("email", email)
                 .executeUpdate();

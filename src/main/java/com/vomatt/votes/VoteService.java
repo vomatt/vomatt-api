@@ -2,8 +2,13 @@ package com.vomatt.votes;
 
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.email.EmailService;
+import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.common.util.UUIDv7Generator;
+import java.time.Duration;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -17,6 +22,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
@@ -75,6 +81,12 @@ public class VoteService {
     private final NotificationReadRepository notificationReadRepository;
     private final InviteeRepository inviteeRepository;
     private final EmailService emailService;
+    private final RedisService redisService;
+
+    private static final String INVITATION_COUNTER_NS = "email:invitation";
+
+    @Value("${app.email.invitation-daily-limit:200}")
+    private int invitationDailyLimit;
 
     public VoteResponse createVote(CreateVoteRequest request, String creatorId) {
         validateCreateVoteRequest(request, request.getStartTime());
@@ -495,12 +507,20 @@ public class VoteService {
         sendInvitations(vote, pendingEmails);
     }
 
-    // Edit only happens while Scheduled, so no Invitee can hold a Ballot yet. A null list keeps that kind of Invitee
+    /**
+     * Edit only happens while Scheduled, so no Invitee can hold a Ballot yet. A null list keeps that kind of Invitee.
+     * A user listed in either list (by ID, or by the email of their account) is kept, never deleted and re-added,
+     * so only truly new Invitees see the Invitation unread again.
+     */
     private void replaceInvitees(Vote vote, List<UUID> userIds, List<String> emails) {
         Set<String> keptEmails = emails == null ? null : emails.stream().map(User::normalizeEmail).collect(Collectors.toSet());
+        Set<UUID> keptUsers = userIds == null ? null : new HashSet<>(userIds);
+        if (keptUsers != null && keptEmails != null && !keptEmails.isEmpty()) {
+            userRepository.findByEmailIn(keptEmails).forEach(u -> keptUsers.add(u.getId()));
+        }
         inviteeRepository.deleteAll(inviteeRepository.findByVoteId(vote.getId()).stream()
             .filter(i -> i.getUser() != null
-                ? userIds != null && !userIds.contains(i.getUser().getId())
+                ? keptUsers != null && !keptUsers.contains(i.getUser().getId())
                 : keptEmails != null && !keptEmails.contains(i.getEmail()))
             .toList());
         // Hibernate flushes inserts before deletes; flush now so a re-added Invitee cannot hit a unique constraint
@@ -508,17 +528,37 @@ public class VoteService {
         insertInvitees(vote, orEmpty(userIds), orEmpty(emails));
     }
 
-    // Sent after commit, so a rolled-back request sends nothing; plain values only, the mail is sent on another thread
+    /**
+     * Sends each address the Poll's invitation at most once, ever (callers hold the Poll lock or own a new Poll, so the
+     * check and record cannot race), and at most {@code invitationDailyLimit} per owner per UTC day. Over the cap the
+     * Invitee is kept and only the email is skipped. Sent after commit, so a rolled-back request sends nothing;
+     * plain values only, the mail is sent on another thread.
+     */
     private void sendInvitations(Vote vote, Collection<String> emails) {
-        if (emails.isEmpty()) {
+        User owner = vote.getCreator();
+        UUID voteId = vote.getId();
+        List<String> recipients = new ArrayList<>();
+        int overLimit = 0;
+        for (String email : emails) {
+            if (inviteeRepository.isInvitationSent(voteId, email)) {
+                continue;
+            }
+            if (!withinInvitationLimit(owner.getId())) {
+                overLimit++;
+                continue;
+            }
+            inviteeRepository.recordInvitationSent(voteId, email);
+            recipients.add(email);
+        }
+        if (overLimit > 0) {
+            log.warn("Invitation email daily limit reached: {} invitation(s) for vote {} by owner {} not sent", overLimit, voteId, owner.getId());
+        }
+        if (recipients.isEmpty()) {
             return;
         }
-        User owner = vote.getCreator();
         String inviterName = owner.getDisplayName() != null ? owner.getDisplayName() : owner.getUsername();
         String title = vote.getTitle();
-        UUID voteId = vote.getId();
         Locale locale = LocaleContextHolder.getLocale();
-        List<String> recipients = List.copyOf(emails);
         Runnable send = () -> recipients.forEach(to -> emailService.sendInvitationEmail(to, inviterName, title, voteId, locale));
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             send.run();
@@ -532,8 +572,36 @@ public class VoteService {
         });
     }
 
+    // Fails closed: when Redis is down no invitation is sent, but the Invitees are still saved
+    private boolean withinInvitationLimit(UUID ownerId) {
+        try {
+            String day = LocalDate.now(ZoneOffset.UTC).toString();
+            return redisService.incrementAndExpire(INVITATION_COUNTER_NS, ownerId + ":" + day, Duration.ofDays(1)) <= invitationDailyLimit;
+        } catch (RuntimeException e) {
+            log.warn("Invitation email limit check failed for owner {}: {}", ownerId, e.getMessage());
+            return false;
+        }
+    }
+
     private static <T> List<T> orEmpty(List<T> list) {
         return list == null ? List.of() : list;
+    }
+
+    /**
+     * Turns the email Invitees of the user's verified email into user Invitees. Called only from the find-or-create
+     * by verified email in auth, inside its transaction; rerunning it binds nothing new. Steps 1-3 share
+     * {@link InviteeRepository#BINDABLE}, so they agree on which rows bind.
+     */
+    public void bindEmailInvitees(User user) {
+        String email = user.getEmail();
+        // 1. Invitation unread again, as for any newly added Invitee
+        notificationReadRepository.deleteReadsForEmailBinding(user.getId(), email);
+        // 2. A user row per bindable email row
+        for (UUID rowId : inviteeRepository.findIdsByEmail(email)) {
+            inviteeRepository.bindEmailRow(UUIDv7Generator.generateId(), rowId, user.getId());
+        }
+        // 3. Email rows now covered by a user row (or the owner's own address) go
+        inviteeRepository.deleteUnbindableEmail(user.getId(), email);
     }
 
     /**

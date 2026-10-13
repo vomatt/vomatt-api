@@ -62,6 +62,7 @@ class VoteServiceTest {
     @Mock InviteeRepository inviteeRepository;
     @Mock NotificationReadRepository notificationReadRepository;
     @Mock com.vomatt.common.email.EmailService emailService;
+    @Mock com.vomatt.common.redis.RedisService redisService;
     @Spy VoteMapper voteMapper = new VoteMapper();
 
     @InjectMocks
@@ -86,6 +87,7 @@ class VoteServiceTest {
         setId(vote, voteId);
         ReflectionTestUtils.setField(vote, "createdAt", OffsetDateTime.now());
         lenient().when(voteConfig.getDeleteWindow()).thenReturn(Duration.ofMinutes(20));
+        ReflectionTestUtils.setField(voteService, "invitationDailyLimit", 200);
 
         option = new VoteOption();
         option.setVote(vote);
@@ -1105,7 +1107,41 @@ class VoteServiceTest {
                         && rows.stream().anyMatch(i -> i.getUser() == null && "carol@example.com".equals(i.getEmail()));
             }));
             verify(emailService).sendInvitationEmail(eq("carol@example.com"), eq("Alice"), eq("Test Vote"), eq(voteId), any());
+            verify(inviteeRepository).recordInvitationSent(voteId, "carol@example.com");
             verifyNoMoreInteractions(emailService);
+        }
+
+        @Test
+        @DisplayName("should add the email Invitee but not mail it again when its invitation was already sent once")
+        void shouldNotResendWhenInvitationAlreadySent() {
+            inviteOnly(OffsetDateTime.now().plusDays(1));
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(inviteeRepository.isInvitationSent(voteId, "carol@example.com")).thenReturn(true);
+            InviteesRequest invite = new InviteesRequest();
+            invite.setEmails(List.of("carol@example.com"));
+
+            voteService.addInvitees(voteId.toString(), invite, userId.toString());
+
+            verify(inviteeRepository).saveAllAndFlush(argThat(invitees -> invitees.iterator().hasNext()));
+            verify(inviteeRepository, never()).recordInvitationSent(any(), any());
+            verifyNoInteractions(emailService, redisService);
+        }
+
+        @Test
+        @DisplayName("should add the email Invitee but skip the email when the owner's daily invitation limit is reached")
+        void shouldSkipEmailWhenDailyLimitReached() {
+            inviteOnly(OffsetDateTime.now().plusDays(1));
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(redisService.incrementAndExpire(eq("email:invitation"), org.mockito.ArgumentMatchers.startsWith(userId + ":"), any()))
+                    .thenReturn(201L);
+            InviteesRequest invite = new InviteesRequest();
+            invite.setEmails(List.of("carol@example.com"));
+
+            voteService.addInvitees(voteId.toString(), invite, userId.toString());
+
+            verify(inviteeRepository).saveAllAndFlush(argThat(invitees -> invitees.iterator().hasNext()));
+            verify(inviteeRepository, never()).recordInvitationSent(any(), any());
+            verifyNoInteractions(emailService);
         }
 
         @Test

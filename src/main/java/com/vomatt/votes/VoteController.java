@@ -89,6 +89,7 @@ public class VoteController {
                 "tags": [ { "id": "0199f2a4-6c3e-7a1b-9d52-3f8e1b7c4a10", "name": "Tech", "slug": "tech", "description": null, "displayOrder": 1, "usageCount": 18 } ],
                 "commentCount": 7,
                 "voterVisibility": "OWNER",
+                "audience": "PUBLIC",
                 "unread": null,
             """;
     private static final String POLL_MY_OPTION = "    \"myOptionId\": \"0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813\"\n} , \"message\": null, \"errorCode\": null, \"error\": null }";
@@ -111,9 +112,12 @@ public class VoteController {
             **Auth**: required
             **Precondition**: none
             **Behavior**: creates a Poll owned by the caller. With no `startTime` (or a past one) the Poll is Open immediately; \
-            a future `startTime` makes it Scheduled until that time. `voterVisibility` defaults to OWNER.
-            **Side effects**: usage count of each attached tag +1; the creation is audit-logged.
+            a future `startTime` makes it Scheduled until that time. `voterVisibility` defaults to OWNER; `audience` defaults to PUBLIC. \
+            An UNLISTED Poll is reachable only through its link: it stays out of Feed / Explore / Search and the owner's profile, \
+            and is listed only in My Polls.
+            **Side effects**: usage count of each attached tag +1 for a PUBLIC Poll (UNLISTED Polls are not counted); the creation is audit-logged.
             **Errors**:
+                    - 400 `vote.audience.unsupported`: `audience` is INVITE_ONLY, which is not supported yet
                     - 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true
                     - 400 `vote.options.min`: fewer than 2 options
                     - 400 `vote.options.max`: more than 10 options
@@ -133,6 +137,7 @@ public class VoteController {
                               "startTime": "2026-10-12T09:00:00+08:00",
                               "endTime": "2026-10-19T09:00:00+08:00",
                               "voterVisibility": "OWNER",
+                              "audience": "PUBLIC",
                               "tagIds": [ "0199f2a4-6c3e-7a1b-9d52-3f8e1b7c4a10" ]
                             }
                             """))))
@@ -156,13 +161,16 @@ public class VoteController {
     @Operation(summary = "Edit a Scheduled Poll", description = """
             **Auth**: required (owner only)
             **Precondition**: the Poll is Scheduled (its start time has not arrived and it has not been Closed)
-            **Behavior**: replaces title, description, times, Voter Visibility, tags and options with the body (same body and validation as create). \
-            An omitted `startTime` keeps the scheduled one; the Poll does not open on edit.
-            **Side effects**: all options are replaced, so option IDs change; tag usage counts are adjusted for added / removed tags.
+            **Behavior**: replaces title, description, times, Voter Visibility, Audience, tags and options with the body (same body and validation as create). \
+            An omitted `startTime`, `voterVisibility` or `audience` keeps the current value; the Poll does not open on edit. \
+            Audience can change only here, so it is fixed once the Poll is Open.
+            **Side effects**: all options are replaced, so option IDs change; tag usage counts are adjusted for added / removed tags \
+            and for an Audience change (only PUBLIC Polls are counted).
             **Errors**:
             - 403 `vote.forbidden`: the caller is not the owner
             - 404 `vote.not_found`: Poll does not exist or is Deleted
             - 400 `vote.not_editable`: the Poll is Open or Ended
+            - 400 `vote.audience.unsupported`: `audience` is INVITE_ONLY, which is not supported yet
             - 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true
             - 400 `vote.options.min`: fewer than 2 options
             - 400 `vote.options.max`: more than 10 options
@@ -226,7 +234,7 @@ public class VoteController {
     @Operation(summary = "List Polls (Feed / Explore / Search)", description = """
             **Auth**: public (optional login changes response: `myOptionId` of each item is filled for the caller's Ballots)
             **Precondition**: none
-            **Behavior**: cursor-paged list of Open or Ended Polls; Scheduled Polls never appear.
+            **Behavior**: cursor-paged list of Open or Ended PUBLIC Polls; Scheduled and UNLISTED Polls never appear.
             - `status=open` (default) + `sort=newest` (default): most recently opened first (the Feed)
             - `status=open` + `sort=closing`: closing soonest first
             - `status=ended`: most recently ended first; `sort` must be omitted
@@ -262,7 +270,7 @@ public class VoteController {
     @Operation(summary = "My Polls", description = """
             **Auth**: required
             **Precondition**: none
-            **Behavior**: cursor-paged Polls the caller created or holds a Ballot in.
+            **Behavior**: cursor-paged Polls the caller created or holds a Ballot in, of any Audience (UNLISTED included).
             - `status=open` (default): the caller's Scheduled and Open Polls, closing soonest first
             - `status=ended`: Ended Polls (including Cancelled ones), most recently ended first; each item carries `unread` (Ended Notification not yet read; false for a Cancelled Poll)
             - `nextCursor` null means the last page; `limit` is clamped to 1-50 (default 20).

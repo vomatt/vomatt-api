@@ -69,8 +69,9 @@ public class Vote extends AuditableEntity {
     @Column(name = "is_anonymous")
     private boolean isAnonymous = false;
 
-    @Column(name = "is_public")
-    private boolean isPublic = true;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "audience", nullable = false)
+    private Audience audience = Audience.PUBLIC;
 
     @Column(name = "max_choices")
     private Integer maxChoices = 1;

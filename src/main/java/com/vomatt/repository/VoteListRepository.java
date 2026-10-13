@@ -15,7 +15,7 @@ import jakarta.persistence.Query;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Keyset pages of Polls for Feed / Explore / Search. SQL is assembled from constant fragments only;
+ * Keyset pages of Polls for Feed / Explore / Search (Public Polls only) and My Polls (any Audience). SQL is assembled from constant fragments only;
  * every value is a bound parameter.
  */
 @Repository
@@ -42,7 +42,7 @@ public class VoteListRepository {
     @SuppressWarnings("unchecked")
     public List<Vote> findPage(VoteListOrder order, String tag, String query, Cursor after, OffsetDateTime now,
                                int limit) {
-        StringBuilder sql = new StringBuilder("SELECT v.* FROM vomatt.votes v WHERE v.deleted_at IS NULL AND ");
+        StringBuilder sql = new StringBuilder("SELECT v.* FROM vomatt.votes v WHERE v.deleted_at IS NULL AND v.audience = 'PUBLIC' AND ");
         String sortColumn = switch (order) {
             case NEWEST -> "v.start_time";
             case CLOSING, ENDED -> "v.end_time";
@@ -111,7 +111,7 @@ public class VoteListRepository {
     }
 
     /**
-     * A user's public profile list: Polls they created that have opened (Open or Ended, not Scheduled and not
+     * A user's public profile list: Public Polls they created that have opened (Open or Ended, not Scheduled and not
      * Cancelled before opening), most recently opened first.
      */
     @SuppressWarnings("unchecked")
@@ -119,7 +119,7 @@ public class VoteListRepository {
         StringBuilder sql = new StringBuilder("""
                 SELECT v.* FROM vomatt.votes v
                 WHERE v.creator_id = :creatorId AND v.start_time <= :now AND v.end_time > v.start_time
-                  AND v.deleted_at IS NULL
+                  AND v.deleted_at IS NULL AND v.audience = 'PUBLIC'
                 """);
         if (after != null) {
             sql.append(" AND (v.start_time, v.id) < (:afterKey, :afterId)");

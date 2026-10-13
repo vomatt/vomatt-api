@@ -133,7 +133,7 @@ public class UserController {
     @Operation(summary = "Get a user's Polls", description = """
             **Auth**: public (optional login fills the viewer-specific fields of each Poll, e.g. the caller's Ballot)
             **Precondition**: the user exists and is not suspended
-            **Behavior**: the Polls the user created that have opened (Open and Ended), most recently opened first, \
+            **Behavior**: the PUBLIC Polls the user created that have opened (Open and Ended), most recently opened first, \
             cursor-paged (`limit` 1-50, default 20; out-of-range values are clamped). Scheduled Polls and Polls \
             Cancelled before opening are left out, so the count matches `totalPolls` on the public profile. \
             `nextCursor` is `null` on the last page.

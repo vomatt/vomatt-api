@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import com.vomatt.entity.Audience;
 import com.vomatt.entity.VoterVisibility;
 
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -56,6 +57,12 @@ public class CreateVoteRequest {
             + "Participants see this level before casting a Ballot",
             example = "OWNER", nullable = true)
     private VoterVisibility voterVisibility;
+
+    @Schema(description = "Who can reach the Poll: PUBLIC (default; listed in Feed / Explore / Search and the owner's profile) or "
+            + "UNLISTED (reachable only through its link, listed only in the owner's My Polls). Null keeps PUBLIC on create and "
+            + "the current value on edit. INVITE_ONLY is reserved and not supported yet: 400 `vote.audience.unsupported`",
+            example = "PUBLIC", nullable = true)
+    private Audience audience;
 
     @Size(max = 5, message = "Maximum 5 tags can be selected")
     @Schema(description = "IDs of up to 5 existing tags (see `GET /api/tags`); null or empty means no tags. Unknown IDs are rejected with 400 `tag.ids.invalid`",

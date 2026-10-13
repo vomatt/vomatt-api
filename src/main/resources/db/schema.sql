@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS vomatt.votes (
     is_active              BOOLEAN       NOT NULL DEFAULT TRUE,
     allow_multiple_choices BOOLEAN       NOT NULL DEFAULT FALSE,
     is_anonymous           BOOLEAN       NOT NULL DEFAULT FALSE,
-    is_public              BOOLEAN       NOT NULL DEFAULT TRUE,
+    audience               VARCHAR(20)   NOT NULL DEFAULT 'PUBLIC',
     max_choices            INTEGER       NOT NULL DEFAULT 1,
     voter_visibility       VARCHAR(20)   NOT NULL DEFAULT 'OWNER',
     search_bigrams         TEXT[]        GENERATED ALWAYS AS
@@ -250,6 +250,8 @@ ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS search_bigrams TEXT[] GENERATE
 CREATE INDEX IF NOT EXISTS idx_votes_search_bigrams ON vomatt.votes USING GIN (search_bigrams);
 -- Delete (soft): a Deleted Poll is hidden from everyone, owner included; the row and its Ballots are kept
 ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+-- Audience: PUBLIC (default) / UNLISTED / INVITE_ONLY; replaces the never-used is_public, which old databases keep unmapped
+ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS audience VARCHAR(20) NOT NULL DEFAULT 'PUBLIC';
 -- Comment replies (one level): parent_id only points to top-level comments
 ALTER TABLE vomatt.vote_comments ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES vomatt.vote_comments (id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS idx_vote_comments_parent ON vomatt.vote_comments (parent_id, created_at, id);

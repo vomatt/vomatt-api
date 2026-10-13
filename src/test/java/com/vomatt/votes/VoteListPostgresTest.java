@@ -264,6 +264,7 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
         poll("scheduled", now.plusHours(1), now.plusDays(1), 9);
         poll("ended", now.minusDays(2), now.minusHours(1), 9);
         poll("unlisted", now.minusHours(1), now.plusDays(1), 9).setAudience(Audience.UNLISTED);
+        poll("invite-only", now.minusHours(1), now.plusDays(1), 9).setAudience(Audience.INVITE_ONLY);
         poll("deleted", now.minusHours(1), now.plusDays(1), 9).setDeletedAt(now);
 
         assertThat(titles(VoteListOrder.TOP, null)).containsExactly("high", "tie-new", "tie-old", "low");

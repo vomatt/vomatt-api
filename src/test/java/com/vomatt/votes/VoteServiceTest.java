@@ -61,6 +61,7 @@ class VoteServiceTest {
     @Mock com.vomatt.repository.VoteCommentRepository voteCommentRepository;
     @Mock InviteeRepository inviteeRepository;
     @Mock NotificationReadRepository notificationReadRepository;
+    @Mock com.vomatt.common.email.EmailService emailService;
     @Spy VoteMapper voteMapper = new VoteMapper();
 
     @InjectMocks
@@ -227,6 +228,22 @@ class VoteServiceTest {
             assertThatThrownBy(() -> voteService.createVote(request, userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_INVITEE_NOT_INVITE_ONLY));
             verify(voteRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("should throw 400 VOTE_INVITEE_NOT_INVITE_ONLY when inviteeEmails are sent for a Public Poll")
+        void shouldRejectCreateWhenInviteeEmailsSentForPublicPoll() {
+            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
+            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
+            CreateVoteRequest request = new CreateVoteRequest();
+            request.setTitle("Test");
+            request.setOptions(List.of(buildOption("A"), buildOption("B")));
+            request.setInviteeEmails(List.of("carol@example.com"));
+
+            assertThatThrownBy(() -> voteService.createVote(request, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_INVITEE_NOT_INVITE_ONLY));
+            verify(voteRepository, never()).save(any());
+            verifyNoInteractions(emailService);
         }
 
         @Test
@@ -1064,6 +1081,92 @@ class VoteServiceTest {
             verify(inviteeRepository).saveAllAndFlush(argThat(invitees ->
                     invitees instanceof List<?> list && list.size() == 1
                             && ((Invitee) list.getFirst()).getUser() == carol));
+        }
+
+        @Test
+        @DisplayName("should store a normalized pending email, invite the registered user of another email and mail only the pending one")
+        void shouldInviteByEmailWhenAddingEmails() {
+            inviteOnly(OffsetDateTime.now().plusDays(1));
+            vote.getCreator().setDisplayName("Alice");
+            User bob = User.builder().id(inviteeId).email("bob@example.com").build();
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(userRepository.findByEmailIn(Set.of("carol@example.com", "bob@example.com"))).thenReturn(List.of(bob));
+            when(userRepository.findAllById(Set.of(bob.getId()))).thenReturn(List.of(bob));
+            InviteesRequest invite = new InviteesRequest();
+            invite.setEmails(List.of(" Carol@Example.com", "bob@example.com", "carol@example.com"));
+
+            voteService.addInvitees(voteId.toString(), invite, userId.toString());
+
+            verify(inviteeRepository).saveAllAndFlush(argThat(invitees -> {
+                List<Invitee> rows = new ArrayList<>();
+                invitees.forEach(rows::add);
+                return rows.size() == 2
+                        && rows.stream().anyMatch(i -> i.getUser() == bob && i.getEmail() == null)
+                        && rows.stream().anyMatch(i -> i.getUser() == null && "carol@example.com".equals(i.getEmail()));
+            }));
+            verify(emailService).sendInvitationEmail(eq("carol@example.com"), eq("Alice"), eq("Test Vote"), eq(voteId), any());
+            verifyNoMoreInteractions(emailService);
+        }
+
+        @Test
+        @DisplayName("should neither re-add nor re-mail an email that is already a pending Invitee")
+        void shouldSkipPendingEmailWhenAlreadyInvited() {
+            inviteOnly(OffsetDateTime.now().plusDays(1));
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(inviteeRepository.findByVoteId(voteId)).thenReturn(List.of(new Invitee(vote, "carol@example.com")));
+            InviteesRequest invite = new InviteesRequest();
+            invite.setEmails(List.of("carol@example.com"));
+
+            voteService.addInvitees(voteId.toString(), invite, userId.toString());
+
+            verify(inviteeRepository).saveAllAndFlush(argThat(invitees -> !invitees.iterator().hasNext()));
+            verifyNoInteractions(emailService);
+        }
+
+        @Test
+        @DisplayName("should ignore the owner's own email")
+        void shouldSkipOwnerWhenOwnerEmailInvited() {
+            inviteOnly(OffsetDateTime.now().plusDays(1));
+            user.setEmail("owner@example.com");
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(userRepository.findByEmailIn(Set.of("owner@example.com"))).thenReturn(List.of(user));
+            InviteesRequest invite = new InviteesRequest();
+            invite.setEmails(List.of("owner@example.com"));
+
+            voteService.addInvitees(voteId.toString(), invite, userId.toString());
+
+            verify(inviteeRepository, never()).saveAllAndFlush(any());
+            verifyNoInteractions(emailService);
+        }
+
+        @Test
+        @DisplayName("should throw 400 VOTE_INVITEE_IDS_INVALID when an email belongs to a suspended user")
+        void shouldRefuseEmailWhenUserSuspended() {
+            inviteOnly(OffsetDateTime.now().plusDays(1));
+            User suspended = User.builder().id(UUID.randomUUID()).email("gone@example.com").active(false).build();
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(userRepository.findByEmailIn(Set.of("gone@example.com"))).thenReturn(List.of(suspended));
+            when(userRepository.findAllById(Set.of(suspended.getId()))).thenReturn(List.of(suspended));
+            InviteesRequest invite = new InviteesRequest();
+            invite.setEmails(List.of("gone@example.com"));
+
+            assertThatThrownBy(() -> voteService.addInvitees(voteId.toString(), invite, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_INVITEE_IDS_INVALID));
+            verifyNoInteractions(emailService);
+        }
+
+        @Test
+        @DisplayName("should remove a pending email Invitee looked up by its normalized email")
+        void shouldRemoveEmailInviteeWhenPending() {
+            inviteOnly(OffsetDateTime.now().plusDays(1));
+            Invitee pending = new Invitee(vote, "carol@example.com");
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(inviteeRepository.findByVoteIdAndEmail(voteId, "carol@example.com")).thenReturn(Optional.of(pending));
+
+            voteService.removeEmailInvitee(voteId.toString(), " Carol@Example.com ", userId.toString());
+
+            verify(inviteeRepository).delete(pending);
+            verify(userVoteRepository, never()).existsByUserIdAndVoteId(any(), any());
         }
     }
 

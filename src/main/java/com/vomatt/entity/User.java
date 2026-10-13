@@ -35,7 +35,7 @@ public class User extends AuditableEntity {
     @Column(name = "username", nullable = false, unique = true, length = 50)
     private String username;
 
-    /** Null for users who registered via phone OTP. */
+    /** Null for users who registered via phone OTP. Stored as {@link #normalizeEmail}. */
     @Column(name = "email", unique = true, length = 254)
     private String email;
 
@@ -92,6 +92,11 @@ public class User extends AuditableEntity {
     public void addPoints(int points) {
         this.points += points;
         updateMembershipLevel();
+    }
+
+    /** The one email normalization: sign-up / sign-in lookups and email Invitees must agree on it. */
+    public static String normalizeEmail(String email) {
+        return email.toLowerCase().trim();
     }
 
     public void deductPoints(int points) {

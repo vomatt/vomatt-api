@@ -4,6 +4,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -70,6 +71,16 @@ public class CreateVoteRequest {
             example = "[\"0199f2a1-2c5d-7f13-9b0e-7d4a1e3f6c82\"]", nullable = true)
     @Size(max = 100, message = "Maximum 100 users can be invited at once")
     private List<@NotNull(message = "Invitee ID cannot be null") UUID> inviteeIds;
+
+    @Schema(description = "Email addresses to invite, for people who may not have an account yet; only for an INVITE_ONLY Poll "
+            + "(otherwise 400 `vote.invitee.not_invite_only`). At most 100; null elements and invalid addresses are rejected. "
+            + "Addresses are lower-cased and trimmed like sign-in does; duplicates and the owner's own address are ignored. "
+            + "An address of a registered user invites that user (a suspended one is rejected with 400 `vote.invitee.ids_invalid`); "
+            + "any other address becomes a pending email Invitee, gets an invitation email, and turns into that user once someone verifies it at sign-up / sign-in. "
+            + "On edit the list replaces the current pending email Invitees; null keeps them",
+            example = "[\"carol@example.com\"]", nullable = true)
+    @Size(max = 100, message = "Maximum 100 email addresses can be invited at once")
+    private List<@NotNull(message = "Invitee email cannot be null") @Email(message = "Invalid invitee email") @Size(max = 254, message = "Invitee email cannot exceed 254 characters") String> inviteeEmails;
 
     @Size(max = 5, message = "Maximum 5 tags can be selected")
     @Schema(description = "IDs of up to 5 existing tags (see `GET /api/tags`); null or empty means no tags. Unknown IDs are rejected with 400 `tag.ids.invalid`",

@@ -9,6 +9,7 @@ import com.vomatt.common.security.JwtUtil;
 import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.sms.SmsService;
 import com.vomatt.entity.User;
+import com.vomatt.repository.InviteeRepository;
 import com.vomatt.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
@@ -60,6 +62,8 @@ public class AuthService {
     private volatile AppleJwksCache appleJwksCache;
 
     private final UserRepository userRepository;
+    private final InviteeRepository inviteeRepository;
+    private final TransactionTemplate transactionTemplate;
     private final RedisService redisService;
     private final EmailService emailService;
     private final SmsService smsService;
@@ -110,7 +114,7 @@ public class AuthService {
         String code = generateOtpCode();
 
         if (email != null && !email.isBlank()) {
-            String normalizedEmail = email.toLowerCase().trim();
+            String normalizedEmail = User.normalizeEmail(email);
             if (checkRole) {
                 userRepository.findByEmail(normalizedEmail)
                         .filter(u -> List.of(u.getRoles()).contains(UserRole.ADMIN))
@@ -161,7 +165,7 @@ public class AuthService {
 
     public AuthResponse verifyOtp(String email, String phone, String code, boolean checkRole) {
         if (email != null && !email.isBlank()) {
-            String normalizedEmail = email.toLowerCase().trim();
+            String normalizedEmail = User.normalizeEmail(email);
             // P5-#13: the admin login role check must run before "consume OTP / create account / send welcome email".
             // Otherwise a non-admin attempt would burn the OTP, auto-create an account and send an email before returning 403.
             if (checkRole) {
@@ -266,7 +270,7 @@ public class AuthService {
     }
 
     public boolean checkEmailExists(String email) {
-        return userRepository.existsByEmail(email.toLowerCase().trim());
+        return userRepository.existsByEmail(User.normalizeEmail(email));
     }
 
     // ── Google OAuth ──────────────────────────────────────────────────
@@ -296,7 +300,7 @@ public class AuthService {
         // Google tokeninfo usually returns email_verified as the string "true"/"false", occasionally as a boolean; parse defensively
         boolean emailVerified = "true".equals(String.valueOf(response.get("email_verified")));
 
-        User user = findOrCreateUserByEmail(email.toLowerCase().trim(), name, "google", emailVerified);
+        User user = findOrCreateUserByEmail(User.normalizeEmail(email), name, "google", emailVerified);
         if (picture != null && user.getAvatarUrl() == null) {
             user.setAvatarUrl(picture);
             userRepository.save(user);
@@ -369,7 +373,7 @@ public class AuthService {
 
         // LINE's verify endpoint only returns the email when it is verified; otherwise the synthesized
         // line_<userId>@line.oauth is unique and cannot be set by an attacker to a victim's real email -> both cases are safely treated as verified
-        User user = findOrCreateUserByEmail(email.toLowerCase().trim(), displayName, "line", true);
+        User user = findOrCreateUserByEmail(User.normalizeEmail(email), displayName, "line", true);
         if (pictureUrl != null && user.getAvatarUrl() == null) {
             user.setAvatarUrl(pictureUrl);
             userRepository.save(user);
@@ -447,7 +451,7 @@ public class AuthService {
             // Apple id_token usually returns email_verified as the string "true", occasionally as boolean true; parse defensively
             boolean emailVerified = "true".equals(String.valueOf(payload.get("email_verified")));
 
-            User user = findOrCreateUserByEmail(email.toLowerCase().trim(),
+            User user = findOrCreateUserByEmail(User.normalizeEmail(email),
                     fullName != null ? fullName : "", "apple", emailVerified);
             return buildAuthResponse(user);
 
@@ -517,21 +521,28 @@ public class AuthService {
      *       <b>must not</b> merge into an existing account nor create a new one; throw
      *       {@link MessageKey#AUTH_EMAIL_NOT_VERIFIED}.</li>
      * </ul>
+     * <p>This is the only place an email is proven to be the user's, so email Invitees of it become user Invitees
+     * here, in the same transaction as the find-or-create; rerunning it binds nothing new.</p>
      */
-    @Transactional
     User findOrCreateUserByEmail(String email, String fullName, String authMethod, boolean emailVerified) {
         if (!emailVerified) {
             // Email not verified by the provider -> refuse to merge or create, preventing account takeover
             throw ApiException.unauthorized(MessageKey.AUTH_EMAIL_NOT_VERIFIED);
         }
-        return userRepository.findByEmail(email).orElseGet(() -> {
-            User newUser = User.builder()
-                    .email(email)
-                    .username(generateUsername(email.split("@")[0]))
-                    .displayName((fullName != null && !fullName.isBlank()) ? fullName : email.split("@")[0])
-                    .authMethod(authMethod)
-                    .build();
-            return userRepository.save(newUser);
+        // Programmatic transaction: callers are in this class, so @Transactional here would be skipped
+        return transactionTemplate.execute(status -> {
+            User user = userRepository.findByEmail(email).orElseGet(() -> {
+                User newUser = User.builder()
+                        .email(email)
+                        .username(generateUsername(email.split("@")[0]))
+                        .displayName((fullName != null && !fullName.isBlank()) ? fullName : email.split("@")[0])
+                        .authMethod(authMethod)
+                        .build();
+                return userRepository.save(newUser);
+            });
+            inviteeRepository.bindEmail(user.getId(), email);
+            inviteeRepository.deleteDuplicateEmail(user.getId(), email);
+            return user;
         });
     }
 

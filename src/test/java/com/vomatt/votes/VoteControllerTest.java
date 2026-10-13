@@ -210,6 +210,7 @@ class VoteControllerTest {
             assertThat(isPublic("GET", "/api/votes/" + voteId + "/invitees")).isFalse();
             assertThat(isPublic("POST", "/api/votes/" + voteId + "/invitees")).isFalse();
             assertThat(isPublic("DELETE", "/api/votes/" + voteId + "/invitees/" + inviteeId)).isFalse();
+            assertThat(isPublic("DELETE", "/api/votes/" + voteId + "/invitees")).isFalse();
         }
 
         @Test
@@ -217,7 +218,7 @@ class VoteControllerTest {
         void shouldReturn200WhenOwnerListsInvitees() throws Exception {
             authenticate();
             when(voteService.getInvitees(voteId, USER_ID))
-                    .thenReturn(List.of(new InviteeResponse(inviteeId, "bob", true, null)));
+                    .thenReturn(List.of(new InviteeResponse(inviteeId, "bob", null, true, null)));
 
             mockMvc.perform(get("/api/votes/{voteId}/invitees", voteId))
                     .andExpect(status().isOk())
@@ -230,7 +231,7 @@ class VoteControllerTest {
         void shouldReturn200WhenOwnerAddsInvitees() throws Exception {
             authenticate();
             when(voteService.addInvitees(eq(voteId), any(InviteesRequest.class), eq(USER_ID)))
-                    .thenReturn(List.of(new InviteeResponse(inviteeId, "bob", false, null)));
+                    .thenReturn(List.of(new InviteeResponse(inviteeId, "bob", null, false, null)));
 
             mockMvc.perform(post("/api/votes/{voteId}/invitees", voteId)
                             .contentType(MediaType.APPLICATION_JSON)
@@ -301,6 +302,50 @@ class VoteControllerTest {
             mockMvc.perform(delete("/api/votes/{voteId}/invitees/{userId}", voteId, inviteeId))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.errorCode").value(MessageKey.VOTE_INVITEE_HAS_BALLOT.code()));
+        }
+
+        @Test
+        @DisplayName("should return 200 when the owner adds only email Invitees")
+        void shouldReturn200WhenOwnerAddsEmailInvitees() throws Exception {
+            authenticate();
+            when(voteService.addInvitees(eq(voteId), any(InviteesRequest.class), eq(USER_ID)))
+                    .thenReturn(List.of(new InviteeResponse(null, null, "carol@example.com", false, null)));
+
+            mockMvc.perform(post("/api/votes/{voteId}/invitees", voteId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"emails\": [\"carol@example.com\"]}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data[0].email").value("carol@example.com"))
+                    .andExpect(jsonPath("$.data[0].userId").doesNotExist());
+        }
+
+        @Test
+        @DisplayName("should return 400 common.validation_failed when adding with neither userIds nor emails")
+        void shouldReturn400WhenNoInviteesGiven() throws Exception {
+            assertValidationFailed("/api/votes/{voteId}/invitees", "{\"emails\": []}");
+        }
+
+        @Test
+        @DisplayName("should return 400 common.validation_failed when an added email is invalid")
+        void shouldReturn400WhenEmailInvalid() throws Exception {
+            assertValidationFailed("/api/votes/{voteId}/invitees", "{\"emails\": [\"not-an-email\"]}");
+        }
+
+        @Test
+        @DisplayName("should return 400 common.validation_failed when creating with an invalid inviteeEmail")
+        void shouldReturn400WhenInviteeEmailInvalidOnCreate() throws Exception {
+            assertValidationFailed("/api/votes", POLL_BODY + "], \"inviteeEmails\": [\"not-an-email\"]}");
+        }
+
+        @Test
+        @DisplayName("should return 200 when the owner removes a pending email Invitee")
+        void shouldReturn200WhenOwnerRemovesEmailInvitee() throws Exception {
+            authenticate();
+            when(voteService.removeEmailInvitee(voteId, "carol@example.com", USER_ID)).thenReturn(List.of());
+
+            mockMvc.perform(delete("/api/votes/{voteId}/invitees", voteId).param("email", "carol@example.com"))
+                    .andExpect(status().isOk());
+            verify(voteService).removeEmailInvitee(voteId, "carol@example.com", USER_ID);
         }
     }
 

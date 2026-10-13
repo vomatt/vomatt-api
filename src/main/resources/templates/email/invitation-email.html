@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<!-- Styles are inline and laid out with tables: several mail clients (Outlook, some webmail) drop <style> blocks and flexbox -->
+<html xmlns:th="http://www.thymeleaf.org" th:lang="${#locale.toLanguageTag()}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Light only: stops Apple Mail and Outlook from auto-darkening the design -->
+    <meta name="color-scheme" content="light only">
+    <meta name="supported-color-schemes" content="light only">
+    <style>:root { color-scheme: light only; supported-color-schemes: light only; }</style>
+    <title th:text="#{email.invitation.title}">You are invited to a Poll</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f5f3ee;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f5f3ee;">
+    <tr>
+        <td align="center" style="padding: 40px 16px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                   style="max-width: 600px; font-family: Geist, -apple-system, 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', 'Helvetica Neue', Arial, sans-serif; color: #1a1917;">
+                <tr>
+                    <td style="padding: 0 4px 20px;">
+                        <a href="https://vomatt.com" th:href="${siteUrl}" style="text-decoration: none;"><img src="logo.png" th:src="'cid:logo'" width="95" height="20" alt="vomatt" style="display: block; border: 0; width: 95px; height: 20px; color: #1a1917; font-size: 16px; font-weight: 600;"></a>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="background-color: #ffffff; border: 1px solid #e3dfd7; border-radius: 12px; padding: 40px;">
+                        <h1 style="margin: 0 0 20px; font-size: 32px; font-weight: 400; line-height: 1.25; letter-spacing: -0.03em;"
+                            th:text="#{email.invitation.title}">You are invited to a Poll</h1>
+
+                        <p style="margin: 0 0 20px; font-size: 15px; line-height: 1.6;"
+                           th:text="#{email.invitation.message(${inviterName})}">{inviterName} invited you to answer a Poll on Vomatt:</p>
+
+                        <p style="margin: 0 0 20px; padding: 16px; border: 1px solid #e3dfd7; border-radius: 12px; font-size: 17px; font-weight: 600; line-height: 1.5;"
+                           th:text="${pollTitle}">Poll title</p>
+
+                        <p style="margin: 0 0 20px;">
+                            <a href="https://vomatt.com" th:href="${pollUrl}" style="display: inline-block; padding: 12px 24px; border-radius: 999px; background-color: #1a1917; color: #ffffff; font-size: 15px; font-weight: 600; text-decoration: none;"
+                               th:text="#{email.invitation.button}">Open the Poll</a>
+                        </p>
+
+                        <p style="margin: 0 0 20px; font-size: 13px; line-height: 1.6; color: #6b6760;"
+                           th:text="#{email.invitation.signup.hint}">Sign up or sign in with this email address to take part.</p>
+
+                        <p style="margin: 0; font-size: 15px; line-height: 1.6;" th:utext="#{email.verification.signature}">Thank you,<br>The Vomatt Team</p>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 20px 4px 0; font-size: 13px; line-height: 1.6; color: #6b6760;">
+                        <p style="margin: 0 0 8px;" th:text="#{email.footer.auto}">This email is sent automatically, please do not reply.</p>
+                        <p style="margin: 0;">
+                            <a href="https://vomatt.com/terms-of-service" th:href="|${siteUrl}/terms-of-service|" style="color: #6b6760; text-decoration: underline;" th:text="#{email.footer.terms}">Terms and Conditions</a>
+                            &nbsp;·&nbsp;
+                            <a href="https://vomatt.com/privacy-policy" th:href="|${siteUrl}/privacy-policy|" style="color: #6b6760; text-decoration: underline;" th:text="#{email.footer.privacy}">Privacy Policy</a>
+                            &nbsp;·&nbsp;
+                            <a href="https://vomatt.com/contact-us" th:href="|${siteUrl}/contact-us|" style="color: #6b6760; text-decoration: underline;" th:text="#{email.footer.contact}">Contact Us</a>
+                        </p>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

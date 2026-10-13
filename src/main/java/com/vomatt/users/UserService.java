@@ -123,6 +123,12 @@ public class UserService {
     @Transactional
     public UserProfileResponse updateMyProfile(String userId, UpdateProfileRequest request) {
         User user = findUserById(userId);
+        if (request.getUsername() != null && !request.getUsername().equals(user.getUsername())) {
+            if (userRepository.existsByUsername(request.getUsername())) {
+                throw ApiException.conflict(MessageKey.USER_USERNAME_TAKEN);
+            }
+            user.setUsername(request.getUsername());
+        }
         if (request.getDisplayName() != null) {
             user.setDisplayName(request.getDisplayName());
         }

@@ -53,6 +53,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.email_not_verified` | 401 | 此 OAuth 帳號的 email 尚未驗證，無法登入或合併既有帳號 | This OAuth account's email is not verified; cannot sign in or merge an existing account | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.account_banned` | 403 | 此帳號已被停權，無法登入 | This account has been banned and cannot sign in | Show a permission-denied notice | AuthService |
 | `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | UserService, VoteCommentService, VoteService |
+| `user.username.taken` | 409 | 使用者名稱已被使用 | Username already taken | Show message (resource state conflict) | UserService |
 | `user.delete.forbidden` | 403 | 只能刪除自己的帳號 | You can only delete your own account | Show a permission-denied notice | UserService |
 | `vote.not_found` | 404 | 找不到投票 | Vote not found | Show resource not found | VoteCommentService, VoteService |
 | `vote.option.not_found` | 404 | 找不到投票選項 | Vote option not found | Show resource not found | VoteService |
@@ -89,7 +90,7 @@ Keys not found on any error path (mostly success-response `message` values, e.g.
 
 | key | zh-TW message | en message | Used in |
 |-----|-----------|---------|----------|
-| `common.not_found` | 找不到指定資源 | The requested resource was not found |  |
+| `common.not_found` | 找不到指定資源 | The requested resource was not found | GlobalExceptionHandler |
 | `common.conflict` | 資源衝突，請重試 | Resource conflict, please try again |  |
 | `common.admin_only` | 此功能限管理員使用 | This feature is for administrators only |  |
 | `common.file_required` | 請選擇要上傳的檔案 | Please select a file to upload |  |
@@ -109,6 +110,5 @@ Keys not found on any error path (mostly success-response `message` values, e.g.
 | `auth.invalid_user_id` | 用戶 ID 格式無效 | Invalid user ID format |  |
 | `user.update.success` | 用戶資料已更新 | User profile updated |  |
 | `user.profile.not_found` | 找不到此用戶的個人資料 | User profile not found |  |
-| `user.username.taken` | 使用者名稱已被使用 | Username already taken |  |
 | `user.email.taken` | Email 已被使用 | Email already in use |  |
 | `user.phone.taken` | 手機號碼已被使用 | Phone number already in use |  |

@@ -670,7 +670,7 @@ class VoteServiceTest {
             ReflectionTestUtils.setField(vote, "createdAt", posted);
             vote.setStartTime(posted);
             vote.setEndTime(posted.plusDays(1));
-            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
         }
 
         @Test
@@ -713,6 +713,8 @@ class VoteServiceTest {
             vote.setDeletedAt(OffsetDateTime.now());
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             when(voteRepository.findByIdWithOptions(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.findByIdForShare(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
             String id = voteId.toString();
             String owner = userId.toString();
 

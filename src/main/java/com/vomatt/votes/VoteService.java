@@ -357,7 +357,8 @@ public class VoteService {
      * The Poll is soft-deleted (data kept) and nobody is notified; its tags stop counting it.
      */
     public void deleteVote(String voteId, String userId) {
-        Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
+        // Exclusive lock: an in-flight Ballot finishes first, and none can land once Delete returns
+        Vote vote = requireAccessible(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), userId);
         if (!vote.isOwnedBy(userId)) {
             throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
         }

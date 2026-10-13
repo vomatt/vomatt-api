@@ -62,8 +62,21 @@ public class UserService {
         Cursor after = Cursor.decode(cursor);
         List<User> rows = userRepository.searchByUsernameAfter(username, after == null ? null : after.key(),
             Limit.of(size + 1));
-        return CursorResponse.of(rows, size, u -> Cursor.of(u.getUsername(), u.getId()),
-            page -> page.stream().map(userMapper::toDto).toList());
+        return CursorResponse.of(rows, size, u -> Cursor.of(u.getUsername(), u.getId()), page -> {
+            Map<UUID, Boolean> shown = displayNameSettings(page);
+            boolean byDefault = VisibilityField.DISPLAY_NAME.isVisibleByDefault();
+            return page.stream().map(u -> userMapper.toSearchResult(u, shown.getOrDefault(u.getId(), byDefault))).toList();
+        });
+    }
+
+    /** Display name visibility explicitly set by users on the page, in one query; unset users are absent. */
+    private Map<UUID, Boolean> displayNameSettings(List<User> users) {
+        if (users.isEmpty()) {
+            return Map.of();
+        }
+        return preferenceRepository.findByUserIdInAndKey(users.stream().map(User::getId).toList(),
+                VisibilityField.DISPLAY_NAME.preferenceKey()).stream()
+            .collect(Collectors.toMap(pref -> pref.getUser().getId(), pref -> Boolean.parseBoolean(pref.getValue())));
     }
 
     @Transactional(readOnly = true)

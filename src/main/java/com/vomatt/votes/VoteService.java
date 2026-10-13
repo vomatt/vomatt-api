@@ -87,7 +87,7 @@ public class VoteService {
             tagRepository.incrementUsageCount(new HashSet<>(request.getTagIds()));
         }
 
-        return convertToVoteResponse(vote);
+        return convertToVoteResponse(vote, creatorId);
     }
 
     /**
@@ -96,8 +96,7 @@ public class VoteService {
      */
     public VoteResponse updateVote(String voteId, CreateVoteRequest request, String userId) {
         // Exclusive lock: a first Ballot at the opening moment either commits first (then this sees Open) or waits
-        Vote vote = voteRepository.findByIdForUpdate(UUID.fromString(voteId))
-            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
+        Vote vote = requireAccessible(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), userId);
         if (!vote.getCreator().getId().toString().equals(userId)) {
             throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
         }
@@ -229,7 +228,7 @@ public class VoteService {
     public VoteResponse vote(String voteId, VoteRequest request, String userId, String ipAddress) {
         UUID voteUuid = UUID.fromString(voteId);
         UUID userUuid = UUID.fromString(userId);
-        Vote vote = lockOpenVote(voteUuid);
+        Vote vote = lockOpenVote(voteUuid, userId);
 
         if (request.getOptionIds().size() > 1) {
             throw ApiException.badRequest(MessageKey.VOTE_MULTIPLE_NOT_ALLOWED);
@@ -260,7 +259,7 @@ public class VoteService {
     /** Retraction: withdraws the user's whole Ballot; succeeds even when there is none. */
     public VoteResponse retract(String voteId, String userId) {
         UUID voteUuid = UUID.fromString(voteId);
-        lockOpenVote(voteUuid);
+        lockOpenVote(voteUuid, userId);
 
         userVoteRepository.lockBallot(userId, voteId);
         userVoteRepository.findByUserIdAndVoteId(UUID.fromString(userId), voteUuid)
@@ -274,7 +273,7 @@ public class VoteService {
     public VoteResponse removeVote(String voteId, String optionId, String userId) {
         UUID voteUuid = UUID.fromString(voteId);
         UUID userUuid = UUID.fromString(userId);
-        lockOpenVote(voteUuid);
+        lockOpenVote(voteUuid, userId);
 
         userVoteRepository.lockBallot(userId, voteId);
         userVoteRepository.findByUserIdAndVoteIdAndOptionId(userUuid, voteUuid, UUID.fromString(optionId))
@@ -287,7 +286,7 @@ public class VoteService {
     /** Results of an Ended Poll; 403 while Sealed. */
     @Transactional(readOnly = true)
     public VoteResultResponse getVoteResults(String voteId) {
-        Vote vote = findVote(UUID.fromString(voteId));
+        Vote vote = findAccessibleVote(UUID.fromString(voteId), null);
         if (vote.isResultsSealed()) {
             throw ApiException.forbidden(MessageKey.VOTE_RESULTS_SEALED);
         }
@@ -298,7 +297,7 @@ public class VoteService {
     /** Who chose what in an Ended Poll, as allowed by its Voter Visibility; oldest Ballot first. */
     @Transactional(readOnly = true)
     public CursorResponse<VoterResponse> getVoters(String voteId, String userId, String cursor, Integer limit) {
-        Vote vote = findVote(UUID.fromString(voteId));
+        Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
         if (vote.isResultsSealed()) {
             throw ApiException.forbidden(MessageKey.VOTE_RESULTS_SEALED);
         }
@@ -321,11 +320,13 @@ public class VoteService {
 
     @Transactional(readOnly = true)
     public boolean hasUserVoted(String voteId, String userId) {
+        findAccessibleVote(UUID.fromString(voteId), userId);
         return userVoteRepository.existsByUserIdAndVoteId(UUID.fromString(userId), UUID.fromString(voteId));
     }
 
     @Transactional(readOnly = true)
     public List<String> getUserVoteOptions(String voteId, String userId) {
+        findAccessibleVote(UUID.fromString(voteId), userId);
         return userVoteRepository.findByUserIdAndVoteId(UUID.fromString(userId), UUID.fromString(voteId))
             .stream()
             .map(mv -> mv.getOption().getId().toString())
@@ -334,8 +335,7 @@ public class VoteService {
 
     public VoteResponse deactivateVote(String voteId, String creatorId) {
         // Exclusive lock: waits for in-flight Ballot changes, and a concurrent Close then sees Ended and keeps its end time
-        Vote vote = voteRepository.findByIdForUpdate(UUID.fromString(voteId))
-            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
+        Vote vote = requireAccessible(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), creatorId);
 
         if (!vote.getCreator().getId().toString().equals(creatorId)) {
             throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
@@ -348,14 +348,51 @@ public class VoteService {
         return convertToVoteResponse(vote);
     }
 
+    /**
+     * Delete (owner only): while Scheduled, or within the delete window of posting even when it holds Ballots.
+     * The Poll is soft-deleted (data kept) and nobody is notified; its tags stop counting it.
+     */
+    public void deleteVote(String voteId, String userId) {
+        Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
+        if (!vote.getCreator().getId().toString().equals(userId)) {
+            throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
+        }
+        OffsetDateTime now = OffsetDateTime.now();
+        if (!vote.canDeleteAt(now, voteConfig.getDeleteWindow())) {
+            throw ApiException.badRequest(MessageKey.VOTE_DELETE_WINDOW_PASSED, voteConfig.getDeleteWindow().toMinutes());
+        }
+        vote.setDeletedAt(now);
+        voteRepository.save(vote);
+        Set<UUID> tagIds = vote.getTags().stream().map(Tag::getId).collect(Collectors.toSet());
+        if (!tagIds.isEmpty()) {
+            tagRepository.decrementUsageCount(tagIds);
+        }
+        log.info("Vote {} deleted by creator {}", voteId, userId);
+    }
+
+    /**
+     * The single access lookup: every path that reads or acts on one Poll goes through here (or
+     * {@link #requireAccessible}) and gets {@code vote.not_found} for a Poll the viewer may not reach.
+     *
+     * @param viewerId caller, or null when signed out
+     */
+    public Vote findAccessibleVote(UUID voteId, String viewerId) {
+        return requireAccessible(voteRepository.findById(voteId), viewerId);
+    }
+
+    // The access rule itself: Deleted Polls are hidden from everyone, owner included
+    private static Vote requireAccessible(Optional<Vote> vote, String viewerId) {
+        return vote.filter(v -> v.getDeletedAt() == null)
+            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
+    }
+
     private VoteResponse convertToVoteResponse(Vote vote) {
         return convertToVoteResponse(vote, null);
     }
 
     private VoteResponse convertToVoteResponse(UUID voteId, String userId) {
         // JOIN FETCH avoids additional queries for options
-        Vote vote = voteRepository.findByIdWithOptions(voteId)
-            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
+        Vote vote = requireAccessible(voteRepository.findByIdWithOptions(voteId), userId);
         return toResponses(List.of(vote), userId).getFirst();
     }
 
@@ -377,6 +414,7 @@ public class VoteService {
             return List.of();
         }
         List<UUID> ids = votes.stream().map(Vote::getId).toList();
+        OffsetDateTime now = OffsetDateTime.now();
         Map<UUID, Long> commentCounts = voteCommentRepository.countVisibleByVoteIds(ids).stream()
             .collect(Collectors.toMap(IdCount::getId, IdCount::getCount));
         Map<UUID, UUID> selections = userId == null ? Map.of()
@@ -387,6 +425,9 @@ public class VoteService {
             UUID myOptionId = selections.get(vote.getId());
             response.setMyOptionId(myOptionId == null ? null : myOptionId.toString());
             response.setCommentCount(commentCounts.getOrDefault(vote.getId(), 0L));
+            if (vote.getCreator().getId().toString().equals(userId)) {
+                response.setDeletable(vote.canDeleteAt(now, voteConfig.getDeleteWindow()));
+            }
             return response;
         }).toList();
     }
@@ -397,18 +438,12 @@ public class VoteService {
             .toList();
     }
 
-    private Vote findVote(UUID voteId) {
-        return voteRepository.findById(voteId)
-            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
-    }
-
     /**
      * Ballots can change only while Open; frozen once Ended. Takes the shared Poll-row lock before the existing
      * (user, Poll) advisory lock and checks the status under it, so a Close or Edit cannot slip in between.
      */
-    private Vote lockOpenVote(UUID voteId) {
-        Vote vote = voteRepository.findByIdForShare(voteId)
-            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
+    private Vote lockOpenVote(UUID voteId, String userId) {
+        Vote vote = requireAccessible(voteRepository.findByIdForShare(voteId), userId);
         switch (vote.getStatus()) {
             case ENDED -> throw ApiException.badRequest(MessageKey.VOTE_ENDED);
             case SCHEDULED -> throw ApiException.badRequest(MessageKey.VOTE_NOT_ALLOWED);

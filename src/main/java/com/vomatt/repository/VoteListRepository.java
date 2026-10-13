@@ -42,7 +42,7 @@ public class VoteListRepository {
     @SuppressWarnings("unchecked")
     public List<Vote> findPage(VoteListOrder order, String tag, String query, Cursor after, OffsetDateTime now,
                                int limit) {
-        StringBuilder sql = new StringBuilder("SELECT v.* FROM vomatt.votes v WHERE ");
+        StringBuilder sql = new StringBuilder("SELECT v.* FROM vomatt.votes v WHERE v.deleted_at IS NULL AND ");
         String sortColumn = switch (order) {
             case NEWEST -> "v.start_time";
             case CLOSING, ENDED -> "v.end_time";
@@ -92,7 +92,7 @@ public class VoteListRepository {
     @SuppressWarnings("unchecked")
     public List<Vote> findMine(UUID userId, boolean ended, Cursor after, OffsetDateTime now, int limit) {
         String direction = ended ? " DESC" : " ASC";
-        StringBuilder sql = new StringBuilder("SELECT v.* FROM vomatt.votes v WHERE v.id IN ")
+        StringBuilder sql = new StringBuilder("SELECT v.* FROM vomatt.votes v WHERE v.deleted_at IS NULL AND v.id IN ")
                 .append(MY_POLL_IDS);
         sql.append(ended ? " AND v.end_time <= :now" : " AND v.end_time > :now");
         if (after != null) {
@@ -119,6 +119,7 @@ public class VoteListRepository {
         StringBuilder sql = new StringBuilder("""
                 SELECT v.* FROM vomatt.votes v
                 WHERE v.creator_id = :creatorId AND v.start_time <= :now AND v.end_time > v.start_time
+                  AND v.deleted_at IS NULL
                 """);
         if (after != null) {
             sql.append(" AND (v.start_time, v.id) < (:afterKey, :afterId)");

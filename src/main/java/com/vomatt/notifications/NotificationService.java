@@ -10,6 +10,7 @@ import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.notifications.dto.UnreadCountResponse;
 import com.vomatt.repository.NotificationReadRepository;
+import com.vomatt.votes.VoteService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +26,7 @@ import lombok.extern.slf4j.Slf4j;
 public class NotificationService {
 
     private final NotificationReadRepository notificationReadRepository;
+    private final VoteService voteService;
 
     @Transactional(readOnly = true)
     public UnreadCountResponse countUnread(String userId) {
@@ -35,7 +37,7 @@ public class NotificationService {
     /** Marks the Ended Notification of one Poll read; idempotent. 404 when the user has no such notification. */
     public void markRead(String userId, String voteId) {
         UUID userUuid = UUID.fromString(userId);
-        UUID voteUuid = UUID.fromString(voteId);
+        UUID voteUuid = voteService.findAccessibleVote(UUID.fromString(voteId), userId).getId();
         if (!notificationReadRepository.isNotified(userUuid, voteUuid, OffsetDateTime.now())) {
             throw ApiException.notFound(MessageKey.NOTIFICATION_NOT_FOUND);
         }

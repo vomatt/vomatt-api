@@ -20,10 +20,10 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class NotificationReadRepository {
 
-    // Ended, opened at some point (a cancelled Scheduled Poll ends before its start time), and owned or participated in
+    // Ended, opened at some point (a cancelled Scheduled Poll ends before its start time), not Deleted, and owned or participated in
     private static final String NOTIFIED_POLLS = """
             FROM vomatt.votes v
-            WHERE v.end_time <= :now AND v.end_time > v.start_time
+            WHERE v.end_time <= :now AND v.end_time > v.start_time AND v.deleted_at IS NULL
               AND v.id IN %s
             """.formatted(VoteListRepository.MY_POLL_IDS);
 

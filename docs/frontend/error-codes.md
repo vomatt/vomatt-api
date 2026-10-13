@@ -55,7 +55,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | UserService, VoteCommentService, VoteService |
 | `user.username.taken` | 409 | 使用者名稱已被使用 | Username already taken | Show message (resource state conflict) | UserService |
 | `user.delete.forbidden` | 403 | 只能刪除自己的帳號 | You can only delete your own account | Show a permission-denied notice | UserService |
-| `vote.not_found` | 404 | 找不到投票 | Vote not found | Show resource not found | VoteCommentService, VoteService |
+| `vote.not_found` | 404 | 找不到投票 | Vote not found | Show resource not found | VoteService |
 | `vote.option.not_found` | 404 | 找不到投票選項 | Vote option not found | Show resource not found | VoteService |
 | `vote.option.not_in_vote` | 400 | 選項不屬於此投票 | Option does not belong to this vote | Show message so the user can fix the input | VoteService |
 | `vote.not_allowed` | 400 | 投票尚未開始或已結束 | Voting period has ended or not started | Show message so the user can fix the input | ApiException, VoteService |
@@ -69,6 +69,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `vote.end_time.past` | 400 | 結束時間不可早於現在 | End time cannot be in the past | Show message so the user can fix the input | VoteService |
 | `vote.end_time.before_start` | 400 | 結束時間不可早於開始時間 | End time cannot be before start time | Show message so the user can fix the input | VoteService |
 | `vote.forbidden` | 403 | 只有投票建立者可執行此操作 | Only the vote creator can perform this action | Show a permission-denied notice | VoteService |
+| `vote.delete.window_passed` | 400 | 投票發布超過 {0} 分鐘後，只有尚未開始的投票可以刪除 | A Poll can only be deleted while it is scheduled or within {0} minutes of posting | Show message so the user can fix the input | VoteService |
 | `vote.options.min` | 400 | 至少需要 {0} 個選項 | Minimum {0} options required | Show message so the user can fix the input | VoteService |
 | `vote.options.max` | 400 | 最多只能有 {0} 個選項 | Maximum {0} options allowed | Show message so the user can fix the input | VoteService |
 | `vote.duration.exceeded` | 400 | 投票期間不可超過 {0} 天 | Vote duration cannot exceed {0} days | Show message so the user can fix the input | VoteService |

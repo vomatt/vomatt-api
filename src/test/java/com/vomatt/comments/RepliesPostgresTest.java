@@ -13,6 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
+import com.vomatt.votes.VoteServiceSlice;
 
 import com.vomatt.comments.dto.CommentDto;
 import com.vomatt.comments.dto.CreateCommentRequest;
@@ -24,7 +25,7 @@ import com.vomatt.entity.Vote;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.repository.VoteCommentRepository;
 
-@Import({ VoteCommentService.class, CommentMapper.class })
+@Import({ VoteCommentService.class, CommentMapper.class, VoteServiceSlice.class })
 @DisplayName("Replies (Postgres)")
 class RepliesPostgresTest extends PostgresRepositoryTest {
 

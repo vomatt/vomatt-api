@@ -90,6 +90,7 @@ public enum MessageKey {
     VOTE_END_TIME_PAST("vote.end_time.past"),
     VOTE_END_BEFORE_START("vote.end_time.before_start"),
     VOTE_FORBIDDEN("vote.forbidden"),
+    VOTE_DELETE_WINDOW_PASSED("vote.delete.window_passed"),
     VOTE_OPTIONS_MIN("vote.options.min"),
     VOTE_OPTIONS_MAX("vote.options.max"),
     VOTE_DURATION_EXCEEDED("vote.duration.exceeded"),

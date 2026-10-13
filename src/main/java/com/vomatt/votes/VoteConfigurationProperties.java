@@ -16,6 +16,8 @@ public class VoteConfigurationProperties {
     private int minOptionsPerVote = 2;
     private Duration defaultVoteDuration = Duration.ofDays(7);
     private Duration maxVoteDuration = Duration.ofDays(365);
+    /** How long after posting an Open Poll can still be Deleted (ADR 0004). */
+    private Duration deleteWindow = Duration.ofMinutes(20);
     private int maxTitleLength = 200;
     private int maxDescriptionLength = 1000;
     private int maxOptionTextLength = 200;

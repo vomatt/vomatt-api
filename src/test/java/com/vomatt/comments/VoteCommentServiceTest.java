@@ -33,14 +33,14 @@ import com.vomatt.repository.CommentLikeRepository;
 import com.vomatt.repository.IdCount;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.VoteCommentRepository;
-import com.vomatt.repository.VoteRepository;
+import com.vomatt.votes.VoteService;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("VoteCommentService")
 class VoteCommentServiceTest {
 
     @Mock VoteCommentRepository commentRepository;
-    @Mock VoteRepository voteRepository;
+    @Mock VoteService voteService;
     @Mock UserRepository userRepository;
     @Mock CommentLikeRepository commentLikeRepository;
     @Spy CommentMapper commentMapper = new CommentMapper();
@@ -73,7 +73,7 @@ class VoteCommentServiceTest {
         User author = User.builder().id(UUID.randomUUID()).username("author").build();
         VoteComment liked = comment(vote, author, "liked");
         VoteComment plain = comment(vote, author, "plain");
-        when(voteRepository.existsById(voteId)).thenReturn(true);
+        when(voteService.findAccessibleVote(voteId, viewerId.toString())).thenReturn(vote);
         when(commentRepository.findPageByVoteId(eq(voteId), any(), any(), eq(Limit.of(21))))
                 .thenReturn(List.of(liked, plain));
         IdCount likedCount = count(liked.getId(), 3);
@@ -92,14 +92,29 @@ class VoteCommentServiceTest {
     }
 
     @Test
-    @DisplayName("should return 404 when Poll does not exist")
+    @DisplayName("should return 404 when the Poll lookup refuses it (missing or Deleted)")
     void shouldThrowWhenPollMissing() {
-        when(voteRepository.existsById(voteId)).thenReturn(false);
+        when(voteService.findAccessibleVote(voteId, null)).thenThrow(ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
 
         assertThatThrownBy(() -> commentService.getCommentsByVote(voteId.toString(), null, null, null))
                 .isInstanceOfSatisfying(ApiException.class, ex -> {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
                     assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_NOT_FOUND);
                 });
+    }
+
+    @Test
+    @DisplayName("should return vote.not_found when liking a Comment of a Deleted Poll")
+    void shouldThrowWhenLikingCommentOfDeletedPoll() {
+        Vote vote = new Vote();
+        ReflectionTestUtils.setField(vote, "id", voteId);
+        VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "hi");
+        when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(java.util.Optional.of(target));
+        when(voteService.findAccessibleVote(voteId, viewerId.toString()))
+                .thenThrow(ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
+
+        assertThatThrownBy(() -> commentService.likeComment(target.getId(), viewerId.toString()))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_NOT_FOUND));
     }
 }

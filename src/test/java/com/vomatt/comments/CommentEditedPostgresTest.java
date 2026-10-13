@@ -10,6 +10,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
+import com.vomatt.votes.VoteServiceSlice;
 
 import com.vomatt.comments.dto.CommentDto;
 import com.vomatt.comments.dto.CreateCommentRequest;
@@ -18,7 +19,7 @@ import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.repository.PostgresRepositoryTest;
 
-@Import({ VoteCommentService.class, CommentMapper.class })
+@Import({ VoteCommentService.class, CommentMapper.class, VoteServiceSlice.class })
 @DisplayName("Comment edited flag (Postgres)")
 class CommentEditedPostgresTest extends PostgresRepositoryTest {
 

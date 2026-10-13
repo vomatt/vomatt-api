@@ -468,9 +468,10 @@ public class VoteController {
     @Operation(summary = "Get my Ballot status", deprecated = true, description = """
             **Auth**: required
             **Precondition**: none
-            **Behavior**: deprecated, use `myOptionId` in `GET /api/votes/{voteId}`. Tells whether the caller holds a Ballot in the Poll and which option it chose. Works in any Poll state. An unknown Poll ID is not an error: `hasVoted` is false.
+            **Behavior**: deprecated, use `myOptionId` in `GET /api/votes/{voteId}`. Tells whether the caller holds a Ballot in the Poll and which option it chose. Works in any Poll state.
             **Side effects**: none
-            **Errors**: none specific to this endpoint (only the common 400 / 401 / 429)
+            **Errors**:
+            - 404 `vote.not_found`: Poll does not exist or is Deleted
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Ballot status",
             content = @Content(examples = {
@@ -490,6 +491,44 @@ public class VoteController {
         response.setHasVoted(voteService.hasUserVoted(voteId, principal.userId()));
         response.setSelectedOptions(voteService.getUserVoteOptions(voteId, principal.userId()));
         return ResponseEntity.ok(ApiResponse.ok(response));
+    }
+
+    @DeleteMapping("/{voteId}")
+    @Auditable(action = "DELETE", resourceType = "VOTE", resourceIdIndex = 0)
+    @CommonApiResponses
+    @Operation(summary = "Delete a Poll", description = """
+            **Auth**: required (owner only)
+            **Precondition**: the Poll is Scheduled, or was posted less than 20 minutes ago (any state, even with Ballots); \
+            `deletable` on the Poll response tells the owner whether this still holds
+            **Behavior**: soft-deletes the Poll. From then on it is gone for everyone, owner included: every Poll endpoint \
+            (including Comments, Replies, likes and notification read) returns 404 `vote.not_found`, and it leaves Feed / Explore / Search, \
+            profile lists, My Polls, Ended Notifications and popular tag counts. The data is kept.
+            **Side effects**: nobody is notified
+            **Errors**:
+            - 400 `vote.delete.window_passed`: the Poll is Open or Ended and was posted 20 minutes ago or more
+            - 403 `vote.forbidden`: the caller is not the owner
+            - 404 `vote.not_found`: Poll does not exist or is already Deleted
+            """)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Poll deleted",
+            content = @Content(examples = @ExampleObject(name = "Deleted", value = """
+                    { "success": true, "data": { "success": true, "id": null, "status": null, "message": null },
+                      "message": null, "errorCode": null, "error": null }
+                    """)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Delete window has passed (`vote.delete.window_passed`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.delete.window_passed", value = ERR_MESSAGE + "A Poll can only be deleted while it is scheduled or within 20 minutes of posting" + ERR_CODE + "vote.delete.window_passed" + ERR_ERROR + "A Poll can only be deleted while it is scheduled or within 20 minutes of posting" + ERR_END)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Caller is not the owner (`vote.forbidden`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.forbidden", value = ERR_MESSAGE + "Not allowed to modify this Poll" + ERR_CODE + "vote.forbidden" + ERR_ERROR + "Not allowed to modify this Poll" + ERR_END)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist or is already Deleted (`vote.not_found`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> deleteVote(
+            @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
+            @PathVariable String voteId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        voteService.deleteVote(voteId, principal.userId());
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 
     @PutMapping("/{voteId}/deactivate")

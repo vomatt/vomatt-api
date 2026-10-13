@@ -248,6 +248,8 @@ ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS voter_visibility VARCHAR(20) N
 ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS search_bigrams TEXT[] GENERATED ALWAYS AS
     (vomatt.text_bigrams(COALESCE(title, '') || ' ' || COALESCE(description, ''))) STORED;
 CREATE INDEX IF NOT EXISTS idx_votes_search_bigrams ON vomatt.votes USING GIN (search_bigrams);
+-- Delete (soft): a Deleted Poll is hidden from everyone, owner included; the row and its Ballots are kept
+ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 -- Comment replies (one level): parent_id only points to top-level comments
 ALTER TABLE vomatt.vote_comments ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES vomatt.vote_comments (id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS idx_vote_comments_parent ON vomatt.vote_comments (parent_id, created_at, id);

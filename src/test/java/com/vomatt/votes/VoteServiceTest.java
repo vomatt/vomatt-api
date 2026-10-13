@@ -26,6 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -73,6 +74,8 @@ class VoteServiceTest {
         vote.setTitle("Test Vote");
         vote.setCreator(user);
         setId(vote, voteId);
+        ReflectionTestUtils.setField(vote, "createdAt", OffsetDateTime.now());
+        lenient().when(voteConfig.getDeleteWindow()).thenReturn(Duration.ofMinutes(20));
 
         option = new VoteOption();
         option.setVote(vote);
@@ -102,6 +105,7 @@ class VoteServiceTest {
             Vote v = inv.getArgument(0);
             if (v.getId() == null) {
                 setId(v, UUID.randomUUID()); // simulate DB-assigned ID
+                ReflectionTestUtils.setField(v, "createdAt", OffsetDateTime.now()); // simulate @PrePersist
             }
             v.getOptions().stream().filter(o -> o.getId() == null).forEach(o -> setId(o, UUID.randomUUID()));
             saved.add(v);
@@ -650,8 +654,79 @@ class VoteServiceTest {
     @Test
     @DisplayName("hasUserVoted should delegate to repository")
     void shouldDelegateHasUserVotedToRepository() {
+        when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
         when(userVoteRepository.existsByUserIdAndVoteId(userId, voteId)).thenReturn(true);
         assertThat(voteService.hasUserVoted(voteId.toString(), userId.toString())).isTrue();
+    }
+
+    // ─── deleteVote ───────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("deleteVote")
+    class DeleteVoteTests {
+
+        private void openPostedMinutesAgo(long minutes) {
+            OffsetDateTime posted = OffsetDateTime.now().minusMinutes(minutes);
+            ReflectionTestUtils.setField(vote, "createdAt", posted);
+            vote.setStartTime(posted);
+            vote.setEndTime(posted.plusDays(1));
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+        }
+
+        @Test
+        @DisplayName("should throw 403 VOTE_FORBIDDEN when caller is not the owner")
+        void shouldThrowForbiddenWhenNotOwner() {
+            openPostedMinutesAgo(1);
+
+            assertThatThrownBy(() -> voteService.deleteVote(voteId.toString(), UUID.randomUUID().toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_FORBIDDEN));
+            assertThat(vote.getDeletedAt()).isNull();
+        }
+
+        @Test
+        @DisplayName("should throw 400 VOTE_DELETE_WINDOW_PASSED when an Open Poll was posted too long ago")
+        void shouldThrowWhenWindowPassed() {
+            openPostedMinutesAgo(21);
+
+            assertThatThrownBy(() -> voteService.deleteVote(voteId.toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_DELETE_WINDOW_PASSED));
+            assertThat(vote.getDeletedAt()).isNull();
+        }
+
+        @Test
+        @DisplayName("should soft-delete and release tag usage when within the window")
+        void shouldSoftDeleteWhenWithinWindow() {
+            openPostedMinutesAgo(5);
+            Tag tag = setId(new Tag(), UUID.randomUUID());
+            vote.addTag(tag);
+
+            voteService.deleteVote(voteId.toString(), userId.toString());
+
+            assertThat(vote.getDeletedAt()).isNotNull();
+            verify(voteRepository).save(vote);
+            verify(tagRepository).decrementUsageCount(Set.of(tag.getId()));
+        }
+
+        @Test
+        @DisplayName("should return 404 VOTE_NOT_FOUND on every single-Poll path once Deleted")
+        void shouldHideDeletedPollWhenLookedUp() {
+            vote.setDeletedAt(OffsetDateTime.now());
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.findByIdWithOptions(voteId)).thenReturn(Optional.of(vote));
+            String id = voteId.toString();
+            String owner = userId.toString();
+
+            List<org.assertj.core.api.ThrowableAssert.ThrowingCallable> paths = List.of(
+                    () -> voteService.getVote(id, owner),
+                    () -> voteService.retract(id, owner),
+                    () -> voteService.getVoteResults(id),
+                    () -> voteService.getVoters(id, owner, null, null),
+                    () -> voteService.hasUserVoted(id, owner),
+                    () -> voteService.deactivateVote(id, owner),
+                    () -> voteService.deleteVote(id, owner));
+            paths.forEach(path -> assertThatThrownBy(path)
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND)));
+        }
     }
 
     // ─── createVote with tags ─────────────────────────────────────────────────

@@ -88,8 +88,10 @@ public class VoteResponse {
             + "null for other Audiences", example = "12", nullable = true)
     private Long inviteeCount;
 
-    @Schema(description = "Whether the Ended Notification for this Poll is still unread by the caller. Only set on My Polls with `status=ended` "
-            + "(false for a Cancelled Poll, which sends none); null on every other endpoint", example = "true", nullable = true)
+    @Schema(description = "Whether the caller's current notification for this Poll is unread. Only set on My Polls; null on every other endpoint. "
+            + "On `status=open`: true while the caller has not read their Invitation to this INVITE_ONLY Poll, false otherwise "
+            + "(including Polls the caller owns or only holds a Ballot in). On `status=ended`: true while the Ended Notification "
+            + "is unread (false for a Cancelled Poll, which sends none); reading the Invitation earlier does not read it", example = "true", nullable = true)
     private Boolean unread;
 
     @Schema(description = "ID of the option in the caller's Ballot. Null when the caller is not signed in, holds no Ballot in this Poll, "

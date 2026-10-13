@@ -141,15 +141,6 @@ class VoteTest {
         }
     }
 
-    @Test
-    @DisplayName("should stay Ended when an existing Cancelled Poll ends before its start time")
-    void shouldStayEndedWhenCancelledBeforeOpening() {
-        Vote vote = poll(now.plusDays(1), now.minusHours(1));
-
-        assertThat(vote.statusAt(now)).isEqualTo(VoteStatus.ENDED);
-        assertThat(vote.isCancelledBeforeOpening()).isTrue();
-    }
-
     // ─── Delete window ───────────────────────────────────────────────────────
 
     private static final Duration WINDOW = Duration.ofMinutes(20);

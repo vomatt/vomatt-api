@@ -175,11 +175,6 @@ public class Vote extends AuditableEntity {
         return getStatus() == VoteStatus.OPEN;
     }
 
-    /** Cancelled (legacy data only): a Poll Closed while Scheduled, before ADR 0004, ends before its start time and never opened. */
-    public boolean isCancelledBeforeOpening() {
-        return endTime != null && startTime != null && !endTime.isAfter(startTime);
-    }
-
     /** Sealed: nobody, including the owner, sees per-option counts or Support until the Poll has Ended. */
     public boolean isResultsSealed() {
         return getStatus() != VoteStatus.ENDED;

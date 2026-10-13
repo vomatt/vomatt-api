@@ -16,8 +16,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Ended Notifications, derived on read (ADR 0003). The list itself is My Polls {@code status=ended},
- * which carries {@code unread}; this service only counts and marks them read.
+ * Invitations and Ended Notifications, derived on read (ADR 0003). The list itself is My Polls, whose items carry
+ * {@code unread}; this service only counts and marks them read.
  */
 @Slf4j
 @Service
@@ -34,14 +34,15 @@ public class NotificationService {
                 notificationReadRepository.countUnread(UUID.fromString(userId), OffsetDateTime.now()));
     }
 
-    /** Marks the Ended Notification of one Poll read; idempotent. 404 when the user has no such notification. */
+    /** Marks the current notification (Invitation or Ended) of one Poll read; idempotent. 404 when the user has none. */
     public void markRead(String userId, String voteId) {
         UUID userUuid = UUID.fromString(userId);
         UUID voteUuid = voteService.findAccessibleVote(UUID.fromString(voteId), userId).getId();
-        if (!notificationReadRepository.isNotified(userUuid, voteUuid, OffsetDateTime.now())) {
+        OffsetDateTime now = OffsetDateTime.now();
+        if (!notificationReadRepository.isNotified(userUuid, voteUuid, now)) {
             throw ApiException.notFound(MessageKey.NOTIFICATION_NOT_FOUND);
         }
-        notificationReadRepository.markRead(userUuid, voteUuid);
-        log.info("User {} read ended notification of vote {}", userId, voteId);
+        notificationReadRepository.markRead(userUuid, voteUuid, now);
+        log.info("User {} read notification of vote {}", userId, voteId);
     }
 }

@@ -15,17 +15,20 @@ import org.springframework.context.annotation.Import;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.entity.Audience;
+import com.vomatt.entity.Invitee;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.votes.VoteService;
 import com.vomatt.votes.VoteServiceSlice;
+import com.vomatt.votes.dto.InviteesRequest;
+import com.vomatt.votes.dto.VoteRequest;
 import com.vomatt.votes.dto.VoteResponse;
 
-/** Ended Notifications derived on read (ADR 0003). */
+/** Invitations and Ended Notifications derived on read (ADR 0003). */
 @Import({ NotificationService.class, VoteServiceSlice.class })
-@DisplayName("Ended Notifications (Postgres)")
+@DisplayName("Notifications (Postgres)")
 class NotificationPostgresTest extends PostgresRepositoryTest {
 
     @Autowired NotificationService notificationService;
@@ -49,6 +52,26 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
 
     private void ballot(User user, Vote poll) {
         em.persist(new UserVote(user, poll, poll.getOptions().iterator().next(), null));
+    }
+
+    private Vote invitePoll(OffsetDateTime start, OffsetDateTime end, User... invitees) {
+        Vote poll = poll(start, end);
+        poll.setAudience(Audience.INVITE_ONLY);
+        for (User invitee : invitees) {
+            em.persist(new Invitee(poll, invitee));
+        }
+        return poll;
+    }
+
+    private void markRead(User user, Vote poll) {
+        em.flush();
+        notificationService.markRead(user.getId().toString(), poll.getId().toString());
+    }
+
+    private Boolean myPollUnread(User user, String status, Vote poll) {
+        em.flush();
+        return voteService.getMyPolls(user.getId().toString(), status, null, 50).items().stream()
+                .filter(v -> v.getId().equals(poll.getId().toString())).findFirst().orElseThrow().getUnread();
     }
 
     private long unread(User user) {
@@ -140,5 +163,114 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
                 org.assertj.core.groups.Tuple.tuple(unreadPoll.getId().toString(), true),
                 org.assertj.core.groups.Tuple.tuple(readPoll.getId().toString(), false),
                 org.assertj.core.groups.Tuple.tuple(cancelled.getId().toString(), false));
+    }
+
+    @Test
+    @DisplayName("should notify Invitees of Scheduled and Open Invite-only Polls, not the owner or Public Participants")
+    void shouldNotifyInviteeWhenInvitedToInviteOnlyPoll() {
+        Vote open = invitePoll(now.minusHours(1), now.plusDays(1), participant);
+        invitePoll(now.plusDays(1), now.plusDays(2), participant);
+        ballot(bystander, poll(now.minusHours(1), now.plusDays(1)));  // Open Public Poll: no Invitation
+
+        assertThat(unread(participant)).isEqualTo(2);
+        assertThat(unread(owner)).isZero();
+        assertThat(unread(bystander)).isZero();
+        assertThat(myPollUnread(participant, "open", open)).isTrue();
+        assertThat(myPollUnread(owner, "open", open)).isFalse();
+    }
+
+    @Test
+    @DisplayName("should keep the Ended Notification unread when the Invitation was read before the Poll Ended")
+    void shouldNotifyEndedWhenInvitationReadBeforePollEnded() {
+        Vote poll = invitePoll(now.minusHours(1), now.plusDays(1), participant);
+        markRead(participant, poll);
+        markRead(participant, poll);
+        assertThat(unread(participant)).isZero();
+        assertThat(myPollUnread(participant, "open", poll)).isFalse();
+
+        poll.closeAt(OffsetDateTime.now());
+
+        assertThat(unread(participant)).isEqualTo(1);
+        assertThat(myPollUnread(participant, "ended", poll)).isTrue();
+        markRead(participant, poll);
+        assertThat(unread(participant)).isZero();
+        assertThat(myPollUnread(participant, "ended", poll)).isFalse();
+    }
+
+    @Test
+    @DisplayName("should send the Ended Notification to every Invitee, Ballot or not, and only to Participants otherwise")
+    void shouldNotifyEveryInviteeWhenInviteOnlyPollEnded() {
+        User retracted = persistUser("n-ret-" + System.nanoTime());
+        Vote inviteOnly = invitePoll(now.minusDays(2), now.minusHours(1), participant, bystander);
+        ballot(participant, inviteOnly);  // bystander never cast a Ballot
+        Vote unlisted = poll(now.minusDays(2), now.minusHours(1));
+        unlisted.setAudience(Audience.UNLISTED);
+        ballot(participant, unlisted);  // retracted made a Retraction here: no Ballot row left
+
+        assertThat(unread(participant)).isEqualTo(2);
+        assertThat(unread(bystander)).isEqualTo(1);
+        assertThat(unread(retracted)).isZero();
+        assertThat(unread(owner)).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("should send the Ended Notification to an Invitee who Retracted")
+    void shouldNotifyInviteeWhenRetractedBeforePollEnded() {
+        Vote poll = invitePoll(now.minusHours(1), now.plusDays(1), participant);
+        em.flush();
+        String voteId = poll.getId().toString();
+        String userId = participant.getId().toString();
+        VoteRequest ballot = new VoteRequest();
+        ballot.setOptionIds(List.of(voteService.getVote(voteId, userId).getOptions().getFirst().getId()));
+        voteService.vote(voteId, ballot, userId, null);
+        voteService.retract(voteId, userId);
+
+        voteService.closeVote(voteId, owner.getId().toString());
+
+        assertThat(unread(participant)).isEqualTo(1);
+        assertThat(myPollUnread(participant, "ended", poll)).isTrue();
+    }
+
+    @Test
+    @DisplayName("should give no Invitation or Ended Notification for a Deleted Poll")
+    void shouldNotNotifyWhenPollDeleted() {
+        Vote open = invitePoll(now.minusHours(1), now.plusDays(1), participant);
+        Vote ended = invitePoll(now.minusDays(2), now.minusHours(1), participant);
+        assertThat(unread(participant)).isEqualTo(2);
+
+        open.setDeletedAt(now);
+        ended.setDeletedAt(now);
+
+        assertThat(unread(participant)).isZero();
+        assertThat(unread(owner)).isZero();
+        assertThatThrownBy(() -> markRead(participant, open))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("should drop the Invitation when the Invitee is removed")
+    void shouldNotNotifyWhenInviteeRemoved() {
+        Vote poll = invitePoll(now.minusHours(1), now.plusDays(1), participant);
+        assertThat(unread(participant)).isEqualTo(1);
+
+        voteService.removeInvitee(poll.getId().toString(), participant.getId().toString(), owner.getId().toString());
+
+        assertThat(unread(participant)).isZero();
+    }
+
+    @Test
+    @DisplayName("should show the Invitation unread again when a removed Invitee who read it is invited again")
+    void shouldNotifyAgainWhenInviteeReAdded() {
+        Vote poll = invitePoll(now.minusHours(1), now.plusDays(1), participant);
+        markRead(participant, poll);
+        voteService.removeInvitee(poll.getId().toString(), participant.getId().toString(), owner.getId().toString());
+
+        InviteesRequest request = new InviteesRequest();
+        request.setUserIds(List.of(participant.getId()));
+        voteService.addInvitees(poll.getId().toString(), request, owner.getId().toString());
+
+        assertThat(unread(participant)).isEqualTo(1);
+        assertThat(myPollUnread(participant, "open", poll)).isTrue();
     }
 }

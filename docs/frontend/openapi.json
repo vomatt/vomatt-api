@@ -1667,6 +1667,15 @@
             "minLength" : 0,
             "nullable" : true,
             "type" : "string"
+          },
+          "username" : {
+            "description" : "New username, used in the public profile path: 3-50 characters of [a-z0-9_], not `search`; null or omitted keeps the current value",
+            "example" : "alice_c",
+            "maxLength" : 50,
+            "minLength" : 3,
+            "nullable" : true,
+            "pattern" : "^(?!search$)[a-z0-9_]{3,50}$",
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -5342,7 +5351,7 @@
         "tags" : [ "User" ]
       },
       "patch" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: updates `displayName` and/or `bio`. A field that is omitted or `null` is left unchanged (`null` cannot be used to clear a value; send an empty string instead). Returns the public profile after the update, so the optional fields are masked by the caller's own visibility settings.\n**Side effects**: persists the new values\n**Errors**:\n- 400 `common.validation_failed`: `displayName` exceeds 100 characters or `bio` exceeds 500 characters\n- 404 `user.not_found`: the account no longer exists",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: updates `username`, `displayName` and/or `bio`. Sending the current `username` is a no-op. A field that is omitted or `null` is left unchanged (`null` cannot be used to clear a value; send an empty string instead). Returns the public profile after the update, so the optional fields are masked by the caller's own visibility settings.\n**Side effects**: persists the new values; after a `username` change the old public profile path returns 404\n**Errors**:\n- 400 `common.validation_failed`: `username` is not 3-50 characters of [a-z0-9_] or is `search`, `displayName` exceeds 100 characters, or `bio` exceeds 500 characters\n- 404 `user.not_found`: the account no longer exists\n- 409 `user.username.taken`: another account already uses `username`",
         "operationId" : "updateMyProfile",
         "requestBody" : {
           "content" : {
@@ -5434,6 +5443,23 @@
               }
             },
             "description" : "Account no longer exists (errorCode `user.not_found`)"
+          },
+          "409" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : null,
+                  "error" : "Username already taken",
+                  "errorCode" : "user.username.taken",
+                  "message" : "Username already taken",
+                  "success" : false
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Username already used by another account (errorCode `user.username.taken`)"
           },
           "429" : {
             "content" : {

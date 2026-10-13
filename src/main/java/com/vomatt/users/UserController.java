@@ -159,16 +159,22 @@ public class UserController {
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Username already used by another account (errorCode `user.username.taken`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(value = """
+                            {"success":false,"data":null,"message":"Username already taken","errorCode":"user.username.taken","error":"Username already taken"}""")))
     @Operation(summary = "Update my profile", description = """
             **Auth**: required
             **Precondition**: none
-            **Behavior**: updates `displayName` and/or `bio`. A field that is omitted or `null` is left unchanged \
+            **Behavior**: updates `username`, `displayName` and/or `bio`. Sending the current `username` is a no-op. A field that is omitted or `null` is left unchanged \
             (`null` cannot be used to clear a value; send an empty string instead). Returns the public profile after the update, \
             so the optional fields are masked by the caller's own visibility settings.
-            **Side effects**: persists the new values
+            **Side effects**: persists the new values; after a `username` change the old public profile path returns 404
             **Errors**:
-            - 400 `common.validation_failed`: `displayName` exceeds 100 characters or `bio` exceeds 500 characters
-            - 404 `user.not_found`: the account no longer exists""")
+            - 400 `common.validation_failed`: `username` is not 3-50 characters of [a-z0-9_] or is `search`, \
+            `displayName` exceeds 100 characters, or `bio` exceeds 500 characters
+            - 404 `user.not_found`: the account no longer exists
+            - 409 `user.username.taken`: another account already uses `username`""")
     public ResponseEntity<ApiResponse<UserProfileResponse>> updateMyProfile(
             @Valid @RequestBody UpdateProfileRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {

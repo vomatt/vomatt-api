@@ -1,36 +1,61 @@
 <!DOCTYPE html>
-<!-- Styles are inline: several mail clients (Outlook, some webmail) drop <style> blocks -->
-<html xmlns:th="http://www.thymeleaf.org">
+<!-- Styles are inline and laid out with tables: several mail clients (Outlook, some webmail) drop <style> blocks and flexbox -->
+<html xmlns:th="http://www.thymeleaf.org" th:lang="${#locale.toLanguageTag()}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title th:text="#{email.verification.title}">Email Verification</title>
 </head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-    <div style="background-color: #f9f9f9; border-radius: 5px; padding: 20px; border: 1px solid #ddd;">
-        <div style="text-align: center; padding-bottom: 10px; border-bottom: 1px solid #ddd; margin-bottom: 20px;">
-            <h1 th:text="#{email.verification.title}">Email Verification</h1>
-        </div>
+<body style="margin: 0; padding: 0; background-color: #f5f3ee;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f5f3ee;">
+    <tr>
+        <td align="center" style="padding: 40px 16px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                   style="max-width: 600px; font-family: Geist, -apple-system, 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', 'Helvetica Neue', Arial, sans-serif; color: #1a1917;">
+                <tr>
+                    <td style="padding: 0 4px 20px;">
+                        <a href="https://vomatt.com" th:href="${siteUrl}" style="font-size: 20px; font-weight: 600; letter-spacing: -0.03em; color: #1a1917; text-decoration: none;">vomatt</a>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="background-color: #ffffff; border: 1px solid #e3dfd7; border-radius: 12px; padding: 40px;">
+                        <h1 style="margin: 0 0 20px; font-size: 32px; font-weight: 400; line-height: 1.25; letter-spacing: -0.03em;"
+                            th:text="#{email.verification.title}">Email Verification</h1>
 
-        <p th:text="#{email.verification.greeting}">Hello,</p>
+                        <p style="margin: 0 0 20px; font-size: 15px; line-height: 1.6;">
+                            <span th:text="#{email.verification.greeting}">Hello,</span><br>
+                            <span th:text="${isPreSignup} ? #{email.verification.pre.signup.message} : #{email.verification.login.message}">Verification message</span>
+                        </p>
 
-        <p th:text="${isPreSignup} ? #{email.verification.pre.signup.message} : #{email.verification.login.message}">
-            Verification message
-        </p>
+                        <!-- No JS in email, so "copy" is a one-tap select-all on the code -->
+                        <div style="background-color: #efece5; border-radius: 12px; padding: 24px; text-align: center; font-family: 'Geist Mono', ui-monospace, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; font-size: 36px; font-weight: 500; letter-spacing: 0.3em; color: #1a1917; -webkit-user-select: all; user-select: all;"
+                             th:text="${verificationCode}">123456</div>
+                        <p style="margin: 8px 0 20px; font-size: 13px; line-height: 1.6; color: #6b6760; text-align: center;"
+                           th:text="#{email.verification.copy.hint}">Tap the code to select it, then copy.</p>
 
-        <div style="font-size: 32px; font-weight: bold; text-align: center; background-color: #f0f8ff; border: 2px solid #007bff; border-radius: 8px; padding: 20px; margin: 30px 0; letter-spacing: 5px; color: #007bff; font-family: 'Courier New', monospace;"
-             th:text="${verificationCode}">123456</div>
+                        <p style="margin: 0 0 20px; font-size: 13px; line-height: 1.6; color: #6b6760;">
+                            <span th:text="#{email.verification.expiry(${expiryMinutes})}">This verification code will expire in 3 minutes.</span>
+                            <span th:text="#{email.verification.ignore}">If you did not request this verification code, please ignore this email.</span>
+                        </p>
 
-        <p th:text="#{email.verification.expiry(${expiryMinutes})}">This verification code will expire in 3 minutes.</p>
-
-        <p th:text="#{email.verification.ignore}">If you did not request this verification code, please ignore this email.</p>
-
-        <p th:utext="#{email.verification.signature}">Thank you,<br>Vomatt Team</p>
-
-        <div style="font-size: 12px; color: #666; text-align: center; margin-top: 30px; padding-top: 10px; border-top: 1px solid #ddd;">
-            <p th:text="#{email.verification.footer.auto}">This email is sent automatically, please do not reply.</p>
-            <p th:text="#{email.verification.footer.copyright(${year})}">&copy; 2026 Vomatt. All rights reserved.</p>
-        </div>
-    </div>
+                        <p style="margin: 0; font-size: 15px; line-height: 1.6;" th:utext="#{email.verification.signature}">Thank you,<br>Vomatt Team</p>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 20px 4px 0; font-size: 13px; line-height: 1.6; color: #6b6760;">
+                        <p style="margin: 0 0 8px;" th:text="#{email.footer.auto}">This email is sent automatically, please do not reply.</p>
+                        <p style="margin: 0;">
+                            <a href="https://vomatt.com/terms-of-service" th:href="|${siteUrl}/terms-of-service|" style="color: #6b6760; text-decoration: underline;" th:text="#{email.footer.terms}">Terms and Conditions</a>
+                            &nbsp;·&nbsp;
+                            <a href="https://vomatt.com/privacy-policy" th:href="|${siteUrl}/privacy-policy|" style="color: #6b6760; text-decoration: underline;" th:text="#{email.footer.privacy}">Privacy Policy</a>
+                            &nbsp;·&nbsp;
+                            <a href="https://vomatt.com/contact-us" th:href="|${siteUrl}/contact-us|" style="color: #6b6760; text-decoration: underline;" th:text="#{email.footer.contact}">Contact Us</a>
+                        </p>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+</table>
 </body>
 </html>

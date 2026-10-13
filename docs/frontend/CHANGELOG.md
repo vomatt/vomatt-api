@@ -2,6 +2,10 @@
 
 Contract changes that affect the frontend. 💥 BREAKING means frontend code must change. See [openapi.json](openapi.json) for the contract snapshot and [error-codes.md](error-codes.md) for error codes.
 
+## 2026-10-13
+
+- `PATCH /api/users/me` accepts `username` (3-50 characters of `[a-z0-9_]`, not `search`); returns 409 `user.username.taken` when another account uses it. The old `/api/users/{username}` path returns 404 after the change.
+
 ## 2026-10-12
 
 - Deprecated (still working, to be removed in a later 💥 release): `DELETE /api/votes/{voteId}/vote/{optionId}` → use `DELETE /api/votes/{voteId}/vote`; `GET /api/votes/{voteId}/my-vote-status` → use `myOptionId` in `GET /api/votes/{voteId}`.

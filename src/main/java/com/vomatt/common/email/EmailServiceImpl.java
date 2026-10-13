@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
-import java.time.Year;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -34,6 +33,9 @@ public class EmailServiceImpl implements EmailService {
 
     @Value("${app.email.from:noreply@vomatt.com}")
     private String fromEmail;
+
+    @Value("${app.email.site-url:https://vomatt.com}")
+    private String siteUrl;
 
     @Value("${otp.ttl-seconds:180}")
     private long otpTtlSeconds;
@@ -82,8 +84,7 @@ public class EmailServiceImpl implements EmailService {
         helper.setSubject(messageSource.getMessage(subjectKey, null, locale));
 
         Context context = new Context(locale, variables);
-        // a String, so MessageFormat does not render it as "2,026"
-        context.setVariable("year", String.valueOf(Year.now().getValue()));
+        context.setVariable("siteUrl", siteUrl);
         helper.setText(templateEngine.process(template, context), true);
 
         mailSender.send(mimeMessage);

@@ -17,6 +17,8 @@ class VoteListOrderTest {
     void shouldDefaultToOpenNewest() {
         assertThat(VoteListOrder.of(null, null)).isEqualTo(VoteListOrder.NEWEST);
         assertThat(VoteListOrder.of("open", "closing")).isEqualTo(VoteListOrder.CLOSING);
+        assertThat(VoteListOrder.of("open", "top")).isEqualTo(VoteListOrder.TOP);
+        assertThat(VoteListOrder.of(null, "top")).isEqualTo(VoteListOrder.TOP);
         assertThat(VoteListOrder.of("ended", null)).isEqualTo(VoteListOrder.ENDED);
     }
 
@@ -24,6 +26,9 @@ class VoteListOrderTest {
     @DisplayName("should reject when status=ended is given with sort")
     void shouldRejectSortWhenStatusEnded() {
         assertThatThrownBy(() -> VoteListOrder.of("ended", "closing"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_LIST_SORT_NOT_ALLOWED));
+        assertThatThrownBy(() -> VoteListOrder.of("ended", "top"))
                 .isInstanceOfSatisfying(ApiException.class,
                         ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_LIST_SORT_NOT_ALLOWED));
     }

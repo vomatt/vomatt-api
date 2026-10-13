@@ -172,7 +172,7 @@ public class VoteService {
     }
 
     /**
-     * Feed / Explore / Search page: Open (newest or closing soonest) or Ended Polls, optionally under one tag
+     * Feed / Explore / Search / Top page: Open (newest, closing soonest or highest Turnout) or Ended Polls, optionally under one tag
      * and matching a free-text query on title and description.
      */
     @Transactional(readOnly = true)
@@ -189,11 +189,16 @@ public class VoteService {
             case NEWEST -> Cursor.Scope.FEED_NEWEST;
             case CLOSING -> Cursor.Scope.FEED_CLOSING;
             case ENDED -> Cursor.Scope.FEED_ENDED;
+            case TOP -> Cursor.Scope.FEED_TOP;
         };
         List<Vote> rows = voteListRepository.findPage(order, tagSlug, query, Cursor.decode(cursor, scope),
             OffsetDateTime.now(), size + 1);
         return CursorResponse.of(rows, size, scope,
-            v -> Cursor.of(order == VoteListOrder.NEWEST ? v.getStartTime() : v.getEndTime(), v.getId()),
+            v -> switch (order) {
+                case NEWEST -> Cursor.of(v.getStartTime(), v.getId());
+                case CLOSING, ENDED -> Cursor.of(v.getEndTime(), v.getId());
+                case TOP -> Cursor.of(v.getTurnout(), v.getStartTime(), v.getId());
+            },
             page -> toResponses(page, userId));
     }
 
@@ -275,6 +280,9 @@ public class VoteService {
             userVoteRepository.save(new UserVote(user, vote, option, ipAddress));
             releasedOptionId.ifPresent(id -> voteOptionRepository.adjustVoteCount(id, -1));
             voteOptionRepository.adjustVoteCount(optionUuid, 1);
+            if (previous.isEmpty()) {
+                voteRepository.adjustTurnout(voteUuid, 1);
+            }
             log.info("User {} cast ballot on vote {} for option {}", userId, voteId, optionUuid);
         }
 
@@ -288,7 +296,7 @@ public class VoteService {
 
         userVoteRepository.lockBallot(userId, voteId);
         userVoteRepository.findByUserIdAndVoteId(UUID.fromString(userId), voteUuid)
-            .ifPresent(ballot -> voteOptionRepository.adjustVoteCount(deleteBallot(ballot), -1));
+            .ifPresent(this::releaseBallot);
         log.info("User {} retracted ballot in vote {}", userId, voteId);
 
         return ballotResponse(voteUuid, userId, null);
@@ -302,7 +310,7 @@ public class VoteService {
 
         userVoteRepository.lockBallot(userId, voteId);
         userVoteRepository.findByUserIdAndVoteIdAndOptionId(userUuid, voteUuid, UUID.fromString(optionId))
-            .ifPresent(ballot -> voteOptionRepository.adjustVoteCount(deleteBallot(ballot), -1));
+            .ifPresent(this::releaseBallot);
         log.info("User {} removed vote from option {} in vote {}", userId, optionId, voteId);
 
         return convertToVoteResponse(voteUuid, userId);
@@ -545,11 +553,11 @@ public class VoteService {
     }
 
     /**
-     * Ballots can change only while Open; frozen once Ended. Takes the shared Poll-row lock before the existing
+     * Ballots can change only while Open; frozen once Ended. Takes the exclusive Poll-row lock before the existing
      * (user, Poll) advisory lock and checks the status under it, so a Close or Edit cannot slip in between.
      */
     private Vote lockOpenVote(UUID voteId, String userId) {
-        Vote vote = requireAccessible(voteRepository.findByIdForShare(voteId), userId);
+        Vote vote = requireAccessible(voteRepository.findByIdForUpdate(voteId), userId);
         switch (vote.getStatus()) {
             case ENDED -> throw ApiException.badRequest(MessageKey.VOTE_ENDED);
             case SCHEDULED -> throw ApiException.badRequest(MessageKey.VOTE_NOT_ALLOWED);
@@ -564,6 +572,13 @@ public class VoteService {
         // Hibernate flushes inserts before deletes; flush now so a replacing Ballot cannot hit UNIQUE (user_id, vote_id)
         userVoteRepository.flush();
         return ballot.getOption().getId();
+    }
+
+    // Withdraws a whole Ballot: its option count and the Poll's Turnout both drop by one
+    private void releaseBallot(UserVote ballot) {
+        UUID voteId = ballot.getVote().getId();
+        voteOptionRepository.adjustVoteCount(deleteBallot(ballot), -1);
+        voteRepository.adjustTurnout(voteId, -1);
     }
 
     // Popular tag counts include only Public Polls

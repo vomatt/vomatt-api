@@ -242,19 +242,20 @@ public class VoteController {
 
     @GetMapping
     @PublicApiResponse
-    @Operation(summary = "List Polls (Feed / Explore / Search)", description = """
+    @Operation(summary = "List Polls (Feed / Explore / Search / Top)", description = """
             **Auth**: public (optional login changes response: `myOptionId` of each item is filled for the caller's Ballots)
             **Precondition**: none
             **Behavior**: cursor-paged list of Open or Ended PUBLIC Polls; Scheduled, UNLISTED and INVITE_ONLY Polls never appear.
             - `status=open` (default) + `sort=newest` (default): most recently opened first (the Feed)
             - `status=open` + `sort=closing`: closing soonest first
+            - `status=open` + `sort=top`: highest Turnout (`participantCount`) first, ties most recently opened first (Top); Turnout can change between pages, so dedupe items by `id`
             - `status=ended`: most recently ended first; `sort` must be omitted
             - `tag`: only Polls under that tag slug (Explore); `q`: free-text match on title and description, option text is not matched (Search), at least 2 characters
             - Filters combine. `nextCursor` null means the last page; pass it back unchanged as `cursor`. `limit` is clamped to 1-50 (default 20).
             **Side effects**: none
             **Errors**:
             - 400 `common.invalid_status`: `status` is neither `open` nor `ended`
-            - 400 `common.invalid_sort`: `sort` is neither `newest` nor `closing`
+            - 400 `common.invalid_sort`: `sort` is not `newest`, `closing` or `top`
             - 400 `vote.list.sort_not_allowed`: `sort` was sent together with `status=ended`
             - 400 `vote.search.query_too_short`: `q` is shorter than 2 characters
             - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list or another ordering of this list
@@ -266,7 +267,7 @@ public class VoteController {
                     examples = @ExampleObject(name = "vote.search.query_too_short", value = ERR_MESSAGE + "Search query must be at least 2 characters" + ERR_CODE + "vote.search.query_too_short" + ERR_ERROR + "Search query must be at least 2 characters" + ERR_END)))
     public ResponseEntity<ApiResponse<CursorResponse<VoteResponse>>> listVotes(
             @Parameter(description = "`open` (default) or `ended`", example = "open") @RequestParam(required = false) String status,
-            @Parameter(description = "`newest` (default) or `closing`; only valid with `status=open`", example = "closing") @RequestParam(required = false) String sort,
+            @Parameter(description = "`newest` (default), `closing` or `top`; only valid with `status=open`", example = "closing") @RequestParam(required = false) String sort,
             @Parameter(description = "Tag slug to browse (Explore); omitted or blank means no tag filter", example = "tech") @RequestParam(required = false) String tag,
             @Parameter(description = "Free-text query on title and description (Search); at least 2 characters", example = "side project") @RequestParam(required = false) String q,
             @Parameter(description = "`nextCursor` of the previous page; omit for the first page") @RequestParam(required = false) String cursor,

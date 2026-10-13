@@ -18,6 +18,7 @@ import org.springframework.context.annotation.Import;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.CursorResponse;
+import com.vomatt.entity.Audience;
 import com.vomatt.entity.Tag;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserVote;
@@ -241,5 +242,73 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
                         ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMON_CURSOR_INVALID));
         // filters are not part of the scope: the same ordering under another tag still accepts it
         assertThat(voteService.listVotes(VoteListOrder.NEWEST, null, null, newestCursor, 1, null)).isNotNull();
+    }
+
+    private Vote poll(String title, OffsetDateTime start, OffsetDateTime end, int turnout) {
+        Vote vote = poll(title, start, end);
+        em.flush();
+        em.createNativeQuery("UPDATE vomatt.votes SET turnout = :turnout WHERE id = :id")
+                .setParameter("turnout", turnout).setParameter("id", vote.getId()).executeUpdate();
+        return vote;
+    }
+
+    @Test
+    @DisplayName("should order Top by Turnout, ties most recently opened first, Open Public non-Deleted Polls only")
+    void shouldOrderTopByTurnoutThenStartTime() {
+        poll("low", now.minusHours(1), now.plusDays(1), 1);
+        poll("high", now.minusHours(3), now.plusDays(1), 5);
+        poll("tie-old", now.minusHours(5), now.plusDays(1), 3);
+        poll("tie-new", now.minusHours(2), now.plusDays(1), 3);
+        poll("scheduled", now.plusHours(1), now.plusDays(1), 9);
+        poll("ended", now.minusDays(2), now.minusHours(1), 9);
+        poll("unlisted", now.minusHours(1), now.plusDays(1), 9).setAudience(Audience.UNLISTED);
+        poll("deleted", now.minusHours(1), now.plusDays(1), 9).setDeletedAt(now);
+
+        assertThat(titles(VoteListOrder.TOP, null)).containsExactly("high", "tie-new", "tie-old", "low");
+        assertThat(titles(VoteListOrder.TOP, 1)).containsExactly("high", "tie-new", "tie-old", "low");
+    }
+
+    @Test
+    @DisplayName("should page Top by cursor without duplicates or gaps when Turnout and start time tie")
+    void shouldNotRepeatItemsAcrossTopPagesWhenKeysTie() {
+        OffsetDateTime sameStart = now.minusHours(2);
+        for (int i = 0; i < 7; i++) {
+            poll("p" + i, i < 4 ? sameStart : now.minusMinutes(i), now.plusDays(1), i % 2);
+        }
+
+        List<String> onePage = titles(VoteListOrder.TOP, 50);
+        assertThat(onePage).hasSize(7);
+        assertThat(titles(VoteListOrder.TOP, 2)).containsExactlyElementsOf(onePage);
+    }
+
+    @Test
+    @DisplayName("should filter Top by tag and free-text query")
+    void shouldFilterTopByTagAndQuery() {
+        poll("lunch ideas", now.minusHours(1), now.plusDays(1), 1);
+        poll("dinner ideas", now.minusHours(1), now.plusDays(1), 2);
+        Vote untagged = persistPoll(owner, now.minusHours(1), now.plusDays(1), "A", "B");
+        untagged.setTitle("lunch untagged");
+        em.flush();
+        em.clear();
+
+        assertThat(voteService.listVotes(VoteListOrder.TOP, tag.getSlug(), "lunch", null, null, null).items())
+                .extracting(VoteResponse::getTitle).containsExactly("lunch ideas");
+    }
+
+    @Test
+    @DisplayName("should reject cursors from other orderings with 400 COMMON_CURSOR_INVALID when sent with sort=top")
+    void shouldRejectCursorWhenSwitchingToOrFromTop() {
+        poll("a", now.minusHours(2), now.plusDays(1), 1);
+        poll("b", now.minusHours(1), now.plusDays(2), 2);
+        em.flush();
+        String newestCursor = voteService.listVotes(VoteListOrder.NEWEST, tag.getSlug(), null, null, 1, null).nextCursor();
+        String topCursor = voteService.listVotes(VoteListOrder.TOP, tag.getSlug(), null, null, 1, null).nextCursor();
+
+        assertThatThrownBy(() -> voteService.listVotes(VoteListOrder.TOP, tag.getSlug(), null, newestCursor, 1, null))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMON_CURSOR_INVALID));
+        assertThatThrownBy(() -> voteService.listVotes(VoteListOrder.NEWEST, tag.getSlug(), null, topCursor, 1, null))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMON_CURSOR_INVALID));
     }
 }

@@ -87,6 +87,31 @@ class CursorResponseTest {
     }
 
     @Test
+    @DisplayName("should restore count, time and id when a compound Top cursor is encoded and decoded")
+    void shouldRoundTripCountTimeCursor() {
+        OffsetDateTime time = OffsetDateTime.of(2026, 10, 5, 12, 0, 0, 123_456_000, ZoneOffset.ofHours(8));
+        UUID id = UUID.randomUUID();
+
+        Cursor decoded = Cursor.decode(Cursor.of(42L, time, id).encode(Cursor.Scope.FEED_TOP), Cursor.Scope.FEED_TOP);
+
+        assertThat(decoded.countKey()).isEqualTo(42L);
+        assertThat(decoded.countTimeKey().toInstant()).isEqualTo(time.toInstant());
+        assertThat(decoded.id()).isEqualTo(id);
+    }
+
+    @Test
+    @DisplayName("should throw 400 COMMON_CURSOR_INVALID when a compound key is malformed")
+    void shouldRejectCompoundKeyWhenMalformed() {
+        Cursor noSeparator = new Cursor("42", UUID.randomUUID());
+        Cursor badCount = new Cursor("x,2026-10-05T04:00:00Z", UUID.randomUUID());
+        Cursor badTime = new Cursor("42,yesterday", UUID.randomUUID());
+
+        assertCursorInvalid(noSeparator::countKey);
+        assertCursorInvalid(badCount::countKey);
+        assertCursorInvalid(badTime::countTimeKey);
+    }
+
+    @Test
     @DisplayName("should keep a key containing the separator when the cursor round-trips in its scope")
     void shouldRoundTripCursorWhenDecodedWithSameScope() {
         UUID id = UUID.randomUUID();

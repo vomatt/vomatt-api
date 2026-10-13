@@ -1,6 +1,6 @@
 -- =============================================================================
--- Option vote count reconciliation (run manually; not part of startup)
--- vote_options.vote_count is atomically incremented/decremented by the application; this file checks and fixes drift from the actual user_votes row count.
+-- Option vote count and Turnout reconciliation (run manually; not part of startup)
+-- vote_options.vote_count and votes.turnout are atomically incremented/decremented by the application; this file checks and fixes drift from the actual user_votes row count.
 -- =============================================================================
 
 -- 1) Check: list options whose stored count differs from the actual Ballot count (should normally return 0 rows)
@@ -18,3 +18,19 @@ FROM (SELECT o2.id, COUNT(uv.id) AS actual
       LEFT JOIN vomatt.user_votes uv ON uv.option_id = o2.id
       GROUP BY o2.id) c
 WHERE c.id = o.id AND o.vote_count <> c.actual;
+
+-- 3) Check: Polls whose stored Turnout (votes.turnout) differs from the actual Participant count (should normally return 0 rows)
+SELECT v.id AS vote_id, v.turnout AS stored, COUNT(uv.id) AS actual
+FROM vomatt.votes v
+LEFT JOIN vomatt.user_votes uv ON uv.vote_id = v.id
+GROUP BY v.id
+HAVING v.turnout <> COUNT(uv.id);
+
+-- 4) Fix: overwrite Turnout with the actual count
+UPDATE vomatt.votes v
+SET turnout = c.actual
+FROM (SELECT v2.id, COUNT(uv.id) AS actual
+      FROM vomatt.votes v2
+      LEFT JOIN vomatt.user_votes uv ON uv.vote_id = v2.id
+      GROUP BY v2.id) c
+WHERE c.id = v.id AND v.turnout <> c.actual;

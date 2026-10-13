@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -21,18 +22,26 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
     Optional<Vote> findByIdWithOptions(@Param("id") UUID id);
 
     /**
-     * Shared Poll-row lock (FOR SHARE) for Ballot changes; they do not block one another but wait for Close / Edit.
+     * Exclusive Poll-row lock (Hibernate emits FOR NO KEY UPDATE on Postgres) for Ballot changes, Close, Edit and
+     * Delete; each waits for the others on the same Poll. Ballots take it too, not a shared lock, because each one
+     * updates the Poll's Turnout and two shared-lock holders updating the same row would deadlock.
      * Must be the first load of the Poll in the transaction, so its status is read from the locked row.
      */
-    @Lock(LockModeType.PESSIMISTIC_READ)
-    @Query("SELECT v FROM Vote v WHERE v.id = :id")
-    Optional<Vote> findByIdForShare(@Param("id") UUID id);
-
-    /**
-     * Exclusive Poll-row lock for Close and Edit; waits for in-flight Ballot changes.
-     * On Postgres Hibernate emits FOR NO KEY UPDATE, which still conflicts with FOR SHARE.
-     */
+    // ponytail: Ballots on one Poll serialize; move Turnout to a separate counter row if a hot Poll needs more throughput
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT v FROM Vote v WHERE v.id = :id")
     Optional<Vote> findByIdForUpdate(@Param("id") UUID id);
+
+    /** Atomic +/- on the stored Turnout; never read-modify-write. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = "UPDATE vomatt.votes SET turnout = turnout + :delta WHERE id = :voteId", nativeQuery = true)
+    void adjustTurnout(@Param("voteId") UUID voteId, @Param("delta") int delta);
+
+    /** Releases a user's Ballots from Turnout; run before deleting the user (user_votes cascade). */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = """
+            UPDATE vomatt.votes v SET turnout = v.turnout - 1
+            FROM vomatt.user_votes uv
+            WHERE uv.vote_id = v.id AND uv.user_id = :userId""", nativeQuery = true)
+    void decrementTurnoutForUserBallots(@Param("userId") UUID userId);
 }

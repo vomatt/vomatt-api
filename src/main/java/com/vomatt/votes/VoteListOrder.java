@@ -13,13 +13,16 @@ public enum VoteListOrder {
     /** Open Polls, closing soonest first. */
     CLOSING,
     /** Ended Polls, most recently ended first. */
-    ENDED;
+    ENDED,
+    /** Open Polls, highest Turnout first; ties most recently opened first (Top). */
+    TOP;
 
-    /** Resolves {@code status=open|ended} and {@code sort=newest|closing}; defaults to open + newest. */
+    /** Resolves {@code status=open|ended} and {@code sort=newest|closing|top}; defaults to open + newest. */
     public static VoteListOrder of(String status, String sort) {
         if (status == null || status.equals("open")) {
             if (sort == null || sort.equals("newest")) return NEWEST;
             if (sort.equals("closing")) return CLOSING;
+            if (sort.equals("top")) return TOP;
             throw ApiException.badRequest(MessageKey.COMMON_INVALID_SORT, sort);
         }
         if (status.equals("ended")) {

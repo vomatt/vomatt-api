@@ -68,6 +68,10 @@ public class Vote extends AuditableEntity {
     @Column(name = "deleted_at")
     private OffsetDateTime deletedAt;
 
+    /** Turnout (Participants); written only by atomic SQL increments in {@code VoteRepository}, never by the entity. */
+    @Column(name = "turnout", insertable = false, updatable = false)
+    private int turnout;
+
     @Column(name = "is_active")
     private boolean isActive = true;
 

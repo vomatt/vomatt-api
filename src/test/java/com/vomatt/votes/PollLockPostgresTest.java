@@ -153,6 +153,50 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
                 .cause().isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(key));
     }
 
+    private Void delete() {
+        voteService.deleteVote(poll.getId().toString(), owner.getId().toString());
+        return null;
+    }
+
+    @Test
+    @DisplayName("should make Delete wait for an in-flight Cast and then delete the Poll")
+    void shouldDeleteAfterCastWhenCastHoldsPollFirst() throws Exception {
+        OffsetDateTime now = OffsetDateTime.now();
+        createPoll(now.minusMinutes(1), now.plusDays(1));
+        CountDownLatch cast = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Future<VoteResponse> caster = holding(this::cast, cast, release);
+        assertThat(cast.await(10, TimeUnit.SECONDS)).isTrue();
+
+        Future<Void> deleter = pool.submit(this::delete);
+        assertThat(blocked(deleter)).as("Delete waits for the Cast").isTrue();
+        release.countDown();
+        caster.get(10, TimeUnit.SECONDS);
+        deleter.get(10, TimeUnit.SECONDS);
+
+        assertThatThrownBy(this::cast).isInstanceOfSatisfying(ApiException.class,
+                ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("should reject a Cast with vote.not_found when Delete holds the Poll first")
+    void shouldRejectCastWhenDeleteCommitsFirst() throws Exception {
+        OffsetDateTime now = OffsetDateTime.now();
+        createPoll(now.minusMinutes(1), now.plusDays(1));
+        CountDownLatch deleted = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Future<Void> deleter = holding(this::delete, deleted, release);
+        assertThat(deleted.await(10, TimeUnit.SECONDS)).isTrue();
+
+        Future<VoteResponse> caster = pool.submit(this::cast);
+        assertThat(blocked(caster)).as("Cast waits for the Delete").isTrue();
+        release.countDown();
+        deleter.get(10, TimeUnit.SECONDS);
+
+        assertApiError(caster, MessageKey.VOTE_NOT_FOUND);
+        assertThat(ballots()).isZero();
+    }
+
     @Test
     @DisplayName("should make Close wait for an in-flight Cast and count its Ballot when the Cast passed its check first")
     void shouldCountBallotWhenCastCommitsBeforeClose() throws Exception {

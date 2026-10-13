@@ -2,10 +2,12 @@ package com.vomatt.entity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @DisplayName("Vote (Poll lifecycle)")
 class VoteTest {
@@ -81,5 +83,51 @@ class VoteTest {
 
         assertThat(vote.getEndTime()).isEqualTo(end);
         assertThat(vote.getStatus()).isEqualTo(VoteStatus.ENDED);
+    }
+
+    // ─── Delete window ───────────────────────────────────────────────────────
+
+    private static final Duration WINDOW = Duration.ofMinutes(20);
+
+    private Vote posted(OffsetDateTime createdAt, OffsetDateTime start, OffsetDateTime end) {
+        Vote vote = poll(start, end);
+        ReflectionTestUtils.setField(vote, "createdAt", createdAt);
+        return vote;
+    }
+
+    @Test
+    @DisplayName("should allow Delete when an Open Poll is just inside the window")
+    void shouldAllowDeleteWhenJustInsideWindow() {
+        OffsetDateTime createdAt = now.minus(WINDOW).plusSeconds(1);
+        assertThat(posted(createdAt, createdAt, now.plusDays(1)).canDeleteAt(now, WINDOW)).isTrue();
+    }
+
+    @Test
+    @DisplayName("should refuse Delete when an Open Poll reaches the end of the window")
+    void shouldRefuseDeleteWhenWindowReached() {
+        OffsetDateTime createdAt = now.minus(WINDOW);
+        assertThat(posted(createdAt, createdAt, now.plusDays(1)).canDeleteAt(now, WINDOW)).isFalse();
+    }
+
+    @Test
+    @DisplayName("should allow Delete even with Ballots when within the window and already Ended")
+    void shouldAllowDeleteWhenEndedWithinWindow() {
+        OffsetDateTime createdAt = now.minusMinutes(5);
+        assertThat(posted(createdAt, createdAt, now.minusMinutes(1)).canDeleteAt(now, WINDOW)).isTrue();
+    }
+
+    @Test
+    @DisplayName("should allow Delete when Scheduled long after posting")
+    void shouldAllowDeleteWhenScheduled() {
+        Vote vote = posted(now.minusDays(3), now.plusHours(1), now.plusDays(1));
+        assertThat(vote.canDeleteAt(now, WINDOW)).isTrue();
+    }
+
+    @Test
+    @DisplayName("should refuse Delete when already Deleted")
+    void shouldRefuseDeleteWhenAlreadyDeleted() {
+        Vote vote = posted(now.minusMinutes(1), now.plusHours(1), now.plusDays(1));
+        vote.setDeletedAt(now);
+        assertThat(vote.canDeleteAt(now, WINDOW)).isFalse();
     }
 }

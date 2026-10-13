@@ -53,7 +53,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     /**
      * Fetch the User profile and stats in one query (avoids N+1). totalPolls counts only Polls that have opened (Open, Ended),
-     * consistent with the Poll list on the public page: excludes Scheduled ones and those cancelled before opening.
+     * consistent with the Poll list on the public page: excludes Scheduled, Deleted, and those cancelled before opening.
      */
     @Query("SELECT u.id AS id, u.username AS username, u.displayName AS displayName, u.bio AS bio, " +
            "u.createdAt AS createdAt, u.email AS email, u.firstName AS firstName, " +
@@ -61,8 +61,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
            "u.membershipLevel AS membershipLevel, u.active AS active, " +
            "COUNT(DISTINCT v.id) AS totalPolls, COUNT(DISTINCT uv.id) AS totalVotes " +
            "FROM User u " +
-           "LEFT JOIN Vote v ON v.creator.id = u.id AND v.startTime <= CURRENT_TIMESTAMP AND v.endTime > v.startTime " +
-           "LEFT JOIN UserVote uv ON uv.user.id = u.id " +
+           "LEFT JOIN Vote v ON v.creator.id = u.id AND v.startTime <= CURRENT_TIMESTAMP AND v.endTime > v.startTime AND v.deletedAt IS NULL " +
+           "LEFT JOIN UserVote uv ON uv.user.id = u.id AND uv.vote.deletedAt IS NULL " +
            "WHERE u.username = :username " +
            "GROUP BY u.id, u.username, u.displayName, u.bio, u.createdAt, " +
            "u.email, u.firstName, u.lastName, u.location, u.points, u.membershipLevel, u.active")

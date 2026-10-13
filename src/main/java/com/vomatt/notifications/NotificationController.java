@@ -55,7 +55,7 @@ public class NotificationController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Caller has no Ended Notification for this Poll (errorCode `notification.not_found`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist or is Deleted (errorCode `vote.not_found`), or the caller has no Ended Notification for it (`notification.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"Notification not found","errorCode":"notification.not_found","error":"Notification not found"}""")))
@@ -65,7 +65,8 @@ public class NotificationController {
             **Behavior**: marks the caller's Ended Notification for this Poll as read. Idempotent: marking an already-read notification succeeds and changes nothing.
             **Side effects**: the unread count drops by 1 (first call only); `unread` becomes false on the Poll in `GET /api/votes/my?status=ended`
             **Errors**:
-            - 404 `notification.not_found`: the Poll has not Ended, was Cancelled while Scheduled, does not exist, or the caller neither owns it nor holds a Ballot in it
+            - 404 `vote.not_found`: the Poll does not exist or is Deleted
+            - 404 `notification.not_found`: the Poll has not Ended, was Cancelled while Scheduled, or the caller neither owns it nor holds a Ballot in it
             - 400 `common.bad_request`: `voteId` is not a valid id""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> markRead(
             @Parameter(description = "Id of the Poll whose Ended Notification is marked read", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47") @PathVariable String voteId,

@@ -16,7 +16,7 @@ import com.vomatt.common.response.CursorResponse;
 import com.vomatt.repository.CommentLikeRepository;
 import com.vomatt.repository.IdCount;
 import com.vomatt.repository.VoteCommentRepository;
-import com.vomatt.repository.VoteRepository;
+import com.vomatt.votes.VoteService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Limit;
@@ -36,14 +36,13 @@ import java.util.stream.Collectors;
 public class VoteCommentService {
 
     private final VoteCommentRepository commentRepository;
-    private final VoteRepository voteRepository;
+    private final VoteService voteService;
     private final UserRepository userRepository;
     private final CommentLikeRepository commentLikeRepository;
     private final CommentMapper commentMapper;
 
     public CommentDto createComment(String voteId, String userId, CreateCommentRequest request) {
-        Vote vote = voteRepository.findById(UUID.fromString(voteId))
-            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
+        Vote vote = voteService.findAccessibleVote(UUID.fromString(voteId), userId);
 
         User user = userRepository.findById(UUID.fromString(userId))
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
@@ -64,10 +63,7 @@ public class VoteCommentService {
     @Transactional(readOnly = true)
     public CursorResponse<CommentDto> getCommentsByVote(String voteId, String cursor, Integer limit,
                                                         String currentUserId) {
-        UUID voteUuid = UUID.fromString(voteId);
-        if (!voteRepository.existsById(voteUuid)) {
-            throw ApiException.notFound(MessageKey.VOTE_NOT_FOUND);
-        }
+        UUID voteUuid = voteService.findAccessibleVote(UUID.fromString(voteId), currentUserId).getId();
 
         int size = CursorResponse.limit(limit);
         Cursor after = Cursor.decode(cursor, Cursor.Scope.COMMENTS);
@@ -81,6 +77,7 @@ public class VoteCommentService {
     @Transactional(readOnly = true)
     public CursorResponse<CommentDto> getReplies(String voteId, UUID commentId, String cursor, Integer limit,
                                                  String currentUserId) {
+        voteService.findAccessibleVote(UUID.fromString(voteId), currentUserId);
         VoteComment root = commentRepository.findById(commentId)
             .filter(c -> c.getParent() == null && c.getVote().getId().toString().equals(voteId))
             .orElseThrow(() -> ApiException.notFound(MessageKey.COMMENT_NOT_FOUND));
@@ -91,6 +88,14 @@ public class VoteCommentService {
             after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
         return CursorResponse.of(rows, size, Cursor.Scope.REPLIES, c -> Cursor.of(c.getCreatedAt(), c.getId()),
             page -> toDtos(page, currentUserId));
+    }
+
+    // A live Comment on a Poll the caller can reach; a Deleted Poll's Comments are gone with it
+    private VoteComment findComment(UUID commentId, String userId) {
+        VoteComment comment = commentRepository.findByIdAndNotDeleted(commentId)
+            .orElseThrow(() -> ApiException.notFound(MessageKey.COMMENT_NOT_FOUND));
+        voteService.findAccessibleVote(comment.getVote().getId(), userId);
+        return comment;
     }
 
     // Replies are one level deep: replying to a Reply attaches to the same top-level Comment
@@ -113,8 +118,7 @@ public class VoteCommentService {
     }
 
     public CommentDto updateComment(UUID commentId, String userId, UpdateCommentRequest request) {
-        VoteComment comment = commentRepository.findByIdAndNotDeleted(commentId)
-            .orElseThrow(() -> ApiException.notFound(MessageKey.COMMENT_NOT_FOUND));
+        VoteComment comment = findComment(commentId, userId);
 
         if (!comment.canBeEditedBy(userId)) {
             throw ApiException.forbidden(MessageKey.COMMENT_FORBIDDEN);
@@ -129,8 +133,7 @@ public class VoteCommentService {
     }
 
     public void deleteComment(UUID commentId, String userId) {
-        VoteComment comment = commentRepository.findByIdAndNotDeleted(commentId)
-            .orElseThrow(() -> ApiException.notFound(MessageKey.COMMENT_NOT_FOUND));
+        VoteComment comment = findComment(commentId, userId);
 
         if (!comment.canBeDeletedBy(userId)) {
             throw ApiException.forbidden(MessageKey.COMMENT_FORBIDDEN);
@@ -144,24 +147,20 @@ public class VoteCommentService {
 
     @Transactional(readOnly = true)
     public CommentDto getComment(UUID commentId, String currentUserId) {
-        VoteComment comment = commentRepository.findByIdAndNotDeleted(commentId)
-            .orElseThrow(() -> ApiException.notFound(MessageKey.COMMENT_NOT_FOUND));
+        VoteComment comment = findComment(commentId, currentUserId);
 
         return convertToCommentDto(comment, currentUserId);
     }
 
     @Transactional(readOnly = true)
-    public long countCommentsByVote(String voteId) {
-        if (!voteRepository.existsById(UUID.fromString(voteId))) {
-            throw ApiException.notFound(MessageKey.VOTE_NOT_FOUND);
-        }
+    public long countCommentsByVote(String voteId, String currentUserId) {
+        voteService.findAccessibleVote(UUID.fromString(voteId), currentUserId);
 
         return commentRepository.countByVoteId(UUID.fromString(voteId));
     }
 
     public void likeComment(UUID commentId, String userId) {
-        VoteComment comment = commentRepository.findByIdAndNotDeleted(commentId)
-            .orElseThrow(() -> ApiException.notFound(MessageKey.COMMENT_NOT_FOUND));
+        VoteComment comment = findComment(commentId, userId);
 
         User user = userRepository.findById(UUID.fromString(userId))
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
@@ -179,8 +178,7 @@ public class VoteCommentService {
     }
 
     public void unlikeComment(UUID commentId, String userId) {
-        commentRepository.findByIdAndNotDeleted(commentId)
-            .orElseThrow(() -> ApiException.notFound(MessageKey.COMMENT_NOT_FOUND));
+        findComment(commentId, userId);
 
         commentLikeRepository.deleteByCommentIdAndUserId(commentId, UUID.fromString(userId));
 

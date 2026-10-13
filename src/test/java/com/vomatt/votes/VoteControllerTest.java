@@ -45,6 +45,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -188,6 +189,56 @@ class VoteControllerTest {
             mockMvc.perform(get("/api/votes/{voteId}", "not-a-uuid"))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.errorCode").value(MessageKey.COMMON_BAD_REQUEST.code()));
+        }
+    }
+
+    // ─── DELETE /api/votes/{voteId} ───────────────────────────────────────────
+
+    @Nested
+    @DisplayName("DELETE /api/votes/{voteId}")
+    class DeleteVoteTests {
+
+        @Test
+        @DisplayName("Unauthenticated request should be rejected: DELETE is not in any public whitelist")
+        void shouldRequireAuthenticationWhenDeleting() {
+            assertThat(isPublic("DELETE", "/api/votes/" + UUID.randomUUID())).isFalse();
+        }
+
+        @Test
+        @DisplayName("Should return 200 when the owner deletes within the window")
+        void shouldReturn200WhenOwnerDeletes() throws Exception {
+            authenticate();
+            String voteId = UUID.randomUUID().toString();
+
+            mockMvc.perform(delete("/api/votes/{voteId}", voteId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+            verify(voteService).deleteVote(voteId, USER_ID);
+        }
+
+        @Test
+        @DisplayName("Should return 400 vote.delete.window_passed when the window has passed")
+        void shouldReturn400WhenWindowPassed() throws Exception {
+            authenticate();
+            String voteId = UUID.randomUUID().toString();
+            doThrow(ApiException.badRequest(MessageKey.VOTE_DELETE_WINDOW_PASSED, 20L))
+                    .when(voteService).deleteVote(voteId, USER_ID);
+
+            mockMvc.perform(delete("/api/votes/{voteId}", voteId))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errorCode").value(MessageKey.VOTE_DELETE_WINDOW_PASSED.code()));
+        }
+
+        @Test
+        @DisplayName("Should return 403 vote.forbidden when the caller is not the owner")
+        void shouldReturn403WhenNotOwner() throws Exception {
+            authenticate();
+            String voteId = UUID.randomUUID().toString();
+            doThrow(ApiException.forbidden(MessageKey.VOTE_FORBIDDEN)).when(voteService).deleteVote(voteId, USER_ID);
+
+            mockMvc.perform(delete("/api/votes/{voteId}", voteId))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.errorCode").value(MessageKey.VOTE_FORBIDDEN.code()));
         }
     }
 

@@ -1,5 +1,6 @@
 package com.vomatt.entity;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.HashSet;
 import java.util.Set;
@@ -54,6 +55,10 @@ public class Vote extends AuditableEntity {
 
     @Column(name = "end_time", nullable = false)
     private OffsetDateTime endTime;
+
+    /** Set when the owner Deletes the Poll; a Deleted Poll is hidden from everyone but its data is kept. */
+    @Column(name = "deleted_at")
+    private OffsetDateTime deletedAt;
 
     @Column(name = "is_active")
     private boolean isActive = true;
@@ -113,6 +118,17 @@ public class Vote extends AuditableEntity {
         if (endTime != null && !now.isBefore(endTime)) return VoteStatus.ENDED;
         if (startTime != null && now.isBefore(startTime)) return VoteStatus.SCHEDULED;
         return VoteStatus.OPEN;
+    }
+
+    /** Delete: allowed while Scheduled, or within {@code window} of posting even when it holds Ballots (ADR 0004). */
+    public boolean canDeleteAt(OffsetDateTime now, Duration window) {
+        return deletedAt == null
+            && (statusAt(now) == VoteStatus.SCHEDULED || now.isBefore(getCreatedAt().plus(window)));
+    }
+
+    /** @param userId caller, or null when signed out */
+    public boolean isOwnedBy(String userId) {
+        return creator.getId().toString().equals(userId);
     }
 
     public boolean isVotingActive() {

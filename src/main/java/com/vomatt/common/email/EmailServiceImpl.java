@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
@@ -27,6 +28,8 @@ import java.util.Objects;
 @ConditionalOnProperty(name = "app.email.enabled", havingValue = "true", matchIfMissing = false)
 @RequiredArgsConstructor
 public class EmailServiceImpl implements EmailService {
+    private static final ClassPathResource LOGO = new ClassPathResource("templates/email/logo.png");
+
     private final JavaMailSender mailSender;
     private final TemplateEngine templateEngine;
     private final MessageSource messageSource;
@@ -78,7 +81,7 @@ public class EmailServiceImpl implements EmailService {
     private void send(String to, String subjectKey, String template, Locale locale, Map<String, Object> variables)
             throws MessagingException {
         MimeMessage mimeMessage = mailSender.createMimeMessage();
-        MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, "utf-8");
+        MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "utf-8");
         helper.setFrom(fromEmail);
         helper.setTo(to);
         helper.setSubject(messageSource.getMessage(subjectKey, null, locale));
@@ -86,6 +89,8 @@ public class EmailServiceImpl implements EmailService {
         Context context = new Context(locale, variables);
         context.setVariable("siteUrl", siteUrl);
         helper.setText(templateEngine.process(template, context), true);
+        // Inline (CID) image: Gmail and Outlook strip inline SVG and block data: URIs
+        helper.addInline("logo", LOGO, "image/png");
 
         mailSender.send(mimeMessage);
     }

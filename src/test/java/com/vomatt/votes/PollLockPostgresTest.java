@@ -99,7 +99,7 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
     }
 
     private VoteResponse close() {
-        return voteService.deactivateVote(poll.getId().toString(), owner.getId().toString());
+        return voteService.closeVote(poll.getId().toString(), owner.getId().toString());
     }
 
     // Runs action in an outer transaction that stays open until release; acted fires once the action is done

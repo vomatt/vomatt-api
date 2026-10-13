@@ -416,6 +416,7 @@ public class VoteController {
                         "creatorUsername": "alice",
                         "startTime": "2026-10-12T09:00:00+08:00",
                         "endTime": "2026-10-19T09:00:00+08:00",
+                        "deadline": "2026-10-19T09:00:00+08:00",
                         "active": true, "allowMultipleChoices": false, "anonymous": false,
                         "createdAt": "2026-10-09T15:20:31+08:00",
                         "totalVotes": 42, "totalParticipants": 42, "votingActive": false,
@@ -575,8 +576,8 @@ public class VoteController {
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
             @PathVariable String voteId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        voteService.deactivateVote(voteId, principal.userId());
-        log.info("Vote {} deactivated by creator {}", voteId, principal.userId());
+        voteService.closeVote(voteId, principal.userId());
+        log.info("Vote {} closed by creator {}", voteId, principal.userId());
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 

@@ -27,7 +27,7 @@ class VoteMapperTest {
         ReflectionTestUtils.setField(vote, "id", UUID.randomUUID());
         vote.setCreator(User.builder().id(UUID.randomUUID()).username("owner").build());
         vote.setStartTime(start);
-        vote.setEndTime(end);
+        vote.scheduleEnd(end);
         return vote;
     }
 
@@ -73,6 +73,7 @@ class VoteMapperTest {
                 List.of(option("A", 3), option("B", 1)));
 
         assertThat(results.getTotalParticipants()).isEqualTo(4);
+        assertThat(results.getDeadline()).isEqualTo(now.minusDays(1));
         assertThat(results.getOptions()).extracting(VoteResultResponse.VoteOptionResultResponse::getPercentage)
                 .containsExactly(75.0, 25.0);
     }

@@ -114,8 +114,7 @@ public class Vote extends AuditableEntity {
 
     public Vote(String title, String description, User creator, OffsetDateTime endTime) {
         this(title, description, creator);
-        this.endTime = endTime;
-        this.deadline = endTime;
+        scheduleEnd(endTime);
     }
 
     public VoteStatus getStatus() {
@@ -152,7 +151,7 @@ public class Vote extends AuditableEntity {
         return getStatus() == VoteStatus.OPEN;
     }
 
-    /** A Scheduled Poll Closed before Close was limited (Cancelled) ends before its start time: it never opened. */
+    /** Cancelled (legacy data only): a Poll Closed while Scheduled, before ADR 0004, ends before its start time and never opened. */
     public boolean isCancelledBeforeOpening() {
         return endTime != null && startTime != null && !endTime.isAfter(startTime);
     }
@@ -174,6 +173,12 @@ public class Vote extends AuditableEntity {
     public void removeOption(VoteOption option) {
         options.remove(option);
         option.setVote(null);
+    }
+
+    /** Create / edit: the owner's end time is both the Deadline and when the Poll Ends. */
+    public void scheduleEnd(OffsetDateTime endTime) {
+        this.endTime = endTime;
+        this.deadline = endTime;
     }
 
     /**

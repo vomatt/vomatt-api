@@ -665,11 +665,11 @@ class VoteServiceTest {
         }
     }
 
-    // ─── deactivateVote ───────────────────────────────────────────────────────
+    // ─── closeVote ───────────────────────────────────────────────────────────
 
     @Nested
-    @DisplayName("deactivateVote")
-    class DeactivateVoteTests {
+    @DisplayName("closeVote")
+    class CloseVoteTests {
 
         @Test
         @DisplayName("should throw 403 VOTE_FORBIDDEN when non-creator tries to disable")
@@ -678,7 +678,7 @@ class VoteServiceTest {
             vote.setCreator(creator);
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
 
-            assertThatThrownBy(() -> voteService.deactivateVote(voteId.toString(), userId.toString()))
+            assertThatThrownBy(() -> voteService.closeVote(voteId.toString(), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_FORBIDDEN));
 
             assertThat(vote.isActive()).isTrue();
@@ -690,14 +690,13 @@ class VoteServiceTest {
         void shouldCloseWhenOpenUnlisted() {
             OffsetDateTime deadline = OffsetDateTime.now().plusDays(1);
             vote.setStartTime(OffsetDateTime.now().minusHours(1));
-            vote.setEndTime(deadline);
-            vote.setDeadline(deadline);
+            vote.scheduleEnd(deadline);
             vote.setAudience(Audience.UNLISTED);
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
             when(voteRepository.save(vote)).thenReturn(vote);
             stubConvertToVoteResponse(vote);
 
-            voteService.deactivateVote(voteId.toString(), userId.toString());
+            voteService.closeVote(voteId.toString(), userId.toString());
 
             assertThat(vote.getStatus()).isEqualTo(VoteStatus.ENDED);
             assertThat(vote.getEndTime()).isBefore(deadline);
@@ -713,7 +712,7 @@ class VoteServiceTest {
             vote.setEndTime(deadline);
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
 
-            assertThatThrownBy(() -> voteService.deactivateVote(voteId.toString(), userId.toString()))
+            assertThatThrownBy(() -> voteService.closeVote(voteId.toString(), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_CLOSE_PUBLIC_NOT_ALLOWED));
             assertThat(vote.getEndTime()).isEqualTo(deadline);
             verify(voteRepository, never()).save(any());
@@ -728,7 +727,7 @@ class VoteServiceTest {
             vote.setAudience(Audience.UNLISTED);
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
 
-            assertThatThrownBy(() -> voteService.deactivateVote(voteId.toString(), userId.toString()))
+            assertThatThrownBy(() -> voteService.closeVote(voteId.toString(), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_CLOSE_SCHEDULED));
             assertThat(vote.getEndTime()).isEqualTo(deadline);
             verify(voteRepository, never()).save(any());
@@ -744,7 +743,7 @@ class VoteServiceTest {
             when(voteRepository.save(vote)).thenReturn(vote);
             stubConvertToVoteResponse(vote);
 
-            voteService.deactivateVote(voteId.toString(), userId.toString());
+            voteService.closeVote(voteId.toString(), userId.toString());
 
             assertThat(vote.getEndTime()).isEqualTo(ended);
         }
@@ -825,7 +824,7 @@ class VoteServiceTest {
                     () -> voteService.getVoteResults(id, owner),
                     () -> voteService.getVoters(id, owner, null, null),
                     () -> voteService.hasUserVoted(id, owner),
-                    () -> voteService.deactivateVote(id, owner),
+                    () -> voteService.closeVote(id, owner),
                     () -> voteService.deleteVote(id, owner));
             paths.forEach(path -> assertThatThrownBy(path)
                     .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND)));

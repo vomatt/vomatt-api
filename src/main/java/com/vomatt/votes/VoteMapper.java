@@ -81,6 +81,7 @@ public class VoteMapper {
         response.setCreatorUsername(vote.getCreator().getUsername());
         response.setStartTime(vote.getStartTime());
         response.setEndTime(vote.getEndTime());
+        response.setDeadline(vote.getDeadline());
         response.setActive(vote.isActive());
         response.setAllowMultipleChoices(vote.isAllowMultipleChoices());
         response.setAnonymous(vote.isAnonymous());

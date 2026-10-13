@@ -2252,6 +2252,12 @@
             "example" : "alice",
             "type" : "string"
           },
+          "deadline" : {
+            "description" : "Deadline: the end time the owner set; ending early never moves it",
+            "example" : "2026-10-19T09:00:00+08:00",
+            "format" : "date-time",
+            "type" : "string"
+          },
           "description" : {
             "description" : "Optional context for the Poll; null when the owner gave none",
             "example" : "Vote before Friday.",
@@ -2259,7 +2265,7 @@
             "type" : "string"
           },
           "endTime" : {
-            "description" : "When the Poll ended",
+            "description" : "When the Poll ended. Earlier than `deadline` when it ended early",
             "example" : "2026-10-19T09:00:00+08:00",
             "format" : "date-time",
             "type" : "string"
@@ -7958,6 +7964,7 @@
                         "createdAt" : "2026-10-09T15:20:31+08:00",
                         "creatorId" : "0199f2a1-1b4c-7e02-8a9d-6c3f0d2e5b71",
                         "creatorUsername" : "alice",
+                        "deadline" : "2026-10-19T09:00:00+08:00",
                         "description" : "Vote before Friday.",
                         "endTime" : "2026-10-19T09:00:00+08:00",
                         "id" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05",

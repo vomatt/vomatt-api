@@ -41,7 +41,7 @@ public class VoteResponse {
             + "For Polls that ended early before this field existed, it equals `endTime`", example = "2026-10-19T09:00:00+08:00")
     private OffsetDateTime deadline;
 
-    @Schema(description = "False once the owner has Closed the Poll early or cancelled it; true otherwise, including after the end time passed naturally. "
+    @Schema(description = "False once the owner has Closed the Poll early (or, for legacy data, Cancelled it while Scheduled); true otherwise, including after the end time passed naturally. "
             + "Do not use it for state: read `votingActive` and the times instead", example = "true")
     private boolean isActive;
 

@@ -115,8 +115,7 @@ public class VoteService {
         vote.setTitle(request.getTitle());
         vote.setDescription(request.getDescription());
         vote.setStartTime(startTime);
-        vote.setEndTime(request.getEndTime());
-        vote.setDeadline(request.getEndTime());
+        vote.scheduleEnd(request.getEndTime());
         vote.setAnonymous(request.isAnonymous());
         if (request.getVoterVisibility() != null) {
             vote.setVoterVisibility(request.getVoterVisibility());
@@ -345,7 +344,7 @@ public class VoteService {
             .toList();
     }
 
-    public VoteResponse deactivateVote(String voteId, String creatorId) {
+    public VoteResponse closeVote(String voteId, String creatorId) {
         // Exclusive lock: waits for in-flight Ballot changes, and a concurrent Close then sees Ended and keeps its end time
         Vote vote = requireAccessible(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), creatorId);
 
@@ -355,7 +354,7 @@ public class VoteService {
 
         vote.closeAt(OffsetDateTime.now());
         vote = voteRepository.save(vote);
-        log.info("Vote {} deactivated by creator {}", voteId, creatorId);
+        log.info("Vote {} closed by creator {}", voteId, creatorId);
 
         return convertToVoteResponse(vote, creatorId);
     }

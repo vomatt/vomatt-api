@@ -4,7 +4,7 @@ Contract changes that affect the frontend. 💥 BREAKING means frontend code mus
 
 ## 2026-10-14
 
-- Poll response gains `deadline`: the end time the owner set (`endTime` on create / edit sets both). Ending early moves only `endTime`, so `endTime` < `deadline` means the Poll ended early. Polls that ended early before this change have `deadline` equal to `endTime`.
+- Poll response gains `deadline`: the end time the owner set (`endTime` on create / edit sets both). Ending early moves only `endTime`, so `endTime` < `deadline` means the Poll ended early. Polls that ended early before this change have `deadline` equal to `endTime`. `GET /api/votes/{voteId}/results` gains the same `deadline` field.
 - 💥 BREAKING `PUT /api/votes/{voteId}/deactivate` (Close) on an Open Public Poll returns 400 `vote.close.public_not_allowed`; a Public Poll runs to its Deadline (ADR 0004). Only Open Unlisted (and, later, Invite-only) Polls can be Closed.
 - 💥 BREAKING Close on a Scheduled Poll returns 400 `vote.close.scheduled` instead of cancelling it; use `DELETE /api/votes/{voteId}`. Cancelled Polls are no longer produced; existing ones stay Ended. Close on an Ended Poll is still a no-op success.
 - Polls gain an Audience: `POST /api/votes` and `PUT /api/votes/{voteId}` accept `audience` (`PUBLIC` default, or `UNLISTED`); omitting it keeps `PUBLIC` on create and the current value on edit. Audience can change only while the Poll is Scheduled (edit of an Open or Ended Poll is already 400 `vote.not_editable`). `INVITE_ONLY` is reserved and not supported yet: 400 `vote.audience.unsupported`.

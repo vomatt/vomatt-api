@@ -1,42 +1,71 @@
 <!DOCTYPE html>
-<!-- Styles are inline: several mail clients (Outlook, some webmail) drop <style> blocks -->
-<html xmlns:th="http://www.thymeleaf.org">
+<!-- Styles are inline and laid out with tables: several mail clients (Outlook, some webmail) drop <style> blocks and flexbox -->
+<html xmlns:th="http://www.thymeleaf.org" th:lang="${#locale.toLanguageTag()}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title th:text="#{email.welcome.title}">Welcome to Vomatt!</title>
 </head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-    <div style="background-color: #f9f9f9; border-radius: 5px; padding: 20px; border: 1px solid #ddd;">
-        <div style="text-align: center; padding-bottom: 10px; border-bottom: 1px solid #ddd; margin-bottom: 20px;">
-            <h1 style="color: #2c5282; margin-bottom: 10px;" th:text="#{email.welcome.title}">Welcome to Vomatt!</h1>
-        </div>
+<body style="margin: 0; padding: 0; background-color: #f5f3ee;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f5f3ee;">
+    <tr>
+        <td align="center" style="padding: 40px 16px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                   style="max-width: 600px; font-family: Geist, -apple-system, 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', 'Helvetica Neue', Arial, sans-serif; color: #1a1917;">
+                <tr>
+                    <td style="padding: 0 4px 20px;">
+                        <a href="https://vomatt.com" th:href="${siteUrl}" style="font-size: 20px; font-weight: 600; letter-spacing: -0.03em; color: #1a1917; text-decoration: none;">vomatt</a>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="background-color: #ffffff; border: 1px solid #e3dfd7; border-radius: 12px; padding: 40px;">
+                        <h1 style="margin: 0 0 20px; font-size: 32px; font-weight: 400; line-height: 1.25; letter-spacing: -0.03em;"
+                            th:text="#{email.welcome.title}">Welcome to Vomatt!</h1>
 
-        <p th:text="#{email.welcome.greeting(${username})}">Hello {username},</p>
+                        <p style="margin: 0 0 20px; font-size: 15px; line-height: 1.6;">
+                            <span th:text="#{email.welcome.greeting(${username})}">Hello {username},</span><br>
+                            <span th:text="#{email.welcome.message}">Your Vomatt account is ready.</span>
+                        </p>
 
-        <div style="background-color: #e8f5e8; border-left: 4px solid #4caf50; padding: 15px; margin: 20px 0; border-radius: 4px;">
-            <p th:text="#{email.welcome.message}">Your Vomatt account is ready.</p>
-        </div>
+                        <p style="margin: 0 0 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #6b6760;"
+                           th:text="#{email.welcome.getting.started}">Getting Started</p>
+                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                               style="border: 1px solid #e3dfd7; border-radius: 12px; border-collapse: separate; margin-bottom: 20px;">
+                            <tr>
+                                <td width="40" valign="top" style="padding: 14px 0 14px 16px; font-family: 'Geist Mono', ui-monospace, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.6; color: #6b6760; border-bottom: 1px solid #e3dfd7;">01</td>
+                                <td valign="top" style="padding: 14px 16px 14px 0; font-size: 15px; line-height: 1.6; border-bottom: 1px solid #e3dfd7;" th:text="#{email.welcome.step1}">Step 1</td>
+                            </tr>
+                            <tr>
+                                <td width="40" valign="top" style="padding: 14px 0 14px 16px; font-family: 'Geist Mono', ui-monospace, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.6; color: #6b6760; border-bottom: 1px solid #e3dfd7;">02</td>
+                                <td valign="top" style="padding: 14px 16px 14px 0; font-size: 15px; line-height: 1.6; border-bottom: 1px solid #e3dfd7;" th:text="#{email.welcome.step2}">Step 2</td>
+                            </tr>
+                            <tr>
+                                <td width="40" valign="top" style="padding: 14px 0 14px 16px; font-family: 'Geist Mono', ui-monospace, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.6; color: #6b6760;">03</td>
+                                <td valign="top" style="padding: 14px 16px 14px 0; font-size: 15px; line-height: 1.6;" th:text="#{email.welcome.step3}">Step 3</td>
+                            </tr>
+                        </table>
 
-        <div style="background-color: #f0f8ff; border-radius: 5px; padding: 15px; margin: 20px 0;">
-            <h3 style="color: #2c5282; margin-bottom: 10px;" th:text="#{email.welcome.getting.started}">Getting Started:</h3>
-            <ol style="margin: 10px 0; padding-left: 20px;">
-                <li style="margin: 8px 0; color: #2c5282;" th:text="#{email.welcome.step1}">Step 1</li>
-                <li style="margin: 8px 0; color: #2c5282;" th:text="#{email.welcome.step2}">Step 2</li>
-                <li style="margin: 8px 0; color: #2c5282;" th:text="#{email.welcome.step3}">Step 3</li>
-            </ol>
-        </div>
+                        <p style="margin: 0 0 20px; font-size: 13px; line-height: 1.6; color: #6b6760;"
+                           th:text="#{email.welcome.support}">If you have any questions, our support team is here to help.</p>
 
-        <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px; padding: 15px; margin: 20px 0;">
-            <p th:text="#{email.welcome.support}">If you have any questions, our support team is here to help.</p>
-        </div>
-
-        <p th:utext="#{email.welcome.signature}">Welcome aboard,<br>The Vomatt Team</p>
-
-        <div style="font-size: 12px; color: #666; text-align: center; margin-top: 30px; padding-top: 10px; border-top: 1px solid #ddd;">
-            <p th:text="#{email.verification.footer.auto}">This email is sent automatically, please do not reply.</p>
-            <p th:text="#{email.verification.footer.copyright(${year})}">&copy; 2026 Vomatt. All rights reserved.</p>
-        </div>
-    </div>
+                        <p style="margin: 0; font-size: 15px; line-height: 1.6;" th:utext="#{email.welcome.signature}">Welcome aboard,<br>The Vomatt Team</p>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 20px 4px 0; font-size: 13px; line-height: 1.6; color: #6b6760;">
+                        <p style="margin: 0 0 8px;" th:text="#{email.footer.auto}">This email is sent automatically, please do not reply.</p>
+                        <p style="margin: 0;">
+                            <a href="https://vomatt.com/terms-of-service" th:href="|${siteUrl}/terms-of-service|" style="color: #6b6760; text-decoration: underline;" th:text="#{email.footer.terms}">Terms and Conditions</a>
+                            &nbsp;·&nbsp;
+                            <a href="https://vomatt.com/privacy-policy" th:href="|${siteUrl}/privacy-policy|" style="color: #6b6760; text-decoration: underline;" th:text="#{email.footer.privacy}">Privacy Policy</a>
+                            &nbsp;·&nbsp;
+                            <a href="https://vomatt.com/contact-us" th:href="|${siteUrl}/contact-us|" style="color: #6b6760; text-decoration: underline;" th:text="#{email.footer.contact}">Contact Us</a>
+                        </p>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+</table>
 </body>
 </html>

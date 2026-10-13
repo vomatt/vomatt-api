@@ -38,6 +38,7 @@ DB_PASSWORD=<password>
 # Optional: send real OTP emails instead of reading them from Redis
 EMAIL_ENABLED=true
 EMAIL_FROM=<sender>
+EMAIL_SITE_URL=<frontend-origin>   # base of links in emails, defaults to https://vomatt.com
 MAIL_HOST=smtp.gmail.com
 MAIL_PORT=587
 MAIL_USERNAME=<smtp-user>

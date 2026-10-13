@@ -13,7 +13,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.thymeleaf.spring6.SpringTemplateEngine;
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver;
 
-import java.time.Year;
 import java.util.Locale;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -44,7 +43,8 @@ class EmailTemplateTest {
         emailService.sendPreSignupEmail("a@example.com", "123456");
 
         String html = sentHtml();
-        assertThat(html).contains("123456", "感謝您註冊", "3 分鐘", "© " + Year.now().getValue() + " Vomatt").doesNotContain("??");
+        assertThat(html).contains("123456", "感謝您註冊", "3 分鐘", "點一下驗證碼", "服務條款", "https://staging.vomatt.com/privacy-policy")
+                .doesNotContain("??", "©");
     }
 
     @Test
@@ -54,16 +54,16 @@ class EmailTemplateTest {
 
         String html = sentHtml();
         assertThat(html).contains("654321", "complete your login", "expire in 3 minutes",
-                "© " + Year.now().getValue() + " Vomatt").doesNotContain("??", "pre-signup");
+                "Tap the code", "Contact Us", "https://staging.vomatt.com/terms-of-service").doesNotContain("??", "pre-signup", "©");
     }
 
     @Test
     void shouldRenderWelcomeEmailWhenLocaleIsZhTwOrEn() throws Exception {
         emailService.sendWelcomeEmail("a@example.com", "Amy", ZH_TW);
-        assertThat(sentHtml()).contains("您好 Amy", "投下您的第一票").doesNotContain("??");
+        assertThat(sentHtml()).contains("您好 Amy", "投下您的第一票", "隱私權政策", "lang=\"zh-TW\"").doesNotContain("??");
 
         emailService.sendWelcomeEmail("b@example.com", "Bob", Locale.ENGLISH);
-        assertThat(sentHtml()).contains("Hello Bob", "cast your first Ballot").doesNotContain("??");
+        assertThat(sentHtml()).contains("Hello Bob", "cast your first Ballot", "Privacy Policy", "lang=\"en\"").doesNotContain("??");
     }
 
     private String sentHtml() throws Exception {
@@ -88,6 +88,7 @@ class EmailTemplateTest {
 
         EmailServiceImpl service = new EmailServiceImpl(mailSender, engine, messageSource);
         ReflectionTestUtils.setField(service, "fromEmail", "noreply@vomatt.com");
+        ReflectionTestUtils.setField(service, "siteUrl", "https://staging.vomatt.com");
         ReflectionTestUtils.setField(service, "otpTtlSeconds", 180L);
         return service;
     }

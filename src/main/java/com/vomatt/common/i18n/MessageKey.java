@@ -91,6 +91,8 @@ public enum MessageKey {
     VOTE_END_BEFORE_START("vote.end_time.before_start"),
     VOTE_FORBIDDEN("vote.forbidden"),
     VOTE_DELETE_WINDOW_PASSED("vote.delete.window_passed"),
+    VOTE_CLOSE_PUBLIC_NOT_ALLOWED("vote.close.public_not_allowed"),
+    VOTE_CLOSE_SCHEDULED("vote.close.scheduled"),
     VOTE_AUDIENCE_UNSUPPORTED("vote.audience.unsupported"),
     VOTE_OPTIONS_MIN("vote.options.min"),
     VOTE_OPTIONS_MAX("vote.options.max"),

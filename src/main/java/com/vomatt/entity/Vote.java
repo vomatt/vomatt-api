@@ -55,8 +55,13 @@ public class Vote extends AuditableEntity {
     @Column(name = "start_time")
     private OffsetDateTime startTime;
 
+    /** When the Poll Ends; equals the Deadline unless it ended early (Close). */
     @Column(name = "end_time", nullable = false)
     private OffsetDateTime endTime;
+
+    /** The end time the owner set; ending early never moves it. */
+    @Column(name = "deadline", nullable = false)
+    private OffsetDateTime deadline;
 
     /** Set when the owner Deletes the Poll; a Deleted Poll is hidden from everyone but its data is kept. */
     @Column(name = "deleted_at")
@@ -110,6 +115,7 @@ public class Vote extends AuditableEntity {
     public Vote(String title, String description, User creator, OffsetDateTime endTime) {
         this(title, description, creator);
         this.endTime = endTime;
+        this.deadline = endTime;
     }
 
     public VoteStatus getStatus() {
@@ -146,7 +152,7 @@ public class Vote extends AuditableEntity {
         return getStatus() == VoteStatus.OPEN;
     }
 
-    /** A Scheduled Poll that was Closed (cancelled) ends before its start time: it never opened. */
+    /** A Scheduled Poll Closed before Close was limited (Cancelled) ends before its start time: it never opened. */
     public boolean isCancelledBeforeOpening() {
         return endTime != null && startTime != null && !endTime.isAfter(startTime);
     }
@@ -171,14 +177,21 @@ public class Vote extends AuditableEntity {
     }
 
     /**
-     * Close: an Open Poll ends now; a Scheduled Poll is cancelled (ends before it ever starts);
-     * an Ended Poll keeps its real end time.
+     * Close: an Open Unlisted or Invite-only Poll ends now, keeping its Deadline; an Ended Poll is left as is.
+     * A Public Poll runs to its Deadline and a Scheduled Poll is Deleted instead (ADR 0004).
      */
-    public void deactivate() {
-        if (getStatus() == VoteStatus.ENDED) {
+    public void closeAt(OffsetDateTime now) {
+        VoteStatus status = statusAt(now);
+        if (status == VoteStatus.ENDED) {
             return;
         }
+        if (status == VoteStatus.SCHEDULED) {
+            throw ApiException.badRequest(MessageKey.VOTE_CLOSE_SCHEDULED);
+        }
+        if (audience == Audience.PUBLIC) {
+            throw ApiException.badRequest(MessageKey.VOTE_CLOSE_PUBLIC_NOT_ALLOWED);
+        }
         this.isActive = false;
-        this.endTime = OffsetDateTime.now();
+        this.endTime = now;
     }
 }

@@ -32,6 +32,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.entity.Audience;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.repository.PostgresRepositoryTest;
@@ -84,7 +85,10 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
     }
 
     private void createPoll(OffsetDateTime start, OffsetDateTime end) {
-        tx.executeWithoutResult(s -> poll = persistPoll(owner, start, end, "A", "B"));
+        tx.executeWithoutResult(s -> {
+            poll = persistPoll(owner, start, end, "A", "B");
+            poll.setAudience(Audience.UNLISTED); // a Public Poll cannot be Closed
+        });
         optionA = voteOptionRepository.findByVoteIdOrderByDisplayOrder(poll.getId()).getFirst().getId();
     }
 

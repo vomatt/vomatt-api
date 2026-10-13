@@ -64,6 +64,7 @@ public class VoteController {
                 "creatorUsername": "alice",
                 "startTime": "2026-10-12T09:00:00+08:00",
                 "endTime": "2026-10-19T09:00:00+08:00",
+                "deadline": "2026-10-19T09:00:00+08:00",
                 "active": true,
                 "allowMultipleChoices": false,
                 "anonymous": false,
@@ -160,7 +161,7 @@ public class VoteController {
     @CommonApiResponses
     @Operation(summary = "Edit a Scheduled Poll", description = """
             **Auth**: required (owner only)
-            **Precondition**: the Poll is Scheduled (its start time has not arrived and it has not been Closed)
+            **Precondition**: the Poll is Scheduled (its start time has not arrived)
             **Behavior**: replaces title, description, times, Voter Visibility, Audience, tags and options with the body (same body and validation as create). \
             An omitted `startTime`, `voterVisibility` or `audience` keeps the current value; the Poll does not open on edit. \
             Audience can change only here, so it is fixed once the Poll is Open.
@@ -545,11 +546,13 @@ public class VoteController {
     @CommonApiResponses
     @Operation(summary = "Close a Poll", description = """
             **Auth**: required (owner only)
-            **Precondition**: none; works in any Poll state
-            **Behavior**: Open Poll: ends now (Ended). Scheduled Poll: cancelled, i.e. Ended without ever accepting Ballots (`endTime` becomes earlier than `startTime`). \
-            Ended Poll: nothing changes. Fetch the Poll again to see the new state.
-            **Side effects**: the Poll becomes Ended, so results and Voter Visibility open up; the owner and Participants receive an Ended Notification, except for a Poll Closed while Scheduled.
+            **Precondition**: the Poll is Open and its Audience is not Public (Unlisted or Invite-only); an Ended Poll is accepted as a no-op
+            **Behavior**: Open Poll: ends now (Ended); `endTime` becomes the close time while `deadline` keeps the owner's end time. \
+            Ended Poll: nothing changes. A Public Poll runs to its Deadline; a Scheduled Poll is Deleted instead. Fetch the Poll again to see the new state.
+            **Side effects**: the Poll becomes Ended, so results and Voter Visibility open up; the owner and Participants receive an Ended Notification.
             **Errors**:
+            - 400 `vote.close.public_not_allowed`: the Poll is Public and Open
+            - 400 `vote.close.scheduled`: the Poll is Scheduled; use `DELETE /api/votes/{voteId}` instead
             - 403 `vote.forbidden`: the caller is not the owner
             - 404 `vote.not_found`: Poll does not exist or is Deleted
             """)
@@ -558,6 +561,10 @@ public class VoteController {
                     { "success": true, "data": { "success": true, "id": null, "status": null, "message": null },
                       "message": null, "errorCode": null, "error": null }
                     """)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Poll is Public (`vote.close.public_not_allowed`) or Scheduled (`vote.close.scheduled`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = {
+                    @ExampleObject(name = "vote.close.public_not_allowed", value = ERR_MESSAGE + "A Public Poll cannot be closed early; it runs until its deadline" + ERR_CODE + "vote.close.public_not_allowed" + ERR_ERROR + "A Public Poll cannot be closed early; it runs until its deadline" + ERR_END),
+                    @ExampleObject(name = "vote.close.scheduled", value = ERR_MESSAGE + "A scheduled Poll cannot be closed; delete it instead" + ERR_CODE + "vote.close.scheduled" + ERR_ERROR + "A scheduled Poll cannot be closed; delete it instead" + ERR_END)}))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Caller is not the owner (`vote.forbidden`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.forbidden", value = ERR_MESSAGE + "Not allowed to modify this Poll" + ERR_CODE + "vote.forbidden" + ERR_ERROR + "Not allowed to modify this Poll" + ERR_END)))

@@ -12,7 +12,7 @@ import lombok.Data;
 
 @Data
 @Schema(description = "A Poll. Its state is derived from `startTime`, `endTime` and `votingActive`: Scheduled (now < startTime), "
-        + "Open (`votingActive` = true), Ended (now >= endTime). A Cancelled Poll is Ended with `endTime` <= `startTime`. "
+        + "Open (`votingActive` = true), Ended (now >= endTime). A Cancelled Poll (no longer produced) is Ended with `endTime` <= `startTime`. "
         + "While the Poll has not Ended, per-option counts are Sealed (`options[].votes` is null)")
 public class VoteResponse {
     
@@ -34,8 +34,12 @@ public class VoteResponse {
     @Schema(description = "When the Poll opens (or opened)", example = "2026-10-12T09:00:00+08:00")
     private OffsetDateTime startTime;
 
-    @Schema(description = "When the Poll ends (or ended). Set to the close time when the owner Closes the Poll early", example = "2026-10-19T09:00:00+08:00")
+    @Schema(description = "When the Poll ends (or actually ended). Equals `deadline` unless the Poll ended early: then it is the moment it Ended", example = "2026-10-19T09:00:00+08:00")
     private OffsetDateTime endTime;
+
+    @Schema(description = "Deadline: the end time the owner set. Ending early never moves it, so `endTime` < `deadline` means the Poll ended early. "
+            + "For Polls that ended early before this field existed, it equals `endTime`", example = "2026-10-19T09:00:00+08:00")
+    private OffsetDateTime deadline;
 
     @Schema(description = "False once the owner has Closed the Poll early or cancelled it; true otherwise, including after the end time passed naturally. "
             + "Do not use it for state: read `votingActive` and the times instead", example = "true")

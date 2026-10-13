@@ -41,7 +41,7 @@ public class OpenAPIConfig {
     /** Page of Poll summaries, shared by the Poll listing and user Poll listing endpoints. */
     public static final String EX_PAGE_OF_POLLS = "{ \"success\": true, \"data\": { \"items\": [ { \"id\": \"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05\", "
             + "\"title\": \"Which language should we use for the next side project?\", \"creatorUsername\": \"alice\", "
-            + "\"startTime\": \"2026-10-12T09:00:00+08:00\", \"endTime\": \"2026-10-19T09:00:00+08:00\", \"votingActive\": true, "
+            + "\"startTime\": \"2026-10-12T09:00:00+08:00\", \"endTime\": \"2026-10-19T09:00:00+08:00\", \"deadline\": \"2026-10-19T09:00:00+08:00\", \"votingActive\": true, "
             + "\"participantCount\": 42, \"commentCount\": 7, \"voterVisibility\": \"OWNER\", \"audience\": \"PUBLIC\", \"myOptionId\": null, "
             + "\"options\": [ { \"text\": \"Java\", \"votes\": null }, { \"text\": \"Kotlin\", \"votes\": null } ] } ], "
             + "\"nextCursor\": \"MDE5OWYyYTMtNWI3ZS03ZDQwLWExYzgtOWUzYjJmNmQ0YzA1fDIwMjYtMTAtMTlUMDE6MDA6MDBa\" }, "

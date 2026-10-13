@@ -116,6 +116,7 @@ public class VoteService {
         vote.setDescription(request.getDescription());
         vote.setStartTime(startTime);
         vote.setEndTime(request.getEndTime());
+        vote.setDeadline(request.getEndTime());
         vote.setAnonymous(request.isAnonymous());
         if (request.getVoterVisibility() != null) {
             vote.setVoterVisibility(request.getVoterVisibility());
@@ -352,7 +353,7 @@ public class VoteService {
             throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
         }
 
-        vote.deactivate();
+        vote.closeAt(OffsetDateTime.now());
         vote = voteRepository.save(vote);
         log.info("Vote {} deactivated by creator {}", voteId, creatorId);
 

@@ -41,6 +41,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -248,6 +249,46 @@ class VoteControllerTest {
                             .content("{\"userIds\": []}"))
                     .andExpect(status().isBadRequest());
             verify(voteService, never()).addInvitees(any(), any(), any());
+        }
+
+        private String ids(int count) {
+            return Stream.generate(() -> "\"" + UUID.randomUUID() + "\"").limit(count).collect(Collectors.joining(","));
+        }
+
+        private void assertValidationFailed(String path, String body) throws Exception {
+            authenticate();
+            mockMvc.perform(post(path, voteId).contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errorCode").value(MessageKey.COMMON_VALIDATION_FAILED.code()));
+            verify(voteService, never()).addInvitees(any(), any(), any());
+            verify(voteService, never()).createVote(any(), any());
+        }
+
+        @Test
+        @DisplayName("should return 400 common.validation_failed when adding more than 100 Invitees")
+        void shouldReturn400WhenTooManyUserIds() throws Exception {
+            assertValidationFailed("/api/votes/{voteId}/invitees", "{\"userIds\": [" + ids(101) + "]}");
+        }
+
+        @Test
+        @DisplayName("should return 400 common.validation_failed when an added Invitee ID is null")
+        void shouldReturn400WhenUserIdNull() throws Exception {
+            assertValidationFailed("/api/votes/{voteId}/invitees", "{\"userIds\": [null]}");
+        }
+
+        private static final String POLL_BODY = "{\"title\":\"Q\",\"endTime\":\"2099-01-01T00:00:00Z\","
+                + "\"options\":[{\"text\":\"A\"},{\"text\":\"B\"}],\"audience\":\"INVITE_ONLY\",\"inviteeIds\":[";
+
+        @Test
+        @DisplayName("should return 400 common.validation_failed when creating with more than 100 inviteeIds")
+        void shouldReturn400WhenTooManyInviteeIdsOnCreate() throws Exception {
+            assertValidationFailed("/api/votes", POLL_BODY + ids(101) + "]}");
+        }
+
+        @Test
+        @DisplayName("should return 400 common.validation_failed when creating with a null inviteeId")
+        void shouldReturn400WhenInviteeIdNullOnCreate() throws Exception {
+            assertValidationFailed("/api/votes", POLL_BODY + "null]}");
         }
 
         @Test

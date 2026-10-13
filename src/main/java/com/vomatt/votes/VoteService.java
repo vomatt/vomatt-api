@@ -93,7 +93,7 @@ public class VoteService {
 
         vote = voteRepository.save(vote);
         if (request.getInviteeIds() != null) {
-            addInvitees(vote, request.getInviteeIds());
+            insertInvitees(vote, request.getInviteeIds());
         }
         log.info("Vote created: {} by user: {}", vote.getId(), creatorId);
 
@@ -111,17 +111,15 @@ public class VoteService {
      */
     public VoteResponse updateVote(String voteId, CreateVoteRequest request, String userId) {
         // Exclusive lock: a first Ballot at the opening moment either commits first (then this sees Open) or waits
-        Vote vote = requireAccessible(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), userId);
-        if (!vote.isOwnedBy(userId)) {
-            throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
-        }
+        Vote vote = requireOwned(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), userId);
         if (vote.getStatus() != VoteStatus.SCHEDULED) {
             throw ApiException.badRequest(MessageKey.VOTE_NOT_EDITABLE);
         }
         // An omitted start time keeps the scheduled one; create's "now" default would open the Poll on edit
         OffsetDateTime startTime = request.getStartTime() != null ? request.getStartTime() : vote.getStartTime();
         validateCreateVoteRequest(request, startTime);
-        Audience audience = request.getAudience() != null ? request.getAudience() : vote.getAudience();
+        Audience oldAudience = vote.getAudience();
+        Audience audience = request.getAudience() != null ? request.getAudience() : oldAudience;
         validateInviteeIds(request, audience);
 
         vote.setTitle(request.getTitle());
@@ -146,9 +144,9 @@ public class VoteService {
         vote = voteRepository.save(vote);
 
         // Invitees exist only on an Invite-only Poll; a null list keeps them
-        if (audience != Audience.INVITE_ONLY) {
+        if (oldAudience == Audience.INVITE_ONLY && audience != Audience.INVITE_ONLY) {
             replaceInvitees(vote, List.of());
-        } else if (request.getInviteeIds() != null) {
+        } else if (audience == Audience.INVITE_ONLY && request.getInviteeIds() != null) {
             replaceInvitees(vote, request.getInviteeIds());
         }
 
@@ -366,11 +364,7 @@ public class VoteService {
 
     public VoteResponse closeVote(String voteId, String creatorId) {
         // Exclusive lock: waits for in-flight Ballot changes, and a concurrent Close then sees Ended and keeps its end time
-        Vote vote = requireAccessible(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), creatorId);
-
-        if (!vote.isOwnedBy(creatorId)) {
-            throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
-        }
+        Vote vote = requireOwned(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), creatorId);
 
         vote.closeAt(OffsetDateTime.now());
         vote = voteRepository.save(vote);
@@ -385,10 +379,7 @@ public class VoteService {
      */
     public void deleteVote(String voteId, String userId) {
         // Exclusive lock: an in-flight Ballot finishes first, and none can land once Delete returns
-        Vote vote = requireAccessible(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), userId);
-        if (!vote.isOwnedBy(userId)) {
-            throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
-        }
+        Vote vote = requireOwned(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), userId);
         OffsetDateTime now = OffsetDateTime.now();
         if (!vote.canDeleteAt(now, voteConfig.getDeleteWindow())) {
             throw ApiException.badRequest(MessageKey.VOTE_DELETE_WINDOW_PASSED, voteConfig.getDeleteWindow().toMinutes());
@@ -405,22 +396,15 @@ public class VoteService {
     /** Invitees of a Poll with whether each holds a Ballot (owner only), earliest invited first. */
     @Transactional(readOnly = true)
     public List<InviteeResponse> getInvitees(String voteId, String userId) {
-        Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
-        if (!vote.isOwnedBy(userId)) {
-            throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
-        }
-        return invitees(vote.getId());
+        return invitees(requireOwned(voteRepository.findById(UUID.fromString(voteId)), userId).getId());
     }
 
     /** Adds Invitees to a Scheduled or Open Invite-only Poll (owner only); users already invited are skipped. */
     public List<InviteeResponse> addInvitees(String voteId, InviteesRequest request, String userId) {
         // Exclusive lock: serializes with Invitee removal and Ballot changes, so concurrent adds cannot collide
-        Vote vote = requireAccessible(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), userId);
-        if (!vote.isOwnedBy(userId)) {
-            throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
-        }
+        Vote vote = requireOwned(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), userId);
         vote.checkInviteesEditable(OffsetDateTime.now());
-        addInvitees(vote, request.getUserIds());
+        insertInvitees(vote, request.getUserIds());
         log.info("Invitees added to vote {} by creator {}", voteId, userId);
         return invitees(vote.getId());
     }
@@ -428,10 +412,7 @@ public class VoteService {
     /** Removes one Invitee (owner only); refused when they hold a Ballot, a no-op when they are not invited. */
     public List<InviteeResponse> removeInvitee(String voteId, String inviteeUserId, String userId) {
         // Exclusive lock: a Ballot by this Invitee either committed first (then it is seen) or waits and then loses access
-        Vote vote = requireAccessible(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), userId);
-        if (!vote.isOwnedBy(userId)) {
-            throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
-        }
+        Vote vote = requireOwned(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), userId);
         vote.checkInviteesEditable(OffsetDateTime.now());
         UUID inviteeUuid = UUID.fromString(inviteeUserId);
         inviteeRepository.findByVoteIdAndUserId(vote.getId(), inviteeUuid).ifPresent(invitee -> {
@@ -452,13 +433,14 @@ public class VoteService {
     }
 
     // Duplicates, the owner (never an Invitee) and users already invited are skipped
-    private void addInvitees(Vote vote, Collection<UUID> userIds) {
+    private void insertInvitees(Vote vote, Collection<UUID> userIds) {
         Set<UUID> ids = new HashSet<>(userIds);
         ids.remove(vote.getCreator().getId());
         if (ids.isEmpty()) {
             return;
         }
-        List<User> users = userRepository.findAllById(ids);
+        // Suspended users cannot be invited, same as unknown ones
+        List<User> users = userRepository.findAllById(ids).stream().filter(User::isActive).toList();
         if (users.size() != ids.size()) {
             throw ApiException.badRequest(MessageKey.VOTE_INVITEE_IDS_INVALID);
         }
@@ -477,7 +459,7 @@ public class VoteService {
             .toList());
         // Hibernate flushes inserts before deletes; flush now so a re-added user cannot hit UNIQUE (vote_id, user_id)
         inviteeRepository.flush();
-        addInvitees(vote, userIds);
+        insertInvitees(vote, userIds);
     }
 
     /**
@@ -495,6 +477,15 @@ public class VoteService {
         return vote.filter(v -> v.isVisibleTo(viewerId,
                 () -> inviteeRepository.existsByVoteIdAndUserId(v.getId(), UUID.fromString(viewerId))))
             .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
+    }
+
+    // Owner-only actions: the access lookup first (404), then 403 for anyone but the owner
+    private Vote requireOwned(Optional<Vote> vote, String userId) {
+        Vote owned = requireAccessible(vote, userId);
+        if (!owned.isOwnedBy(userId)) {
+            throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
+        }
+        return owned;
     }
 
     private VoteResponse convertToVoteResponse(UUID voteId, String userId) {

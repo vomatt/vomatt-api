@@ -609,6 +609,8 @@ class VoteServiceTest {
             request.setAudience(null);
             assertThat(voteService.updateVote(voteId.toString(), request, userId.toString()).getAudience())
                     .isEqualTo(Audience.UNLISTED);
+            // Never Invite-only, so there are no Invitees to clear
+            verifyNoInteractions(inviteeRepository);
         }
 
         @Test
@@ -1023,6 +1025,21 @@ class VoteServiceTest {
             when(userRepository.findAllById(any())).thenReturn(List.of());
             InviteesRequest invite = new InviteesRequest();
             invite.setUserIds(List.of(UUID.randomUUID()));
+
+            assertThatThrownBy(() -> voteService.addInvitees(voteId.toString(), invite, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_INVITEE_IDS_INVALID));
+            verify(inviteeRepository, never()).saveAllAndFlush(any());
+        }
+
+        @Test
+        @DisplayName("should throw 400 VOTE_INVITEE_IDS_INVALID when an invited user is suspended")
+        void shouldRefuseAddWhenUserSuspended() {
+            inviteOnly(OffsetDateTime.now().plusDays(1));
+            User suspended = User.builder().id(UUID.randomUUID()).active(false).build();
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(userRepository.findAllById(Set.of(suspended.getId()))).thenReturn(List.of(suspended));
+            InviteesRequest invite = new InviteesRequest();
+            invite.setUserIds(List.of(suspended.getId()));
 
             assertThatThrownBy(() -> voteService.addInvitees(voteId.toString(), invite, userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_INVITEE_IDS_INVALID));

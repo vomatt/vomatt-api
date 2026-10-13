@@ -124,7 +124,7 @@ public class VoteController {
             **Side effects**: usage count of each attached tag +1 for a PUBLIC Poll (UNLISTED and INVITE_ONLY Polls are not counted); the creation is audit-logged.
             **Errors**:
                     - 400 `vote.invitee.not_invite_only`: `inviteeIds` is not empty but `audience` is not INVITE_ONLY
-                    - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user
+                    - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended
                     - 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true
                     - 400 `vote.options.min`: fewer than 2 options
                     - 400 `vote.options.max`: more than 10 options
@@ -178,7 +178,7 @@ public class VoteController {
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
             - 400 `vote.not_editable`: the Poll is Open or Ended
             - 400 `vote.invitee.not_invite_only`: `inviteeIds` is not empty but the resulting Audience is not INVITE_ONLY
-            - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user
+            - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended
             - 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true
             - 400 `vote.options.min`: fewer than 2 options
             - 400 `vote.options.max`: more than 10 options
@@ -635,8 +635,8 @@ public class VoteController {
             **Errors**:
             - 400 `vote.invitee.not_invite_only`: the Poll is not INVITE_ONLY
             - 400 `vote.ended`: the Poll has Ended
-            - 400 `vote.invitee.ids_invalid`: one of `userIds` is not an existing user
-            - 400 `common.validation_failed`: `userIds` is empty
+            - 400 `vote.invitee.ids_invalid`: one of `userIds` is not an existing user or is suspended
+            - 400 `common.validation_failed`: `userIds` is empty, holds more than 100 IDs or a null element
             - 403 `vote.forbidden`: the caller is not the owner
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
             """,
@@ -648,7 +648,7 @@ public class VoteController {
             content = @Content(examples = @ExampleObject(name = "Invitees", value = EX_INVITEES)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Poll is not Invite-only (`vote.invitee.not_invite_only`), has Ended (`vote.ended`), or a user does not exist (`vote.invitee.ids_invalid`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "vote.invitee.ids_invalid", value = ERR_MESSAGE + "One or more invited users do not exist" + ERR_CODE + "vote.invitee.ids_invalid" + ERR_ERROR + "One or more invited users do not exist" + ERR_END)))
+                    examples = @ExampleObject(name = "vote.invitee.ids_invalid", value = ERR_MESSAGE + "One or more invited users do not exist or are suspended" + ERR_CODE + "vote.invitee.ids_invalid" + ERR_ERROR + "One or more invited users do not exist or are suspended" + ERR_END)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Caller is not the owner (`vote.forbidden`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.forbidden", value = ERR_MESSAGE + "Not allowed to modify this Poll" + ERR_CODE + "vote.forbidden" + ERR_ERROR + "Not allowed to modify this Poll" + ERR_END)))

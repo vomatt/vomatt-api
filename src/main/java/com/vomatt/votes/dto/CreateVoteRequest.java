@@ -65,10 +65,11 @@ public class CreateVoteRequest {
     private Audience audience;
 
     @Schema(description = "User IDs to invite; only for an INVITE_ONLY Poll (otherwise 400 `vote.invitee.not_invite_only`). "
-            + "Duplicates and the owner's own ID are ignored; unknown IDs are rejected with 400 `vote.invitee.ids_invalid`. "
+            + "At most 100 IDs; null elements are rejected. Duplicates and the owner's own ID are ignored; unknown or suspended users are rejected with 400 `vote.invitee.ids_invalid`. "
             + "On edit the list replaces the current Invitees; null keeps them (and an Audience other than INVITE_ONLY removes them)",
             example = "[\"0199f2a1-2c5d-7f13-9b0e-7d4a1e3f6c82\"]", nullable = true)
-    private List<UUID> inviteeIds;
+    @Size(max = 100, message = "Maximum 100 users can be invited at once")
+    private List<@NotNull(message = "Invitee ID cannot be null") UUID> inviteeIds;
 
     @Size(max = 5, message = "Maximum 5 tags can be selected")
     @Schema(description = "IDs of up to 5 existing tags (see `GET /api/tags`); null or empty means no tags. Unknown IDs are rejected with 400 `tag.ids.invalid`",

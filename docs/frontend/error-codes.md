@@ -73,7 +73,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `vote.close.public_not_allowed` | 400 | 公開投票不可提早結束，會持續到截止時間 | A Public Poll cannot be closed early; it runs until its deadline | Show message so the user can fix the input | Vote |
 | `vote.close.scheduled` | 400 | 尚未開始的投票無法結束，請改為刪除 | A scheduled Poll cannot be closed; delete it instead | Show message so the user can fix the input | Vote |
 | `vote.invitee.not_invite_only` | 400 | 只有僅限受邀者的投票可以設定受邀者 | Invitees can only be set on an Invite-only Poll | Show message so the user can fix the input | Vote, VoteService |
-| `vote.invitee.ids_invalid` | 400 | 部分受邀使用者不存在 | One or more invited users do not exist | Show message so the user can fix the input | VoteService |
+| `vote.invitee.ids_invalid` | 400 | 部分受邀使用者不存在或已停權 | One or more invited users do not exist or are suspended | Show message so the user can fix the input | VoteService |
 | `vote.invitee.has_ballot` | 400 | 已投票的受邀者無法移除 | An Invitee who holds a Ballot cannot be removed | Show message so the user can fix the input | VoteService |
 | `vote.options.min` | 400 | 至少需要 {0} 個選項 | Minimum {0} options required | Show message so the user can fix the input | VoteService |
 | `vote.options.max` | 400 | 最多只能有 {0} 個選項 | Maximum {0} options allowed | Show message so the user can fix the input | VoteService |

@@ -1,0 +1,12 @@
+package com.vomatt.repository;
+
+import java.time.OffsetDateTime;
+import java.util.UUID;
+
+/** Projection: one Invitee of a Poll and whether they hold a Ballot in it. */
+public interface InviteeStatus {
+    UUID getUserId();
+    String getUsername();
+    OffsetDateTime getInvitedAt();
+    boolean getHasBallot();
+}

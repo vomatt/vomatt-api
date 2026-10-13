@@ -3,17 +3,21 @@ package com.vomatt.votes;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.entity.Audience;
+import com.vomatt.entity.Invitee;
 import com.vomatt.entity.Tag;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
 import com.vomatt.entity.VoteStatus;
+import com.vomatt.repository.IdCount;
+import com.vomatt.repository.InviteeRepository;
 import com.vomatt.repository.TagRepository;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.UserVoteRepository;
 import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.VoteRepository;
 import com.vomatt.votes.dto.CreateVoteRequest;
+import com.vomatt.votes.dto.InviteesRequest;
 import com.vomatt.votes.dto.VoteRequest;
 import com.vomatt.votes.dto.VoteResponse;
 import org.junit.jupiter.api.BeforeEach;
@@ -54,6 +58,7 @@ class VoteServiceTest {
     @Mock TagRepository tagRepository;
     @Mock VoteConfigurationProperties voteConfig;
     @Mock com.vomatt.repository.VoteCommentRepository voteCommentRepository;
+    @Mock InviteeRepository inviteeRepository;
     @Spy VoteMapper voteMapper = new VoteMapper();
 
     @InjectMocks
@@ -208,17 +213,45 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("should throw 400 VOTE_AUDIENCE_UNSUPPORTED when audience is INVITE_ONLY")
-        void shouldRejectCreateWhenAudienceInviteOnly() {
+        @DisplayName("should throw 400 VOTE_INVITEE_NOT_INVITE_ONLY when inviteeIds are sent for a Public Poll")
+        void shouldRejectCreateWhenInviteesSentForPublicPoll() {
+            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
+            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
+            CreateVoteRequest request = new CreateVoteRequest();
+            request.setTitle("Test");
+            request.setOptions(List.of(buildOption("A"), buildOption("B")));
+            request.setInviteeIds(List.of(UUID.randomUUID()));
+
+            assertThatThrownBy(() -> voteService.createVote(request, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_INVITEE_NOT_INVITE_ONLY));
+            verify(voteRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("should invite each user once, skipping the owner, when an Invite-only Poll is created")
+        void shouldInviteDistinctUsersWhenInviteOnlyPollCreated() {
+            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
+            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
+            when(voteConfig.getMaxVoteDuration()).thenReturn(Duration.ofDays(365));
+            when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+            stubSaveAssignsId();
+            User bob = User.builder().id(UUID.randomUUID()).username("bob").build();
+            when(userRepository.findAllById(Set.of(bob.getId()))).thenReturn(List.of(bob));
+
             CreateVoteRequest request = new CreateVoteRequest();
             request.setTitle("Test");
             request.setOptions(List.of(buildOption("A"), buildOption("B")));
             request.setEndTime(OffsetDateTime.now().plusDays(1));
             request.setAudience(Audience.INVITE_ONLY);
+            request.setInviteeIds(List.of(bob.getId(), bob.getId(), userId));
 
-            assertThatThrownBy(() -> voteService.createVote(request, userId.toString()))
-                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_AUDIENCE_UNSUPPORTED));
-            verify(voteRepository, never()).save(any());
+            VoteResponse response = voteService.createVote(request, userId.toString());
+
+            verify(inviteeRepository).saveAllAndFlush(argThat(invitees ->
+                    invitees instanceof List<?> list && list.size() == 1
+                            && ((Invitee) list.getFirst()).getUser() == bob));
+            assertThat(response.getAudience()).isEqualTo(Audience.INVITE_ONLY);
+            assertThat(response.getInviteeCount()).isZero();
         }
 
         @Test
@@ -828,6 +861,191 @@ class VoteServiceTest {
                     () -> voteService.deleteVote(id, owner));
             paths.forEach(path -> assertThatThrownBy(path)
                     .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND)));
+        }
+    }
+
+    // ─── Invite-only ──────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("Invite-only access and Invitees")
+    class InviteOnlyTests {
+
+        private final UUID inviteeId = UUID.randomUUID();
+
+        private void inviteOnly(OffsetDateTime end) {
+            vote.setAudience(Audience.INVITE_ONLY);
+            vote.setStartTime(OffsetDateTime.now().minusHours(1));
+            vote.setEndTime(end);
+        }
+
+        private static IdCount count(UUID id, long count) {
+            return new IdCount() {
+                public UUID getId() { return id; }
+                public Long getCount() { return count; }
+            };
+        }
+
+        @Test
+        @DisplayName("should return 404 VOTE_NOT_FOUND on every single-Poll path when the caller is not an Invitee")
+        void shouldHideInviteOnlyPollWhenCallerNotInvitee() {
+            inviteOnly(OffsetDateTime.now().plusDays(1));
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.findByIdWithOptions(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.findByIdForShare(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            String id = voteId.toString();
+            String stranger = UUID.randomUUID().toString();
+            VoteRequest ballot = new VoteRequest();
+            ballot.setOptionIds(List.of(UUID.randomUUID().toString()));
+            InviteesRequest invite = new InviteesRequest();
+            invite.setUserIds(List.of(UUID.randomUUID()));
+
+            List<org.assertj.core.api.ThrowableAssert.ThrowingCallable> paths = List.of(
+                    () -> voteService.getVote(id, null),
+                    () -> voteService.getVote(id, stranger),
+                    () -> voteService.vote(id, ballot, stranger, null),
+                    () -> voteService.retract(id, stranger),
+                    () -> voteService.getVoteResults(id, stranger),
+                    () -> voteService.getVoters(id, stranger, null, null),
+                    () -> voteService.hasUserVoted(id, stranger),
+                    () -> voteService.getInvitees(id, stranger),
+                    () -> voteService.addInvitees(id, invite, stranger),
+                    () -> voteService.removeInvitee(id, stranger, stranger),
+                    () -> voteService.closeVote(id, stranger),
+                    () -> voteService.deleteVote(id, stranger));
+            paths.forEach(path -> assertThatThrownBy(path)
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND)));
+        }
+
+        @Test
+        @DisplayName("should show the Poll with inviteeCount when the caller is an Invitee")
+        void shouldShowPollWithInviteeCountWhenCallerIsInvitee() {
+            inviteOnly(OffsetDateTime.now().plusDays(1));
+            when(voteRepository.findByIdWithOptions(voteId)).thenReturn(Optional.of(vote));
+            when(inviteeRepository.existsByVoteIdAndUserId(voteId, inviteeId)).thenReturn(true);
+            when(inviteeRepository.countByVoteIds(List.of(voteId))).thenReturn(List.of(count(voteId, 3)));
+
+            VoteResponse response = voteService.getVote(voteId.toString(), inviteeId.toString());
+
+            assertThat(response.getInviteeCount()).isEqualTo(3L);
+            assertThat(response.getDeletable()).isNull();
+        }
+
+        @Test
+        @DisplayName("should show voters to an Invitee when visibility is SIGNED_IN on an Ended Invite-only Poll")
+        void shouldShowVotersToInviteeWhenVisibilitySignedIn() {
+            inviteOnly(OffsetDateTime.now().minusMinutes(1));
+            vote.setVoterVisibility(com.vomatt.entity.VoterVisibility.SIGNED_IN);
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(inviteeRepository.existsByVoteIdAndUserId(voteId, inviteeId)).thenReturn(true);
+            when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of());
+
+            assertThat(voteService.getVoters(voteId.toString(), inviteeId.toString(), null, null).items()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("should throw 403 VOTE_FORBIDDEN when an Invitee manages Invitees")
+        void shouldForbidInviteeManagementWhenCallerIsInvitee() {
+            inviteOnly(OffsetDateTime.now().plusDays(1));
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(inviteeRepository.existsByVoteIdAndUserId(voteId, inviteeId)).thenReturn(true);
+            String id = voteId.toString();
+            String invitee = inviteeId.toString();
+            InviteesRequest invite = new InviteesRequest();
+            invite.setUserIds(List.of(UUID.randomUUID()));
+
+            List<org.assertj.core.api.ThrowableAssert.ThrowingCallable> paths = List.of(
+                    () -> voteService.getInvitees(id, invitee),
+                    () -> voteService.addInvitees(id, invite, invitee),
+                    () -> voteService.removeInvitee(id, invitee, invitee));
+            paths.forEach(path -> assertThatThrownBy(path)
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_FORBIDDEN)));
+        }
+
+        @Test
+        @DisplayName("should throw 400 VOTE_INVITEE_HAS_BALLOT and keep the Invitee when they hold a Ballot")
+        void shouldRefuseRemovalWhenInviteeHoldsBallot() {
+            inviteOnly(OffsetDateTime.now().plusDays(1));
+            Invitee invitee = new Invitee(vote, User.builder().id(inviteeId).build());
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(inviteeRepository.findByVoteIdAndUserId(voteId, inviteeId)).thenReturn(Optional.of(invitee));
+            when(userVoteRepository.existsByUserIdAndVoteId(inviteeId, voteId)).thenReturn(true);
+
+            assertThatThrownBy(() -> voteService.removeInvitee(voteId.toString(), inviteeId.toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_INVITEE_HAS_BALLOT));
+            verify(inviteeRepository, never()).delete(any());
+        }
+
+        @Test
+        @DisplayName("should remove the Invitee when they hold no Ballot")
+        void shouldRemoveInviteeWhenNoBallot() {
+            inviteOnly(OffsetDateTime.now().plusDays(1));
+            Invitee invitee = new Invitee(vote, User.builder().id(inviteeId).build());
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(inviteeRepository.findByVoteIdAndUserId(voteId, inviteeId)).thenReturn(Optional.of(invitee));
+
+            assertThat(voteService.removeInvitee(voteId.toString(), inviteeId.toString(), userId.toString())).isEmpty();
+            verify(inviteeRepository).delete(invitee);
+        }
+
+        @Test
+        @DisplayName("should throw 400 VOTE_ENDED when Invitees change after the Poll Ended")
+        void shouldRefuseInviteeChangesWhenPollEnded() {
+            inviteOnly(OffsetDateTime.now().minusMinutes(1));
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            InviteesRequest invite = new InviteesRequest();
+            invite.setUserIds(List.of(UUID.randomUUID()));
+
+            assertThatThrownBy(() -> voteService.addInvitees(voteId.toString(), invite, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_ENDED));
+            assertThatThrownBy(() -> voteService.removeInvitee(voteId.toString(), inviteeId.toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_ENDED));
+        }
+
+        @Test
+        @DisplayName("should throw 400 VOTE_INVITEE_NOT_INVITE_ONLY when adding Invitees to a Public Poll")
+        void shouldRefuseAddWhenPollNotInviteOnly() {
+            vote.setEndTime(OffsetDateTime.now().plusDays(1));
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            InviteesRequest invite = new InviteesRequest();
+            invite.setUserIds(List.of(UUID.randomUUID()));
+
+            assertThatThrownBy(() -> voteService.addInvitees(voteId.toString(), invite, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_INVITEE_NOT_INVITE_ONLY));
+        }
+
+        @Test
+        @DisplayName("should throw 400 VOTE_INVITEE_IDS_INVALID when an invited user does not exist")
+        void shouldRefuseAddWhenUserUnknown() {
+            inviteOnly(OffsetDateTime.now().plusDays(1));
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(userRepository.findAllById(any())).thenReturn(List.of());
+            InviteesRequest invite = new InviteesRequest();
+            invite.setUserIds(List.of(UUID.randomUUID()));
+
+            assertThatThrownBy(() -> voteService.addInvitees(voteId.toString(), invite, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_INVITEE_IDS_INVALID));
+            verify(inviteeRepository, never()).saveAllAndFlush(any());
+        }
+
+        @Test
+        @DisplayName("should skip users already invited when adding Invitees")
+        void shouldSkipExistingInviteesWhenAdding() {
+            inviteOnly(OffsetDateTime.now().plusDays(1));
+            User bob = User.builder().id(inviteeId).build();
+            User carol = User.builder().id(UUID.randomUUID()).build();
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(userRepository.findAllById(Set.of(bob.getId(), carol.getId()))).thenReturn(List.of(bob, carol));
+            when(inviteeRepository.findByVoteId(voteId)).thenReturn(List.of(new Invitee(vote, bob)));
+            InviteesRequest invite = new InviteesRequest();
+            invite.setUserIds(List.of(bob.getId(), carol.getId()));
+
+            voteService.addInvitees(voteId.toString(), invite, userId.toString());
+
+            verify(inviteeRepository).saveAllAndFlush(argThat(invitees ->
+                    invitees instanceof List<?> list && list.size() == 1
+                            && ((Invitee) list.getFirst()).getUser() == carol));
         }
     }
 

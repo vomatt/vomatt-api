@@ -13,14 +13,14 @@ import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Ended Notifications are derived on read (ADR 0003): a user's notifications are the Polls they own or hold a
- * Ballot in whose end time has passed, excluding Polls Closed before they ever opened. Only read state is stored.
+ * Ended Notifications are derived on read (ADR 0003): a user's notifications are the Polls they own, hold a
+ * Ballot in or are invited to whose end time has passed, excluding Polls Closed before they ever opened. Only read state is stored.
  */
 @Repository
 @RequiredArgsConstructor
 public class NotificationReadRepository {
 
-    // Ended, opened at some point (a cancelled Scheduled Poll ends before its start time), not Deleted, and owned or participated in
+    // Ended, opened at some point (a cancelled Scheduled Poll ends before its start time), not Deleted, and owned, participated in or invited to
     private static final String NOTIFIED_POLLS = """
             FROM vomatt.votes v
             WHERE v.end_time <= :now AND v.end_time > v.start_time AND v.deleted_at IS NULL

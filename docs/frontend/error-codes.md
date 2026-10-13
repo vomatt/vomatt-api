@@ -59,7 +59,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `vote.option.not_found` | 404 | 找不到投票選項 | Vote option not found | Show resource not found | VoteService |
 | `vote.option.not_in_vote` | 400 | 選項不屬於此投票 | Option does not belong to this vote | Show message so the user can fix the input | VoteService |
 | `vote.not_allowed` | 400 | 投票尚未開始或已結束 | Voting period has ended or not started | Show message so the user can fix the input | ApiException, VoteService |
-| `vote.ended` | 400 | 投票已結束，無法再投票或撤回 | This poll has ended; ballots can no longer be cast or retracted | Show message so the user can fix the input | VoteService |
+| `vote.ended` | 400 | 投票已結束，無法再投票或撤回 | This poll has ended; ballots can no longer be cast or retracted | Show message so the user can fix the input | Vote, VoteService |
 | `vote.results.sealed` | 403 | 投票結束前無法查看結果 | Results are sealed until the poll ends | Show a permission-denied notice | VoteService |
 | `vote.voters.hidden` | 403 | 你沒有權限查看此投票的投票者 | You are not allowed to see who voted in this poll | Show a permission-denied notice | VoteService |
 | `vote.not_editable` | 400 | 只能在投票開始前編輯 | A poll can only be edited before it opens | Show message so the user can fix the input | Vote, VoteService |
@@ -72,7 +72,9 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `vote.delete.window_passed` | 400 | 投票發布超過 {0} 分鐘後，只有尚未開始的投票可以刪除 | A Poll can only be deleted while it is scheduled or within {0} minutes of posting | Show message so the user can fix the input | VoteService |
 | `vote.close.public_not_allowed` | 400 | 公開投票不可提早結束，會持續到截止時間 | A Public Poll cannot be closed early; it runs until its deadline | Show message so the user can fix the input | Vote |
 | `vote.close.scheduled` | 400 | 尚未開始的投票無法結束，請改為刪除 | A scheduled Poll cannot be closed; delete it instead | Show message so the user can fix the input | Vote |
-| `vote.audience.unsupported` | 400 | 尚未支援僅限受邀者的投票 | Invite-only Polls are not supported yet | Show message so the user can fix the input | VoteService |
+| `vote.invitee.not_invite_only` | 400 | 只有僅限受邀者的投票可以設定受邀者 | Invitees can only be set on an Invite-only Poll | Show message so the user can fix the input | Vote, VoteService |
+| `vote.invitee.ids_invalid` | 400 | 部分受邀使用者不存在 | One or more invited users do not exist | Show message so the user can fix the input | VoteService |
+| `vote.invitee.has_ballot` | 400 | 已投票的受邀者無法移除 | An Invitee who holds a Ballot cannot be removed | Show message so the user can fix the input | VoteService |
 | `vote.options.min` | 400 | 至少需要 {0} 個選項 | Minimum {0} options required | Show message so the user can fix the input | VoteService |
 | `vote.options.max` | 400 | 最多只能有 {0} 個選項 | Maximum {0} options allowed | Show message so the user can fix the input | VoteService |
 | `vote.duration.exceeded` | 400 | 投票期間不可超過 {0} 天 | Vote duration cannot exceed {0} days | Show message so the user can fix the input | VoteService |

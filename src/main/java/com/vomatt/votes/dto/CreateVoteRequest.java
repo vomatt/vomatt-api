@@ -53,16 +53,22 @@ public class CreateVoteRequest {
     private boolean isAnonymous = false;
 
     @Schema(description = "Who may see which option each Participant chose once the Poll has Ended: NOBODY (not even the owner), "
-            + "OWNER (default) or SIGNED_IN (any signed-in user). Null keeps the default OWNER on create and the current value on edit. "
+            + "OWNER (default) or SIGNED_IN (anyone who can see the Poll). Null keeps the default OWNER on create and the current value on edit. "
             + "Participants see this level before casting a Ballot",
             example = "OWNER", nullable = true)
     private VoterVisibility voterVisibility;
 
-    @Schema(description = "Who can reach the Poll: PUBLIC (default; listed in Feed / Explore / Search and the owner's profile) or "
-            + "UNLISTED (reachable only through its link, listed only in the owner's My Polls). Null keeps PUBLIC on create and "
-            + "the current value on edit. INVITE_ONLY is reserved and not supported yet: 400 `vote.audience.unsupported`",
+    @Schema(description = "Who can reach the Poll: PUBLIC (default; listed in Feed / Explore / Search and the owner's profile), "
+            + "UNLISTED (reachable only through its link, listed only in the owner's My Polls) or INVITE_ONLY (only the owner "
+            + "and `inviteeIds` can see it). Null keeps PUBLIC on create and the current value on edit",
             example = "PUBLIC", nullable = true)
     private Audience audience;
+
+    @Schema(description = "User IDs to invite; only for an INVITE_ONLY Poll (otherwise 400 `vote.invitee.not_invite_only`). "
+            + "Duplicates and the owner's own ID are ignored; unknown IDs are rejected with 400 `vote.invitee.ids_invalid`. "
+            + "On edit the list replaces the current Invitees; null keeps them (and an Audience other than INVITE_ONLY removes them)",
+            example = "[\"0199f2a1-2c5d-7f13-9b0e-7d4a1e3f6c82\"]", nullable = true)
+    private List<UUID> inviteeIds;
 
     @Size(max = 5, message = "Maximum 5 tags can be selected")
     @Schema(description = "IDs of up to 5 existing tags (see `GET /api/tags`); null or empty means no tags. Unknown IDs are rejected with 400 `tag.ids.invalid`",

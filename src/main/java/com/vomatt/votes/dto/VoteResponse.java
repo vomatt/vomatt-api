@@ -76,13 +76,17 @@ public class VoteResponse {
     @Schema(description = "Number of Comments and Replies on the Poll, excluding deleted ones", example = "7")
     private long commentCount;
 
-    @Schema(description = "Who may see which option each Participant chose once the Poll has Ended: NOBODY, OWNER or SIGNED_IN. "
+    @Schema(description = "Who may see which option each Participant chose once the Poll has Ended: NOBODY, OWNER or SIGNED_IN (anyone who can see the Poll). "
             + "Visible at all times so Participants know it before casting a Ballot; fixed once the Poll is Open", example = "OWNER")
     private VoterVisibility voterVisibility;
 
-    @Schema(description = "Who can reach the Poll: PUBLIC (listed in Feed / Explore / Search and the owner's profile) or UNLISTED "
-            + "(reachable only through its link). INVITE_ONLY is reserved. Fixed once the Poll is Open", example = "PUBLIC")
+    @Schema(description = "Who can reach the Poll: PUBLIC (listed in Feed / Explore / Search and the owner's profile), UNLISTED "
+            + "(reachable only through its link) or INVITE_ONLY (only the owner and its Invitees). Fixed once the Poll is Open", example = "PUBLIC")
     private Audience audience;
+
+    @Schema(description = "Number of Invitees of an INVITE_ONLY Poll, shown next to Turnout to everyone who can see the Poll; "
+            + "null for other Audiences", example = "12", nullable = true)
+    private Long inviteeCount;
 
     @Schema(description = "Whether the Ended Notification for this Poll is still unread by the caller. Only set on My Polls with `status=ended` "
             + "(false for a Cancelled Poll, which sends none); null on every other endpoint", example = "true", nullable = true)

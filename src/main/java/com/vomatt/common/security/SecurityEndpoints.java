@@ -29,7 +29,7 @@ public final class SecurityEndpoints {
      * they are listed here explicitly as a second line of defense and matched before {@link #PUBLIC_GET}.
      */
     public static final String[] AUTHENTICATED_VOTES = { "/api/votes/my", "/api/votes/*/my-vote-status",
-            "/api/votes/*/voters" };
+            "/api/votes/*/voters", "/api/votes/*/invitees", "/api/votes/*/invitees/*" };
 
     /**
      * Poll ID (UUID) path segment. Matching only UUIDs means named sub-paths like {@code /api/votes/my} are never permitted by the public rules,

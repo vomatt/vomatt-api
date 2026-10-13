@@ -10,6 +10,7 @@ import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.sms.SmsService;
 import com.vomatt.entity.User;
 import com.vomatt.repository.InviteeRepository;
+import com.vomatt.repository.NotificationReadRepository;
 import com.vomatt.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,6 +47,8 @@ class AuthServiceTest {
     UserRepository userRepository;
     @Mock
     InviteeRepository inviteeRepository;
+    @Mock
+    NotificationReadRepository notificationReadRepository;
     @Mock
     TransactionTemplate transactionTemplate;
     @Mock
@@ -444,8 +447,9 @@ class AuthServiceTest {
 
         authService.verifyOtp(" Carol@Example.com", null, "123456", false);
 
-        var order = inOrder(userRepository, inviteeRepository);
+        var order = inOrder(userRepository, notificationReadRepository, inviteeRepository);
         order.verify(userRepository).save(any(User.class));
+        order.verify(notificationReadRepository).deleteReadsForEmailBinding(carolId, "carol@example.com");
         order.verify(inviteeRepository).bindEmail(carolId, "carol@example.com");
         order.verify(inviteeRepository).deleteDuplicateEmail(carolId, "carol@example.com");
         verify(transactionTemplate).execute(any());
@@ -479,6 +483,7 @@ class AuthServiceTest {
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_EMAIL_NOT_VERIFIED));
 
         verify(inviteeRepository, never()).bindEmail(any(), anyString());
+        verify(notificationReadRepository, never()).deleteReadsForEmailBinding(any(), anyString());
         verify(inviteeRepository, never()).deleteDuplicateEmail(any(), anyString());
     }
 

@@ -18,6 +18,7 @@ import com.vomatt.entity.Invitee;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.repository.InviteeRepository;
+import com.vomatt.repository.NotificationReadRepository;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.votes.dto.InviteeResponse;
 import com.vomatt.votes.dto.InviteesRequest;
@@ -29,6 +30,7 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
 
     @Autowired VoteService voteService;
     @Autowired InviteeRepository inviteeRepository;
+    @Autowired NotificationReadRepository notificationReadRepository;
 
     private final OffsetDateTime now = OffsetDateTime.now();
     private final String carolEmail = "carol-" + System.nanoTime() + "@example.com";
@@ -53,6 +55,7 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
     private User signUpAndBind(String email) {
         User user = User.builder().username("em-carol-" + System.nanoTime()).email(email).build();
         em.persist(user);
+        notificationReadRepository.deleteReadsForEmailBinding(user.getId(), email);
         inviteeRepository.bindEmail(user.getId(), email);
         inviteeRepository.deleteDuplicateEmail(user.getId(), email);
         em.clear();
@@ -91,6 +94,38 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
         assertThat(voteService.getVote(poll.getId().toString(), carol.getId().toString()).getInviteeCount()).isEqualTo(1L);
         assertThat(voteService.getMyPolls(carol.getId().toString(), "open", null, null).items())
                 .extracting(VoteResponse::getId).containsExactly(poll.getId().toString());
+    }
+
+    @Test
+    @DisplayName("should give an unbound email no Invitation, Ended Notification, My Polls entry or access; after binding the user gets them")
+    void shouldNotifyOnlyAfterBindingWhenInvitedByEmail() {
+        inviteEmail(carolEmail);
+        // Carol already has an account with that email that was never bound (no verified sign-in since), plus a stale read row
+        User carol = User.builder().username("em-carol-" + System.nanoTime()).email(carolEmail).build();
+        em.persist(carol);
+        notificationReadRepository.markRead(carol.getId(), poll.getId(), now);
+        em.flush();
+        OffsetDateTime afterEnd = now.plusDays(2);
+
+        // Pending row has user_id NULL: NOTIFIED_POLLS, MY_POLL_IDS and Vote.isVisibleTo must not match it
+        assertThat(notificationReadRepository.countUnread(carol.getId(), now)).isZero();
+        assertThat(notificationReadRepository.isNotified(carol.getId(), poll.getId(), now)).isFalse();
+        assertThat(notificationReadRepository.isNotified(carol.getId(), poll.getId(), afterEnd)).isFalse();
+        assertThat(voteService.getMyPolls(carol.getId().toString(), "open", null, null).items()).isEmpty();
+        assertThatThrownBy(() -> voteService.getVote(poll.getId().toString(), carol.getId().toString()))
+                .isInstanceOf(ApiException.class);
+
+        notificationReadRepository.deleteReadsForEmailBinding(carol.getId(), carolEmail);
+        inviteeRepository.bindEmail(carol.getId(), carolEmail);
+        inviteeRepository.deleteDuplicateEmail(carol.getId(), carolEmail);
+        em.clear();
+
+        // The stale read row is gone, so the Invitation is unread; once the Poll Ends, the Ended Notification follows
+        assertThat(notificationReadRepository.countUnread(carol.getId(), now)).isEqualTo(1);
+        assertThat(notificationReadRepository.isNotified(carol.getId(), poll.getId(), now)).isTrue();
+        assertThat(notificationReadRepository.countUnread(carol.getId(), afterEnd)).isEqualTo(1);
+        assertThat(notificationReadRepository.isNotified(carol.getId(), poll.getId(), afterEnd)).isTrue();
+        assertThat(voteService.getMyPolls(carol.getId().toString(), "open", null, null).items()).hasSize(1);
     }
 
     @Test

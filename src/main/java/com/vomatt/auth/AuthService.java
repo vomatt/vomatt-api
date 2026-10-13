@@ -10,6 +10,7 @@ import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.sms.SmsService;
 import com.vomatt.entity.User;
 import com.vomatt.repository.InviteeRepository;
+import com.vomatt.repository.NotificationReadRepository;
 import com.vomatt.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -63,6 +64,7 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final InviteeRepository inviteeRepository;
+    private final NotificationReadRepository notificationReadRepository;
     private final TransactionTemplate transactionTemplate;
     private final RedisService redisService;
     private final EmailService emailService;
@@ -540,6 +542,7 @@ public class AuthService {
                         .build();
                 return userRepository.save(newUser);
             });
+            notificationReadRepository.deleteReadsForEmailBinding(user.getId(), email);
             inviteeRepository.bindEmail(user.getId(), email);
             inviteeRepository.deleteDuplicateEmail(user.getId(), email);
             return user;

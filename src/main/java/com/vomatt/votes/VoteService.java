@@ -123,7 +123,7 @@ public class VoteService {
 
         Set<UUID> oldTagIds = countedTagIds(vote);
         if (request.getAudience() != null) {
-            vote.setAudience(request.getAudience());
+            vote.changeAudience(request.getAudience(), OffsetDateTime.now());
         }
         vote.getTags().clear();
         findTags(request.getTagIds()).forEach(vote::addTag);

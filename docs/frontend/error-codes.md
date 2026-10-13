@@ -62,7 +62,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `vote.ended` | 400 | 投票已結束，無法再投票或撤回 | This poll has ended; ballots can no longer be cast or retracted | Show message so the user can fix the input | VoteService |
 | `vote.results.sealed` | 403 | 投票結束前無法查看結果 | Results are sealed until the poll ends | Show a permission-denied notice | VoteService |
 | `vote.voters.hidden` | 403 | 你沒有權限查看此投票的投票者 | You are not allowed to see who voted in this poll | Show a permission-denied notice | VoteService |
-| `vote.not_editable` | 400 | 只能在投票開始前編輯 | A poll can only be edited before it opens | Show message so the user can fix the input | VoteService |
+| `vote.not_editable` | 400 | 只能在投票開始前編輯 | A poll can only be edited before it opens | Show message so the user can fix the input | Vote, VoteService |
 | `vote.list.sort_not_allowed` | 400 | 已結束的投票固定依結束時間排序，不可指定 sort | Ended polls are always ordered by end time; sort is not allowed | Show message so the user can fix the input | VoteListOrder |
 | `vote.search.query_too_short` | 400 | 搜尋字串至少需要 2 個字 | Search query must be at least 2 characters | Show message so the user can fix the input | VoteService |
 | `vote.multiple.not_allowed` | 400 | 此投票不允許複選 | Multiple choices not allowed for this vote | Show message so the user can fix the input | VoteService |

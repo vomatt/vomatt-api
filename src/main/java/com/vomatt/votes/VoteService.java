@@ -23,6 +23,7 @@ import com.vomatt.votes.dto.VoteResultResponse;
 import com.vomatt.votes.dto.VoterResponse;
 import com.vomatt.common.response.Cursor;
 import com.vomatt.common.response.CursorResponse;
+import com.vomatt.entity.Audience;
 import com.vomatt.entity.User;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.entity.Tag;
@@ -73,6 +74,9 @@ public class VoteService {
         if (request.getVoterVisibility() != null) {
             vote.setVoterVisibility(request.getVoterVisibility());
         }
+        if (request.getAudience() != null) {
+            vote.setAudience(request.getAudience());
+        }
 
         findTags(request.getTagIds()).forEach(vote::addTag);
 
@@ -83,8 +87,9 @@ public class VoteService {
         vote = voteRepository.save(vote);
         log.info("Vote created: {} by user: {}", vote.getId(), creatorId);
 
-        if (request.getTagIds() != null && !request.getTagIds().isEmpty()) {
-            tagRepository.incrementUsageCount(new HashSet<>(request.getTagIds()));
+        Set<UUID> countedTagIds = countedTagIds(vote);
+        if (!countedTagIds.isEmpty()) {
+            tagRepository.incrementUsageCount(countedTagIds);
         }
 
         return convertToVoteResponse(vote, creatorId);
@@ -116,11 +121,13 @@ public class VoteService {
             vote.setVoterVisibility(request.getVoterVisibility());
         }
 
-        Set<UUID> oldTagIds = vote.getTags().stream().map(Tag::getId).collect(Collectors.toSet());
-        List<Tag> newTags = findTags(request.getTagIds());
-        Set<UUID> newTagIds = newTags.stream().map(Tag::getId).collect(Collectors.toSet());
+        Set<UUID> oldTagIds = countedTagIds(vote);
+        if (request.getAudience() != null) {
+            vote.changeAudience(request.getAudience(), OffsetDateTime.now());
+        }
         vote.getTags().clear();
-        newTags.forEach(vote::addTag);
+        findTags(request.getTagIds()).forEach(vote::addTag);
+        Set<UUID> newTagIds = countedTagIds(vote);
 
         vote.getOptions().clear();
         addOptions(vote, request);
@@ -368,7 +375,7 @@ public class VoteService {
         }
         vote.setDeletedAt(now);
         voteRepository.save(vote);
-        Set<UUID> tagIds = vote.getTags().stream().map(Tag::getId).collect(Collectors.toSet());
+        Set<UUID> tagIds = countedTagIds(vote);
         if (!tagIds.isEmpty()) {
             tagRepository.decrementUsageCount(tagIds);
         }
@@ -461,6 +468,12 @@ public class VoteService {
         return ballot.getOption().getId();
     }
 
+    // Popular tag counts include only Public Polls
+    private static Set<UUID> countedTagIds(Vote vote) {
+        return vote.getAudience() != Audience.PUBLIC ? Set.of()
+            : vote.getTags().stream().map(Tag::getId).collect(Collectors.toSet());
+    }
+
     private List<Tag> findTags(List<UUID> tagIds) {
         if (tagIds == null || tagIds.isEmpty()) {
             return List.of();
@@ -484,6 +497,11 @@ public class VoteService {
 
     // startTime null means the Poll opens now
     private void validateCreateVoteRequest(CreateVoteRequest request, OffsetDateTime startTime) {
+        // Invite-only needs Invitees (#19); remove this guard there
+        if (request.getAudience() == Audience.INVITE_ONLY) {
+            throw ApiException.badRequest(MessageKey.VOTE_AUDIENCE_UNSUPPORTED);
+        }
+
         if (request.isAllowMultipleChoices()) {
             throw ApiException.badRequest(MessageKey.VOTE_MULTIPLE_NOT_ALLOWED);
         }

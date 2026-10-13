@@ -1,6 +1,7 @@
 package com.vomatt.entity;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -8,6 +9,9 @@ import java.time.OffsetDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
+
+import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
 
 @DisplayName("Vote (Poll lifecycle)")
 class VoteTest {
@@ -19,6 +23,27 @@ class VoteTest {
         vote.setStartTime(start);
         vote.setEndTime(end);
         return vote;
+    }
+
+    @Test
+    @DisplayName("should change Audience when Poll is Scheduled")
+    void shouldChangeAudienceWhenScheduled() {
+        Vote vote = poll(now.plusHours(1), now.plusDays(1));
+
+        vote.changeAudience(Audience.UNLISTED, now);
+
+        assertThat(vote.getAudience()).isEqualTo(Audience.UNLISTED);
+    }
+
+    @Test
+    @DisplayName("should refuse an Audience change with vote.not_editable when Poll is Open or Ended")
+    void shouldRefuseAudienceChangeWhenOpenOrEnded() {
+        for (Vote vote : new Vote[] { poll(now.minusHours(1), now.plusDays(1)), poll(now.minusDays(2), now.minusDays(1)) }) {
+            assertThatThrownBy(() -> vote.changeAudience(Audience.UNLISTED, now))
+                    .isInstanceOfSatisfying(ApiException.class,
+                            ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_NOT_EDITABLE));
+            assertThat(vote.getAudience()).isEqualTo(Audience.PUBLIC);
+        }
     }
 
     @Test

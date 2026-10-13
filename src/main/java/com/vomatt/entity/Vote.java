@@ -5,6 +5,8 @@ import java.time.OffsetDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
+import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.entity.common.AuditableEntity;
 import com.vomatt.entity.User;
 
@@ -69,8 +71,9 @@ public class Vote extends AuditableEntity {
     @Column(name = "is_anonymous")
     private boolean isAnonymous = false;
 
-    @Column(name = "is_public")
-    private boolean isPublic = true;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "audience", nullable = false)
+    private Audience audience = Audience.PUBLIC;
 
     @Column(name = "max_choices")
     private Integer maxChoices = 1;
@@ -124,6 +127,14 @@ public class Vote extends AuditableEntity {
     public boolean canDeleteAt(OffsetDateTime now, Duration window) {
         return deletedAt == null
             && (statusAt(now) == VoteStatus.SCHEDULED || now.isBefore(getCreatedAt().plus(window)));
+    }
+
+    /** Audience can change only while Scheduled, so it is fixed once the Poll is Open. */
+    public void changeAudience(Audience audience, OffsetDateTime now) {
+        if (statusAt(now) != VoteStatus.SCHEDULED) {
+            throw ApiException.badRequest(MessageKey.VOTE_NOT_EDITABLE);
+        }
+        this.audience = audience;
     }
 
     /** @param userId caller, or null when signed out */

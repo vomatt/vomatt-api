@@ -21,6 +21,6 @@ public class TagDto {
     private String description;
     @Schema(description = "Sort position used by the full tag list (ascending)", example = "1")
     private int displayOrder;
-    @Schema(description = "Number of Polls currently using this tag; the popular list is ordered by this value", example = "42")
+    @Schema(description = "Number of Public Polls currently using this tag (Unlisted and Deleted Polls are not counted); the popular list is ordered by this value", example = "42")
     private int usageCount;
 }

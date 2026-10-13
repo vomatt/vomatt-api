@@ -33,6 +33,7 @@ public class VoteMapper {
         response.setAllowMultipleChoices(vote.isAllowMultipleChoices());
         response.setAnonymous(vote.isAnonymous());
         response.setVoterVisibility(vote.getVoterVisibility());
+        response.setAudience(vote.getAudience());
         response.setCreatedAt(vote.getCreatedAt());
         response.setUpdatedAt(vote.getUpdatedAt());
         long turnout = turnout(options);

@@ -2,6 +2,7 @@ package com.vomatt.votes;
 
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.entity.Audience;
 import com.vomatt.entity.Tag;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
@@ -206,6 +207,20 @@ class VoteServiceTest {
         }
 
         @Test
+        @DisplayName("should throw 400 VOTE_AUDIENCE_UNSUPPORTED when audience is INVITE_ONLY")
+        void shouldRejectCreateWhenAudienceInviteOnly() {
+            CreateVoteRequest request = new CreateVoteRequest();
+            request.setTitle("Test");
+            request.setOptions(List.of(buildOption("A"), buildOption("B")));
+            request.setEndTime(OffsetDateTime.now().plusDays(1));
+            request.setAudience(Audience.INVITE_ONLY);
+
+            assertThatThrownBy(() -> voteService.createVote(request, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_AUDIENCE_UNSUPPORTED));
+            verify(voteRepository, never()).save(any());
+        }
+
+        @Test
         @DisplayName("should throw 404 USER_NOT_FOUND when creator is not found")
         void shouldThrowWhenCreatorNotFound() {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
@@ -236,6 +251,7 @@ class VoteServiceTest {
             VoteResponse result = voteService.createVote(request, userId.toString());
 
             assertThat(result.getTitle()).isEqualTo("Favourite Color?");
+            assertThat(result.getAudience()).isEqualTo(Audience.PUBLIC);
             assertThat(result.getOptions()).extracting(VoteResponse.VoteOptionResponse::getText)
                     .containsExactlyInAnyOrder("Red", "Blue");
             // a new Poll is Open: counts are Sealed
@@ -527,6 +543,38 @@ class VoteServiceTest {
             assertThatThrownBy(() -> voteService.updateVote(voteId.toString(), editRequest(null), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_NOT_EDITABLE));
             verify(voteRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("should reject an Audience change when Poll is Open")
+        void shouldRejectAudienceChangeWhenPollOpen() {
+            vote.setEndTime(OffsetDateTime.now().plusDays(1));
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            CreateVoteRequest request = editRequest(null);
+            request.setAudience(Audience.UNLISTED);
+
+            assertThatThrownBy(() -> voteService.updateVote(voteId.toString(), request, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_NOT_EDITABLE));
+            assertThat(vote.getAudience()).isEqualTo(Audience.PUBLIC);
+        }
+
+        @Test
+        @DisplayName("should change Audience when Scheduled, and keep it when edit omits audience")
+        void shouldChangeAudienceWhenScheduledPollEdited() {
+            scheduled();
+            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
+            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
+            when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
+            stubSaveAssignsId();
+            CreateVoteRequest request = editRequest(null);
+            request.setAudience(Audience.UNLISTED);
+
+            assertThat(voteService.updateVote(voteId.toString(), request, userId.toString()).getAudience())
+                    .isEqualTo(Audience.UNLISTED);
+
+            request.setAudience(null);
+            assertThat(voteService.updateVote(voteId.toString(), request, userId.toString()).getAudience())
+                    .isEqualTo(Audience.UNLISTED);
         }
 
         @Test

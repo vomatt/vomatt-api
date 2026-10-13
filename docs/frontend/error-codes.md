@@ -62,7 +62,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `vote.ended` | 400 | 投票已結束，無法再投票或撤回 | This poll has ended; ballots can no longer be cast or retracted | Show message so the user can fix the input | VoteService |
 | `vote.results.sealed` | 403 | 投票結束前無法查看結果 | Results are sealed until the poll ends | Show a permission-denied notice | VoteService |
 | `vote.voters.hidden` | 403 | 你沒有權限查看此投票的投票者 | You are not allowed to see who voted in this poll | Show a permission-denied notice | VoteService |
-| `vote.not_editable` | 400 | 只能在投票開始前編輯 | A poll can only be edited before it opens | Show message so the user can fix the input | VoteService |
+| `vote.not_editable` | 400 | 只能在投票開始前編輯 | A poll can only be edited before it opens | Show message so the user can fix the input | Vote, VoteService |
 | `vote.list.sort_not_allowed` | 400 | 已結束的投票固定依結束時間排序，不可指定 sort | Ended polls are always ordered by end time; sort is not allowed | Show message so the user can fix the input | VoteListOrder |
 | `vote.search.query_too_short` | 400 | 搜尋字串至少需要 2 個字 | Search query must be at least 2 characters | Show message so the user can fix the input | VoteService |
 | `vote.multiple.not_allowed` | 400 | 此投票不允許複選 | Multiple choices not allowed for this vote | Show message so the user can fix the input | VoteService |
@@ -70,6 +70,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `vote.end_time.before_start` | 400 | 結束時間不可早於開始時間 | End time cannot be before start time | Show message so the user can fix the input | VoteService |
 | `vote.forbidden` | 403 | 只有投票建立者可執行此操作 | Only the vote creator can perform this action | Show a permission-denied notice | VoteService |
 | `vote.delete.window_passed` | 400 | 投票發布超過 {0} 分鐘後，只有尚未開始的投票可以刪除 | A Poll can only be deleted while it is scheduled or within {0} minutes of posting | Show message so the user can fix the input | VoteService |
+| `vote.audience.unsupported` | 400 | 尚未支援僅限受邀者的投票 | Invite-only Polls are not supported yet | Show message so the user can fix the input | VoteService |
 | `vote.options.min` | 400 | 至少需要 {0} 個選項 | Minimum {0} options required | Show message so the user can fix the input | VoteService |
 | `vote.options.max` | 400 | 最多只能有 {0} 個選項 | Maximum {0} options allowed | Show message so the user can fix the input | VoteService |
 | `vote.duration.exceeded` | 400 | 投票期間不可超過 {0} 天 | Vote duration cannot exceed {0} days | Show message so the user can fix the input | VoteService |

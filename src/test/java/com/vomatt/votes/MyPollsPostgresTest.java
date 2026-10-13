@@ -1,6 +1,7 @@
 package com.vomatt.votes;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -11,6 +12,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 
+import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
@@ -71,5 +74,18 @@ class MyPollsPostgresTest extends PostgresRepositoryTest {
         poll(me, "mine-open", now.minusHours(1), now.plusDays(1));
 
         assertThat(titles("ended")).containsExactly("voted-ended-recently", "mine-ended-long-ago");
+    }
+
+    @Test
+    @DisplayName("should reject an open-tab cursor with 400 COMMON_CURSOR_INVALID when sent to status=ended")
+    void shouldRejectCursorWhenStatusTabChanged() {
+        poll(me, "mine-open-1", now.minusHours(1), now.plusDays(1));
+        poll(me, "mine-open-2", now.minusHours(1), now.plusDays(2));
+        em.flush();
+        String openCursor = voteService.getMyPolls(me.getId().toString(), "open", null, 1).nextCursor();
+
+        assertThatThrownBy(() -> voteService.getMyPolls(me.getId().toString(), "ended", openCursor, 1))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMON_CURSOR_INVALID));
     }
 }

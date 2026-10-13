@@ -70,10 +70,10 @@ public class VoteCommentService {
         }
 
         int size = CursorResponse.limit(limit);
-        Cursor after = Cursor.decode(cursor);
+        Cursor after = Cursor.decode(cursor, Cursor.Scope.COMMENTS);
         List<VoteComment> rows = commentRepository.findPageByVoteId(voteUuid,
             after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
-        return CursorResponse.of(rows, size, c -> Cursor.of(c.getCreatedAt(), c.getId()),
+        return CursorResponse.of(rows, size, Cursor.Scope.COMMENTS, c -> Cursor.of(c.getCreatedAt(), c.getId()),
             page -> withReplyCounts(page, toDtos(page, currentUserId)));
     }
 
@@ -86,10 +86,10 @@ public class VoteCommentService {
             .orElseThrow(() -> ApiException.notFound(MessageKey.COMMENT_NOT_FOUND));
 
         int size = CursorResponse.limit(limit);
-        Cursor after = Cursor.decode(cursor);
+        Cursor after = Cursor.decode(cursor, Cursor.Scope.REPLIES);
         List<VoteComment> rows = commentRepository.findReplyPage(root.getId(),
             after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
-        return CursorResponse.of(rows, size, c -> Cursor.of(c.getCreatedAt(), c.getId()),
+        return CursorResponse.of(rows, size, Cursor.Scope.REPLIES, c -> Cursor.of(c.getCreatedAt(), c.getId()),
             page -> toDtos(page, currentUserId));
     }
 

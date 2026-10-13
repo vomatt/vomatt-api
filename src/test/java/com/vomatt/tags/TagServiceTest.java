@@ -316,7 +316,7 @@ class TagServiceTest {
             CursorResponse<TagDto> result = tagService.getPopularTags(null, 2);
 
             assertThat(result.items()).extracting(TagDto::getName).containsExactly("Popular", "LessPopular");
-            Cursor next = Cursor.decode(result.nextCursor());
+            Cursor next = Cursor.decode(result.nextCursor(), Cursor.Scope.POPULAR_TAGS);
             assertThat(next.longKey()).isEqualTo(50);
             assertThat(next.id()).isEqualTo(tag2.getId());
         }

@@ -59,14 +59,16 @@ public class UserService {
     public CursorResponse<UserDto> searchUsersByUsername(String username, String cursor, Integer limit) {
         log.debug("Searching users with username containing: {}", username);
         int size = CursorResponse.limit(limit);
-        Cursor after = Cursor.decode(cursor);
+        Cursor after = Cursor.decode(cursor, Cursor.Scope.USER_SEARCH);
         List<User> rows = userRepository.searchByUsernameAfter(username, after == null ? null : after.key(),
             Limit.of(size + 1));
-        return CursorResponse.of(rows, size, u -> Cursor.of(u.getUsername(), u.getId()), page -> {
-            Map<UUID, Boolean> shown = displayNameSettings(page);
-            boolean byDefault = VisibilityField.DISPLAY_NAME.isVisibleByDefault();
-            return page.stream().map(u -> userMapper.toSearchResult(u, shown.getOrDefault(u.getId(), byDefault))).toList();
-        });
+        return CursorResponse.of(rows, size, Cursor.Scope.USER_SEARCH,
+            u -> Cursor.of(u.getUsername(), u.getId()), page -> {
+                Map<UUID, Boolean> shown = displayNameSettings(page);
+                boolean byDefault = VisibilityField.DISPLAY_NAME.isVisibleByDefault();
+                return page.stream().map(u -> userMapper.toSearchResult(u, shown.getOrDefault(u.getId(), byDefault)))
+                    .toList();
+            });
     }
 
     /** Display name visibility explicitly set by users on the page, in one query; unset users are absent. */

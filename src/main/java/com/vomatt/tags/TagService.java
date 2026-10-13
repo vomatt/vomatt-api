@@ -97,10 +97,10 @@ public class TagService {
     @Transactional(readOnly = true)
     public CursorResponse<TagDto> getPopularTags(String cursor, Integer limit) {
         int size = CursorResponse.limit(limit);
-        Cursor after = Cursor.decode(cursor);
+        Cursor after = Cursor.decode(cursor, Cursor.Scope.POPULAR_TAGS);
         List<Tag> rows = tagRepository.findPopularPage(after == null ? null : (int) after.longKey(),
                 after == null ? null : after.id(), Limit.of(size + 1));
-        return CursorResponse.of(rows, size, t -> Cursor.of(t.getUsageCount(), t.getId()),
+        return CursorResponse.of(rows, size, Cursor.Scope.POPULAR_TAGS, t -> Cursor.of(t.getUsageCount(), t.getId()),
                 page -> page.stream().map(this::toDto).toList());
     }
 

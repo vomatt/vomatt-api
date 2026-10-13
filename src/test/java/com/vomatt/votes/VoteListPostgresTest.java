@@ -227,4 +227,19 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
 
         assertThat(String.join("\n", plan)).contains("idx_votes_search_bigrams");
     }
+
+    @Test
+    @DisplayName("should reject a Feed newest cursor with 400 COMMON_CURSOR_INVALID when sent with sort=closing")
+    void shouldRejectCursorWhenOrderingChanged() {
+        poll("a", now.minusHours(2), now.plusDays(1));
+        poll("b", now.minusHours(1), now.plusDays(2));
+        em.flush();
+        String newestCursor = voteService.listVotes(VoteListOrder.NEWEST, tag.getSlug(), null, null, 1, null).nextCursor();
+
+        assertThatThrownBy(() -> voteService.listVotes(VoteListOrder.CLOSING, tag.getSlug(), null, newestCursor, 1, null))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMON_CURSOR_INVALID));
+        // filters are not part of the scope: the same ordering under another tag still accepts it
+        assertThat(voteService.listVotes(VoteListOrder.NEWEST, null, null, newestCursor, 1, null)).isNotNull();
+    }
 }

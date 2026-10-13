@@ -17,6 +17,15 @@ import com.vomatt.common.i18n.MessageKey;
  */
 public record Cursor(String key, UUID id) {
 
+    /**
+     * The list and ordering a cursor was issued for; a cursor is only accepted by the same scope.
+     * Filters ({@code tag}, {@code q}) and the parent id are not part of it: the keyset position stays valid under them.
+     */
+    public enum Scope {
+        FEED_NEWEST, FEED_CLOSING, FEED_ENDED, MY_OPEN, MY_ENDED, USER_POLLS,
+        COMMENTS, REPLIES, VOTERS, USER_SEARCH, POPULAR_TAGS
+    }
+
     public static Cursor of(OffsetDateTime time, UUID id) {
         return new Cursor(time.toInstant().toString(), id);
     }
@@ -46,21 +55,26 @@ public record Cursor(String key, UUID id) {
         }
     }
 
-    public String encode() {
+    public String encode(Scope scope) {
         return Base64.getUrlEncoder().withoutPadding()
-                .encodeToString((id + "|" + key).getBytes(StandardCharsets.UTF_8));
+                .encodeToString((scope + "|" + id + "|" + key).getBytes(StandardCharsets.UTF_8));
     }
 
-    /** Decodes a client-supplied cursor; null stays null (first page). */
-    public static Cursor decode(String token) {
+    /**
+     * Decodes a client-supplied cursor; null stays null (first page).
+     * A cursor issued for another list or ordering, or one without a scope, is a bad cursor.
+     */
+    public static Cursor decode(String token, Scope expected) {
         if (token == null || token.isBlank()) {
             return null;
         }
         try {
-            String raw = new String(Base64.getUrlDecoder().decode(token), StandardCharsets.UTF_8);
-            int sep = raw.indexOf('|');
-            return new Cursor(raw.substring(sep + 1), UUID.fromString(raw.substring(0, sep)));
-        } catch (IllegalArgumentException | StringIndexOutOfBoundsException e) {
+            String[] parts = new String(Base64.getUrlDecoder().decode(token), StandardCharsets.UTF_8).split("\\|", 3);
+            if (parts.length < 3 || !parts[0].equals(expected.name())) {
+                throw ApiException.badRequest(MessageKey.COMMON_CURSOR_INVALID);
+            }
+            return new Cursor(parts[2], UUID.fromString(parts[1]));
+        } catch (IllegalArgumentException e) {
             throw ApiException.badRequest(MessageKey.COMMON_CURSOR_INVALID);
         }
     }

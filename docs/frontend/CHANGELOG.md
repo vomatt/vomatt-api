@@ -5,6 +5,8 @@ Contract changes that affect the frontend. 💥 BREAKING means frontend code mus
 ## 2026-10-14
 
 - 💥 BREAKING `GET /api/users/search` items (`UserDto`) now carry only public profile fields: `id`, `username`, `displayName`, `avatarUrl`. `email`, `phoneNumber`, `firstName`, `lastName`, `location`, `points`, `membershipLevel`, `active`, `createdAt` and `lastLoginAt` are removed. `displayName` is `null` when the owner hid it on the public profile. Ordering, cursor paging and the blank-`username` error are unchanged.
+- 💥 BREAKING A pagination cursor is accepted only by the list and ordering that issued it. Sending it to another list or ordering (e.g. a Feed `sort=newest` cursor to `sort=closing`, a My Polls `status=open` cursor to `status=ended`, a comments cursor to replies) returns 400 `common.cursor_invalid`; restart from the first page. Changing `tag` or `q` with the same ordering is still allowed. Cursors issued before this change are no longer valid. Response shapes are unchanged.
+- Casting, Retracting and removing a Selection racing a Close now either count before the Poll Ended or fail with 400 `vote.ended`; Ballots and counts never change after Close returns. Editing a Scheduled Poll that opened and received a Ballot meanwhile fails with 400 `vote.not_editable`; a Ballot on an option replaced by an in-flight edit fails with 404 `vote.option.not_found`.
 
 ## 2026-10-13
 

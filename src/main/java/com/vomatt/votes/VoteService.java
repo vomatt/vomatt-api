@@ -95,7 +95,9 @@ public class VoteService {
      * No Ballots can exist before the start time, so options are replaced wholesale.
      */
     public VoteResponse updateVote(String voteId, CreateVoteRequest request, String userId) {
-        Vote vote = findVote(UUID.fromString(voteId));
+        // Exclusive lock: a first Ballot at the opening moment either commits first (then this sees Open) or waits
+        Vote vote = voteRepository.findByIdForUpdate(UUID.fromString(voteId))
+            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
         if (!vote.getCreator().getId().toString().equals(userId)) {
             throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
         }
@@ -160,9 +162,14 @@ public class VoteService {
         if (query != null && query.codePointCount(0, query.length()) < 2) {
             throw ApiException.badRequest(MessageKey.VOTE_SEARCH_QUERY_TOO_SHORT);
         }
-        List<Vote> rows = voteListRepository.findPage(order, tagSlug, query, Cursor.decode(cursor),
+        Cursor.Scope scope = switch (order) {
+            case NEWEST -> Cursor.Scope.FEED_NEWEST;
+            case CLOSING -> Cursor.Scope.FEED_CLOSING;
+            case ENDED -> Cursor.Scope.FEED_ENDED;
+        };
+        List<Vote> rows = voteListRepository.findPage(order, tagSlug, query, Cursor.decode(cursor, scope),
             OffsetDateTime.now(), size + 1);
-        return CursorResponse.of(rows, size,
+        return CursorResponse.of(rows, size, scope,
             v -> Cursor.of(order == VoteListOrder.NEWEST ? v.getStartTime() : v.getEndTime(), v.getId()),
             page -> toResponses(page, userId));
     }
@@ -180,9 +187,10 @@ public class VoteService {
         };
         int size = CursorResponse.limit(limit);
         UUID userUuid = UUID.fromString(userId);
-        List<Vote> rows = voteListRepository.findMine(userUuid, ended, Cursor.decode(cursor),
+        Cursor.Scope scope = ended ? Cursor.Scope.MY_ENDED : Cursor.Scope.MY_OPEN;
+        List<Vote> rows = voteListRepository.findMine(userUuid, ended, Cursor.decode(cursor, scope),
             OffsetDateTime.now(), size + 1);
-        return CursorResponse.of(rows, size, v -> Cursor.of(v.getEndTime(), v.getId()),
+        return CursorResponse.of(rows, size, scope, v -> Cursor.of(v.getEndTime(), v.getId()),
             page -> ended ? withUnread(page, toResponses(page, userId), userUuid) : toResponses(page, userId));
     }
 
@@ -198,9 +206,9 @@ public class VoteService {
         User creator = userRepository.findByUsername(username).filter(User::isActive)
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
         int size = CursorResponse.limit(limit);
-        List<Vote> rows = voteListRepository.findByCreator(creator.getId(), Cursor.decode(cursor), OffsetDateTime.now(),
-            size + 1);
-        return CursorResponse.of(rows, size, v -> Cursor.of(v.getStartTime(), v.getId()),
+        List<Vote> rows = voteListRepository.findByCreator(creator.getId(), Cursor.decode(cursor, Cursor.Scope.USER_POLLS),
+            OffsetDateTime.now(), size + 1);
+        return CursorResponse.of(rows, size, Cursor.Scope.USER_POLLS, v -> Cursor.of(v.getStartTime(), v.getId()),
             page -> toResponses(page, userId));
     }
 
@@ -221,8 +229,7 @@ public class VoteService {
     public VoteResponse vote(String voteId, VoteRequest request, String userId, String ipAddress) {
         UUID voteUuid = UUID.fromString(voteId);
         UUID userUuid = UUID.fromString(userId);
-        Vote vote = findVote(voteUuid);
-        requireOpen(vote);
+        Vote vote = lockOpenVote(voteUuid);
 
         if (request.getOptionIds().size() > 1) {
             throw ApiException.badRequest(MessageKey.VOTE_MULTIPLE_NOT_ALLOWED);
@@ -253,7 +260,7 @@ public class VoteService {
     /** Retraction: withdraws the user's whole Ballot; succeeds even when there is none. */
     public VoteResponse retract(String voteId, String userId) {
         UUID voteUuid = UUID.fromString(voteId);
-        requireOpen(findVote(voteUuid));
+        lockOpenVote(voteUuid);
 
         userVoteRepository.lockBallot(userId, voteId);
         userVoteRepository.findByUserIdAndVoteId(UUID.fromString(userId), voteUuid)
@@ -267,7 +274,7 @@ public class VoteService {
     public VoteResponse removeVote(String voteId, String optionId, String userId) {
         UUID voteUuid = UUID.fromString(voteId);
         UUID userUuid = UUID.fromString(userId);
-        requireOpen(findVote(voteUuid));
+        lockOpenVote(voteUuid);
 
         userVoteRepository.lockBallot(userId, voteId);
         userVoteRepository.findByUserIdAndVoteIdAndOptionId(userUuid, voteUuid, UUID.fromString(optionId))
@@ -305,10 +312,10 @@ public class VoteService {
         }
 
         int size = CursorResponse.limit(limit);
-        Cursor after = Cursor.decode(cursor);
+        Cursor after = Cursor.decode(cursor, Cursor.Scope.VOTERS);
         List<UserVote> rows = userVoteRepository.findVoterPage(vote.getId(),
             after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
-        return CursorResponse.of(rows, size, ballot -> Cursor.of(ballot.getCreatedAt(), ballot.getId()),
+        return CursorResponse.of(rows, size, Cursor.Scope.VOTERS, ballot -> Cursor.of(ballot.getCreatedAt(), ballot.getId()),
             page -> page.stream().map(voteMapper::toVoterResponse).toList());
     }
 
@@ -326,7 +333,8 @@ public class VoteService {
     }
 
     public VoteResponse deactivateVote(String voteId, String creatorId) {
-        Vote vote = voteRepository.findById(UUID.fromString(voteId))
+        // Exclusive lock: waits for in-flight Ballot changes, and a concurrent Close then sees Ended and keeps its end time
+        Vote vote = voteRepository.findByIdForUpdate(UUID.fromString(voteId))
             .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
 
         if (!vote.getCreator().getId().toString().equals(creatorId)) {
@@ -394,13 +402,19 @@ public class VoteService {
             .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
     }
 
-    // Ballots can change only while Open; frozen once Ended
-    private void requireOpen(Vote vote) {
+    /**
+     * Ballots can change only while Open; frozen once Ended. Takes the shared Poll-row lock before the existing
+     * (user, Poll) advisory lock and checks the status under it, so a Close or Edit cannot slip in between.
+     */
+    private Vote lockOpenVote(UUID voteId) {
+        Vote vote = voteRepository.findByIdForShare(voteId)
+            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
         switch (vote.getStatus()) {
             case ENDED -> throw ApiException.badRequest(MessageKey.VOTE_ENDED);
             case SCHEDULED -> throw ApiException.badRequest(MessageKey.VOTE_NOT_ALLOWED);
             case OPEN -> { }
         }
+        return vote;
     }
 
     // Deletes the Ballot row and returns the option whose count must be released

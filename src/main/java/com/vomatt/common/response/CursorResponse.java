@@ -17,13 +17,15 @@ public record CursorResponse<T>(
     /**
      * Builds a page from rows fetched with {@code limit + 1}: the extra row only signals that another page exists.
      *
+     * @param scope   the list and ordering the next cursor is accepted by
      * @param mapPage converts the whole page at once, so callers can batch-load per-page data
      */
-    public static <E, T> CursorResponse<T> of(List<E> rows, int limit, Function<E, Cursor> cursorOf,
+    public static <E, T> CursorResponse<T> of(List<E> rows, int limit, Cursor.Scope scope,
+                                              Function<E, Cursor> cursorOf,
                                               Function<List<E>, List<T>> mapPage) {
         boolean hasMore = rows.size() > limit;
         List<E> page = hasMore ? rows.subList(0, limit) : rows;
-        String next = hasMore ? cursorOf.apply(page.getLast()).encode() : null;
+        String next = hasMore ? cursorOf.apply(page.getLast()).encode(scope) : null;
         return new CursorResponse<>(mapPage.apply(page), next);
     }
 

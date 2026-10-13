@@ -5,10 +5,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.Optional;
+
+import org.springframework.data.domain.Limit;
 import java.util.UUID;
 
 import org.junit.jupiter.api.DisplayName;
@@ -17,12 +21,16 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.security.UserPrincipal;
+import com.vomatt.common.response.CursorResponse;
 import com.vomatt.entity.User;
+import com.vomatt.entity.UserPreference;
+import com.vomatt.users.dto.UserDto;
 import com.vomatt.repository.UserPreferenceRepository;
 import com.vomatt.users.dto.UpdateProfileRequest;
 import com.vomatt.repository.UserRepository;
@@ -34,7 +42,7 @@ class UserServiceTest {
 
     @Mock UserRepository userRepository;
     @Mock UserPreferenceRepository preferenceRepository;
-    @Mock UserMapper userMapper;
+    @Spy UserMapper userMapper = new UserMapper();
     @Mock RefreshTokenService refreshTokenService;
     @Mock VoteOptionRepository voteOptionRepository;
     @InjectMocks UserService userService;
@@ -68,5 +76,28 @@ class UserServiceTest {
                 .extracting("status").isEqualTo(org.springframework.http.HttpStatus.CONFLICT);
         assertThat(user.getUsername()).isEqualTo("old_name");
         verify(userRepository, never()).save(user);
+    }
+
+    @Test
+    @DisplayName("should return public fields and mask hidden display name when searching users")
+    void shouldMaskHiddenDisplayNameWhenSearchingUsers() {
+        User shown = User.builder().id(UUID.randomUUID()).username("alice").displayName("Alice")
+                .avatarUrl("https://cdn.example.com/a.jpg").email("alice@example.com").build();
+        User hidden = User.builder().id(UUID.randomUUID()).username("alicia").displayName("Alicia")
+                .email("alicia@example.com").build();
+        UserPreference pref = new UserPreference();
+        pref.setUser(hidden);
+        pref.setKey("visibility.displayName");
+        pref.setValue("false");
+        when(userRepository.searchByUsernameAfter(eq("ali"), any(), any(Limit.class))).thenReturn(List.of(shown, hidden));
+        when(preferenceRepository.findByUserIdInAndKey(List.of(shown.getId(), hidden.getId()), "visibility.displayName"))
+                .thenReturn(List.of(pref));
+
+        CursorResponse<UserDto> page = userService.searchUsersByUsername("ali", null, null);
+
+        assertThat(page.items()).containsExactly(
+                new UserDto(shown.getId().toString(), "alice", "Alice", "https://cdn.example.com/a.jpg"),
+                new UserDto(hidden.getId().toString(), "alicia", null, null));
+        assertThat(page.nextCursor()).isNull();
     }
 }

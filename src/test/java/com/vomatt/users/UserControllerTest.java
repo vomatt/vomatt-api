@@ -1,6 +1,7 @@
 package com.vomatt.users;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
@@ -28,6 +29,7 @@ import com.vomatt.common.exception.GlobalExceptionHandler;
 import com.vomatt.common.i18n.LocalizedMessageService;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.security.SecurityEndpoints;
+import com.vomatt.users.dto.UserDto;
 import com.vomatt.votes.VoteService;
 import com.vomatt.votes.dto.VoteResponse;
 
@@ -62,6 +64,29 @@ class UserControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].title").value("Lunch?"))
                 .andExpect(jsonPath("$.data.nextCursor").value("next"));
+    }
+
+    @Test
+    @DisplayName("should return only public profile fields when searching users")
+    void shouldReturnOnlyPublicFieldsWhenSearchingUsers() throws Exception {
+        when(userService.searchUsersByUsername(eq("ali"), isNull(), isNull())).thenReturn(new CursorResponse<>(
+                List.of(new UserDto("0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47", "alice", "Alice", null)), null));
+
+        mockMvc.perform(get("/api/users/search").param("username", " ali "))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].*", hasSize(4)))
+                .andExpect(jsonPath("$.data.items[0].username").value("alice"))
+                .andExpect(jsonPath("$.data.items[0].displayName").value("Alice"))
+                .andExpect(jsonPath("$.data.items[0].email").doesNotExist())
+                .andExpect(jsonPath("$.data.items[0].phoneNumber").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("should reject user search when username is blank")
+    void shouldRejectUserSearchWhenUsernameBlank() throws Exception {
+        mockMvc.perform(get("/api/users/search").param("username", "  "))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("common.missing_param"));
     }
 
     @Test

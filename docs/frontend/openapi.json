@@ -1739,27 +1739,16 @@
         "type" : "object"
       },
       "UserDto" : {
-        "description" : "User search result item; not masked by the owner's visibility settings",
+        "description" : "User search result item; only public profile fields, masked by the owner's visibility settings",
         "properties" : {
-          "active" : {
-            "description" : "False when the account is suspended",
-            "example" : true,
-            "type" : "boolean"
-          },
-          "createdAt" : {
-            "description" : "When the account was created",
-            "example" : "2026-08-01T10:00:00+08:00",
-            "format" : "date-time",
-            "type" : "string"
-          },
-          "email" : {
-            "description" : "Email; null if the account signed up with phone only",
-            "example" : "alice@example.com",
+          "avatarUrl" : {
+            "description" : "Avatar URL; null until the user or an OAuth provider (Google / LINE) supplies one",
+            "example" : "https://cdn.example.com/avatar/abc.jpg",
             "nullable" : true,
             "type" : "string"
           },
-          "firstName" : {
-            "description" : "First name; null if not set",
+          "displayName" : {
+            "description" : "Display name; null if the owner hid it (public by default) or never set one",
             "example" : "Alice",
             "nullable" : true,
             "type" : "string"
@@ -1768,43 +1757,6 @@
             "description" : "User id (UUIDv7)",
             "example" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
             "type" : "string"
-          },
-          "lastLoginAt" : {
-            "description" : "Last sign-in time; null if the user never signed in",
-            "example" : "2026-10-09T09:15:00+08:00",
-            "format" : "date-time",
-            "nullable" : true,
-            "type" : "string"
-          },
-          "lastName" : {
-            "description" : "Last name; null if not set",
-            "example" : "Chen",
-            "nullable" : true,
-            "type" : "string"
-          },
-          "location" : {
-            "description" : "Location; null if not set",
-            "example" : "Taipei",
-            "nullable" : true,
-            "type" : "string"
-          },
-          "membershipLevel" : {
-            "description" : "Membership level; null if not set",
-            "example" : "basic",
-            "nullable" : true,
-            "type" : "string"
-          },
-          "phoneNumber" : {
-            "description" : "Phone number; null if the account signed up with email only",
-            "example" : "+886912345678",
-            "nullable" : true,
-            "type" : "string"
-          },
-          "points" : {
-            "description" : "Points",
-            "example" : 120,
-            "format" : "int32",
-            "type" : "integer"
           },
           "username" : {
             "description" : "Unique username",
@@ -5586,7 +5538,7 @@
     },
     "/api/users/search" : {
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: `username` is not blank\n**Behavior**: case-insensitive partial match on username, ordered by username, cursor-paged (`limit` 1-50, default 20; out-of-range values are clamped). `nextCursor` is `null` on the last page. Items are not masked by the owners' visibility settings.\n**Side effects**: none\n**Errors**:\n- 400 `common.missing_param`: `username` is missing or blank",
+        "description" : "**Auth**: required\n**Precondition**: `username` is not blank\n**Behavior**: case-insensitive partial match on username, ordered by username, cursor-paged (`limit` 1-50, default 20; out-of-range values are clamped). `nextCursor` is `null` on the last page. Each item carries only public profile fields (`id`, `username`, `displayName`, `avatarUrl`); `displayName` is `null` when the owner hid it on the public profile. Email, phone number and other private fields are never returned.\n**Side effects**: none\n**Errors**:\n- 400 `common.missing_param`: `username` is missing or blank",
         "operationId" : "searchUsers",
         "parameters" : [ {
           "description" : "Username fragment to search for",
@@ -5622,18 +5574,15 @@
                 "example" : {
                   "data" : {
                     "items" : [ {
-                      "active" : true,
-                      "createdAt" : "2026-08-01T10:00:00+08:00",
-                      "email" : "alice@example.com",
-                      "firstName" : "Alice",
+                      "avatarUrl" : "https://cdn.example.com/avatar/abc.jpg",
+                      "displayName" : "Alice",
                       "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
-                      "lastLoginAt" : "2026-10-09T09:15:00+08:00",
-                      "lastName" : "Chen",
-                      "location" : "Taipei",
-                      "membershipLevel" : "basic",
-                      "phoneNumber" : null,
-                      "points" : 120,
                       "username" : "alice"
+                    }, {
+                      "avatarUrl" : null,
+                      "displayName" : null,
+                      "id" : "0199c1a2-8c4f-7e5b-a021-3d6f9b2c4e58",
+                      "username" : "alicia"
                     } ],
                     "nextCursor" : null
                   },

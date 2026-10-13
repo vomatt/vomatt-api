@@ -187,13 +187,14 @@ public class UserController {
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"items":[{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":null,"firstName":"Alice","lastName":"Chen","location":"Taipei","points":120,"membershipLevel":"basic","active":true,"createdAt":"2026-08-01T10:00:00+08:00","lastLoginAt":"2026-10-09T09:15:00+08:00"}],"nextCursor":null},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"items":[{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice","avatarUrl":"https://cdn.example.com/avatar/abc.jpg"},{"id":"0199c1a2-8c4f-7e5b-a021-3d6f9b2c4e58","username":"alicia","displayName":null,"avatarUrl":null}],"nextCursor":null},"message":null,"errorCode":null,"error":null}""")))
     @Operation(summary = "Search users by username", description = """
             **Auth**: required
             **Precondition**: `username` is not blank
             **Behavior**: case-insensitive partial match on username, ordered by username, cursor-paged \
             (`limit` 1-50, default 20; out-of-range values are clamped). `nextCursor` is `null` on the last page. \
-            Items are not masked by the owners' visibility settings.
+            Each item carries only public profile fields (`id`, `username`, `displayName`, `avatarUrl`); \
+            `displayName` is `null` when the owner hid it on the public profile. Email, phone number and other private fields are never returned.
             **Side effects**: none
             **Errors**:
             - 400 `common.missing_param`: `username` is missing or blank""")

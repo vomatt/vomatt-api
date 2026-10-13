@@ -2,6 +2,10 @@
 
 Contract changes that affect the frontend. 💥 BREAKING means frontend code must change. See [openapi.json](openapi.json) for the contract snapshot and [error-codes.md](error-codes.md) for error codes.
 
+## 2026-10-14
+
+- 💥 BREAKING `GET /api/users/search` items (`UserDto`) now carry only public profile fields: `id`, `username`, `displayName`, `avatarUrl`. `email`, `phoneNumber`, `firstName`, `lastName`, `location`, `points`, `membershipLevel`, `active`, `createdAt` and `lastLoginAt` are removed. `displayName` is `null` when the owner hid it on the public profile. Ordering, cursor paging and the blank-`username` error are unchanged.
+
 ## 2026-10-13
 
 - `PATCH /api/users/me` accepts `username` (3-50 characters of `[a-z0-9_]`, not `search`); returns 409 `user.username.taken` when another account uses it. The old `/api/users/{username}` path returns 404 after the change.

@@ -29,13 +29,13 @@ class CursorListsPostgresTest extends PostgresRepositoryTest {
     @Autowired TagRepository tagRepository;
 
     // Walks every page; fetch(cursor, limit + 1) returns raw rows, like the services do
-    private <E> List<E> walk(int limit, Function<Cursor, List<E>> fetch, Function<E, Cursor> cursorOf) {
+    private <E> List<E> walk(int limit, Cursor.Scope scope, Function<Cursor, List<E>> fetch, Function<E, Cursor> cursorOf) {
         List<E> all = new ArrayList<>();
         Cursor cursor = null;
         do {
-            CursorResponse<E> page = CursorResponse.of(fetch.apply(cursor), limit, cursorOf, p -> p);
+            CursorResponse<E> page = CursorResponse.of(fetch.apply(cursor), limit, scope, cursorOf, p -> p);
             all.addAll(page.items());
-            cursor = Cursor.decode(page.nextCursor());
+            cursor = Cursor.decode(page.nextCursor(), scope);
         } while (cursor != null);
         return all;
     }
@@ -57,7 +57,7 @@ class CursorListsPostgresTest extends PostgresRepositoryTest {
         em.flush();
         em.clear();
 
-        List<VoteComment> all = walk(2,
+        List<VoteComment> all = walk(2, Cursor.Scope.COMMENTS,
                 c -> commentRepository.findPageByVoteId(poll.getId(), c == null ? null : c.timeKey(),
                         c == null ? null : c.id(), Limit.of(3)),
                 c -> Cursor.of(c.getCreatedAt(), c.getId()));
@@ -74,7 +74,7 @@ class CursorListsPostgresTest extends PostgresRepositoryTest {
         }
         em.flush();
 
-        List<User> all = walk(2,
+        List<User> all = walk(2, Cursor.Scope.USER_SEARCH,
                 c -> userRepository.searchByUsernameAfter(marker, c == null ? null : c.key(), Limit.of(3)),
                 u -> Cursor.of(u.getUsername(), u.getId()));
 
@@ -95,7 +95,7 @@ class CursorListsPostgresTest extends PostgresRepositoryTest {
         }
         em.flush();
 
-        List<Tag> all = walk(2,
+        List<Tag> all = walk(2, Cursor.Scope.POPULAR_TAGS,
                 c -> tagRepository.findPopularPage(c == null ? null : (int) c.longKey(), c == null ? null : c.id(),
                         Limit.of(3)),
                 t -> Cursor.of(t.getUsageCount(), t.getId()));

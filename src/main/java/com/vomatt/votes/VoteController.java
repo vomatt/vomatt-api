@@ -238,7 +238,7 @@ public class VoteController {
             - 400 `common.invalid_sort`: `sort` is neither `newest` nor `closing`
             - 400 `vote.list.sort_not_allowed`: `sort` was sent together with `status=ended`
             - 400 `vote.search.query_too_short`: `q` is shorter than 2 characters
-            - 400 `common.cursor_invalid`: `cursor` was not issued by this endpoint
+            - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list or another ordering of this list
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of Polls",
             content = @Content(examples = @ExampleObject(name = "Page", value = EX_PAGE_OF_POLLS)))
@@ -269,7 +269,7 @@ public class VoteController {
             **Side effects**: none
             **Errors**:
             - 400 `common.invalid_status`: `status` is neither `open` nor `ended`
-            - 400 `common.cursor_invalid`: `cursor` was not issued by this endpoint
+            - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list or another ordering of this list
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of the caller's Polls",
             content = @Content(examples = @ExampleObject(name = "Page", value = EX_PAGE_OF_POLLS)))
@@ -437,7 +437,7 @@ public class VoteController {
             - 404 `vote.not_found`: Poll does not exist
             - 403 `vote.results.sealed`: the Poll is still Scheduled or Open
             - 403 `vote.voters.hidden`: Voter Visibility does not allow the caller
-            - 400 `common.cursor_invalid`: `cursor` was not issued by this endpoint
+            - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list or another ordering of this list
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of Participants",
             content = @Content(examples = @ExampleObject(name = "Page", value = """

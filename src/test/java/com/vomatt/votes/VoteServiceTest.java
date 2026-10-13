@@ -276,7 +276,7 @@ class VoteServiceTest {
         @Test
         @DisplayName("should throw 404 VOTE_NOT_FOUND when Poll does not exist or is disabled")
         void shouldThrowWhenVoteNotActive() {
-            when(voteRepository.findById(voteId)).thenReturn(Optional.empty());
+            when(voteRepository.findByIdForShare(voteId)).thenReturn(Optional.empty());
 
             VoteRequest request = new VoteRequest();
             request.setOptionIds(List.of(UUID.randomUUID().toString()));
@@ -290,7 +290,7 @@ class VoteServiceTest {
         void shouldThrowWhenMultipleChoicesNotAllowed() {
             vote.setActive(true);
             vote.setAllowMultipleChoices(false);
-            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.findByIdForShare(voteId)).thenReturn(Optional.of(vote));
 
             VoteRequest request = new VoteRequest();
             request.setOptionIds(List.of(UUID.randomUUID().toString(), UUID.randomUUID().toString()));
@@ -305,7 +305,7 @@ class VoteServiceTest {
         @DisplayName("should throw 400 VOTE_OPTION_NOT_IN_VOTE when option does not belong to Poll")
         void shouldThrowWhenOptionBelongsToDifferentVote() {
             vote.setActive(true);
-            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.findByIdForShare(voteId)).thenReturn(Optional.of(vote));
 
             UUID optionId = UUID.randomUUID();
             Vote differentVote = setId(new Vote(), UUID.randomUUID()); // different from voteId
@@ -336,7 +336,7 @@ class VoteServiceTest {
         @DisplayName("should reject vote with vote.ended when Poll has ended")
         void shouldRejectVoteWhenPollEndedWithVoteEndedCode() {
             vote.setEndTime(OffsetDateTime.now().minusMinutes(1));
-            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.findByIdForShare(voteId)).thenReturn(Optional.of(vote));
 
             assertThatThrownBy(() -> voteService.vote(voteId.toString(), singleOption(), userId.toString(), "127.0.0.1"))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_ENDED));
@@ -348,7 +348,7 @@ class VoteServiceTest {
         void shouldRejectVoteWhenPollScheduled() {
             vote.setStartTime(OffsetDateTime.now().plusHours(1));
             vote.setEndTime(OffsetDateTime.now().plusDays(1));
-            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.findByIdForShare(voteId)).thenReturn(Optional.of(vote));
 
             assertThatThrownBy(() -> voteService.vote(voteId.toString(), singleOption(), userId.toString(), "127.0.0.1"))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_NOT_ALLOWED));
@@ -358,7 +358,7 @@ class VoteServiceTest {
         @DisplayName("should reject removing selection with vote.ended when Poll has ended")
         void shouldRejectRemovalWhenPollEnded() {
             vote.setEndTime(OffsetDateTime.now().minusMinutes(1));
-            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.findByIdForShare(voteId)).thenReturn(Optional.of(vote));
 
             assertThatThrownBy(() -> voteService.removeVote(voteId.toString(), UUID.randomUUID().toString(), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_ENDED));
@@ -369,7 +369,7 @@ class VoteServiceTest {
         @DisplayName("should reject withdraw with vote.ended when Poll has ended")
         void shouldRejectRetractionWhenPollEnded() {
             vote.setEndTime(OffsetDateTime.now().minusMinutes(1));
-            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.findByIdForShare(voteId)).thenReturn(Optional.of(vote));
 
             assertThatThrownBy(() -> voteService.retract(voteId.toString(), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_ENDED));
@@ -511,14 +511,14 @@ class VoteServiceTest {
         private void scheduled() {
             vote.setStartTime(OffsetDateTime.now().plusHours(1));
             vote.setEndTime(OffsetDateTime.now().plusDays(1));
-            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
         }
 
         @Test
         @DisplayName("should reject edit when Poll has started")
         void shouldRejectEditWhenPollOpen() {
             vote.setEndTime(OffsetDateTime.now().plusDays(1));
-            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
 
             assertThatThrownBy(() -> voteService.updateVote(voteId.toString(), editRequest(null), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_NOT_EDITABLE));
@@ -619,7 +619,7 @@ class VoteServiceTest {
         void shouldThrowWhenNotCreator() {
             User creator = User.builder().id(UUID.randomUUID()).build(); // different from userId
             vote.setCreator(creator);
-            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
 
             assertThatThrownBy(() -> voteService.deactivateVote(voteId.toString(), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_FORBIDDEN));
@@ -633,7 +633,7 @@ class VoteServiceTest {
         void shouldDeactivateWhenCreator() {
             vote.setCreator(user);
             vote.setActive(true);
-            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
             when(voteRepository.save(vote)).thenReturn(vote);
             stubConvertToVoteResponse(vote);
 

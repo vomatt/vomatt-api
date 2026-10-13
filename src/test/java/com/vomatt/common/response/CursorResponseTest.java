@@ -95,7 +95,7 @@ class CursorResponseTest {
         Cursor decoded = Cursor.decode(Cursor.of(42L, time, id).encode(Cursor.Scope.FEED_TOP), Cursor.Scope.FEED_TOP);
 
         assertThat(decoded.countKey()).isEqualTo(42L);
-        assertThat(decoded.countTimeKey().toInstant()).isEqualTo(time.toInstant());
+        assertThat(decoded.compoundTimeKey().toInstant()).isEqualTo(time.toInstant());
         assertThat(decoded.id()).isEqualTo(id);
     }
 
@@ -108,7 +108,7 @@ class CursorResponseTest {
 
         assertCursorInvalid(noSeparator::countKey);
         assertCursorInvalid(badCount::countKey);
-        assertCursorInvalid(badTime::countTimeKey);
+        assertCursorInvalid(badTime::compoundTimeKey);
     }
 
     @Test

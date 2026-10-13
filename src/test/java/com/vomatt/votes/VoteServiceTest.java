@@ -477,6 +477,7 @@ class VoteServiceTest {
             setId(option, UUID.randomUUID());
             option.setDisplayOrder(0);
             ReflectionTestUtils.setField(option, "voteCount", 5);
+            ReflectionTestUtils.setField(vote, "turnout", 5);
             vote.addOption(option);
             stubConvertToVoteResponse(vote);
 
@@ -850,7 +851,6 @@ class VoteServiceTest {
             vote.setDeletedAt(OffsetDateTime.now());
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             when(voteRepository.findByIdWithOptions(voteId)).thenReturn(Optional.of(vote));
-            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
             String id = voteId.toString();
             String owner = userId.toString();

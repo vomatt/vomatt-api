@@ -66,7 +66,7 @@ public record Cursor(String key, UUID id) {
     }
 
     /** Time half of a compound key from {@link #of(long, OffsetDateTime, UUID)}. */
-    public OffsetDateTime countTimeKey() {
+    public OffsetDateTime compoundTimeKey() {
         return new Cursor(keyPart(1), id).timeKey();
     }
 

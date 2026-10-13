@@ -125,6 +125,8 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
         em.flush();
         em.createNativeQuery("UPDATE vomatt.vote_options SET vote_count = 1 WHERE id = :id")
                 .setParameter("id", chosen.getId()).executeUpdate();
+        em.createNativeQuery("UPDATE vomatt.votes SET turnout = 1 WHERE id = :id")
+                .setParameter("id", voted.getId()).executeUpdate();
         em.persist(new VoteComment(voted, voter, "hello"));
         VoteComment deleted = new VoteComment(voted, voter, "gone");
         deleted.softDelete();

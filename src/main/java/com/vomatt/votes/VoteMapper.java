@@ -17,7 +17,7 @@ public class VoteMapper {
     /**
      * The single sealing point: while a Poll has not Ended, per-option counts stay null so no endpoint
      * can leak them. Turnout ({@code participantCount}) is always present. Counts come from the stored
-     * option counts, so no Ballot rows are loaded.
+     * option counts and the stored Turnout (the Top sort key), so no Ballot rows are loaded.
      */
     public VoteResponse toResponse(Vote vote, List<VoteOption> options) {
         boolean sealed = vote.isResultsSealed();
@@ -37,9 +37,8 @@ public class VoteMapper {
         response.setAudience(vote.getAudience());
         response.setCreatedAt(vote.getCreatedAt());
         response.setUpdatedAt(vote.getUpdatedAt());
-        long turnout = turnout(options);
-        response.setTotalVotes(turnout);
-        response.setParticipantCount(turnout);
+        response.setTotalVotes(vote.getTurnout());
+        response.setParticipantCount(vote.getTurnout());
         response.setVotingActive(vote.isVotingActive());
         response.setOptions(options.stream()
                 .map(opt -> toOptionResponse(opt, sealed))
@@ -72,7 +71,7 @@ public class VoteMapper {
 
     /** Results of an Ended Poll; Support uses the number of Participants as denominator. */
     public VoteResultResponse toResultResponse(Vote vote, List<VoteOption> options) {
-        long participants = turnout(options);
+        long participants = vote.getTurnout();
         VoteResultResponse response = new VoteResultResponse();
         response.setId(vote.getId().toString());
         response.setTitle(vote.getTitle());
@@ -109,10 +108,5 @@ public class VoteMapper {
     public VoterResponse toVoterResponse(UserVote ballot) {
         return new VoterResponse(ballot.getUser().getId().toString(), ballot.getUser().getUsername(),
                 ballot.getOption().getId().toString(), ballot.getCreatedAt());
-    }
-
-    // Turnout: Polls are single-choice, so the option counts add up to the number of Participants
-    private static long turnout(List<VoteOption> options) {
-        return options.stream().mapToLong(VoteOption::getVoteCount).sum();
     }
 }

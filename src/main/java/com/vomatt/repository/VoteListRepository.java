@@ -85,7 +85,7 @@ public class VoteListRepository {
         }
         if (after != null && order == VoteListOrder.TOP) {
             nativeQuery.setParameter("afterCount", after.countKey())
-                    .setParameter("afterKey", after.countTimeKey()).setParameter("afterId", after.id());
+                    .setParameter("afterKey", after.compoundTimeKey()).setParameter("afterId", after.id());
         } else if (after != null) {
             nativeQuery.setParameter("afterKey", after.timeKey()).setParameter("afterId", after.id());
         }

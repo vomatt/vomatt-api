@@ -31,6 +31,13 @@ class VoteMapperTest {
         return vote;
     }
 
+    // Turnout is the stored counter; the Ballot path keeps it equal to the sum of option counts
+    private Vote poll(OffsetDateTime start, OffsetDateTime end, int turnout) {
+        Vote vote = poll(start, end);
+        ReflectionTestUtils.setField(vote, "turnout", turnout);
+        return vote;
+    }
+
     private VoteOption option(String text, int count) {
         VoteOption option = new VoteOption(text, null, null);
         ReflectionTestUtils.setField(option, "id", UUID.randomUUID());
@@ -41,7 +48,7 @@ class VoteMapperTest {
     @Test
     @DisplayName("should hide option counts while Poll is Open but keep Turnout visible")
     void shouldOmitOptionCountsWhenPollOpen() {
-        VoteResponse response = mapper.toResponse(poll(now.minusHours(1), now.plusDays(1)),
+        VoteResponse response = mapper.toResponse(poll(now.minusHours(1), now.plusDays(1), 4),
                 List.of(option("A", 3), option("B", 1)));
 
         assertThat(response.getOptions()).extracting(VoteResponse.VoteOptionResponse::getVotes).containsOnlyNulls();
@@ -59,7 +66,7 @@ class VoteMapperTest {
     @Test
     @DisplayName("should reveal option counts after Poll has Ended")
     void shouldRevealOptionCountsWhenPollEnded() {
-        VoteResponse response = mapper.toResponse(poll(now.minusDays(2), now.minusDays(1)),
+        VoteResponse response = mapper.toResponse(poll(now.minusDays(2), now.minusDays(1), 4),
                 List.of(option("A", 3), option("B", 1)));
 
         assertThat(response.getOptions()).extracting(VoteResponse.VoteOptionResponse::getVotes).containsExactly(3L, 1L);
@@ -69,7 +76,7 @@ class VoteMapperTest {
     @Test
     @DisplayName("should compute Support with Participant as denominator")
     void shouldComputeSupportFromParticipants() {
-        VoteResultResponse results = mapper.toResultResponse(poll(now.minusDays(2), now.minusDays(1)),
+        VoteResultResponse results = mapper.toResultResponse(poll(now.minusDays(2), now.minusDays(1), 4),
                 List.of(option("A", 3), option("B", 1)));
 
         assertThat(results.getTotalParticipants()).isEqualTo(4);

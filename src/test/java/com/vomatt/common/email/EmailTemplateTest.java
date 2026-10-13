@@ -1,6 +1,8 @@
 package com.vomatt.common.email;
 
 import com.vomatt.common.config.I18nConfig;
+import jakarta.mail.Multipart;
+import jakarta.mail.Part;
 import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -69,7 +71,27 @@ class EmailTemplateTest {
     private String sentHtml() throws Exception {
         ArgumentCaptor<MimeMessage> captor = ArgumentCaptor.forClass(MimeMessage.class);
         verify(mailSender, atLeastOnce()).send(captor.capture());
-        return (String) captor.getValue().getContent();
+        MimeMessage message = captor.getValue();
+        message.saveChanges();
+        assertThat(findPart(message, "image/png")).as("inline logo").isNotNull();
+        String html = (String) findPart(message, "text/html").getContent();
+        assertThat(html).contains("cid:logo");
+        return html;
+    }
+
+    private Part findPart(Part part, String mimeType) throws Exception {
+        if (part.isMimeType(mimeType)) {
+            return part;
+        }
+        if (part.getContent() instanceof Multipart multipart) {
+            for (int i = 0; i < multipart.getCount(); i++) {
+                Part found = findPart(multipart.getBodyPart(i), mimeType);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
     }
 
     private EmailServiceImpl createEmailService() {

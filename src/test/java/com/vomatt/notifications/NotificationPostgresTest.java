@@ -22,6 +22,7 @@ import com.vomatt.entity.Vote;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.votes.VoteService;
 import com.vomatt.votes.VoteServiceSlice;
+import com.vomatt.votes.dto.VoteRequest;
 import com.vomatt.votes.dto.VoteResponse;
 
 /** Invitations and Ended Notifications derived on read (ADR 0003). */
@@ -199,16 +200,34 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
     @DisplayName("should send the Ended Notification to every Invitee, Ballot or not, and only to Participants otherwise")
     void shouldNotifyEveryInviteeWhenInviteOnlyPollEnded() {
         User retracted = persistUser("n-ret-" + System.nanoTime());
-        Vote inviteOnly = invitePoll(now.minusDays(2), now.minusHours(1), participant, bystander, retracted);
-        ballot(participant, inviteOnly);  // bystander never cast a Ballot; retracted holds none any more
+        Vote inviteOnly = invitePoll(now.minusDays(2), now.minusHours(1), participant, bystander);
+        ballot(participant, inviteOnly);  // bystander never cast a Ballot
         Vote unlisted = poll(now.minusDays(2), now.minusHours(1));
         unlisted.setAudience(Audience.UNLISTED);
         ballot(participant, unlisted);  // retracted made a Retraction here: no Ballot row left
 
         assertThat(unread(participant)).isEqualTo(2);
         assertThat(unread(bystander)).isEqualTo(1);
-        assertThat(unread(retracted)).isEqualTo(1);
+        assertThat(unread(retracted)).isZero();
         assertThat(unread(owner)).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("should send the Ended Notification to an Invitee who Retracted")
+    void shouldNotifyInviteeWhenRetractedBeforePollEnded() {
+        Vote poll = invitePoll(now.minusHours(1), now.plusDays(1), participant);
+        em.flush();
+        String voteId = poll.getId().toString();
+        String userId = participant.getId().toString();
+        VoteRequest ballot = new VoteRequest();
+        ballot.setOptionIds(List.of(voteService.getVote(voteId, userId).getOptions().getFirst().getId()));
+        voteService.vote(voteId, ballot, userId, null);
+        voteService.retract(voteId, userId);
+
+        voteService.closeVote(voteId, owner.getId().toString());
+
+        assertThat(unread(participant)).isEqualTo(1);
+        assertThat(myPollUnread(participant, "ended", poll)).isTrue();
     }
 
     @Test

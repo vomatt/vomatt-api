@@ -252,6 +252,11 @@ CREATE INDEX IF NOT EXISTS idx_votes_search_bigrams ON vomatt.votes USING GIN (s
 ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 -- Audience: PUBLIC (default) / UNLISTED / INVITE_ONLY; replaces the never-used is_public, which old databases keep unmapped
 ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS audience VARCHAR(20) NOT NULL DEFAULT 'PUBLIC';
+-- Deadline: the end time the owner set; ending early moves only end_time (ADR 0004).
+-- Backfilled from end_time, so Polls that ended early before this column get the moment they Ended
+ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS deadline TIMESTAMPTZ;
+UPDATE vomatt.votes SET deadline = end_time WHERE deadline IS NULL;
+ALTER TABLE vomatt.votes ALTER COLUMN deadline SET NOT NULL;
 -- Comment replies (one level): parent_id only points to top-level comments
 ALTER TABLE vomatt.vote_comments ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES vomatt.vote_comments (id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS idx_vote_comments_parent ON vomatt.vote_comments (parent_id, created_at, id);

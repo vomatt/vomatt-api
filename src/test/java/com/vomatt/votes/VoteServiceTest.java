@@ -7,6 +7,7 @@ import com.vomatt.entity.Tag;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
+import com.vomatt.entity.VoteStatus;
 import com.vomatt.repository.TagRepository;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.UserVoteRepository;
@@ -595,9 +596,13 @@ class VoteServiceTest {
             when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
             stubSaveAssignsId();
 
-            VoteResponse result = voteService.updateVote(voteId.toString(), editRequest(null), userId.toString());
+            CreateVoteRequest request = editRequest(null);
+
+            VoteResponse result = voteService.updateVote(voteId.toString(), request, userId.toString());
 
             assertThat(result.getTitle()).isEqualTo("Edited");
+            assertThat(result.getEndTime()).isEqualTo(request.getEndTime());
+            assertThat(result.getDeadline()).isEqualTo(request.getEndTime());
             assertThat(result.getOptions()).extracting(VoteResponse.VoteOptionResponse::getText)
                     .containsExactlyInAnyOrder("X", "Y", "Z");
             // still Scheduled: counts are Sealed on the edit response too
@@ -660,11 +665,11 @@ class VoteServiceTest {
         }
     }
 
-    // ─── deactivateVote ───────────────────────────────────────────────────────
+    // ─── closeVote ───────────────────────────────────────────────────────────
 
     @Nested
-    @DisplayName("deactivateVote")
-    class DeactivateVoteTests {
+    @DisplayName("closeVote")
+    class CloseVoteTests {
 
         @Test
         @DisplayName("should throw 403 VOTE_FORBIDDEN when non-creator tries to disable")
@@ -673,7 +678,7 @@ class VoteServiceTest {
             vote.setCreator(creator);
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
 
-            assertThatThrownBy(() -> voteService.deactivateVote(voteId.toString(), userId.toString()))
+            assertThatThrownBy(() -> voteService.closeVote(voteId.toString(), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_FORBIDDEN));
 
             assertThat(vote.isActive()).isTrue();
@@ -681,19 +686,66 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("creator should be able to disable Poll")
-        void shouldDeactivateWhenCreator() {
-            vote.setCreator(user);
-            vote.setActive(true);
+        @DisplayName("should end an Open Unlisted Poll now and keep its Deadline when the owner Closes it")
+        void shouldCloseWhenOpenUnlisted() {
+            OffsetDateTime deadline = OffsetDateTime.now().plusDays(1);
+            vote.setStartTime(OffsetDateTime.now().minusHours(1));
+            vote.scheduleEnd(deadline);
+            vote.setAudience(Audience.UNLISTED);
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
             when(voteRepository.save(vote)).thenReturn(vote);
             stubConvertToVoteResponse(vote);
 
-            voteService.deactivateVote(voteId.toString(), userId.toString());
+            voteService.closeVote(voteId.toString(), userId.toString());
 
-            assertThat(vote.isActive()).isFalse();
-            assertThat(vote.getEndTime()).isNotNull();
+            assertThat(vote.getStatus()).isEqualTo(VoteStatus.ENDED);
+            assertThat(vote.getEndTime()).isBefore(deadline);
+            assertThat(vote.getDeadline()).isEqualTo(deadline);
             verify(voteRepository).save(vote);
+        }
+
+        @Test
+        @DisplayName("should throw 400 VOTE_CLOSE_PUBLIC_NOT_ALLOWED when the owner Closes an Open Public Poll")
+        void shouldThrowWhenClosingPublic() {
+            OffsetDateTime deadline = OffsetDateTime.now().plusDays(1);
+            vote.setStartTime(OffsetDateTime.now().minusHours(1));
+            vote.setEndTime(deadline);
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+
+            assertThatThrownBy(() -> voteService.closeVote(voteId.toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_CLOSE_PUBLIC_NOT_ALLOWED));
+            assertThat(vote.getEndTime()).isEqualTo(deadline);
+            verify(voteRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("should throw 400 VOTE_CLOSE_SCHEDULED when the owner Closes a Scheduled Poll")
+        void shouldThrowWhenClosingScheduled() {
+            OffsetDateTime deadline = OffsetDateTime.now().plusDays(2);
+            vote.setStartTime(OffsetDateTime.now().plusDays(1));
+            vote.setEndTime(deadline);
+            vote.setAudience(Audience.UNLISTED);
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+
+            assertThatThrownBy(() -> voteService.closeVote(voteId.toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_CLOSE_SCHEDULED));
+            assertThat(vote.getEndTime()).isEqualTo(deadline);
+            verify(voteRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("should keep the end time of an Ended Public Poll when the owner Closes it")
+        void shouldKeepEndTimeWhenClosingEnded() {
+            OffsetDateTime ended = OffsetDateTime.now().minusMinutes(1);
+            vote.setStartTime(OffsetDateTime.now().minusDays(1));
+            vote.setEndTime(ended);
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.save(vote)).thenReturn(vote);
+            stubConvertToVoteResponse(vote);
+
+            voteService.closeVote(voteId.toString(), userId.toString());
+
+            assertThat(vote.getEndTime()).isEqualTo(ended);
         }
     }
 
@@ -772,7 +824,7 @@ class VoteServiceTest {
                     () -> voteService.getVoteResults(id, owner),
                     () -> voteService.getVoters(id, owner, null, null),
                     () -> voteService.hasUserVoted(id, owner),
-                    () -> voteService.deactivateVote(id, owner),
+                    () -> voteService.closeVote(id, owner),
                     () -> voteService.deleteVote(id, owner));
             paths.forEach(path -> assertThatThrownBy(path)
                     .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND)));

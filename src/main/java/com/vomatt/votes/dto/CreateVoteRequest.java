@@ -40,7 +40,7 @@ public class CreateVoteRequest {
     private OffsetDateTime startTime;
 
     @NotNull(message = "End time is required")
-    @Schema(description = "When the Poll ends (ISO-8601 with offset). Required; must be in the future, after `startTime`, "
+    @Schema(description = "When the Poll ends (ISO-8601 with offset); also sets the Deadline. Required; must be in the future, after `startTime`, "
             + "and at most 365 days after the start time",
             example = "2026-10-19T09:00:00+08:00", requiredMode = Schema.RequiredMode.REQUIRED)
     private OffsetDateTime endTime;

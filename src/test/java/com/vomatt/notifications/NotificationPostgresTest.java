@@ -14,6 +14,7 @@ import org.springframework.context.annotation.Import;
 
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.entity.Audience;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
@@ -78,7 +79,7 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
     @DisplayName("should not create notifications for a cancelled Scheduled Poll")
     void shouldNotNotifyWhenScheduledPollCancelled() {
         Vote scheduled = poll(now.plusDays(1), now.plusDays(2));
-        scheduled.deactivate();
+        scheduled.setEndTime(now.minusMinutes(1)); // Cancelled before Close was limited: ends before its start time
 
         assertThat(unread(owner)).isZero();
     }
@@ -90,7 +91,8 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
         ballot(participant, open);
         assertThat(unread(participant)).isZero();
 
-        open.deactivate();
+        open.setAudience(Audience.UNLISTED);
+        open.closeAt(OffsetDateTime.now());
 
         assertThat(unread(participant)).isEqualTo(1);
     }
@@ -126,7 +128,7 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
         Vote unreadPoll = poll(now.minusDays(2), now.minusHours(1));
         Vote readPoll = poll(now.minusDays(3), now.minusHours(2));
         Vote cancelled = poll(now.plusDays(1), now.plusDays(2));
-        cancelled.deactivate();
+        cancelled.setEndTime(now.minusMinutes(1)); // Cancelled before Close was limited
         em.flush();
         notificationService.markRead(owner.getId().toString(), readPoll.getId().toString());
         em.flush();

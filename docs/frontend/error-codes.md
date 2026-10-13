@@ -70,6 +70,8 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `vote.end_time.before_start` | 400 | 結束時間不可早於開始時間 | End time cannot be before start time | Show message so the user can fix the input | VoteService |
 | `vote.forbidden` | 403 | 只有投票建立者可執行此操作 | Only the vote creator can perform this action | Show a permission-denied notice | VoteService |
 | `vote.delete.window_passed` | 400 | 投票發布超過 {0} 分鐘後，只有尚未開始的投票可以刪除 | A Poll can only be deleted while it is scheduled or within {0} minutes of posting | Show message so the user can fix the input | VoteService |
+| `vote.close.public_not_allowed` | 400 | 公開投票不可提早結束，會持續到截止時間 | A Public Poll cannot be closed early; it runs until its deadline | Show message so the user can fix the input | Vote |
+| `vote.close.scheduled` | 400 | 尚未開始的投票無法結束，請改為刪除 | A scheduled Poll cannot be closed; delete it instead | Show message so the user can fix the input | Vote |
 | `vote.audience.unsupported` | 400 | 尚未支援僅限受邀者的投票 | Invite-only Polls are not supported yet | Show message so the user can fix the input | VoteService |
 | `vote.options.min` | 400 | 至少需要 {0} 個選項 | Minimum {0} options required | Show message so the user can fix the input | VoteService |
 | `vote.options.max` | 400 | 最多只能有 {0} 個選項 | Maximum {0} options allowed | Show message so the user can fix the input | VoteService |

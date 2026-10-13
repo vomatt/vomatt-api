@@ -74,40 +74,79 @@ class VoteTest {
         assertThat(poll(now.plusDays(1), now.minusMinutes(1)).getStatus()).isEqualTo(VoteStatus.ENDED);
     }
 
-    @Test
-    @DisplayName("should end immediately when closing an Open Poll")
-    void shouldEndOpenPollWhenClosed() {
-        Vote vote = poll(now.minusHours(1), now.plusDays(1));
+    // ─── Close ──────────────────────────────────────────────────────────────
 
-        vote.deactivate();
-
-        assertThat(vote.getStatus()).isEqualTo(VoteStatus.ENDED);
-        assertThat(vote.getEndTime()).isBefore(now.plusMinutes(1));
-        assertThat(vote.isActive()).isFalse();
+    private Vote poll(OffsetDateTime start, OffsetDateTime deadline, Audience audience) {
+        Vote vote = new Vote("Poll", null, null, deadline);
+        vote.setStartTime(start);
+        vote.setAudience(audience);
+        return vote;
     }
 
     @Test
-    @DisplayName("should cancel with end time before start time when closing a Scheduled Poll")
-    void shouldEndScheduledPollWhenClosed() {
-        OffsetDateTime start = now.plusDays(1);
-        Vote vote = poll(start, now.plusDays(2));
+    @DisplayName("should end now and keep the Deadline when closing an Open Unlisted or Invite-only Poll")
+    void shouldEndAndKeepDeadlineWhenClosingOpenNonPublicPoll() {
+        OffsetDateTime deadline = now.plusDays(1);
+        for (Audience audience : new Audience[] { Audience.UNLISTED, Audience.INVITE_ONLY }) {
+            Vote vote = poll(now.minusHours(1), deadline, audience);
 
-        vote.deactivate();
+            vote.closeAt(now);
 
-        assertThat(vote.getStatus()).isEqualTo(VoteStatus.ENDED);
-        assertThat(vote.getEndTime()).isBefore(start);
+            assertThat(vote.statusAt(now)).isEqualTo(VoteStatus.ENDED);
+            assertThat(vote.getEndTime()).isEqualTo(now);
+            assertThat(vote.getDeadline()).isEqualTo(deadline);
+            assertThat(vote.isActive()).isFalse();
+        }
     }
 
     @Test
-    @DisplayName("should not change end time when closing an already Ended Poll")
+    @DisplayName("should refuse with vote.close.public_not_allowed when closing an Open Public Poll")
+    void shouldRefuseCloseWhenPublic() {
+        OffsetDateTime deadline = now.plusDays(1);
+        Vote vote = poll(now.minusHours(1), deadline, Audience.PUBLIC);
+
+        assertThatThrownBy(() -> vote.closeAt(now))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_CLOSE_PUBLIC_NOT_ALLOWED));
+        assertThat(vote.getEndTime()).isEqualTo(deadline);
+        assertThat(vote.isActive()).isTrue();
+    }
+
+    @Test
+    @DisplayName("should refuse with vote.close.scheduled when closing a Scheduled Poll of any Audience")
+    void shouldRefuseCloseWhenScheduled() {
+        OffsetDateTime deadline = now.plusDays(2);
+        for (Audience audience : Audience.values()) {
+            Vote vote = poll(now.plusDays(1), deadline, audience);
+
+            assertThatThrownBy(() -> vote.closeAt(now))
+                    .isInstanceOfSatisfying(ApiException.class,
+                            ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_CLOSE_SCHEDULED));
+            assertThat(vote.getEndTime()).isEqualTo(deadline);
+        }
+    }
+
+    @Test
+    @DisplayName("should not change end time when closing an already Ended Poll, Public included")
     void shouldNotChangeEndTimeWhenClosingEndedPoll() {
-        OffsetDateTime end = now.minusDays(1);
-        Vote vote = poll(now.minusDays(2), end);
+        OffsetDateTime deadline = now.minusDays(1);
+        for (Audience audience : Audience.values()) {
+            Vote vote = poll(now.minusDays(2), deadline, audience);
 
-        vote.deactivate();
+            vote.closeAt(now);
 
-        assertThat(vote.getEndTime()).isEqualTo(end);
-        assertThat(vote.getStatus()).isEqualTo(VoteStatus.ENDED);
+            assertThat(vote.getEndTime()).isEqualTo(deadline);
+            assertThat(vote.statusAt(now)).isEqualTo(VoteStatus.ENDED);
+        }
+    }
+
+    @Test
+    @DisplayName("should stay Ended when an existing Cancelled Poll ends before its start time")
+    void shouldStayEndedWhenCancelledBeforeOpening() {
+        Vote vote = poll(now.plusDays(1), now.minusHours(1));
+
+        assertThat(vote.statusAt(now)).isEqualTo(VoteStatus.ENDED);
+        assertThat(vote.isCancelledBeforeOpening()).isTrue();
     }
 
     // ─── Delete window ───────────────────────────────────────────────────────

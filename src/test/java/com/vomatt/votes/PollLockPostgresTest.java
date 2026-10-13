@@ -164,20 +164,13 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
         assertThat(cast.await(10, TimeUnit.SECONDS)).isTrue();
 
         Future<VoteResponse> closer = pool.submit(this::close);
-        boolean closeWaited = blocked(closer);
-        Map<UUID, Long> snapshot = closeWaited ? null : counts();
+        assertThat(blocked(closer)).as("Close waits for the Cast").isTrue();
         release.countDown();
+        caster.get(10, TimeUnit.SECONDS);
+        closer.get(10, TimeUnit.SECONDS);
 
-        if (closeWaited) {
-            caster.get(10, TimeUnit.SECONDS);
-            closer.get(10, TimeUnit.SECONDS);
-            assertThat(counts().get(optionA)).isEqualTo(1);
-            assertThat(ballots()).isEqualTo(1);
-        } else {
-            // Close returned first: the Cast must not change the frozen counts
-            assertApiError(caster, MessageKey.VOTE_ENDED);
-            assertThat(counts()).isEqualTo(snapshot);
-        }
+        assertThat(counts().get(optionA)).isEqualTo(1);
+        assertThat(ballots()).isEqualTo(1);
     }
 
     @Test
@@ -213,25 +206,20 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
         assertThat(retracted.await(10, TimeUnit.SECONDS)).isTrue();
 
         Future<VoteResponse> closer = pool.submit(this::close);
-        boolean closeWaited = blocked(closer);
-        Map<UUID, Long> snapshot = closeWaited ? null : counts();
+        assertThat(blocked(closer)).as("Close waits for the Retraction").isTrue();
         release.countDown();
+        retracter.get(10, TimeUnit.SECONDS);
+        closer.get(10, TimeUnit.SECONDS);
 
-        if (closeWaited) {
-            retracter.get(10, TimeUnit.SECONDS);
-            closer.get(10, TimeUnit.SECONDS);
-            assertThat(counts().get(optionA)).isZero();
-            assertThat(ballots()).isZero();
-        } else {
-            assertApiError(retracter, MessageKey.VOTE_ENDED);
-            assertThat(counts()).isEqualTo(snapshot);
-        }
+        assertThat(counts().get(optionA)).isZero();
+        assertThat(ballots()).isZero();
     }
 
     @Test
     @DisplayName("should reject a Ballot at the opening moment cleanly when an in-flight Edit replaced the options")
     void shouldRejectBallotWhenEditReplacedOptionsAtOpening() throws Exception {
-        OffsetDateTime start = OffsetDateTime.now().plusSeconds(1);
+        // wide margin so the Edit always takes its lock while the Poll is still Scheduled, even on a slow runner
+        OffsetDateTime start = OffsetDateTime.now().plusSeconds(3);
         createPoll(start, start.plusDays(1));
         CreateVoteRequest edit = new CreateVoteRequest();
         edit.setTitle("edited");
@@ -242,6 +230,7 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
         Future<VoteResponse> editor = holding(
                 () -> voteService.updateVote(poll.getId().toString(), edit, owner.getId().toString()), edited, release);
         assertThat(edited.await(10, TimeUnit.SECONDS)).isTrue();
+        assertThat(OffsetDateTime.now()).as("Edit held the lock before the Poll opened").isBefore(start);
 
         // the Poll opens while the Edit is still uncommitted; the first Ballot targets an old option
         Thread.sleep(Math.max(0, Duration.between(OffsetDateTime.now(), start).toMillis() + 50));
@@ -252,6 +241,32 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
 
         assertApiError(caster, MessageKey.VOTE_OPTION_NOT_FOUND);
         assertThat(ballots()).isZero();
+    }
+
+    @Test
+    @DisplayName("should reject an Edit with vote.not_editable when a first Ballot holds the Poll at the opening moment")
+    void shouldRejectEditWhenBallotHoldsPollAtOpening() throws Exception {
+        OffsetDateTime start = OffsetDateTime.now().plus(Duration.ofMillis(500));
+        createPoll(start, start.plusDays(1));
+        CreateVoteRequest edit = new CreateVoteRequest();
+        edit.setTitle("edited");
+        edit.setEndTime(start.plusDays(1));
+        edit.setOptions(List.of(option("X"), option("Y")));
+        Thread.sleep(Math.max(0, Duration.between(OffsetDateTime.now(), start).toMillis() + 50));
+        CountDownLatch cast = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Future<VoteResponse> caster = holding(this::cast, cast, release);
+        assertThat(cast.await(10, TimeUnit.SECONDS)).isTrue();
+
+        Future<VoteResponse> editor = pool.submit(
+                () -> voteService.updateVote(poll.getId().toString(), edit, owner.getId().toString()));
+        assertThat(blocked(editor)).as("Edit waits for the Ballot").isTrue();
+        release.countDown();
+        caster.get(10, TimeUnit.SECONDS);
+
+        assertApiError(editor, MessageKey.VOTE_NOT_EDITABLE);
+        assertThat(ballots()).isEqualTo(1);
+        assertThat(counts().get(optionA)).isEqualTo(1);
     }
 
     @Test

@@ -28,7 +28,10 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
     @Query("SELECT v FROM Vote v WHERE v.id = :id")
     Optional<Vote> findByIdForShare(@Param("id") UUID id);
 
-    /** Exclusive Poll-row lock (FOR UPDATE) for Close and Edit; waits for in-flight Ballot changes. */
+    /**
+     * Exclusive Poll-row lock for Close and Edit; waits for in-flight Ballot changes.
+     * On Postgres Hibernate emits FOR NO KEY UPDATE, which still conflicts with FOR SHARE.
+     */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT v FROM Vote v WHERE v.id = :id")
     Optional<Vote> findByIdForUpdate(@Param("id") UUID id);

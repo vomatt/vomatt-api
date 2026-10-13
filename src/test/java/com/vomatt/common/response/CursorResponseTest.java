@@ -71,8 +71,8 @@ class CursorResponseTest {
     }
 
     @Test
-    @DisplayName("should throw 400 COMMON_CURSOR_INVALID when cursor sort key kind mismatches (e.g. a cursor from another list)")
-    void shouldRejectCursorWhenKeyKindMismatch() {
+    @DisplayName("should throw 400 COMMON_CURSOR_INVALID when the sort key kind mismatches within the same scope")
+    void shouldRejectCursorWhenSortKeyKindMismatchWithinScope() {
         Cursor fromTagList = Cursor.decode(Cursor.of(42L, UUID.randomUUID()).encode(Cursor.Scope.COMMENTS),
                 Cursor.Scope.COMMENTS);
         Cursor fromUserList = Cursor.decode(Cursor.of("alice", UUID.randomUUID()).encode(Cursor.Scope.POPULAR_TAGS),

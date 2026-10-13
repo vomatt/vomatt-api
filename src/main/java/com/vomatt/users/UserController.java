@@ -140,7 +140,7 @@ public class UserController {
             **Side effects**: none
             **Errors**:
             - 404 `user.not_found`: no user has this username, or the user is suspended
-            - 400 `common.cursor_invalid`: `cursor` was not issued by this endpoint""")
+            - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list or another ordering of this list""")
     public ResponseEntity<ApiResponse<CursorResponse<VoteResponse>>> getUserPolls(
             @Parameter(description = "Username of the Poll creator", required = true, example = "alice") @PathVariable String username,
             @Parameter(description = "`nextCursor` from the previous page; omit for the first page") @RequestParam(required = false) String cursor,

@@ -122,7 +122,7 @@ public class VoteController {
             and is listed only in My Polls. An INVITE_ONLY Poll is reachable only by its owner and the users in `inviteeIds` \
             (duplicates and the owner's own ID are ignored; more can be added later); everyone else gets 404 `vote.not_found`.
             **Side effects**: usage count of each attached tag +1 for a PUBLIC Poll (UNLISTED and INVITE_ONLY Polls are not counted); \
-            each Invitee gets an unread Invitation (unread count, `unread` on My Polls `status=open`); the creation is audit-logged.
+            each Invitee gets an unread Invitation notification (unread count, `unread` on My Polls `status=open`); the creation is audit-logged.
             **Errors**:
                     - 400 `vote.invitee.not_invite_only`: `inviteeIds` is not empty but `audience` is not INVITE_ONLY
                     - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended
@@ -173,7 +173,8 @@ public class VoteController {
             An omitted `startTime`, `voterVisibility`, `audience` or `inviteeIds` keeps the current value; the Poll does not open on edit. \
             Audience can change only here, so it is fixed once the Poll is Open.
             **Side effects**: all options are replaced, so option IDs change; tag usage counts are adjusted for added / removed tags \
-            and for an Audience change (only PUBLIC Polls are counted). `inviteeIds` replaces the Invitees; an Audience other than INVITE_ONLY removes them all.
+            and for an Audience change (only PUBLIC Polls are counted). `inviteeIds` replaces the Invitees; an Audience other than INVITE_ONLY removes them all. \
+            Each new Invitee gets an unread Invitation notification, including one removed and invited again.
             **Errors**:
             - 403 `vote.forbidden`: the caller is not the owner
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
@@ -349,7 +350,7 @@ public class VoteController {
             **Auth**: required
             **Precondition**: the Poll is Open (not Scheduled, not Ended)
             **Behavior**: withdraws the caller's whole Ballot (Retraction); the caller is no longer a Participant. Idempotent: succeeds, changing nothing, when the caller holds no Ballot.
-            **Side effects**: Turnout -1 when a Ballot was removed. A Participant who Retracted gets no Ended Notification.
+            **Side effects**: Turnout -1 when a Ballot was removed. A Participant who Retracted gets no Ended Notification, unless they are an Invitee: every Invitee of an INVITE_ONLY Poll still gets it.
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen
@@ -632,7 +633,7 @@ public class VoteController {
             **Precondition**: the Poll is INVITE_ONLY and Scheduled or Open (Invitees can still be added after it opened)
             **Behavior**: adds the users as Invitees, so they can see the Poll, cast a Ballot and Comment, and find it in My Polls. \
             Users already invited, duplicates and the owner's own ID are ignored. Returns the full Invitee list.
-            **Side effects**: `inviteeCount` grows; each added Invitee gets an unread Invitation and later the Ended Notification; the action is audit-logged.
+            **Side effects**: `inviteeCount` grows; each new Invitee gets an unread Invitation notification (again unread for one removed and invited again) and later the Ended Notification; the action is audit-logged.
             **Errors**:
             - 400 `vote.invitee.not_invite_only`: the Poll is not INVITE_ONLY
             - 400 `vote.ended`: the Poll has Ended

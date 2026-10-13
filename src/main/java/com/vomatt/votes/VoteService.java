@@ -447,10 +447,10 @@ public class VoteService {
         }
         Set<UUID> invited = inviteeRepository.findByVoteId(vote.getId()).stream()
             .map(i -> i.getUser().getId()).collect(Collectors.toSet());
-        inviteeRepository.saveAllAndFlush(users.stream()
-            .filter(u -> !invited.contains(u.getId()))
-            .map(u -> new Invitee(vote, u))
-            .toList());
+        List<User> added = users.stream().filter(u -> !invited.contains(u.getId())).toList();
+        inviteeRepository.saveAllAndFlush(added.stream().map(u -> new Invitee(vote, u)).toList());
+        // A removed and re-added Invitee sees the Invitation unread again
+        notificationReadRepository.deleteReads(vote.getId(), added.stream().map(User::getId).toList());
     }
 
     // Edit only happens while Scheduled, so no Invitee can hold a Ballot yet

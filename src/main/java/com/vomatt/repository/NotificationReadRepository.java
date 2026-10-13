@@ -22,14 +22,15 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class NotificationReadRepository {
 
-    // Not Deleted, and either Ended after opening (a cancelled Scheduled Poll ends before its start time) and owned,
-    // participated in or invited to, or not yet Ended and the user is a (bound) Invitee of it
+    // Not Deleted, owned, participated in or invited to (Invitee Polls are a subset, so this indexed semi-join drives
+    // the query and the OR below only filters its rows), and either Ended or an Invite-only Poll not yet Ended.
+    // end_time > start_time leaves out legacy Cancelled Polls, Closed while Scheduled before ADR 0004, which never opened
     private static final String NOTIFIED_POLLS = """
             FROM vomatt.votes v
-            WHERE v.deleted_at IS NULL
-              AND ((v.end_time <= :now AND v.end_time > v.start_time AND v.id IN %s)
-                OR (v.end_time > :now AND v.audience = 'INVITE_ONLY'
-                    AND v.id IN (SELECT i.vote_id FROM vomatt.vote_invitees i WHERE i.user_id = :userId)))
+            WHERE v.deleted_at IS NULL AND v.id IN %s
+              AND (v.end_time <= :now AND v.end_time > v.start_time
+                   OR v.end_time > :now AND v.audience = 'INVITE_ONLY'
+                      AND EXISTS (SELECT 1 FROM vomatt.vote_invitees i WHERE i.vote_id = v.id AND i.user_id = :userId))
             """.formatted(VoteListRepository.MY_POLL_IDS);
 
     // A read row covers the Invitation while the Poll has not Ended, and the Ended Notification only once read after the end
@@ -65,6 +66,17 @@ public class NotificationReadRepository {
                 .setParameter("userId", userId)
                 .setParameter("voteId", voteId)
                 .setParameter("now", now)
+                .executeUpdate();
+    }
+
+    /** Forgets the users' read state for one Poll, so its current notification is unread again. */
+    public void deleteReads(UUID voteId, Collection<UUID> userIds) {
+        if (userIds.isEmpty()) {
+            return;
+        }
+        em.createNativeQuery("DELETE FROM vomatt.notification_reads WHERE vote_id = :voteId AND user_id IN (:userIds)")
+                .setParameter("voteId", voteId)
+                .setParameter("userIds", userIds)
                 .executeUpdate();
     }
 

@@ -11,6 +11,7 @@ import com.vomatt.entity.VoteOption;
 import com.vomatt.entity.VoteStatus;
 import com.vomatt.repository.IdCount;
 import com.vomatt.repository.InviteeRepository;
+import com.vomatt.repository.NotificationReadRepository;
 import com.vomatt.repository.TagRepository;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.UserVoteRepository;
@@ -59,6 +60,7 @@ class VoteServiceTest {
     @Mock VoteConfigurationProperties voteConfig;
     @Mock com.vomatt.repository.VoteCommentRepository voteCommentRepository;
     @Mock InviteeRepository inviteeRepository;
+    @Mock NotificationReadRepository notificationReadRepository;
     @Spy VoteMapper voteMapper = new VoteMapper();
 
     @InjectMocks

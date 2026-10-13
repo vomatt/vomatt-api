@@ -22,6 +22,7 @@ import com.vomatt.entity.Vote;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.votes.VoteService;
 import com.vomatt.votes.VoteServiceSlice;
+import com.vomatt.votes.dto.InviteesRequest;
 import com.vomatt.votes.dto.VoteRequest;
 import com.vomatt.votes.dto.VoteResponse;
 
@@ -256,5 +257,20 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
         voteService.removeInvitee(poll.getId().toString(), participant.getId().toString(), owner.getId().toString());
 
         assertThat(unread(participant)).isZero();
+    }
+
+    @Test
+    @DisplayName("should show the Invitation unread again when a removed Invitee who read it is invited again")
+    void shouldNotifyAgainWhenInviteeReAdded() {
+        Vote poll = invitePoll(now.minusHours(1), now.plusDays(1), participant);
+        markRead(participant, poll);
+        voteService.removeInvitee(poll.getId().toString(), participant.getId().toString(), owner.getId().toString());
+
+        InviteesRequest request = new InviteesRequest();
+        request.setUserIds(List.of(participant.getId()));
+        voteService.addInvitees(poll.getId().toString(), request, owner.getId().toString());
+
+        assertThat(unread(participant)).isEqualTo(1);
+        assertThat(myPollUnread(participant, "open", poll)).isTrue();
     }
 }

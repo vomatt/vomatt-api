@@ -198,8 +198,9 @@ public class VoteService {
     }
 
     /**
-     * My Polls: Polls the user created or holds a Ballot in. {@code status=open} (default) lists Scheduled and
-     * Open ones closing soonest first; {@code status=ended} lists Ended ones most recently ended first.
+     * My Polls: Polls the user created, holds a Ballot in or is invited to. {@code status=open} (default) lists Scheduled
+     * and Open ones closing soonest first; {@code status=ended} lists Ended ones most recently ended first. Each item
+     * carries {@code unread} for the Poll's current notification.
      */
     @Transactional(readOnly = true)
     public CursorResponse<VoteResponse> getMyPolls(String userId, String status, String cursor, Integer limit) {
@@ -211,10 +212,10 @@ public class VoteService {
         int size = CursorResponse.limit(limit);
         UUID userUuid = UUID.fromString(userId);
         Cursor.Scope scope = ended ? Cursor.Scope.MY_ENDED : Cursor.Scope.MY_OPEN;
-        List<Vote> rows = voteListRepository.findMine(userUuid, ended, Cursor.decode(cursor, scope),
-            OffsetDateTime.now(), size + 1);
+        OffsetDateTime now = OffsetDateTime.now();
+        List<Vote> rows = voteListRepository.findMine(userUuid, ended, Cursor.decode(cursor, scope), now, size + 1);
         return CursorResponse.of(rows, size, scope, v -> Cursor.of(v.getEndTime(), v.getId()),
-            page -> ended ? withUnread(page, toResponses(page, userId), userUuid) : toResponses(page, userId));
+            page -> withUnread(page, toResponses(page, userId), userUuid, now));
     }
 
     /**
@@ -235,12 +236,12 @@ public class VoteService {
             page -> toResponses(page, userId));
     }
 
-    // Ended tab: unread when the Poll produced an Ended Notification (it opened) that the user hasn't read
-    private List<VoteResponse> withUnread(List<Vote> page, List<VoteResponse> responses, UUID userId) {
-        Set<UUID> read = notificationReadRepository.findReadVoteIds(userId, page.stream().map(Vote::getId).toList());
+    // Unread when the Poll's current notification (Invitation while not Ended, then Ended Notification) is not read
+    private List<VoteResponse> withUnread(List<Vote> page, List<VoteResponse> responses, UUID userId,
+                                          OffsetDateTime now) {
+        Set<UUID> unread = notificationReadRepository.findUnreadVoteIds(userId, page.stream().map(Vote::getId).toList(), now);
         for (int i = 0; i < page.size(); i++) {
-            Vote vote = page.get(i);
-            responses.get(i).setUnread(!vote.isCancelledBeforeOpening() && !read.contains(vote.getId()));
+            responses.get(i).setUnread(unread.contains(page.get(i).getId()));
         }
         return responses;
     }

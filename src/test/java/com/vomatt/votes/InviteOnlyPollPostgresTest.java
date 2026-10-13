@@ -125,7 +125,8 @@ class InviteOnlyPollPostgresTest extends PostgresRepositoryTest {
     @Test
     @DisplayName("should send the Ended Notification to an Invitee without a Ballot when an Invite-only Poll Ended")
     void shouldNotifyInviteeWhenInviteOnlyPollEnded() {
-        assertThat(notificationReadRepository.countUnread(invitee.getId(), now)).isEqualTo(1);
+        // Ended Notification of invite-ended plus the Invitation to invite-open
+        assertThat(notificationReadRepository.countUnread(invitee.getId(), now)).isEqualTo(2);
         assertThat(notificationReadRepository.countUnread(stranger.getId(), now)).isZero();
         VoteResponse ended = voteService.getMyPolls(invitee.getId().toString(), "ended", null, 50).items().getFirst();
         assertThat(ended.getUnread()).isTrue();

@@ -121,7 +121,8 @@ public class VoteController {
             An UNLISTED Poll is reachable only through its link: it stays out of Feed / Explore / Search and the owner's profile, \
             and is listed only in My Polls. An INVITE_ONLY Poll is reachable only by its owner and the users in `inviteeIds` \
             (duplicates and the owner's own ID are ignored; more can be added later); everyone else gets 404 `vote.not_found`.
-            **Side effects**: usage count of each attached tag +1 for a PUBLIC Poll (UNLISTED and INVITE_ONLY Polls are not counted); the creation is audit-logged.
+            **Side effects**: usage count of each attached tag +1 for a PUBLIC Poll (UNLISTED and INVITE_ONLY Polls are not counted); \
+            each Invitee gets an unread Invitation (unread count, `unread` on My Polls `status=open`); the creation is audit-logged.
             **Errors**:
                     - 400 `vote.invitee.not_invite_only`: `inviteeIds` is not empty but `audience` is not INVITE_ONLY
                     - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended
@@ -280,7 +281,7 @@ public class VoteController {
             **Auth**: required
             **Precondition**: none
             **Behavior**: cursor-paged Polls the caller created, holds a Ballot in or is an Invitee of, of any Audience (UNLISTED and INVITE_ONLY included).
-            - `status=open` (default): the caller's Scheduled and Open Polls, closing soonest first
+            - `status=open` (default): the caller's Scheduled and Open Polls, closing soonest first; each item carries `unread` (Invitation to an INVITE_ONLY Poll not yet read; false otherwise)
             - `status=ended`: Ended Polls (including Cancelled ones), most recently ended first; each item carries `unread` (Ended Notification not yet read; false for a Cancelled Poll)
             - `nextCursor` null means the last page; `limit` is clamped to 1-50 (default 20).
             **Side effects**: none
@@ -631,7 +632,7 @@ public class VoteController {
             **Precondition**: the Poll is INVITE_ONLY and Scheduled or Open (Invitees can still be added after it opened)
             **Behavior**: adds the users as Invitees, so they can see the Poll, cast a Ballot and Comment, and find it in My Polls. \
             Users already invited, duplicates and the owner's own ID are ignored. Returns the full Invitee list.
-            **Side effects**: `inviteeCount` grows; Invitees also receive the Ended Notification; the action is audit-logged.
+            **Side effects**: `inviteeCount` grows; each added Invitee gets an unread Invitation and later the Ended Notification; the action is audit-logged.
             **Errors**:
             - 400 `vote.invitee.not_invite_only`: the Poll is not INVITE_ONLY
             - 400 `vote.ended`: the Poll has Ended

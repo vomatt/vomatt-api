@@ -26,7 +26,8 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/notifications")
 @RequiredArgsConstructor
-@Tag(name = "Notification", description = "Ended Notifications, derived when read (no push). The list itself is `GET /api/votes/my?status=ended`, whose items carry `unread`")
+@Tag(name = "Notification", description = "Invitations and Ended Notifications, derived when read (no push). The list itself is `GET /api/votes/my` "
+        + "(Invitations on `status=open`, Ended Notifications on `status=ended`), whose items carry `unread`")
 public class NotificationController {
 
     private final NotificationService notificationService;
@@ -39,9 +40,13 @@ public class NotificationController {
     @Operation(summary = "Unread notification count", description = """
             **Auth**: required
             **Precondition**: none
-            **Behavior**: counts the caller's unread Ended Notifications. Notifications are not stored: a Poll counts \
-            once it has Ended (end time passed or Closed early), the caller owns it or holds a Ballot in it, it was not \
-            Cancelled while Scheduled, and the caller has not marked it read. A Participant who made a Retraction no longer counts. \
+            **Behavior**: counts the caller's unread notifications. Notifications are not stored; each Poll gives the caller \
+            at most one at a time, and Deleted Polls give none:
+            - Invitation: an INVITE_ONLY Poll the caller is an Invitee of, while it is Scheduled or Open
+            - Ended Notification: once the Poll has Ended (end time passed or Closed early), when the caller owns it, holds a Ballot \
+            in it or is an Invitee of it (with or without a Ballot), and it was not Cancelled while Scheduled. A Participant who made \
+            a Retraction and is not an Invitee no longer counts.
+            A notification counts until the caller marks it read; reading the Invitation does not read the later Ended Notification. \
             Poll this endpoint (for example on app focus and about once a minute) to drive a badge; there is no push.
             **Side effects**: none
             **Errors**: none specific to this endpoint""")
@@ -55,21 +60,26 @@ public class NotificationController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist or is Deleted (errorCode `vote.not_found`), or the caller has no Ended Notification for it (`notification.not_found`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist or is Deleted (errorCode `vote.not_found`), or the caller has no notification for it (`notification.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"Notification not found","errorCode":"notification.not_found","error":"Notification not found"}""")))
-    @Operation(summary = "Mark an Ended Notification read", description = """
+    @Operation(summary = "Mark a notification read", description = """
             **Auth**: required
-            **Precondition**: the Poll has Ended, was not Cancelled while Scheduled, and the caller owns it or holds a Ballot in it
-            **Behavior**: marks the caller's Ended Notification for this Poll as read. Idempotent: marking an already-read notification succeeds and changes nothing.
-            **Side effects**: the unread count drops by 1 (first call only); `unread` becomes false on the Poll in `GET /api/votes/my?status=ended`
+            **Precondition**: the caller has a notification for the Poll: an Invitation (INVITE_ONLY Poll not yet Ended, caller is an \
+            Invitee) or an Ended Notification (Poll Ended, was not Cancelled while Scheduled, caller owns it, holds a Ballot in it or is an Invitee of it)
+            **Behavior**: marks the caller's current notification for this Poll as read: the Invitation while the Poll has not Ended, \
+            the Ended Notification after. Idempotent: marking an already-read notification succeeds and changes nothing. \
+            The Poll's state at the time of this call decides which one is read, so a call meant for the Invitation that arrives after \
+            the Poll Ended reads the Ended Notification.
+            **Side effects**: the unread count drops by 1 (first call only); `unread` becomes false on the Poll in `GET /api/votes/my`. \
+            When the Poll later Ends, its Ended Notification is unread again.
             **Errors**:
             - 404 `vote.not_found`: the Poll does not exist or is Deleted
-            - 404 `notification.not_found`: the Poll has not Ended, was Cancelled while Scheduled, or the caller neither owns it nor holds a Ballot in it
+            - 404 `notification.not_found`: the caller has neither an Invitation nor an Ended Notification for the Poll
             - 400 `common.bad_request`: `voteId` is not a valid id""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> markRead(
-            @Parameter(description = "Id of the Poll whose Ended Notification is marked read", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47") @PathVariable String voteId,
+            @Parameter(description = "Id of the Poll whose notification is marked read", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47") @PathVariable String voteId,
             @AuthenticationPrincipal UserPrincipal principal) {
         notificationService.markRead(principal.userId(), voteId);
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));

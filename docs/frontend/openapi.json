@@ -2111,7 +2111,7 @@
             "type" : "string"
           },
           "deletable" : {
-            "description" : "Whether the caller (the owner) can still Delete the Poll: while Scheduled, or within 20 minutes of posting. Null when the caller is not the owner, and on Ballot responses",
+            "description" : "Whether the caller (the owner) can still Delete the Poll: while Scheduled, or within the delete window after posting (default 20 minutes, configurable). Set on every Poll response to the owner; null when the caller is not the owner or not signed in",
             "example" : true,
             "nullable" : true,
             "type" : "boolean"
@@ -5841,7 +5841,7 @@
     },
     "/api/users/{username}/votes" : {
       "get" : {
-        "description" : "**Auth**: public (optional login fills the viewer-specific fields of each Poll, e.g. the caller's Ballot)\n**Precondition**: the user exists and is not suspended\n**Behavior**: the Polls the user created that have opened (Open and Ended), most recently opened first, cursor-paged (`limit` 1-50, default 20; out-of-range values are clamped). Scheduled Polls and Polls Cancelled before opening are left out, so the count matches `totalPolls` on the public profile. `nextCursor` is `null` on the last page.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended\n- 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list or another ordering of this list",
+        "description" : "**Auth**: public (optional login fills the viewer-specific fields of each Poll, e.g. the caller's Ballot)\n**Precondition**: the user exists and is not suspended\n**Behavior**: the Polls the user created that have opened (Open and Ended), most recently opened first, cursor-paged (`limit` 1-50, default 20; out-of-range values are clamped). Scheduled Polls and Polls Cancelled before opening are left out, so the count matches `totalPolls` on the public profile. `nextCursor` is `null` on the last page.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended\n- 400 `common.cursor_invalid`: `cursor` was not issued by this endpoint",
         "operationId" : "getUserPolls",
         "parameters" : [ {
           "description" : "Username of the Poll creator",
@@ -5955,7 +5955,7 @@
     },
     "/api/votes" : {
       "get" : {
-        "description" : "**Auth**: public (optional login changes response: `myOptionId` of each item is filled for the caller's Ballots)\n**Precondition**: none\n**Behavior**: cursor-paged list of Open or Ended Polls; Scheduled Polls never appear.\n- `status=open` (default) + `sort=newest` (default): most recently opened first (the Feed)\n- `status=open` + `sort=closing`: closing soonest first\n- `status=ended`: most recently ended first; `sort` must be omitted\n- `tag`: only Polls under that tag slug (Explore); `q`: free-text match on title and description, option text is not matched (Search), at least 2 characters\n- Filters combine. `nextCursor` null means the last page; pass it back unchanged as `cursor`. `limit` is clamped to 1-50 (default 20).\n**Side effects**: none\n**Errors**:\n- 400 `common.invalid_status`: `status` is neither `open` nor `ended`\n- 400 `common.invalid_sort`: `sort` is neither `newest` nor `closing`\n- 400 `vote.list.sort_not_allowed`: `sort` was sent together with `status=ended`\n- 400 `vote.search.query_too_short`: `q` is shorter than 2 characters\n- 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list or another ordering of this list\n",
+        "description" : "**Auth**: public (optional login changes response: `myOptionId` of each item is filled for the caller's Ballots)\n**Precondition**: none\n**Behavior**: cursor-paged list of Open or Ended Polls; Scheduled Polls never appear.\n- `status=open` (default) + `sort=newest` (default): most recently opened first (the Feed)\n- `status=open` + `sort=closing`: closing soonest first\n- `status=ended`: most recently ended first; `sort` must be omitted\n- `tag`: only Polls under that tag slug (Explore); `q`: free-text match on title and description, option text is not matched (Search), at least 2 characters\n- Filters combine. `nextCursor` null means the last page; pass it back unchanged as `cursor`. `limit` is clamped to 1-50 (default 20).\n**Side effects**: none\n**Errors**:\n- 400 `common.invalid_status`: `status` is neither `open` nor `ended`\n- 400 `common.invalid_sort`: `sort` is neither `newest` nor `closing`\n- 400 `vote.list.sort_not_allowed`: `sort` was sent together with `status=ended`\n- 400 `vote.search.query_too_short`: `q` is shorter than 2 characters\n- 400 `common.cursor_invalid`: `cursor` was not issued by this endpoint\n",
         "operationId" : "listVotes",
         "parameters" : [ {
           "description" : "`open` (default) or `ended`",
@@ -6264,7 +6264,7 @@
     },
     "/api/votes/my" : {
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: cursor-paged Polls the caller created or holds a Ballot in.\n- `status=open` (default): the caller's Scheduled and Open Polls, closing soonest first\n- `status=ended`: Ended Polls (including Cancelled ones), most recently ended first; each item carries `unread` (Ended Notification not yet read; false for a Cancelled Poll)\n- `nextCursor` null means the last page; `limit` is clamped to 1-50 (default 20).\n**Side effects**: none\n**Errors**:\n- 400 `common.invalid_status`: `status` is neither `open` nor `ended`\n- 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list or another ordering of this list\n",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: cursor-paged Polls the caller created or holds a Ballot in.\n- `status=open` (default): the caller's Scheduled and Open Polls, closing soonest first\n- `status=ended`: Ended Polls (including Cancelled ones), most recently ended first; each item carries `unread` (Ended Notification not yet read; false for a Cancelled Poll)\n- `nextCursor` null means the last page; `limit` is clamped to 1-50 (default 20).\n**Side effects**: none\n**Errors**:\n- 400 `common.invalid_status`: `status` is neither `open` nor `ended`\n- 400 `common.cursor_invalid`: `cursor` was not issued by this endpoint\n",
         "operationId" : "getMyVotes",
         "parameters" : [ {
           "description" : "`open` (default, includes the caller's Scheduled Polls) or `ended`",
@@ -6389,7 +6389,7 @@
     },
     "/api/votes/{voteId}" : {
       "delete" : {
-        "description" : "**Auth**: required (owner only)\n**Precondition**: the Poll is Scheduled, or was posted less than 20 minutes ago (any state, even with Ballots); `deletable` on the Poll response tells the owner whether this still holds\n**Behavior**: soft-deletes the Poll. From then on it is gone for everyone, owner included: every Poll endpoint (including Comments, Replies, likes and notification read) returns 404 `vote.not_found`, and it leaves Feed / Explore / Search, profile lists, My Polls, Ended Notifications and popular tag counts. The data is kept.\n**Side effects**: nobody is notified\n**Errors**:\n- 400 `vote.delete.window_passed`: the Poll is Open or Ended and was posted 20 minutes ago or more\n- 403 `vote.forbidden`: the caller is not the owner\n- 404 `vote.not_found`: Poll does not exist or is already Deleted\n",
+        "description" : "**Auth**: required (owner only)\n**Precondition**: the Poll is Scheduled, or is still within the delete window after posting (default 20 minutes, configurable; any state, even with Ballots); `deletable` on the Poll response tells the owner whether this still holds\n**Behavior**: soft-deletes the Poll. From then on it is gone for everyone, owner included: every Poll endpoint (including Comments, Replies, likes and notification read) returns 404 `vote.not_found`, and it leaves Feed / Explore / Search, profile lists, My Polls, Ended Notifications and popular tag counts. The data is kept.\n**Side effects**: nobody is notified\n**Errors**:\n- 400 `vote.delete.window_passed`: the Poll is Open or Ended and the delete window (default 20 minutes, configurable) has passed\n- 403 `vote.forbidden`: the caller is not the owner\n- 404 `vote.not_found`: Poll does not exist or is already Deleted\n",
         "operationId" : "deleteVote",
         "parameters" : [ {
           "description" : "Poll ID",
@@ -6500,7 +6500,7 @@
         "tags" : [ "Vote" ]
       },
       "get" : {
-        "description" : "**Auth**: public (optional login changes response: `myOptionId` holds the caller's Selection when signed in and a Ballot exists, otherwise null)\n**Precondition**: none; Scheduled, Open and Ended Polls are all readable\n**Behavior**: returns the Poll. `options[].votes` is null (Sealed) for everyone, owner included, until the Poll has Ended; `participantCount` (Turnout) is always present.\n**Side effects**: none\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist\n",
+        "description" : "**Auth**: public (optional login changes response: `myOptionId` holds the caller's Selection when signed in and a Ballot exists, otherwise null)\n**Precondition**: none; Scheduled, Open and Ended Polls are all readable\n**Behavior**: returns the Poll. `options[].votes` is null (Sealed) for everyone, owner included, until the Poll has Ended; `participantCount` (Turnout) is always present.\n**Side effects**: none\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist or is Deleted\n",
         "operationId" : "getVote",
         "parameters" : [ {
           "description" : "Poll ID",
@@ -6669,7 +6669,7 @@
         "tags" : [ "Vote" ]
       },
       "put" : {
-        "description" : "**Auth**: required (owner only)\n**Precondition**: the Poll is Scheduled (its start time has not arrived and it has not been Closed)\n**Behavior**: replaces title, description, times, Voter Visibility, tags and options with the body (same body and validation as create). An omitted `startTime` keeps the scheduled one; the Poll does not open on edit.\n**Side effects**: all options are replaced, so option IDs change; tag usage counts are adjusted for added / removed tags.\n**Errors**:\n- 403 `vote.forbidden`: the caller is not the owner\n- 404 `vote.not_found`: Poll does not exist\n- 400 `vote.not_editable`: the Poll is Open or Ended\n- 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true\n- 400 `vote.options.min`: fewer than 2 options\n- 400 `vote.options.max`: more than 10 options\n- 400 `vote.end_time.past`: `endTime` is in the past\n- 400 `vote.end_time.before_start`: `endTime` is not after `startTime`\n- 400 `vote.duration.exceeded`: `endTime` is more than 365 days after the start time\n- 400 `tag.ids.invalid`: one of `tagIds` does not exist\n- 400 `common.validation_failed`: a field breaks its size / required rule (first failing field only)\n",
+        "description" : "**Auth**: required (owner only)\n**Precondition**: the Poll is Scheduled (its start time has not arrived and it has not been Closed)\n**Behavior**: replaces title, description, times, Voter Visibility, tags and options with the body (same body and validation as create). An omitted `startTime` keeps the scheduled one; the Poll does not open on edit.\n**Side effects**: all options are replaced, so option IDs change; tag usage counts are adjusted for added / removed tags.\n**Errors**:\n- 403 `vote.forbidden`: the caller is not the owner\n- 404 `vote.not_found`: Poll does not exist or is Deleted\n- 400 `vote.not_editable`: the Poll is Open or Ended\n- 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true\n- 400 `vote.options.min`: fewer than 2 options\n- 400 `vote.options.max`: more than 10 options\n- 400 `vote.end_time.past`: `endTime` is in the past\n- 400 `vote.end_time.before_start`: `endTime` is not after `startTime`\n- 400 `vote.duration.exceeded`: `endTime` is more than 365 days after the start time\n- 400 `tag.ids.invalid`: one of `tagIds` does not exist\n- 400 `common.validation_failed`: a field breaks its size / required rule (first failing field only)\n",
         "operationId" : "updateVote",
         "parameters" : [ {
           "description" : "Poll ID",
@@ -6826,7 +6826,7 @@
                 }
               }
             },
-            "description" : "Poll does not exist (`vote.not_found`)"
+            "description" : "Poll does not exist or is Deleted (`vote.not_found`)"
           },
           "429" : {
             "content" : {
@@ -7681,7 +7681,7 @@
     },
     "/api/votes/{voteId}/deactivate" : {
       "put" : {
-        "description" : "**Auth**: required (owner only)\n**Precondition**: none; works in any Poll state\n**Behavior**: Open Poll: ends now (Ended). Scheduled Poll: cancelled, i.e. Ended without ever accepting Ballots (`endTime` becomes earlier than `startTime`). Ended Poll: nothing changes. Fetch the Poll again to see the new state.\n**Side effects**: the Poll becomes Ended, so results and Voter Visibility open up; the owner and Participants receive an Ended Notification, except for a Poll Closed while Scheduled.\n**Errors**:\n- 403 `vote.forbidden`: the caller is not the owner\n- 404 `vote.not_found`: Poll does not exist\n",
+        "description" : "**Auth**: required (owner only)\n**Precondition**: none; works in any Poll state\n**Behavior**: Open Poll: ends now (Ended). Scheduled Poll: cancelled, i.e. Ended without ever accepting Ballots (`endTime` becomes earlier than `startTime`). Ended Poll: nothing changes. Fetch the Poll again to see the new state.\n**Side effects**: the Poll becomes Ended, so results and Voter Visibility open up; the owner and Participants receive an Ended Notification, except for a Poll Closed while Scheduled.\n**Errors**:\n- 403 `vote.forbidden`: the caller is not the owner\n- 404 `vote.not_found`: Poll does not exist or is Deleted\n",
         "operationId" : "deactivateVote",
         "parameters" : [ {
           "description" : "Poll ID",
@@ -7774,7 +7774,7 @@
                 }
               }
             },
-            "description" : "Poll does not exist (`vote.not_found`)"
+            "description" : "Poll does not exist or is Deleted (`vote.not_found`)"
           },
           "429" : {
             "content" : {
@@ -7897,7 +7897,7 @@
     },
     "/api/votes/{voteId}/results" : {
       "get" : {
-        "description" : "**Auth**: public\n**Precondition**: the Poll has Ended (Sealed before that, for everyone including the owner)\n**Behavior**: returns per-option counts and Support (`percentage`, 0-100, share of Participants) plus Turnout.\n**Side effects**: none\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist\n- 403 `vote.results.sealed`: the Poll is still Scheduled or Open\n",
+        "description" : "**Auth**: public\n**Precondition**: the Poll has Ended (Sealed before that, for everyone including the owner)\n**Behavior**: returns per-option counts and Support (`percentage`, 0-100, share of Participants) plus Turnout.\n**Side effects**: none\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist or is Deleted\n- 403 `vote.results.sealed`: the Poll is still Scheduled or Open\n",
         "operationId" : "getVoteResults",
         "parameters" : [ {
           "description" : "Poll ID",
@@ -8024,7 +8024,7 @@
     },
     "/api/votes/{voteId}/vote" : {
       "delete" : {
-        "description" : "**Auth**: required\n**Precondition**: the Poll is Open (not Scheduled, not Ended)\n**Behavior**: withdraws the caller's whole Ballot (Retraction); the caller is no longer a Participant. Idempotent: succeeds, changing nothing, when the caller holds no Ballot.\n**Side effects**: Turnout -1 when a Ballot was removed. A Participant who Retracted gets no Ended Notification.\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist\n- 400 `vote.ended`: the Poll has Ended; Ballots are frozen\n- 400 `vote.not_allowed`: the Poll is still Scheduled\n",
+        "description" : "**Auth**: required\n**Precondition**: the Poll is Open (not Scheduled, not Ended)\n**Behavior**: withdraws the caller's whole Ballot (Retraction); the caller is no longer a Participant. Idempotent: succeeds, changing nothing, when the caller holds no Ballot.\n**Side effects**: Turnout -1 when a Ballot was removed. A Participant who Retracted gets no Ended Notification.\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist or is Deleted\n- 400 `vote.ended`: the Poll has Ended; Ballots are frozen\n- 400 `vote.not_allowed`: the Poll is still Scheduled\n",
         "operationId" : "retract",
         "parameters" : [ {
           "description" : "Poll ID",
@@ -8155,7 +8155,7 @@
                 }
               }
             },
-            "description" : "Poll does not exist (`vote.not_found`)"
+            "description" : "Poll does not exist or is Deleted (`vote.not_found`)"
           },
           "429" : {
             "content" : {
@@ -8173,7 +8173,7 @@
         "tags" : [ "Vote" ]
       },
       "post" : {
-        "description" : "**Auth**: required\n**Precondition**: the Poll is Open (not Scheduled, not Ended)\n**Behavior**: records the caller's Ballot with exactly one Selection. If the caller already holds a Ballot it is replaced by the new one (change of mind); casting the same option again changes nothing. The response is the Poll with the results still Sealed and `myOptionId` set.\n**Side effects**: Turnout +1 on the first Ballot only; the option counts move silently (not visible until the Poll has Ended); the action is audit-logged.\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist\n- 400 `vote.ended`: the Poll has Ended; Ballots are frozen\n- 400 `vote.not_allowed`: the Poll is still Scheduled\n- 400 `vote.multiple.not_allowed`: `optionIds` holds more than one ID\n- 404 `vote.option.not_found`: the option ID does not exist\n- 400 `vote.option.not_in_vote`: the option belongs to another Poll\n- 404 `user.not_found`: the signed-in user no longer exists\n- 400 `common.validation_failed`: `optionIds` is empty\n",
+        "description" : "**Auth**: required\n**Precondition**: the Poll is Open (not Scheduled, not Ended)\n**Behavior**: records the caller's Ballot with exactly one Selection. If the caller already holds a Ballot it is replaced by the new one (change of mind); casting the same option again changes nothing. The response is the Poll with the results still Sealed and `myOptionId` set.\n**Side effects**: Turnout +1 on the first Ballot only; the option counts move silently (not visible until the Poll has Ended); the action is audit-logged.\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist or is Deleted\n- 400 `vote.ended`: the Poll has Ended; Ballots are frozen\n- 400 `vote.not_allowed`: the Poll is still Scheduled\n- 400 `vote.multiple.not_allowed`: `optionIds` holds more than one ID\n- 404 `vote.option.not_found`: the option ID does not exist\n- 400 `vote.option.not_in_vote`: the option belongs to another Poll\n- 404 `user.not_found`: the signed-in user no longer exists\n- 400 `common.validation_failed`: `optionIds` is empty\n",
         "operationId" : "vote",
         "parameters" : [ {
           "description" : "Poll ID",
@@ -8322,7 +8322,7 @@
                 }
               }
             },
-            "description" : "Poll or option does not exist (`vote.not_found`, `vote.option.not_found`, `user.not_found`)"
+            "description" : "Poll does not exist or is Deleted, or option does not exist (`vote.not_found`, `vote.option.not_found`, `user.not_found`)"
           },
           "429" : {
             "content" : {
@@ -8343,7 +8343,7 @@
     "/api/votes/{voteId}/vote/{optionId}" : {
       "delete" : {
         "deprecated" : true,
-        "description" : "**Auth**: required\n**Precondition**: the Poll is Open (not Scheduled, not Ended)\n**Behavior**: kept for compatibility; withdraws the caller's Ballot only if it chose `optionId` (same effect as a Retraction then). Succeeds without change when the caller's Ballot chose another option or none exists. Deprecated: use `DELETE /api/votes/{voteId}/vote`.\n**Side effects**: Turnout -1 when a Ballot was removed.\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist\n- 400 `vote.ended`: the Poll has Ended; Ballots are frozen\n- 400 `vote.not_allowed`: the Poll is still Scheduled\n",
+        "description" : "**Auth**: required\n**Precondition**: the Poll is Open (not Scheduled, not Ended)\n**Behavior**: kept for compatibility; withdraws the caller's Ballot only if it chose `optionId` (same effect as a Retraction then). Succeeds without change when the caller's Ballot chose another option or none exists. Deprecated: use `DELETE /api/votes/{voteId}/vote`.\n**Side effects**: Turnout -1 when a Ballot was removed.\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist or is Deleted\n- 400 `vote.ended`: the Poll has Ended; Ballots are frozen\n- 400 `vote.not_allowed`: the Poll is still Scheduled\n",
         "operationId" : "removeVote",
         "parameters" : [ {
           "description" : "Poll ID",
@@ -8483,7 +8483,7 @@
                 }
               }
             },
-            "description" : "Poll does not exist (`vote.not_found`)"
+            "description" : "Poll does not exist or is Deleted (`vote.not_found`)"
           },
           "429" : {
             "content" : {
@@ -8503,7 +8503,7 @@
     },
     "/api/votes/{voteId}/voters" : {
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: the Poll has Ended, and its Voter Visibility allows the caller: NOBODY allows no one (not even the owner), OWNER allows only the owner, SIGNED_IN allows any signed-in user\n**Behavior**: cursor-paged list of who chose which option, oldest Ballot first. `nextCursor` null means the last page; `limit` is clamped to 1-50 (default 20).\n**Side effects**: none\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist\n- 403 `vote.results.sealed`: the Poll is still Scheduled or Open\n- 403 `vote.voters.hidden`: Voter Visibility does not allow the caller\n- 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list or another ordering of this list\n",
+        "description" : "**Auth**: required\n**Precondition**: the Poll has Ended, and its Voter Visibility allows the caller: NOBODY allows no one (not even the owner), OWNER allows only the owner, SIGNED_IN allows any signed-in user\n**Behavior**: cursor-paged list of who chose which option, oldest Ballot first. `nextCursor` null means the last page; `limit` is clamped to 1-50 (default 20).\n**Side effects**: none\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist or is Deleted\n- 403 `vote.results.sealed`: the Poll is still Scheduled or Open\n- 403 `vote.voters.hidden`: Voter Visibility does not allow the caller\n- 400 `common.cursor_invalid`: `cursor` was not issued by this endpoint\n",
         "operationId" : "getVoters",
         "parameters" : [ {
           "description" : "Poll ID",
@@ -8617,7 +8617,7 @@
                 }
               }
             },
-            "description" : "Poll does not exist (`vote.not_found`)"
+            "description" : "Poll does not exist or is Deleted (`vote.not_found`)"
           },
           "429" : {
             "content" : {

@@ -62,7 +62,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
            "COUNT(DISTINCT v.id) AS totalPolls, COUNT(DISTINCT uv.id) AS totalVotes " +
            "FROM User u " +
            "LEFT JOIN Vote v ON v.creator.id = u.id AND v.startTime <= CURRENT_TIMESTAMP AND v.endTime > v.startTime AND v.deletedAt IS NULL " +
-           "LEFT JOIN UserVote uv ON uv.user.id = u.id " +
+           "LEFT JOIN UserVote uv ON uv.user.id = u.id AND uv.vote.deletedAt IS NULL " +
            "WHERE u.username = :username " +
            "GROUP BY u.id, u.username, u.displayName, u.bio, u.createdAt, " +
            "u.email, u.firstName, u.lastName, u.location, u.points, u.membershipLevel, u.active")

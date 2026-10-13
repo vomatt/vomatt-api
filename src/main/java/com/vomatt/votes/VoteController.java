@@ -161,7 +161,7 @@ public class VoteController {
             **Side effects**: all options are replaced, so option IDs change; tag usage counts are adjusted for added / removed tags.
             **Errors**:
             - 403 `vote.forbidden`: the caller is not the owner
-            - 404 `vote.not_found`: Poll does not exist
+            - 404 `vote.not_found`: Poll does not exist or is Deleted
             - 400 `vote.not_editable`: the Poll is Open or Ended
             - 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true
             - 400 `vote.options.min`: fewer than 2 options
@@ -188,7 +188,7 @@ public class VoteController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Caller is not the owner (`vote.forbidden`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.forbidden", value = ERR_MESSAGE + "Not allowed to modify this Poll" + ERR_CODE + "vote.forbidden" + ERR_ERROR + "Not allowed to modify this Poll" + ERR_END)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist (`vote.not_found`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist or is Deleted (`vote.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<VoteResponse>> updateVote(
@@ -207,7 +207,7 @@ public class VoteController {
             **Behavior**: returns the Poll. `options[].votes` is null (Sealed) for everyone, owner included, until the Poll has Ended; `participantCount` (Turnout) is always present.
             **Side effects**: none
             **Errors**:
-            - 404 `vote.not_found`: Poll does not exist
+            - 404 `vote.not_found`: Poll does not exist or is Deleted
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Poll (shown: Open, results Sealed, caller chose Java)",
             content = @Content(examples = {
@@ -291,7 +291,7 @@ public class VoteController {
             casting the same option again changes nothing. The response is the Poll with the results still Sealed and `myOptionId` set.
             **Side effects**: Turnout +1 on the first Ballot only; the option counts move silently (not visible until the Poll has Ended); the action is audit-logged.
             **Errors**:
-            - 404 `vote.not_found`: Poll does not exist
+            - 404 `vote.not_found`: Poll does not exist or is Deleted
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen
             - 400 `vote.not_allowed`: the Poll is still Scheduled
             - 400 `vote.multiple.not_allowed`: `optionIds` holds more than one ID
@@ -309,7 +309,7 @@ public class VoteController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Poll has Ended (`vote.ended`), is still Scheduled (`vote.not_allowed`), or the Selection is invalid (`vote.multiple.not_allowed`, `vote.option.not_in_vote`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.ended", value = ERR_MESSAGE + "Voting for this Poll has ended" + ERR_CODE + "vote.ended" + ERR_ERROR + "Voting for this Poll has ended" + ERR_END)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll or option does not exist (`vote.not_found`, `vote.option.not_found`, `user.not_found`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist or is Deleted, or option does not exist (`vote.not_found`, `vote.option.not_found`, `user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<VoteResponse>> vote(
@@ -333,7 +333,7 @@ public class VoteController {
             **Behavior**: withdraws the caller's whole Ballot (Retraction); the caller is no longer a Participant. Idempotent: succeeds, changing nothing, when the caller holds no Ballot.
             **Side effects**: Turnout -1 when a Ballot was removed. A Participant who Retracted gets no Ended Notification.
             **Errors**:
-            - 404 `vote.not_found`: Poll does not exist
+            - 404 `vote.not_found`: Poll does not exist or is Deleted
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen
             - 400 `vote.not_allowed`: the Poll is still Scheduled
             """)
@@ -342,7 +342,7 @@ public class VoteController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Poll has Ended (`vote.ended`) or is still Scheduled (`vote.not_allowed`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.ended", value = ERR_MESSAGE + "Voting for this Poll has ended" + ERR_CODE + "vote.ended" + ERR_ERROR + "Voting for this Poll has ended" + ERR_END)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist (`vote.not_found`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist or is Deleted (`vote.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<VoteResponse>> retract(
@@ -362,7 +362,7 @@ public class VoteController {
             Succeeds without change when the caller's Ballot chose another option or none exists. Deprecated: use `DELETE /api/votes/{voteId}/vote`.
             **Side effects**: Turnout -1 when a Ballot was removed.
             **Errors**:
-            - 404 `vote.not_found`: Poll does not exist
+            - 404 `vote.not_found`: Poll does not exist or is Deleted
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen
             - 400 `vote.not_allowed`: the Poll is still Scheduled
             """)
@@ -371,7 +371,7 @@ public class VoteController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Poll has Ended (`vote.ended`) or is still Scheduled (`vote.not_allowed`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.ended", value = ERR_MESSAGE + "Voting for this Poll has ended" + ERR_CODE + "vote.ended" + ERR_ERROR + "Voting for this Poll has ended" + ERR_END)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist (`vote.not_found`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist or is Deleted (`vote.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<VoteResponse>> removeVote(
@@ -394,7 +394,7 @@ public class VoteController {
             **Behavior**: returns per-option counts and Support (`percentage`, 0-100, share of Participants) plus Turnout.
             **Side effects**: none
             **Errors**:
-            - 404 `vote.not_found`: Poll does not exist
+            - 404 `vote.not_found`: Poll does not exist or is Deleted
             - 403 `vote.results.sealed`: the Poll is still Scheduled or Open
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Results of the Ended Poll",
@@ -421,8 +421,9 @@ public class VoteController {
                     examples = @ExampleObject(name = "vote.results.sealed", value = ERR_MESSAGE + "Results are sealed until the Poll ends" + ERR_CODE + "vote.results.sealed" + ERR_ERROR + "Results are sealed until the Poll ends" + ERR_END)))
     public ResponseEntity<ApiResponse<VoteResultResponse>> getVoteResults(
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
-            @PathVariable String voteId) {
-        VoteResultResponse response = voteService.getVoteResults(voteId);
+            @PathVariable String voteId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        VoteResultResponse response = voteService.getVoteResults(voteId, principal != null ? principal.userId() : null);
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
@@ -434,7 +435,7 @@ public class VoteController {
             **Behavior**: cursor-paged list of who chose which option, oldest Ballot first. `nextCursor` null means the last page; `limit` is clamped to 1-50 (default 20).
             **Side effects**: none
             **Errors**:
-            - 404 `vote.not_found`: Poll does not exist
+            - 404 `vote.not_found`: Poll does not exist or is Deleted
             - 403 `vote.results.sealed`: the Poll is still Scheduled or Open
             - 403 `vote.voters.hidden`: Voter Visibility does not allow the caller
             - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list or another ordering of this list
@@ -451,7 +452,7 @@ public class VoteController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Poll not Ended (`vote.results.sealed`) or Voter Visibility does not allow the caller (`vote.voters.hidden`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.voters.hidden", value = ERR_MESSAGE + "Voters of this Poll are hidden" + ERR_CODE + "vote.voters.hidden" + ERR_ERROR + "Voters of this Poll are hidden" + ERR_END)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist (`vote.not_found`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist or is Deleted (`vote.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<CursorResponse<VoterResponse>>> getVoters(
@@ -498,14 +499,14 @@ public class VoteController {
     @CommonApiResponses
     @Operation(summary = "Delete a Poll", description = """
             **Auth**: required (owner only)
-            **Precondition**: the Poll is Scheduled, or was posted less than 20 minutes ago (any state, even with Ballots); \
+            **Precondition**: the Poll is Scheduled, or is still within the delete window after posting (default 20 minutes, configurable; any state, even with Ballots); \
             `deletable` on the Poll response tells the owner whether this still holds
             **Behavior**: soft-deletes the Poll. From then on it is gone for everyone, owner included: every Poll endpoint \
             (including Comments, Replies, likes and notification read) returns 404 `vote.not_found`, and it leaves Feed / Explore / Search, \
             profile lists, My Polls, Ended Notifications and popular tag counts. The data is kept.
             **Side effects**: nobody is notified
             **Errors**:
-            - 400 `vote.delete.window_passed`: the Poll is Open or Ended and was posted 20 minutes ago or more
+            - 400 `vote.delete.window_passed`: the Poll is Open or Ended and the delete window (default 20 minutes, configurable) has passed
             - 403 `vote.forbidden`: the caller is not the owner
             - 404 `vote.not_found`: Poll does not exist or is already Deleted
             """)
@@ -516,7 +517,7 @@ public class VoteController {
                     """)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Delete window has passed (`vote.delete.window_passed`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "vote.delete.window_passed", value = ERR_MESSAGE + "A Poll can only be deleted while it is scheduled or within 20 minutes of posting" + ERR_CODE + "vote.delete.window_passed" + ERR_ERROR + "A Poll can only be deleted while it is scheduled or within 20 minutes of posting" + ERR_END)))
+                    examples = @ExampleObject(name = "vote.delete.window_passed", description = "Message rendered with the configured delete window (default 20 minutes shown)", value = ERR_MESSAGE + "A Poll can only be deleted while it is scheduled or within 20 minutes of posting" + ERR_CODE + "vote.delete.window_passed" + ERR_ERROR + "A Poll can only be deleted while it is scheduled or within 20 minutes of posting" + ERR_END)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Caller is not the owner (`vote.forbidden`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.forbidden", value = ERR_MESSAGE + "Not allowed to modify this Poll" + ERR_CODE + "vote.forbidden" + ERR_ERROR + "Not allowed to modify this Poll" + ERR_END)))
@@ -542,7 +543,7 @@ public class VoteController {
             **Side effects**: the Poll becomes Ended, so results and Voter Visibility open up; the owner and Participants receive an Ended Notification, except for a Poll Closed while Scheduled.
             **Errors**:
             - 403 `vote.forbidden`: the caller is not the owner
-            - 404 `vote.not_found`: Poll does not exist
+            - 404 `vote.not_found`: Poll does not exist or is Deleted
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Poll closed (or already Ended)",
             content = @Content(examples = @ExampleObject(name = "Closed", value = """
@@ -552,7 +553,7 @@ public class VoteController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Caller is not the owner (`vote.forbidden`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.forbidden", value = ERR_MESSAGE + "Not allowed to modify this Poll" + ERR_CODE + "vote.forbidden" + ERR_ERROR + "Not allowed to modify this Poll" + ERR_END)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist (`vote.not_found`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist or is Deleted (`vote.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<SimpleResultResponse>> deactivateVote(

@@ -83,8 +83,9 @@ public class VoteResponse {
             + "or on the create response", example = "0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813", nullable = true)
     private String myOptionId;
 
-    @Schema(description = "Whether the caller (the owner) can still Delete the Poll: while Scheduled, or within 20 minutes of posting. "
-            + "Null when the caller is not the owner, and on Ballot responses", example = "true", nullable = true)
+    @Schema(description = "Whether the caller (the owner) can still Delete the Poll: while Scheduled, or within the delete window after posting "
+            + "(default 20 minutes, configurable). Set on every Poll response to the owner; null when the caller is not the owner or not signed in",
+            example = "true", nullable = true)
     private Boolean deletable;
 
     @Data

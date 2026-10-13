@@ -97,7 +97,7 @@ public class VoteService {
     public VoteResponse updateVote(String voteId, CreateVoteRequest request, String userId) {
         // Exclusive lock: a first Ballot at the opening moment either commits first (then this sees Open) or waits
         Vote vote = requireAccessible(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), userId);
-        if (!vote.getCreator().getId().toString().equals(userId)) {
+        if (!vote.isOwnedBy(userId)) {
             throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
         }
         if (vote.getStatus() != VoteStatus.SCHEDULED) {
@@ -253,7 +253,7 @@ public class VoteService {
             log.info("User {} cast ballot on vote {} for option {}", userId, voteId, optionUuid);
         }
 
-        return ballotResponse(voteUuid, optionUuid);
+        return ballotResponse(voteUuid, userId, optionUuid);
     }
 
     /** Retraction: withdraws the user's whole Ballot; succeeds even when there is none. */
@@ -266,7 +266,7 @@ public class VoteService {
             .ifPresent(ballot -> voteOptionRepository.adjustVoteCount(deleteBallot(ballot), -1));
         log.info("User {} retracted ballot in vote {}", userId, voteId);
 
-        return ballotResponse(voteUuid, null);
+        return ballotResponse(voteUuid, userId, null);
     }
 
     /** Removes the user's Selection of one option (kept for API compatibility; same as a Retraction when it matches). */
@@ -283,10 +283,14 @@ public class VoteService {
         return convertToVoteResponse(voteUuid, userId);
     }
 
-    /** Results of an Ended Poll; 403 while Sealed. */
+    /**
+     * Results of an Ended Poll; 403 while Sealed.
+     *
+     * @param userId viewer, or null when signed out
+     */
     @Transactional(readOnly = true)
-    public VoteResultResponse getVoteResults(String voteId) {
-        Vote vote = findAccessibleVote(UUID.fromString(voteId), null);
+    public VoteResultResponse getVoteResults(String voteId, String userId) {
+        Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
         if (vote.isResultsSealed()) {
             throw ApiException.forbidden(MessageKey.VOTE_RESULTS_SEALED);
         }
@@ -303,7 +307,7 @@ public class VoteService {
         }
         boolean allowed = switch (vote.getVoterVisibility()) {
             case NOBODY -> false;
-            case OWNER -> vote.getCreator().getId().toString().equals(userId);
+            case OWNER -> vote.isOwnedBy(userId);
             case SIGNED_IN -> true;
         };
         if (!allowed) {
@@ -337,7 +341,7 @@ public class VoteService {
         // Exclusive lock: waits for in-flight Ballot changes, and a concurrent Close then sees Ended and keeps its end time
         Vote vote = requireAccessible(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), creatorId);
 
-        if (!vote.getCreator().getId().toString().equals(creatorId)) {
+        if (!vote.isOwnedBy(creatorId)) {
             throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
         }
 
@@ -345,7 +349,7 @@ public class VoteService {
         vote = voteRepository.save(vote);
         log.info("Vote {} deactivated by creator {}", voteId, creatorId);
 
-        return convertToVoteResponse(vote);
+        return convertToVoteResponse(vote, creatorId);
     }
 
     /**
@@ -354,7 +358,7 @@ public class VoteService {
      */
     public void deleteVote(String voteId, String userId) {
         Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
-        if (!vote.getCreator().getId().toString().equals(userId)) {
+        if (!vote.isOwnedBy(userId)) {
             throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
         }
         OffsetDateTime now = OffsetDateTime.now();
@@ -386,10 +390,6 @@ public class VoteService {
             .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
     }
 
-    private VoteResponse convertToVoteResponse(Vote vote) {
-        return convertToVoteResponse(vote, null);
-    }
-
     private VoteResponse convertToVoteResponse(UUID voteId, String userId) {
         // JOIN FETCH avoids additional queries for options
         Vote vote = requireAccessible(voteRepository.findByIdWithOptions(voteId), userId);
@@ -400,10 +400,10 @@ public class VoteService {
         return convertToVoteResponse(vote.getId(), userId);
     }
 
-    // After a Ballot change the caller already knows the Selection, so skip looking it up.
+    // After a Ballot change the caller already knows the Selection, so it overrides the looked-up one.
     // The Poll is still reloaded: adjustVoteCount clears the persistence context and the counts changed.
-    private VoteResponse ballotResponse(UUID voteId, UUID myOptionId) {
-        VoteResponse response = convertToVoteResponse(voteId, null);
+    private VoteResponse ballotResponse(UUID voteId, String userId, UUID myOptionId) {
+        VoteResponse response = convertToVoteResponse(voteId, userId);
         response.setMyOptionId(myOptionId == null ? null : myOptionId.toString());
         return response;
     }
@@ -425,7 +425,7 @@ public class VoteService {
             UUID myOptionId = selections.get(vote.getId());
             response.setMyOptionId(myOptionId == null ? null : myOptionId.toString());
             response.setCommentCount(commentCounts.getOrDefault(vote.getId(), 0L));
-            if (vote.getCreator().getId().toString().equals(userId)) {
+            if (vote.isOwnedBy(userId)) {
                 response.setDeletable(vote.canDeleteAt(now, voteConfig.getDeleteWindow()));
             }
             return response;

@@ -153,8 +153,8 @@ public class VoteCommentService {
     }
 
     @Transactional(readOnly = true)
-    public long countCommentsByVote(String voteId) {
-        voteService.findAccessibleVote(UUID.fromString(voteId), null);
+    public long countCommentsByVote(String voteId, String currentUserId) {
+        voteService.findAccessibleVote(UUID.fromString(voteId), currentUserId);
 
         return commentRepository.countByVoteId(UUID.fromString(voteId));
     }

@@ -39,6 +39,7 @@ class DeletedPollPostgresTest extends PostgresRepositoryTest {
     private User owner;
     private User voter;
     private Tag tag;
+    private Vote liveOpen;
     private Vote deletedOpen;
     private Vote deletedEnded;
 
@@ -50,7 +51,7 @@ class DeletedPollPostgresTest extends PostgresRepositoryTest {
         tag.setUsageCount(4);
         em.persist(tag);
 
-        poll("live-open", now.minusHours(1), now.plusDays(1));
+        liveOpen = poll("live-open", now.minusHours(1), now.plusDays(1));
         poll("live-ended", now.minusDays(2), now.minusHours(1));
         deletedOpen = poll("deleted-open", now.minusHours(1), now.plusDays(1));
         deletedEnded = poll("deleted-ended", now.minusDays(2), now.minusHours(1));
@@ -95,6 +96,20 @@ class DeletedPollPostgresTest extends PostgresRepositoryTest {
                 .containsExactly("live-open", "live-ended");
         assertThat(userRepository.findProfileByUsername(owner.getUsername()).orElseThrow().getTotalPolls())
                 .isEqualTo(2L);
+        assertThat(userRepository.findProfileByUsername(voter.getUsername()).orElseThrow().getTotalVotes())
+                .isEqualTo(2L);
+    }
+
+    @Test
+    @DisplayName("should tell the owner the Poll is deletable on Ballot responses when the owner casts one")
+    void shouldSetDeletableWhenOwnerCastsBallot() {
+        Vote poll = em.find(Vote.class, liveOpen.getId());
+        com.vomatt.votes.dto.VoteRequest request = new com.vomatt.votes.dto.VoteRequest();
+        request.setOptionIds(List.of(poll.getOptions().iterator().next().getId().toString()));
+
+        VoteResponse response = voteService.vote(poll.getId().toString(), request, owner.getId().toString(), null);
+
+        assertThat(response.getDeletable()).isTrue();
     }
 
     @Test

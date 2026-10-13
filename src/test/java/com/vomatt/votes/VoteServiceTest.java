@@ -405,7 +405,7 @@ class VoteServiceTest {
             vote.setEndTime(OffsetDateTime.now().plusDays(1));
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
 
-            assertThatThrownBy(() -> voteService.getVoteResults(voteId.toString()))
+            assertThatThrownBy(() -> voteService.getVoteResults(voteId.toString(), null))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_RESULTS_SEALED));
         }
 
@@ -416,7 +416,7 @@ class VoteServiceTest {
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             when(voteOptionRepository.findByVoteIdOrderByDisplayOrder(voteId)).thenReturn(List.of());
 
-            assertThat(voteService.getVoteResults(voteId.toString()).getTotalParticipants()).isZero();
+            assertThat(voteService.getVoteResults(voteId.toString(), null).getTotalParticipants()).isZero();
         }
 
         @Test
@@ -719,7 +719,7 @@ class VoteServiceTest {
             List<org.assertj.core.api.ThrowableAssert.ThrowingCallable> paths = List.of(
                     () -> voteService.getVote(id, owner),
                     () -> voteService.retract(id, owner),
-                    () -> voteService.getVoteResults(id),
+                    () -> voteService.getVoteResults(id, owner),
                     () -> voteService.getVoters(id, owner, null, null),
                     () -> voteService.hasUserVoted(id, owner),
                     () -> voteService.deactivateVote(id, owner),

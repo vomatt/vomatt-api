@@ -126,6 +126,11 @@ public class Vote extends AuditableEntity {
             && (statusAt(now) == VoteStatus.SCHEDULED || now.isBefore(getCreatedAt().plus(window)));
     }
 
+    /** @param userId caller, or null when signed out */
+    public boolean isOwnedBy(String userId) {
+        return creator.getId().toString().equals(userId);
+    }
+
     public boolean isVotingActive() {
         return getStatus() == VoteStatus.OPEN;
     }

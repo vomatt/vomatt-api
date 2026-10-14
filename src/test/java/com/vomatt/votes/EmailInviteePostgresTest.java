@@ -18,12 +18,14 @@ import com.vomatt.entity.Audience;
 import com.vomatt.entity.Invitee;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
+import com.vomatt.entity.VoteStatus;
 import com.vomatt.repository.InviteeRepository;
 import com.vomatt.repository.NotificationReadRepository;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.votes.dto.CreateVoteRequest;
 import com.vomatt.votes.dto.InviteeResponse;
 import com.vomatt.votes.dto.InviteesRequest;
+import com.vomatt.votes.dto.VoteRequest;
 import com.vomatt.votes.dto.VoteResponse;
 
 @Import(VoteServiceSlice.class)
@@ -289,6 +291,90 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
         voteService.updateVote(scheduled.getId().toString(), edit, owner.getId().toString());
         em.flush();
         assertThat(inviteeRepository.findByVoteId(scheduled.getId())).isEmpty();
+    }
+
+    // ─── Auto-end ─────────────────────────────────────────────────────────────
+
+    // An Invitee added by ID who already holds a Ballot; the given pending email rows are added before the Ballot
+    private User votedInvitee(String... pendingEmails) {
+        User bob = persistUser("em-bob-" + System.nanoTime());
+        em.persist(new Invitee(poll, bob));
+        for (String email : pendingEmails) {
+            em.persist(new Invitee(poll, email));
+        }
+        em.flush();
+        castAs(bob);
+        return bob;
+    }
+
+    private void castAs(User user) {
+        VoteRequest ballot = new VoteRequest();
+        ballot.setOptionIds(List.of(voteService.getVote(poll.getId().toString(), user.getId().toString())
+                .getOptions().getFirst().getId()));
+        voteService.vote(poll.getId().toString(), ballot, user.getId().toString(), null);
+    }
+
+    private Vote reloaded() {
+        em.flush();
+        em.clear();
+        return em.find(Vote.class, poll.getId());
+    }
+
+    @Test
+    @DisplayName("should keep the Poll Open while an email Invitee is pending, and End it when that email is removed")
+    void shouldEndPollWhenPendingEmailInviteeRemoved() {
+        inviteEmail(carolEmail);
+        votedInvitee();
+        assertThat(reloaded().getStatus()).as("pending email blocks the end").isEqualTo(VoteStatus.OPEN);
+
+        voteService.removeEmailInvitee(poll.getId().toString(), carolEmail, owner.getId().toString());
+
+        Vote ended = reloaded();
+        assertThat(ended.getStatus()).isEqualTo(VoteStatus.ENDED);
+        assertThat(ended.getDeadline()).isEqualTo(poll.getDeadline());
+    }
+
+    @Test
+    @DisplayName("should End the Poll once the bound email Invitee casts the last Ballot")
+    void shouldEndPollWhenBoundEmailInviteeVotes() {
+        inviteEmail(carolEmail);
+        votedInvitee();
+        User carol = signUpAndBind(carolEmail);
+        assertThat(reloaded().getStatus()).as("binding casts no Ballot").isEqualTo(VoteStatus.OPEN);
+
+        castAs(carol);
+
+        assertThat(reloaded().getStatus()).isEqualTo(VoteStatus.ENDED);
+    }
+
+    @Test
+    @DisplayName("should End the Poll when binding drops the only pending row, already covered by a voted Invitee added by ID")
+    void shouldEndPollWhenBindingDropsLastPendingRow() {
+        String bobEmail = "bob-" + System.nanoTime() + "@example.com";
+        User bob = votedInvitee(bobEmail);
+        // bob verifies an address that was also invited by email
+        bob.setEmail(bobEmail);
+        em.merge(bob);
+        assertThat(reloaded().getStatus()).isEqualTo(VoteStatus.OPEN);
+
+        voteService.bindEmailInvitees(em.find(User.class, bob.getId()));
+
+        Vote ended = reloaded();
+        assertThat(ended.getStatus()).isEqualTo(VoteStatus.ENDED);
+        assertThat(ended.getDeadline()).isEqualTo(poll.getDeadline());
+        assertThat(inviteeRepository.findByVoteId(poll.getId())).singleElement()
+                .satisfies(i -> assertThat(i.getEmail()).isNull());
+    }
+
+    @Test
+    @DisplayName("should End the Poll when binding drops the owner's own pending address and the rest hold a Ballot")
+    void shouldEndPollWhenBindingDropsOwnersOwnAddress() {
+        votedInvitee(owner.getEmail());
+        assertThat(reloaded().getStatus()).isEqualTo(VoteStatus.OPEN);
+
+        voteService.bindEmailInvitees(em.find(User.class, owner.getId()));
+
+        assertThat(reloaded().getStatus()).isEqualTo(VoteStatus.ENDED);
     }
 
     private static void assertEmailOnly(List<InviteeResponse> invitees) {

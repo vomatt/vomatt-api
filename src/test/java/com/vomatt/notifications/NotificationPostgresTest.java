@@ -216,7 +216,8 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
     @Test
     @DisplayName("should send the Ended Notification to an Invitee who Retracted")
     void shouldNotifyInviteeWhenRetractedBeforePollEnded() {
-        Vote poll = invitePoll(now.minusHours(1), now.plusDays(1), participant);
+        // bystander holds no Ballot, so participant's Ballot does not End the Poll
+        Vote poll = invitePoll(now.minusHours(1), now.plusDays(1), participant, bystander);
         em.flush();
         String voteId = poll.getId().toString();
         String userId = participant.getId().toString();

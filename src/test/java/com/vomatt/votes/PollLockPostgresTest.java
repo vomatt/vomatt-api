@@ -57,7 +57,7 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
     @Autowired TransactionTemplate tx;
 
     private final List<UUID> createdUsers = new ArrayList<>();
-    private final ExecutorService pool = Executors.newFixedThreadPool(2);
+    private final ExecutorService pool = Executors.newFixedThreadPool(4);
     private User owner;
     private User voter;
     private Vote poll;
@@ -349,6 +349,92 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
         assertApiError(editor, MessageKey.VOTE_NOT_EDITABLE);
         assertThat(ballots()).isEqualTo(1);
         assertThat(counts().get(optionA)).isEqualTo(1);
+    }
+
+    // ─── Invite-only auto-end ───────────────────────────────────────────────
+
+    // An Open Invite-only Poll whose Invitees are the given users
+    private void createInviteOnlyPoll(User... invitees) {
+        OffsetDateTime now = OffsetDateTime.now();
+        tx.executeWithoutResult(s -> {
+            poll = persistPoll(owner, now.minusHours(1), now.plusDays(1), "A", "B");
+            poll.setAudience(Audience.INVITE_ONLY);
+            for (User invitee : invitees) {
+                em.persist(new Invitee(poll, invitee));
+            }
+        });
+        optionA = voteOptionRepository.findByVoteIdOrderByDisplayOrder(poll.getId()).getFirst().getId();
+    }
+
+    private VoteResponse castAs(User user) {
+        VoteRequest request = new VoteRequest();
+        request.setOptionIds(List.of(optionA.toString()));
+        return voteService.vote(poll.getId().toString(), request, user.getId().toString(), "127.0.0.1");
+    }
+
+    private static boolean unsealed(VoteResponse response) {
+        return response.getOptions().stream().allMatch(o -> o.getVotes() != null);
+    }
+
+    @Test
+    @DisplayName("should reject a Ballot with vote.ended when the last Invitee's Ballot holds the Poll first and ends it")
+    void shouldRejectBallotWhenLastInviteeBallotEndsPollFirst() throws Exception {
+        User last = track(tx.execute(s -> persistUser("last-" + UUID.randomUUID())));
+        createInviteOnlyPoll(voter, last);
+        castAs(voter);
+        CountDownLatch cast = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Future<VoteResponse> ender = holding(() -> castAs(last), cast, release);
+        assertThat(cast.await(10, TimeUnit.SECONDS)).isTrue();
+
+        Future<VoteResponse> ownerCast = pool.submit(() -> castAs(owner));
+        assertThat(blocked(ownerCast)).as("owner's Ballot waits for the ending Ballot").isTrue();
+        release.countDown();
+        OffsetDateTime endedAt = ender.get(10, TimeUnit.SECONDS).getEndTime();
+
+        assertApiError(ownerCast, MessageKey.VOTE_ENDED);
+        assertThatThrownBy(() -> castAs(voter)).isInstanceOfSatisfying(ApiException.class,
+                ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_ENDED));
+        assertThat(ballots()).isEqualTo(2);
+        assertThat(storedEndTime().toInstant()).isEqualTo(endedAt.toInstant().truncatedTo(ChronoUnit.MICROS));
+    }
+
+    @Test
+    @DisplayName("should end the Poll exactly once and let no Ballot land after it when the last Ballots race")
+    void shouldEndOnceWhenLastInviteeBallotsRace() throws Exception {
+        User second = track(tx.execute(s -> persistUser("second-" + UUID.randomUUID())));
+        User third = track(tx.execute(s -> persistUser("third-" + UUID.randomUUID())));
+        createInviteOnlyPoll(voter, second, third);
+        CountDownLatch go = new CountDownLatch(1);
+        List<Future<VoteResponse>> casts = new ArrayList<>();
+        for (User user : List.of(voter, second, third, owner)) {
+            casts.add(pool.submit(() -> {
+                go.await(10, TimeUnit.SECONDS);
+                return castAs(user);
+            }));
+        }
+        go.countDown();
+
+        List<VoteResponse> landed = new ArrayList<>();
+        for (int i = 0; i < casts.size(); i++) {
+            try {
+                landed.add(casts.get(i).get(10, TimeUnit.SECONDS));
+            } catch (ExecutionException e) {
+                // only the owner (last) can come too late: the Poll Ended once all three Invitees held a Ballot
+                assertThat(i).as("only the owner's Ballot can be refused").isEqualTo(3);
+                assertThat(e.getCause()).isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_ENDED));
+            }
+        }
+
+        // exactly one Ballot (the last Invitee's) saw the Poll End
+        List<VoteResponse> ending = landed.stream().filter(PollLockPostgresTest::unsealed).toList();
+        assertThat(ending).hasSize(1);
+        assertThat(storedEndTime().toInstant())
+                .isEqualTo(ending.getFirst().getEndTime().toInstant().truncatedTo(ChronoUnit.MICROS));
+        assertThat(ballots()).isEqualTo(landed.size());
+        assertThatThrownBy(() -> castAs(owner)).isInstanceOfSatisfying(ApiException.class,
+                ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_ENDED));
     }
 
     @Test

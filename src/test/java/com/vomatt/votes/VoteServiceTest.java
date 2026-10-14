@@ -1011,6 +1011,84 @@ class VoteServiceTest {
             verify(inviteeRepository).delete(invitee);
         }
 
+        // ─── Auto-end ─────────────────────────────────────────────────────────
+
+        private final OffsetDateTime deadline = OffsetDateTime.now().plusDays(1);
+
+        private VoteResponse castAsInvitee() {
+            inviteOnly(deadline);
+            vote.setDeadline(deadline);
+            UUID optionId = setId(option, UUID.randomUUID()).getId();
+            option.setDisplayOrder(0);
+            vote.addOption(option);
+            User invitee = User.builder().id(inviteeId).build();
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(voteOptionRepository.findById(optionId)).thenReturn(Optional.of(option));
+            when(userRepository.findById(inviteeId)).thenReturn(Optional.of(invitee));
+            when(inviteeRepository.existsByVoteIdAndUserId(voteId, inviteeId)).thenReturn(true);
+            stubConvertToVoteResponse(vote);
+            VoteRequest request = new VoteRequest();
+            request.setOptionIds(List.of(optionId.toString()));
+            return voteService.vote(voteId.toString(), request, inviteeId.toString(), "127.0.0.1");
+        }
+
+        @Test
+        @DisplayName("should End the Poll and keep its Deadline when the Ballot leaves every Invitee holding one")
+        void shouldEndPollWhenLastInviteeCastsBallot() {
+            when(inviteeRepository.allHoldBallot(voteId)).thenReturn(true);
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+
+            VoteResponse response = castAsInvitee();
+
+            assertThat(vote.getStatus()).isEqualTo(VoteStatus.ENDED);
+            assertThat(vote.getDeadline()).isEqualTo(deadline);
+            // Unsealed: the response already carries the Ended results
+            assertThat(response.getOptions()).isNotEmpty().allSatisfy(o -> assertThat(o.getVotes()).isNotNull());
+        }
+
+        @Test
+        @DisplayName("should keep the Poll Open when some Invitee still holds no Ballot")
+        void shouldKeepPollOpenWhenInviteeHasNoBallot() {
+            when(inviteeRepository.allHoldBallot(voteId)).thenReturn(false);
+
+            castAsInvitee();
+
+            assertThat(vote.getStatus()).isEqualTo(VoteStatus.OPEN);
+            assertThat(vote.getEndTime()).isEqualTo(deadline);
+        }
+
+        @Test
+        @DisplayName("should never check for auto-end on a Retraction")
+        void shouldNotEndPollWhenRetracting() {
+            inviteOnly(deadline);
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(inviteeRepository.existsByVoteIdAndUserId(voteId, inviteeId)).thenReturn(true);
+            stubConvertToVoteResponse(vote);
+
+            voteService.retract(voteId.toString(), inviteeId.toString());
+
+            verify(inviteeRepository, never()).allHoldBallot(any());
+            assertThat(vote.getStatus()).isEqualTo(VoteStatus.OPEN);
+        }
+
+        @Test
+        @DisplayName("should End the Poll when removing the last Invitee without a Ballot")
+        void shouldEndPollWhenRemovingLastInviteeWithoutBallot() {
+            inviteOnly(deadline);
+            vote.setDeadline(deadline);
+            Invitee invitee = new Invitee(vote, User.builder().id(inviteeId).build());
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(inviteeRepository.findByVoteIdAndUserIdAndEmailIsNull(voteId, inviteeId)).thenReturn(Optional.of(invitee));
+            when(inviteeRepository.allHoldBallot(voteId)).thenReturn(true);
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+
+            voteService.removeInvitee(voteId.toString(), inviteeId.toString(), userId.toString());
+
+            verify(inviteeRepository).delete(invitee);
+            assertThat(vote.getStatus()).isEqualTo(VoteStatus.ENDED);
+            assertThat(vote.getDeadline()).isEqualTo(deadline);
+        }
+
         @Test
         @DisplayName("should throw 400 VOTE_ENDED when Invitees change after the Poll Ended")
         void shouldRefuseInviteeChangesWhenPollEnded() {

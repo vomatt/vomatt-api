@@ -100,6 +100,52 @@ class VoteTest {
         }
     }
 
+    // ─── Auto-end ───────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("should end now and keep the Deadline when every Invitee of an Open Invite-only Poll holds a Ballot")
+    void shouldAutoEndAndKeepDeadlineWhenAllInviteesVoted() {
+        OffsetDateTime deadline = now.plusDays(1);
+        Vote vote = poll(now.minusHours(1), deadline, Audience.INVITE_ONLY);
+
+        assertThat(vote.endIfAllInviteesVotedAt(now, () -> true)).isTrue();
+
+        assertThat(vote.statusAt(now)).isEqualTo(VoteStatus.ENDED);
+        assertThat(vote.getEndTime()).isEqualTo(now);
+        assertThat(vote.getDeadline()).isEqualTo(deadline);
+        assertThat(vote.isActive()).isFalse();
+    }
+
+    @Test
+    @DisplayName("should stay Open when some Invitee holds no Ballot")
+    void shouldNotAutoEndWhenAnInviteeHasNoBallot() {
+        OffsetDateTime deadline = now.plusDays(1);
+        Vote vote = poll(now.minusHours(1), deadline, Audience.INVITE_ONLY);
+
+        assertThat(vote.endIfAllInviteesVotedAt(now, () -> false)).isFalse();
+
+        assertThat(vote.getEndTime()).isEqualTo(deadline);
+        assertThat(vote.isActive()).isTrue();
+    }
+
+    @Test
+    @DisplayName("should never auto-end without asking when the Poll is not Invite-only or not Open")
+    void shouldNotAutoEndWhenNotInviteOnlyOrNotOpen() {
+        Vote[] polls = {
+            poll(now.minusHours(1), now.plusDays(1), Audience.PUBLIC),
+            poll(now.minusHours(1), now.plusDays(1), Audience.UNLISTED),
+            poll(now.plusHours(1), now.plusDays(1), Audience.INVITE_ONLY),
+            poll(now.minusDays(2), now.minusDays(1), Audience.INVITE_ONLY),
+        };
+        for (Vote vote : polls) {
+            OffsetDateTime endTime = vote.getEndTime();
+
+            assertThat(vote.endIfAllInviteesVotedAt(now, () -> { throw new AssertionError("asked"); })).isFalse();
+
+            assertThat(vote.getEndTime()).isEqualTo(endTime);
+        }
+    }
+
     @Test
     @DisplayName("should refuse with vote.close.public_not_allowed when closing an Open Public Poll")
     void shouldRefuseCloseWhenPublic() {

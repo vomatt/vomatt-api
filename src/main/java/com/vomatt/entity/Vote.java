@@ -219,6 +219,24 @@ public class Vote extends AuditableEntity {
         if (audience == Audience.PUBLIC) {
             throw ApiException.badRequest(MessageKey.VOTE_CLOSE_PUBLIC_NOT_ALLOWED);
         }
+        endAt(now);
+    }
+
+    /**
+     * Auto-end: an Open Invite-only Poll Ends once every Invitee holds a Ballot, keeping its Deadline like a Close.
+     *
+     * @param allInviteesHoldBallot asked only for an Open Invite-only Poll; false when it has no Invitees
+     * @return whether the Poll Ended now
+     */
+    public boolean endIfAllInviteesVotedAt(OffsetDateTime now, BooleanSupplier allInviteesHoldBallot) {
+        if (audience != Audience.INVITE_ONLY || statusAt(now) != VoteStatus.OPEN || !allInviteesHoldBallot.getAsBoolean()) {
+            return false;
+        }
+        endAt(now);
+        return true;
+    }
+
+    private void endAt(OffsetDateTime now) {
         this.isActive = false;
         this.endTime = now;
     }

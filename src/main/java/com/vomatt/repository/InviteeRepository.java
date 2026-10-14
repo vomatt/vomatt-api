@@ -45,14 +45,16 @@ public interface InviteeRepository extends JpaRepository<Invitee, UUID> {
              AND NOT EXISTS (SELECT 1 FROM vomatt.votes v WHERE v.id = i.vote_id AND v.creator_id = :userId))""";
 
     /**
-     * Binding step 1: share-locks the Polls holding a pending row of this email, in id order. The owner changes
-     * Invitees under the Poll's write lock, so binding and a concurrent invite of the same user serialize and
-     * cannot both add that user. A Ballot on such a Poll waits for the sign-in (and vice versa); both are short.
+     * Binding step 1: write-locks the Polls holding a pending row of this email, in id order. The owner changes
+     * Invitees under the same lock, so binding and a concurrent invite of the same user serialize and cannot both
+     * add that user; the lock also lets binding auto-end a Poll whose last pending row it drops. A Ballot on such a
+     * Poll waits for the sign-in (and vice versa); both are short. Every other path locks a single Poll, so the id
+     * order rules out a cycle.
      */
     @Query(value = """
             SELECT v.id FROM vomatt.votes v
             WHERE v.id IN (SELECT i.vote_id FROM vomatt.vote_invitees i WHERE i.email = :email AND i.user_id IS NULL)
-            ORDER BY v.id FOR SHARE""", nativeQuery = true)
+            ORDER BY v.id FOR UPDATE""", nativeQuery = true)
     List<UUID> lockVotesWithPendingEmail(@Param("email") String email);
 
     /** Binding step 3: ties the bindable pending rows of the locked Polls to the user; each keeps its email. */
@@ -84,4 +86,13 @@ public interface InviteeRepository extends JpaRepository<Invitee, UUID> {
     @Query(value = "INSERT INTO vomatt.vote_invitation_emails (vote_id, email) VALUES (:voteId, :email) ON CONFLICT DO NOTHING",
             nativeQuery = true)
     void recordInvitationSent(@Param("voteId") UUID voteId, @Param("email") String email);
+
+    /** At least one Invitee, and none without a Ballot; an Invitee not tied to a user (NULL user_id) counts as without. */
+    @Query(value = """
+            SELECT EXISTS (SELECT 1 FROM vomatt.vote_invitees WHERE vote_id = :voteId)
+               AND NOT EXISTS (SELECT 1 FROM vomatt.vote_invitees i WHERE i.vote_id = :voteId
+                   AND (i.user_id IS NULL OR NOT EXISTS (
+                       SELECT 1 FROM vomatt.user_votes uv WHERE uv.vote_id = i.vote_id AND uv.user_id = i.user_id)))""",
+           nativeQuery = true)
+    boolean allHoldBallot(@Param("voteId") UUID voteId);
 }

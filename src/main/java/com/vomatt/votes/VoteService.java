@@ -302,6 +302,7 @@ public class VoteService {
                 voteRepository.adjustTurnout(voteUuid, 1);
             }
             log.info("User {} cast ballot on vote {} for option {}", userId, voteId, optionUuid);
+            endIfAllInviteesVoted(vote);
         }
 
         return ballotResponse(voteUuid, userId, optionUuid);
@@ -462,7 +463,23 @@ public class VoteService {
             inviteeRepository.flush();
             log.info("Invitee {} removed from vote {} by creator {}", invitee.getId(), voteId, userId);
         });
+        endIfAllInviteesVoted(vote);
         return invitees(vote.getId());
+    }
+
+    /**
+     * Auto-end, run under the Poll-row lock after a Ballot is cast or an Invitee removed (by the owner or by email binding): the next Ballot then hits the
+     * Ended guard in {@link #lockOpenVote}. The owner is never an Invitee, so their Ballot never counts.
+     */
+    private void endIfAllInviteesVoted(Vote lockedVote) {
+        OffsetDateTime now = OffsetDateTime.now();
+        // Checked on the given (possibly detached) Poll first; Ballot paths clear the persistence context
+        if (!lockedVote.endIfAllInviteesVotedAt(now, () -> inviteeRepository.allHoldBallot(lockedVote.getId()))) {
+            return;
+        }
+        // Apply the end to the managed copy so it is flushed (the same, already ended instance when still managed)
+        voteRepository.findById(lockedVote.getId()).ifPresent(vote -> vote.endIfAllInviteesVotedAt(now, () -> true));
+        log.info("Vote {} ended: every Invitee holds a Ballot", lockedVote.getId());
     }
 
     private List<InviteeResponse> invitees(UUID voteId) {
@@ -616,7 +633,12 @@ public class VoteService {
         // 3. Bind
         inviteeRepository.bindEmail(user.getId(), email, voteIds);
         // 4. Pending rows already covered by a user row (or the owner's own address) go
-        inviteeRepository.deleteUnbindableEmail(user.getId(), email, voteIds);
+        if (inviteeRepository.deleteUnbindableEmail(user.getId(), email, voteIds) > 0) {
+            // 5. A dropped pending row may have been the only Invitee without a Ballot (binding itself adds none)
+            voteRepository.findAllById(voteIds).stream()
+                .filter(vote -> vote.getDeletedAt() == null)
+                .forEach(this::endIfAllInviteesVoted);
+        }
     }
 
     /**

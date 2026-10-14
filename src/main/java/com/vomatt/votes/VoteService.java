@@ -86,6 +86,7 @@ public class VoteService {
     private final GroupService groupService;
 
     private static final String INVITATION_COUNTER_NS = "email:invitation";
+    private static final String BALLOT_RATE_LIMIT_NS = "rate:limit:ballot";
 
     @Value("${app.email.invitation-daily-limit:200}")
     private int invitationDailyLimit;
@@ -285,6 +286,7 @@ public class VoteService {
      * Casting the same option again changes nothing.
      */
     public VoteResponse vote(String voteId, VoteRequest request, String userId, String ipAddress) {
+        checkBallotRateLimit(userId);
         UUID voteUuid = UUID.fromString(voteId);
         UUID userUuid = UUID.fromString(userId);
         Vote vote = lockOpenVote(voteUuid, userId);
@@ -322,6 +324,7 @@ public class VoteService {
 
     /** Retraction: withdraws the user's whole Ballot; succeeds even when there is none. */
     public VoteResponse retract(String voteId, String userId) {
+        checkBallotRateLimit(userId);
         UUID voteUuid = UUID.fromString(voteId);
         lockOpenVote(voteUuid, userId);
 
@@ -335,6 +338,7 @@ public class VoteService {
 
     /** Removes the user's Selection of one option (kept for API compatibility; same as a Retraction when it matches). */
     public VoteResponse removeVote(String voteId, String optionId, String userId) {
+        checkBallotRateLimit(userId);
         UUID voteUuid = UUID.fromString(voteId);
         UUID userUuid = UUID.fromString(userId);
         lockOpenVote(voteUuid, userId);
@@ -619,6 +623,21 @@ public class VoteService {
         } catch (RuntimeException e) {
             log.warn("Invitation email limit check failed for owner {}: {}", ownerId, e.getMessage());
             return false;
+        }
+    }
+
+    // Runs before any row lock so throttled requests never touch the Poll; fails open like RateLimitFilter's write path
+    private void checkBallotRateLimit(String userId) {
+        VoteConfigurationProperties.BallotRateLimit limit = voteConfig.getBallotRateLimit();
+        long count;
+        try {
+            count = redisService.incrementAndExpire(BALLOT_RATE_LIMIT_NS, userId, limit.getWindow());
+        } catch (RuntimeException e) {
+            log.warn("Ballot rate limit check failed for user {}: {}", userId, e.getMessage());
+            return;
+        }
+        if (count > limit.getCapacity()) {
+            throw ApiException.tooManyRequests(MessageKey.COMMON_RATE_LIMITED);
         }
     }
 

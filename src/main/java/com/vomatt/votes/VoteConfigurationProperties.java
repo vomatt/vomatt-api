@@ -24,4 +24,12 @@ public class VoteConfigurationProperties {
     private int maxOptionDescriptionLength = 500;
     private boolean allowAnonymousVoting = true;
     private boolean allowMultipleChoicesByDefault = false;
+    private BallotRateLimit ballotRateLimit = new BallotRateLimit();
+
+    /** Per-user fixed-window cap on Ballot writes (cast, Retract, remove Selection). */
+    @Data
+    public static class BallotRateLimit {
+        private int capacity = 30;
+        private Duration window = Duration.ofSeconds(60);
+    }
 }

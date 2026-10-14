@@ -97,14 +97,18 @@ CREATE TABLE IF NOT EXISTS vomatt.user_votes (
     UNIQUE (user_id, vote_id)
 );
 
--- Invitees of an Invite-only Poll: only they and the owner can reach it. The surrogate id leaves room for email Invitees
+-- Invitees of an Invite-only Poll: only they and the owner can reach it. A row added by ID holds the user; one added
+-- by email keeps that normalized email for life and gains the user once the address belongs to an active account
+-- (at invite time, or when that email is verified at sign-up / sign-in)
 CREATE TABLE IF NOT EXISTS vomatt.vote_invitees (
-    id         UUID        PRIMARY KEY,
-    vote_id    UUID        NOT NULL REFERENCES vomatt.votes (id) ON DELETE CASCADE,
-    user_id    UUID        NOT NULL REFERENCES vomatt.users (id) ON DELETE CASCADE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (vote_id, user_id)
+    id         UUID         PRIMARY KEY,
+    vote_id    UUID         NOT NULL REFERENCES vomatt.votes (id) ON DELETE CASCADE,
+    user_id    UUID         REFERENCES vomatt.users (id) ON DELETE CASCADE,
+    email      VARCHAR(254),
+    created_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    UNIQUE (vote_id, user_id),
+    CONSTRAINT chk_vote_invitees_user_or_email CHECK (user_id IS NOT NULL OR email IS NOT NULL)
 );
 
 -- For RANKING / RATING poll types (Phase 2, no entity / service yet)
@@ -279,6 +283,33 @@ CREATE INDEX IF NOT EXISTS idx_votes_turnout_start_id ON vomatt.votes (turnout D
 -- Comment replies (one level): parent_id only points to top-level comments
 ALTER TABLE vomatt.vote_comments ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES vomatt.vote_comments (id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS idx_vote_comments_parent ON vomatt.vote_comments (parent_id, created_at, id);
+-- Email Invitees: user_id becomes optional, at least one of user_id / email is set, one row per Poll + email.
+-- The email index serves binding at sign-up / sign-in
+ALTER TABLE vomatt.vote_invitees ALTER COLUMN user_id DROP NOT NULL;
+ALTER TABLE vomatt.vote_invitees ADD COLUMN IF NOT EXISTS email VARCHAR(254);
+-- Guarded, so a re-run neither takes ACCESS EXCLUSIVE nor rescans the table: drops only the old exactly-one CHECK
+-- (num_nonnulls), adds the at-least-one CHECK only when missing
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint
+               WHERE conrelid = 'vomatt.vote_invitees'::regclass AND conname = 'chk_vote_invitees_user_or_email'
+                 AND pg_get_constraintdef(oid) LIKE '%num_nonnulls%') THEN
+        ALTER TABLE vomatt.vote_invitees DROP CONSTRAINT chk_vote_invitees_user_or_email;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                   WHERE conrelid = 'vomatt.vote_invitees'::regclass AND conname = 'chk_vote_invitees_user_or_email') THEN
+        ALTER TABLE vomatt.vote_invitees ADD CONSTRAINT chk_vote_invitees_user_or_email CHECK (user_id IS NOT NULL OR email IS NOT NULL);
+    END IF;
+END $$;
+CREATE UNIQUE INDEX IF NOT EXISTS uk_vote_invitees_vote_email ON vomatt.vote_invitees (vote_id, email) WHERE email IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_vote_invitees_email ON vomatt.vote_invitees (email) WHERE email IS NOT NULL;
+-- Addresses a Poll's invitation email went to: sent once per Poll + address, even after the Invitee is removed and re-added
+CREATE TABLE IF NOT EXISTS vomatt.vote_invitation_emails (
+    vote_id UUID         NOT NULL REFERENCES vomatt.votes (id) ON DELETE CASCADE,
+    email   VARCHAR(254) NOT NULL,
+    sent_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (vote_id, email)
+);
 -- One Ballot row per user per Poll (was UNIQUE (user_id, vote_id, option_id)).
 -- A DO block is atomic: if duplicates make the CREATE fail, the old constraint and index stay even when psql
 -- continues past errors. To dedup first, keep the latest row per (user_id, vote_id), then run reconcile-vote-counts.sql:

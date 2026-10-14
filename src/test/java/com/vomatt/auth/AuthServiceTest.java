@@ -10,6 +10,7 @@ import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.sms.SmsService;
 import com.vomatt.entity.User;
 import com.vomatt.repository.UserRepository;
+import com.vomatt.votes.VoteService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,6 +18,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -28,8 +31,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -38,6 +45,10 @@ class AuthServiceTest {
 
     @Mock
     UserRepository userRepository;
+    @Mock
+    VoteService voteService;
+    @Mock
+    TransactionTemplate transactionTemplate;
     @Mock
     RedisService redisService;
     @Mock
@@ -59,6 +70,9 @@ class AuthServiceTest {
         ReflectionTestUtils.setField(authService, "otpTtlSeconds", 180L);
         ReflectionTestUtils.setField(authService, "otpResendCooldownSeconds", 180L);
         ReflectionTestUtils.setField(authService, "appleJwksUrl", "https://appleid.apple.com/auth/keys");
+        // Runs the find-or-create callback as if a transaction were open
+        lenient().when(transactionTemplate.execute(any()))
+                .thenAnswer(inv -> inv.<TransactionCallback<?>>getArgument(0).doInTransaction(null));
     }
 
     /**
@@ -410,6 +424,60 @@ class AuthServiceTest {
         assertThat(result.getUsername()).matches("fresh_\\d{4}");
         // When fullName is empty, displayName falls back to the email local part
         assertThat(result.getDisplayName()).isEqualTo("fresh");
+    }
+
+    // ── Email Invitee binding: only a verified email turns email Invitees into user Invitees ────────────
+
+    @Test
+    void shouldBindEmailInviteesWhenEmailOtpVerified() {
+        OtpRecord otpRecord = new OtpRecord("123456", "signup", Instant.now(), 0);
+        when(redisService.get(eq("otp:email"), eq("carol@example.com"), eq(OtpRecord.class))).thenReturn(otpRecord);
+        when(redisService.delete(eq("otp:email"), eq("carol@example.com"))).thenReturn(true);
+        when(userRepository.findByEmail("carol@example.com")).thenReturn(Optional.empty());
+        UUID carolId = UUID.randomUUID();
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> {
+            User saved = inv.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", carolId);
+            return saved;
+        });
+        when(jwtUtil.generateToken(anyString(), anyString(), any())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), anyString(), any())).thenReturn("mock-refresh-token");
+
+        authService.verifyOtp(" Carol@Example.com", null, "123456", false);
+
+        var order = inOrder(userRepository, voteService);
+        order.verify(userRepository).save(any(User.class));
+        order.verify(voteService).bindEmailInvitees(argThat(u -> carolId.equals(u.getId()) && "carol@example.com".equals(u.getEmail())));
+        verify(transactionTemplate).execute(any());
+    }
+
+    @Test
+    void shouldBindEmailInviteesWhenGoogleEmailVerified() {
+        ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
+        ReflectionTestUtils.setField(authService, "googleTokenInfoUrl", "https://oauth2.googleapis.com/tokeninfo");
+        stubJwksFetch(java.util.Map.of("email", "Carol@Example.com", "aud", "client-id", "email_verified", "true"), null);
+        User carol = User.builder().id(UUID.randomUUID()).email("carol@example.com").displayName("Carol")
+                .roles(new String[] { "user" }).build();
+        when(userRepository.findByEmail("carol@example.com")).thenReturn(Optional.of(carol));
+        when(jwtUtil.generateToken(anyString(), anyString(), any())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), anyString(), any())).thenReturn("mock-refresh-token");
+
+        authService.googleLogin("id-token");
+
+        verify(voteService).bindEmailInvitees(carol);
+    }
+
+    @Test
+    void shouldNotBindEmailInviteesWhenGoogleEmailUnverified() {
+        ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
+        ReflectionTestUtils.setField(authService, "googleTokenInfoUrl", "https://oauth2.googleapis.com/tokeninfo");
+        stubJwksFetch(java.util.Map.of("email", "carol@example.com", "aud", "client-id", "email_verified", "false"), null);
+
+        assertThatThrownBy(() -> authService.googleLogin("id-token"))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_EMAIL_NOT_VERIFIED));
+
+        verify(voteService, never()).bindEmailInvitees(any());
     }
 
     @Test

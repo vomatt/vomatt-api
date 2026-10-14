@@ -32,12 +32,12 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
-import com.vomatt.entity.Audience;
+import com.vomatt.entity.Audience; import com.vomatt.entity.Invitee;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.repository.VoteOptionRepository;
-import com.vomatt.votes.dto.CreateVoteRequest;
+import com.vomatt.votes.dto.CreateVoteRequest; import com.vomatt.votes.dto.InviteeResponse; import com.vomatt.votes.dto.InviteesRequest;
 import com.vomatt.votes.dto.VoteRequest;
 import com.vomatt.votes.dto.VoteResponse;
 
@@ -160,6 +160,40 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
     private Void delete() {
         voteService.deleteVote(poll.getId().toString(), owner.getId().toString());
         return null;
+    }
+
+    @Test
+    @DisplayName("should make email binding wait for the owner inviting the same user by ID, then drop the email row instead of failing")
+    void shouldBindAfterOwnerInvitesSameUserWhenOwnerHoldsPollFirst() throws Exception {
+        OffsetDateTime now = OffsetDateTime.now();
+        String email = "lock-" + UUID.randomUUID() + "@example.com";
+        tx.executeWithoutResult(s -> {
+            poll = persistPoll(owner, now.minusMinutes(1), now.plusDays(1), "A", "B");
+            poll.setAudience(Audience.INVITE_ONLY);
+            em.persist(new Invitee(poll, email));
+            voter.setEmail(email);
+            em.merge(voter);
+        });
+        InviteesRequest byId = new InviteesRequest();
+        byId.setUserIds(List.of(voter.getId()));
+        CountDownLatch invited = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Future<List<InviteeResponse>> inviter = holding(
+                () -> voteService.addInvitees(poll.getId().toString(), byId, owner.getId().toString()), invited, release);
+        assertThat(invited.await(10, TimeUnit.SECONDS)).isTrue();
+
+        Future<Void> binder = pool.submit(() -> tx.execute(s -> {
+            voteService.bindEmailInvitees(voter);
+            return null;
+        }));
+        assertThat(blocked(binder)).as("Binding waits for the owner's invite").isTrue();
+        release.countDown();
+        inviter.get(10, TimeUnit.SECONDS);
+        binder.get(10, TimeUnit.SECONDS);
+
+        assertThat(em.createQuery("SELECT i FROM Invitee i WHERE i.vote.id = :id", Invitee.class)
+                .setParameter("id", poll.getId()).getResultList()).singleElement()
+                .satisfies(i -> assertThat(i.getEmail()).isNull());
     }
 
     @Test

@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
+import org.springframework.core.env.StandardEnvironment;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -16,6 +17,7 @@ import org.thymeleaf.spring6.SpringTemplateEngine;
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver;
 
 import java.util.Locale;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.atLeastOnce;
@@ -68,6 +70,31 @@ class EmailTemplateTest {
         assertThat(sentHtml()).contains("Hello Bob", "cast your first Ballot", "Privacy Policy", "lang=\"en\"").doesNotContain("??");
     }
 
+    @Test
+    void shouldRenderInvitationEmailWithPollLinkWhenLocaleIsZhTwOrEn() throws Exception {
+        UUID pollId = UUID.fromString("0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05");
+        emailService.sendInvitationEmail("a@example.com", "Amy", "Lunch <b>vote</b>", pollId, ZH_TW);
+        assertThat(sentHtml()).contains("Amy 邀請您", "Lunch &lt;b&gt;vote&lt;/b&gt;",
+                "https://staging.vomatt.com/votes/" + pollId, "前往投票").doesNotContain("??", "<b>vote");
+
+        emailService.sendInvitationEmail("b@example.com", "Amy", "Lunch", pollId, Locale.ENGLISH);
+        assertThat(sentHtml()).contains("Amy invited you", "Open the Poll", "https://staging.vomatt.com/votes/" + pollId)
+                .doesNotContain("??");
+    }
+
+    @Test
+    void shouldMaskAddressWhenLoggingInvitation() {
+        assertThat(EmailServiceImpl.mask("carol@example.com")).isEqualTo("c***@example.com");
+        assertThat(EmailServiceImpl.mask("broken")).isEqualTo("***");
+    }
+
+    @Test
+    void shouldKeepVoteIdTokenWhenPollPathDefaultResolved() {
+        // Same placeholder as application.yml / EmailServiceImpl: the braces of {voteId} must survive resolution
+        assertThat(new StandardEnvironment().resolvePlaceholders("${EMAIL_POLL_PATH_UNSET:/votes/{voteId}}"))
+                .isEqualTo("/votes/{voteId}");
+    }
+
     private String sentHtml() throws Exception {
         ArgumentCaptor<MimeMessage> captor = ArgumentCaptor.forClass(MimeMessage.class);
         verify(mailSender, atLeastOnce()).send(captor.capture());
@@ -112,6 +139,7 @@ class EmailTemplateTest {
         ReflectionTestUtils.setField(service, "fromEmail", "noreply@vomatt.com");
         ReflectionTestUtils.setField(service, "siteUrl", "https://staging.vomatt.com");
         ReflectionTestUtils.setField(service, "otpTtlSeconds", 180L);
+        ReflectionTestUtils.setField(service, "pollPath", "/votes/{voteId}");
         return service;
     }
 }

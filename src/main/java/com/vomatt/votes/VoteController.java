@@ -119,13 +119,17 @@ public class VoteController {
             **Behavior**: creates a Poll owned by the caller. With no `startTime` (or a past one) the Poll is Open immediately; \
             a future `startTime` makes it Scheduled until that time. `voterVisibility` defaults to OWNER; `audience` defaults to PUBLIC. \
             An UNLISTED Poll is reachable only through its link: it stays out of Feed / Explore / Search and the owner's profile, \
-            and is listed only in My Polls. An INVITE_ONLY Poll is reachable only by its owner and the users in `inviteeIds` \
-            (duplicates and the owner's own ID are ignored; more can be added later); everyone else gets 404 `vote.not_found`.
+            and is listed only in My Polls. An INVITE_ONLY Poll is reachable only by its owner and its Invitees: the users in `inviteeIds` and the addresses in `inviteeEmails` \
+            (duplicates and the owner's own ID / address are ignored; more can be added later); everyone else gets 404 `vote.not_found`. \
+            An address is always listed as entered, whether or not it belongs to an account; an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in.
             **Side effects**: usage count of each attached tag +1 for a PUBLIC Poll (UNLISTED and INVITE_ONLY Polls are not counted); \
-            each Invitee gets an unread Invitation notification (unread count, `unread` on My Polls `status=open`); the creation is audit-logged.
+            each Invitee tied to a user gets an unread Invitation notification (unread count, `unread` on My Polls `status=open`); each new email Invitee \
+            is sent an invitation email linking to the Poll (only when email is enabled) \
+            (at most once per address per Poll, even after removing and re-adding it, and at most `EMAIL_INVITATION_DAILY_LIMIT` (default 200) per owner per day; \
+            over the limit the Invitee is still added and only the email is skipped) and gets the Invitation notification once tied to a user; the creation is audit-logged.
             **Errors**:
-                    - 400 `vote.invitee.not_invite_only`: `inviteeIds` is not empty but `audience` is not INVITE_ONLY
-                    - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended
+                    - 400 `vote.invitee.not_invite_only`: `inviteeIds` or `inviteeEmails` is not empty but `audience` is not INVITE_ONLY
+                    - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended (`inviteeEmails` never cause it)
                     - 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true
                     - 400 `vote.options.min`: fewer than 2 options
                     - 400 `vote.options.max`: more than 10 options
@@ -170,17 +174,19 @@ public class VoteController {
             **Auth**: required (owner only)
             **Precondition**: the Poll is Scheduled (its start time has not arrived)
             **Behavior**: replaces title, description, times, Voter Visibility, Audience, Invitees, tags and options with the body (same body and validation as create). \
-            An omitted `startTime`, `voterVisibility`, `audience` or `inviteeIds` keeps the current value; the Poll does not open on edit. \
+            An omitted `startTime`, `voterVisibility`, `audience`, `inviteeIds` or `inviteeEmails` keeps the current value; the Poll does not open on edit. \
             Audience can change only here, so it is fixed once the Poll is Open.
             **Side effects**: all options are replaced, so option IDs change; tag usage counts are adjusted for added / removed tags \
-            and for an Audience change (only PUBLIC Polls are counted). `inviteeIds` replaces the Invitees; an Audience other than INVITE_ONLY removes them all. \
-            Each new Invitee gets an unread Invitation notification, including one removed and invited again.
+            and for an Audience change (only PUBLIC Polls are counted). `inviteeIds` replaces the Invitees added by ID and `inviteeEmails` those added by email (matched by address); \
+            an Audience other than INVITE_ONLY removes them all. Each new Invitee tied to a user gets an unread Invitation notification, including one removed and invited again; \
+            each newly added email Invitee is sent an invitation email (at most once per address per Poll, even after removing and re-adding it, and at most `EMAIL_INVITATION_DAILY_LIMIT` (default 200) per owner per day; \
+            over the limit the Invitee is still added and only the email is skipped).
             **Errors**:
             - 403 `vote.forbidden`: the caller is not the owner
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
             - 400 `vote.not_editable`: the Poll is Open or Ended
-            - 400 `vote.invitee.not_invite_only`: `inviteeIds` is not empty but the resulting Audience is not INVITE_ONLY
-            - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended
+            - 400 `vote.invitee.not_invite_only`: `inviteeIds` or `inviteeEmails` is not empty but the resulting Audience is not INVITE_ONLY
+            - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended (`inviteeEmails` never cause it)
             - 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true
             - 400 `vote.options.min`: fewer than 2 options
             - 400 `vote.options.max`: more than 10 options
@@ -594,8 +600,9 @@ public class VoteController {
 
     private static final String EX_INVITEES = """
             { "success": true, "data": [
-                { "userId": "0199f2a1-2c5d-7f13-9b0e-7d4a1e3f6c82", "username": "bob", "hasBallot": true, "invitedAt": "2026-10-09T15:20:31+08:00" },
-                { "userId": "0199f2a1-3d6e-7a24-8c1f-8e5b2f4a7d93", "username": "carol", "hasBallot": false, "invitedAt": "2026-10-09T15:20:31+08:00" }
+                { "userId": "0199f2a1-2c5d-7f13-9b0e-7d4a1e3f6c82", "username": "bob", "email": null, "hasBallot": true, "invitedAt": "2026-10-09T15:20:31+08:00" },
+                { "userId": "0199f2a1-3d6e-7a24-8c1f-8e5b2f4a7d93", "username": "carol", "email": null, "hasBallot": false, "invitedAt": "2026-10-09T15:20:31+08:00" },
+                { "userId": null, "username": null, "email": "dave@example.com", "hasBallot": false, "invitedAt": "2026-10-09T15:20:31+08:00" }
               ], "message": null, "errorCode": null, "error": null }
             """;
 
@@ -605,6 +612,8 @@ public class VoteController {
             **Auth**: required (owner only)
             **Precondition**: none; the list is empty for a Poll that is not INVITE_ONLY
             **Behavior**: the Poll's Invitees, earliest invited first, each with `hasBallot` so the owner sees who has not answered yet. \
+            An Invitee added by email is always listed by that address with `userId` / `username` null, whether or not the address belongs to an account \
+            (`hasBallot` turns true once that person casts a Ballot). \
             Never tells which option anyone chose, so Sealed results stay sealed.
             **Side effects**: none
             **Errors**:
@@ -632,20 +641,26 @@ public class VoteController {
     @Operation(summary = "Add Invitees", description = """
             **Auth**: required (owner only)
             **Precondition**: the Poll is INVITE_ONLY and Scheduled or Open (Invitees can still be added after it opened)
-            **Behavior**: adds the users as Invitees, so they can see the Poll, cast a Ballot and Comment, and find it in My Polls. \
-            Users already invited, duplicates and the owner's own ID are ignored. Returns the full Invitee list.
-            **Side effects**: `inviteeCount` grows; each new Invitee gets an unread Invitation notification (again unread for one removed and invited again) and later the Ended Notification; the action is audit-logged.
+            **Behavior**: adds the users and email addresses as Invitees, so they can see the Poll, cast a Ballot and Comment, and find it in My Polls. \
+            Users or addresses already invited, duplicates and the owner's own ID / address are ignored. \
+            An address is always listed as entered, whether or not it belongs to an account; an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in. \
+            Returns the full Invitee list.
+            **Side effects**: `inviteeCount` grows (email Invitees included); each new Invitee tied to a user gets an unread Invitation notification \
+            (again unread for one removed and invited again) and later the Ended Notification; each new email Invitee is sent an invitation email \
+            (at most once per address per Poll, even after removing and re-adding it, and at most `EMAIL_INVITATION_DAILY_LIMIT` (default 200) per owner per day; \
+            over the limit the Invitee is still added and only the email is skipped) \
+            linking to the Poll (only when email is enabled) and gets both notifications once tied to a user; the action is audit-logged.
             **Errors**:
             - 400 `vote.invitee.not_invite_only`: the Poll is not INVITE_ONLY
             - 400 `vote.ended`: the Poll has Ended
-            - 400 `vote.invitee.ids_invalid`: one of `userIds` is not an existing user or is suspended
-            - 400 `common.validation_failed`: `userIds` is empty, holds more than 100 IDs or a null element
+            - 400 `vote.invitee.ids_invalid`: one of `userIds` is not an existing user or is suspended (`emails` never cause it)
+            - 400 `common.validation_failed`: both `userIds` and `emails` are empty, one holds more than 100 entries, a null element or an invalid address
             - 403 `vote.forbidden`: the caller is not the owner
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
             """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
-                    examples = @ExampleObject(name = "Invite carol", value = """
-                            { "userIds": [ "0199f2a1-3d6e-7a24-8c1f-8e5b2f4a7d93" ] }
+                    examples = @ExampleObject(name = "Invite carol and dave", value = """
+                            { "userIds": [ "0199f2a1-3d6e-7a24-8c1f-8e5b2f4a7d93" ], "emails": [ "dave@example.com" ] }
                             """))))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Invitees after the addition",
             content = @Content(examples = @ExampleObject(name = "Invitees", value = EX_INVITEES)))
@@ -672,8 +687,9 @@ public class VoteController {
     @Operation(summary = "Remove an Invitee", description = """
             **Auth**: required (owner only)
             **Precondition**: the Poll is INVITE_ONLY and Scheduled or Open, and the Invitee holds no Ballot
-            **Behavior**: removes the user from the Invitees; from then on the Poll is 404 `vote.not_found` for them. \
-            Idempotent: succeeds, changing nothing, when the user is not an Invitee. Returns the full Invitee list.
+            **Behavior**: removes the Invitee added by this user ID; from then on the Poll is 404 `vote.not_found` for them. \
+            Idempotent: succeeds, changing nothing, when the user is not an Invitee added by ID; one added by email \
+            is removed through `DELETE /api/votes/{voteId}/invitees?email=`. Returns the full Invitee list.
             **Side effects**: `inviteeCount` drops; the action is audit-logged.
             **Errors**:
             - 400 `vote.invitee.has_ballot`: the Invitee holds a Ballot, so counted Ballots are never orphaned
@@ -700,6 +716,43 @@ public class VoteController {
             @PathVariable String userId,
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(voteService.removeInvitee(voteId, userId, principal.userId())));
+    }
+
+    @DeleteMapping(value = "/{voteId}/invitees", params = "email")
+    @Auditable(action = "UNINVITE", resourceType = "VOTE", resourceIdIndex = 0)
+    @CommonApiResponses
+    @Operation(summary = "Remove an email Invitee", description = """
+            **Auth**: required (owner only)
+            **Precondition**: the Poll is INVITE_ONLY and Scheduled or Open, and the Invitee holds no Ballot
+            **Behavior**: removes the Invitee added by this address (lower-cased and trimmed like sign-in does), whether or not it belongs to an account; \
+            from then on the Poll is 404 `vote.not_found` for that person and verifying the address no longer grants access. \
+            Idempotent: succeeds, changing nothing, when the address is not an Invitee. Returns the full Invitee list.
+            **Side effects**: `inviteeCount` drops; the action is audit-logged.
+            **Errors**:
+            - 400 `vote.invitee.has_ballot`: the Invitee holds a Ballot, so counted Ballots are never orphaned
+            - 400 `vote.invitee.not_invite_only`: the Poll is not INVITE_ONLY
+            - 400 `vote.ended`: the Poll has Ended
+            - 403 `vote.forbidden`: the caller is not the owner
+            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
+            """)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Invitees after the removal",
+            content = @Content(examples = @ExampleObject(name = "Invitees", value = EX_INVITEES)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invitee holds a Ballot (`vote.invitee.has_ballot`), Poll is not Invite-only (`vote.invitee.not_invite_only`) or has Ended (`vote.ended`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.invitee.has_ballot", value = ERR_MESSAGE + "An Invitee who holds a Ballot cannot be removed" + ERR_CODE + "vote.invitee.has_ballot" + ERR_ERROR + "An Invitee who holds a Ballot cannot be removed" + ERR_END)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Caller is not the owner (`vote.forbidden`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.forbidden", value = ERR_MESSAGE + "Not allowed to modify this Poll" + ERR_CODE + "vote.forbidden" + ERR_ERROR + "Not allowed to modify this Poll" + ERR_END)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller (`vote.not_found`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
+    public ResponseEntity<ApiResponse<List<InviteeResponse>>> removeEmailInvitee(
+            @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
+            @PathVariable String voteId,
+            @Parameter(description = "Email address the Invitee was added by", required = true, example = "dave@example.com")
+            @RequestParam String email,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(voteService.removeEmailInvitee(voteId, email, principal.userId())));
     }
 
     private String getClientIpAddress(HttpServletRequest request) {

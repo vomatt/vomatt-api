@@ -19,6 +19,7 @@ import org.thymeleaf.context.Context;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * SMTP implementation of EmailService (HTML templates under {@code templates/email}, text from {@code messages*.properties})
@@ -39,6 +40,9 @@ public class EmailServiceImpl implements EmailService {
 
     @Value("${app.email.site-url:https://vomatt.com}")
     private String siteUrl;
+
+    @Value("${app.email.poll-path:/votes/{voteId}}")
+    private String pollPath;
 
     @Value("${otp.ttl-seconds:180}")
     private long otpTtlSeconds;
@@ -76,6 +80,26 @@ public class EmailServiceImpl implements EmailService {
         } catch (MessagingException | RuntimeException e) {
             log.error("Failed to send welcome email to: {}", to, e);
         }
+    }
+
+    @Async
+    @Override
+    public void sendInvitationEmail(String to, String inviterName, String pollTitle, UUID pollId, Locale locale) {
+        try {
+            send(to, "email.invitation.subject", "email/invitation-email", locale,
+                    Map.of("inviterName", Objects.toString(inviterName, ""),
+                            "pollTitle", pollTitle,
+                            "pollUrl", siteUrl + pollPath.replace("{voteId}", pollId.toString())));
+            log.info("Invitation email for vote {} sent to: {}", pollId, mask(to));
+        } catch (MessagingException | RuntimeException e) {
+            log.error("Failed to send invitation email for vote {} to: {}", pollId, mask(to), e);
+        }
+    }
+
+    // The invitee has no account yet, so their address stays out of the logs: a***@domain
+    static String mask(String email) {
+        int at = email.indexOf('@');
+        return at <= 0 ? "***" : email.charAt(0) + "***" + email.substring(at);
     }
 
     private void send(String to, String subjectKey, String template, Locale locale, Map<String, Object> variables)

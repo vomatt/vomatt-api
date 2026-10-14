@@ -110,6 +110,10 @@ app:
     from: ${EMAIL_FROM:noreply@vomatt.com}
     # Frontend origin used for links in emails (logo, footer)
     site-url: ${EMAIL_SITE_URL:https://vomatt.com}
+    # Frontend path of a Poll, appended to site-url in invitation emails; {voteId} is replaced
+    poll-path: ${EMAIL_POLL_PATH:/votes/{voteId}}
+    # Invitation emails one owner may trigger per UTC day; over it the Invitees are still added, only the email is skipped
+    invitation-daily-limit: ${EMAIL_INVITATION_DAILY_LIMIT:200}
   security:
     # Comma-separated; * is not allowed when allowCredentials=true
     cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}

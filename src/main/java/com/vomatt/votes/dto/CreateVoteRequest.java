@@ -4,11 +4,13 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import com.vomatt.entity.Audience;
+import com.vomatt.entity.User;
 import com.vomatt.entity.VoterVisibility;
 
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -70,6 +72,21 @@ public class CreateVoteRequest {
             example = "[\"0199f2a1-2c5d-7f13-9b0e-7d4a1e3f6c82\"]", nullable = true)
     @Size(max = 100, message = "Maximum 100 users can be invited at once")
     private List<@NotNull(message = "Invitee ID cannot be null") UUID> inviteeIds;
+
+    @Schema(description = "Email addresses to invite, for people who may not have an account yet; only for an INVITE_ONLY Poll "
+            + "(otherwise 400 `vote.invitee.not_invite_only`). At most 100; null elements and invalid addresses are rejected. "
+            + "Addresses are lower-cased and trimmed like sign-in does; duplicates and the owner's own address are ignored. "
+            + "Each address is listed as entered and gets an invitation email; an active account's user gets access right away, "
+            + "any other address once someone verifies it at sign-up / sign-in. "
+            + "On edit the list replaces the Invitees added by email (matched by address); null keeps them",
+            example = "[\"carol@example.com\"]", nullable = true)
+    @Size(max = 100, message = "Maximum 100 email addresses can be invited at once")
+    private List<@NotNull(message = "Invitee email cannot be null") @Email(message = "Invalid invitee email") @Size(max = 254, message = "Invitee email cannot exceed 254 characters") String> inviteeEmails;
+
+    // Normalized like sign-in before validation, so padded or upper-case input is accepted and stored the same way
+    public void setInviteeEmails(List<String> emails) {
+        this.inviteeEmails = emails == null ? null : emails.stream().map(e -> e == null ? null : User.normalizeEmail(e)).toList();
+    }
 
     @Size(max = 5, message = "Maximum 5 tags can be selected")
     @Schema(description = "IDs of up to 5 existing tags (see `GET /api/tags`); null or empty means no tags. Unknown IDs are rejected with 400 `tag.ids.invalid`",

@@ -6,6 +6,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.util.Locale;
+import java.util.UUID;
 
 /**
  * No-operation implementation of EmailService used when email functionality is disabled
@@ -29,5 +30,10 @@ public class EmailServiceNoOp implements EmailService {
     @Override
     public void sendWelcomeEmail(String to, String username, Locale locale) {
         logger.debug("Email service disabled: Skipping welcome email to {}", to);
+    }
+
+    @Override
+    public void sendInvitationEmail(String to, String inviterName, String pollTitle, UUID pollId, Locale locale) {
+        logger.debug("Email service disabled: Skipping invitation email to {}", to);
     }
 }

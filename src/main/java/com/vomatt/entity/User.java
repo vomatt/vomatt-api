@@ -18,6 +18,7 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -35,7 +36,7 @@ public class User extends AuditableEntity {
     @Column(name = "username", nullable = false, unique = true, length = 50)
     private String username;
 
-    /** Null for users who registered via phone OTP. */
+    /** Null for users who registered via phone OTP. Stored as {@link #normalizeEmail}. */
     @Column(name = "email", unique = true, length = 254)
     private String email;
 
@@ -92,6 +93,11 @@ public class User extends AuditableEntity {
     public void addPoints(int points) {
         this.points += points;
         updateMembershipLevel();
+    }
+
+    /** The one email normalization: sign-up / sign-in lookups and email Invitees must agree on it. */
+    public static String normalizeEmail(String email) {
+        return email.trim().toLowerCase(Locale.ROOT);
     }
 
     public void deductPoints(int points) {

@@ -315,7 +315,9 @@ public class VoteController {
             **Precondition**: the Poll is Open (not Scheduled, not Ended)
             **Behavior**: records the caller's Ballot with exactly one Selection. If the caller already holds a Ballot it is replaced by the new one (change of mind); \
             casting the same option again changes nothing. The response is the Poll with the results still Sealed and `myOptionId` set.
-            **Side effects**: Turnout +1 on the first Ballot only; the option counts move silently (not visible until the Poll has Ended); the action is audit-logged.
+            **Side effects**: Turnout +1 on the first Ballot only; the option counts move silently (not visible until the Poll has Ended); the action is audit-logged. \
+            When this Ballot leaves every Invitee of an INVITE_ONLY Poll holding a Ballot (the owner's own Ballot never counts), the Poll Ends now \
+            (`endTime` moves, `deadline` stays), so the response comes back Ended with results visible and the Ended Notification follows.
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen
@@ -690,7 +692,9 @@ public class VoteController {
             **Behavior**: removes the Invitee added by this user ID; from then on the Poll is 404 `vote.not_found` for them. \
             Idempotent: succeeds, changing nothing, when the user is not an Invitee added by ID; one added by email \
             is removed through `DELETE /api/votes/{voteId}/invitees?email=`. Returns the full Invitee list.
-            **Side effects**: `inviteeCount` drops; the action is audit-logged.
+            **Side effects**: `inviteeCount` drops; the action is audit-logged. When every remaining Invitee of an Open Poll holds a Ballot \
+            (and at least one remains), the Poll Ends now (`endTime` moves, `deadline` stays) and the Ended Notification follows. \
+            This check also runs when nothing was removed, so even a no-op call can end such a Poll.
             **Errors**:
             - 400 `vote.invitee.has_ballot`: the Invitee holds a Ballot, so counted Ballots are never orphaned
             - 400 `vote.invitee.not_invite_only`: the Poll is not INVITE_ONLY
@@ -727,7 +731,9 @@ public class VoteController {
             **Behavior**: removes the Invitee added by this address (lower-cased and trimmed like sign-in does), whether or not it belongs to an account; \
             from then on the Poll is 404 `vote.not_found` for that person and verifying the address no longer grants access. \
             Idempotent: succeeds, changing nothing, when the address is not an Invitee. Returns the full Invitee list.
-            **Side effects**: `inviteeCount` drops; the action is audit-logged.
+            **Side effects**: `inviteeCount` drops; the action is audit-logged. When every remaining Invitee of an Open Poll holds a Ballot \
+            (and at least one remains), the Poll Ends now (`endTime` moves, `deadline` stays) and the Ended Notification follows. \
+            This check also runs when nothing was removed, so even a no-op call can end such a Poll.
             **Errors**:
             - 400 `vote.invitee.has_ballot`: the Invitee holds a Ballot, so counted Ballots are never orphaned
             - 400 `vote.invitee.not_invite_only`: the Poll is not INVITE_ONLY

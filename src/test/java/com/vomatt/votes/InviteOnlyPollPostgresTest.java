@@ -161,11 +161,13 @@ class InviteOnlyPollPostgresTest extends PostgresRepositoryTest {
         String ownerId = owner.getId().toString();
         String inviteeId = invitee.getId().toString();
         String strangerId = stranger.getId().toString();
-        voteService.vote(id, ballotFor(id, inviteeId), inviteeId, null);
         InviteesRequest add = new InviteesRequest();
         add.setUserIds(List.of(stranger.getId(), stranger.getId(), invitee.getId()));
+        voteService.addInvitees(id, add, ownerId);
+        // voted after the add: a lone Invitee's Ballot would End the Poll
+        voteService.vote(id, ballotFor(id, inviteeId), inviteeId, null);
 
-        List<InviteeResponse> invitees = voteService.addInvitees(id, add, ownerId);
+        List<InviteeResponse> invitees = voteService.getInvitees(id, ownerId);
         assertThat(invitees).extracting(InviteeResponse::username, InviteeResponse::hasBallot)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple(invitee.getUsername(), true),
                         org.assertj.core.groups.Tuple.tuple(stranger.getUsername(), false));
@@ -177,6 +179,78 @@ class InviteOnlyPollPostgresTest extends PostgresRepositoryTest {
         assertThat(voteService.removeInvitee(id, strangerId, ownerId)).extracting(InviteeResponse::username)
                 .containsExactly(invitee.getUsername());
         assertNotFound(() -> voteService.getVote(id, strangerId));
+    }
+
+    // ─── Auto-end ─────────────────────────────────────────────────────────────
+
+    private boolean ended(String id) {
+        return voteService.getVote(id, owner.getId().toString()).getOptions().stream().allMatch(o -> o.getVotes() != null);
+    }
+
+    @Test
+    @DisplayName("should End with the Deadline kept when every Invitee holds a Ballot, ignoring the owner's Ballot")
+    void shouldEndPollWhenEveryInviteeHoldsBallotIgnoringOwner() {
+        String id = inviteOpen.getId().toString();
+        String ownerId = owner.getId().toString();
+        String inviteeId = invitee.getId().toString();
+        OffsetDateTime deadline = voteService.getVote(id, ownerId).getDeadline();
+
+        voteService.vote(id, ballotFor(id, ownerId), ownerId, null);
+        assertThat(ended(id)).as("the owner's Ballot never counts").isFalse();
+
+        VoteResponse last = voteService.vote(id, ballotFor(id, inviteeId), inviteeId, null);
+        assertThat(last.getOptions()).allSatisfy(o -> assertThat(o.getVotes()).isNotNull());
+        assertThat(last.getEndTime()).isBefore(deadline);
+        assertThat(last.getDeadline()).isEqualTo(deadline);
+        assertThat(voteService.getVoteResults(id, inviteeId).getTotalVotes()).isEqualTo(2);
+        assertThatThrownBy(() -> voteService.vote(id, ballotFor(id, ownerId), ownerId, null))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_ENDED));
+    }
+
+    @Test
+    @DisplayName("should End when the owner removes the last Invitee without a Ballot and the rest hold one")
+    void shouldEndPollWhenRemovingLastInviteeWithoutBallot() {
+        String id = inviteOpen.getId().toString();
+        String ownerId = owner.getId().toString();
+        String inviteeId = invitee.getId().toString();
+        InviteesRequest add = new InviteesRequest();
+        add.setUserIds(List.of(stranger.getId()));
+        voteService.addInvitees(id, add, ownerId);
+        voteService.vote(id, ballotFor(id, inviteeId), inviteeId, null);
+        assertThat(ended(id)).as("stranger still holds no Ballot").isFalse();
+
+        voteService.removeInvitee(id, stranger.getId().toString(), ownerId);
+
+        assertThat(ended(id)).isTrue();
+    }
+
+    @Test
+    @DisplayName("should never auto-end when the Poll has no Invitees left, even after a Ballot")
+    void shouldNotEndPollWhenNoInvitees() {
+        String id = inviteOpen.getId().toString();
+        String ownerId = owner.getId().toString();
+
+        voteService.removeInvitee(id, invitee.getId().toString(), ownerId);
+        voteService.vote(id, ballotFor(id, ownerId), ownerId, null);
+
+        assertThat(ended(id)).isFalse();
+    }
+
+    @Test
+    @DisplayName("should keep an Invite-only Poll created with no Invitees Open after the owner casts a Ballot")
+    void shouldNotEndPollWhenCreatedWithoutInvitees() {
+        String ownerId = owner.getId().toString();
+        CreateVoteRequest request = new CreateVoteRequest();
+        request.setTitle("empty " + word);
+        request.setOptions(List.of(option("A"), option("B")));
+        request.setEndTime(now.plusDays(1));
+        request.setAudience(Audience.INVITE_ONLY);
+        String id = voteService.createVote(request, ownerId).getId();
+
+        voteService.vote(id, ballotFor(id, ownerId), ownerId, null);
+
+        assertThat(ended(id)).isFalse();
     }
 
     @Test

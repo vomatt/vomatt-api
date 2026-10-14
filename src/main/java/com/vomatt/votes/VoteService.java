@@ -302,6 +302,8 @@ public class VoteService {
                 voteRepository.adjustTurnout(voteUuid, 1);
             }
             log.info("User {} cast ballot on vote {} for option {}", userId, voteId, optionUuid);
+            // adjustVoteCount cleared the persistence context: re-load the (still locked) Poll as a managed entity
+            voteRepository.findById(voteUuid).ifPresent(this::endIfAllInviteesVoted);
         }
 
         return ballotResponse(voteUuid, userId, optionUuid);
@@ -462,7 +464,20 @@ public class VoteService {
             inviteeRepository.flush();
             log.info("Invitee {} removed from vote {} by creator {}", invitee.getId(), voteId, userId);
         });
+        endIfAllInviteesVoted(vote);
         return invitees(vote.getId());
+    }
+
+    /**
+     * Auto-end, run under the Poll-row lock after a Ballot is cast or an Invitee removed (by the owner or by email binding): the next Ballot then hits the
+     * Ended guard in {@link #lockOpenVote}. The owner is never an Invitee, so their Ballot never counts.
+     *
+     * @param vote managed, so the end is flushed with the transaction
+     */
+    private void endIfAllInviteesVoted(Vote vote) {
+        if (vote.endIfAllInviteesVotedAt(OffsetDateTime.now(), () -> inviteeRepository.allHoldBallot(vote.getId()))) {
+            log.info("Vote {} ended: every Invitee holds a Ballot", vote.getId());
+        }
     }
 
     private List<InviteeResponse> invitees(UUID voteId) {
@@ -616,7 +631,11 @@ public class VoteService {
         // 3. Bind
         inviteeRepository.bindEmail(user.getId(), email, voteIds);
         // 4. Pending rows already covered by a user row (or the owner's own address) go
-        inviteeRepository.deleteUnbindableEmail(user.getId(), email, voteIds);
+        if (inviteeRepository.deleteUnbindableEmail(user.getId(), email, voteIds) > 0) {
+            // 5. A dropped pending row may have been the only Invitee without a Ballot (binding itself adds none)
+            // System path with no caller identity, so no access lookup; the Polls are locked by step 1
+            voteRepository.findAllById(voteIds).forEach(this::endIfAllInviteesVoted);
+        }
     }
 
     /**

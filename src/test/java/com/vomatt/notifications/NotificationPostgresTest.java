@@ -214,9 +214,29 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should send the Ended Notification to every Invitee when the last Invitee's Ballot auto-ends the Poll")
+    void shouldNotifyInviteesWhenPollAutoEnded() {
+        Vote poll = invitePoll(now.minusHours(1), now.plusDays(1), participant, bystander);
+        em.flush();
+        String voteId = poll.getId().toString();
+        for (User invitee : List.of(participant, bystander)) {
+            String userId = invitee.getId().toString();
+            markRead(invitee, poll); // the Invitation, so only the Ended Notification can be unread
+            VoteRequest ballot = new VoteRequest();
+            ballot.setOptionIds(List.of(voteService.getVote(voteId, userId).getOptions().getFirst().getId()));
+            voteService.vote(voteId, ballot, userId, null);
+        }
+
+        assertThat(unread(participant)).isEqualTo(1);
+        assertThat(unread(bystander)).isEqualTo(1);
+        assertThat(myPollUnread(participant, "ended", poll)).isTrue();
+    }
+
+    @Test
     @DisplayName("should send the Ended Notification to an Invitee who Retracted")
     void shouldNotifyInviteeWhenRetractedBeforePollEnded() {
-        Vote poll = invitePoll(now.minusHours(1), now.plusDays(1), participant);
+        // bystander holds no Ballot, so participant's Ballot does not End the Poll
+        Vote poll = invitePoll(now.minusHours(1), now.plusDays(1), participant, bystander);
         em.flush();
         String voteId = poll.getId().toString();
         String userId = participant.getId().toString();

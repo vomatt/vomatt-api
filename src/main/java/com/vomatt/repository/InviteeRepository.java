@@ -49,7 +49,9 @@ public interface InviteeRepository extends JpaRepository<Invitee, UUID> {
      * Invitees under the same lock, so binding and a concurrent invite of the same user serialize and cannot both
      * add that user; the lock also lets binding auto-end a Poll whose last pending row it drops. A Ballot on such a
      * Poll waits for the sign-in (and vice versa); both are short. Every other path locks a single Poll, so the id
-     * order rules out a cycle.
+     * order rules out a cycle. FOR UPDATE also blocks FOR KEY SHARE, so inserts that reference the Poll by foreign key
+     * without taking its lock (Comments, notification reads) briefly wait behind a binding; they lock nothing else
+     * first, so this adds no cycle either.
      */
     @Query(value = """
             SELECT v.id FROM vomatt.votes v

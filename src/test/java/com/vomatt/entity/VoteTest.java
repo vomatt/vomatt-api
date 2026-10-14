@@ -147,6 +147,18 @@ class VoteTest {
     }
 
     @Test
+    @DisplayName("should never auto-end without asking when the Invite-only Poll is Deleted")
+    void shouldNotAutoEndWhenDeleted() {
+        OffsetDateTime deadline = now.plusDays(1);
+        Vote vote = poll(now.minusHours(1), deadline, Audience.INVITE_ONLY);
+        vote.setDeletedAt(now);
+
+        assertThat(vote.endIfAllInviteesVotedAt(now, () -> { throw new AssertionError("asked"); })).isFalse();
+
+        assertThat(vote.getEndTime()).isEqualTo(deadline);
+    }
+
+    @Test
     @DisplayName("should refuse with vote.close.public_not_allowed when closing an Open Public Poll")
     void shouldRefuseCloseWhenPublic() {
         OffsetDateTime deadline = now.plusDays(1);

@@ -302,7 +302,8 @@ public class VoteService {
                 voteRepository.adjustTurnout(voteUuid, 1);
             }
             log.info("User {} cast ballot on vote {} for option {}", userId, voteId, optionUuid);
-            endIfAllInviteesVoted(vote);
+            // adjustVoteCount cleared the persistence context: re-load the (still locked) Poll as a managed entity
+            voteRepository.findById(voteUuid).ifPresent(this::endIfAllInviteesVoted);
         }
 
         return ballotResponse(voteUuid, userId, optionUuid);
@@ -470,16 +471,13 @@ public class VoteService {
     /**
      * Auto-end, run under the Poll-row lock after a Ballot is cast or an Invitee removed (by the owner or by email binding): the next Ballot then hits the
      * Ended guard in {@link #lockOpenVote}. The owner is never an Invitee, so their Ballot never counts.
+     *
+     * @param vote managed, so the end is flushed with the transaction
      */
-    private void endIfAllInviteesVoted(Vote lockedVote) {
-        OffsetDateTime now = OffsetDateTime.now();
-        // Checked on the given (possibly detached) Poll first; Ballot paths clear the persistence context
-        if (!lockedVote.endIfAllInviteesVotedAt(now, () -> inviteeRepository.allHoldBallot(lockedVote.getId()))) {
-            return;
+    private void endIfAllInviteesVoted(Vote vote) {
+        if (vote.endIfAllInviteesVotedAt(OffsetDateTime.now(), () -> inviteeRepository.allHoldBallot(vote.getId()))) {
+            log.info("Vote {} ended: every Invitee holds a Ballot", vote.getId());
         }
-        // Apply the end to the managed copy so it is flushed (the same, already ended instance when still managed)
-        voteRepository.findById(lockedVote.getId()).ifPresent(vote -> vote.endIfAllInviteesVotedAt(now, () -> true));
-        log.info("Vote {} ended: every Invitee holds a Ballot", lockedVote.getId());
     }
 
     private List<InviteeResponse> invitees(UUID voteId) {
@@ -635,9 +633,8 @@ public class VoteService {
         // 4. Pending rows already covered by a user row (or the owner's own address) go
         if (inviteeRepository.deleteUnbindableEmail(user.getId(), email, voteIds) > 0) {
             // 5. A dropped pending row may have been the only Invitee without a Ballot (binding itself adds none)
-            voteRepository.findAllById(voteIds).stream()
-                .filter(vote -> vote.getDeletedAt() == null)
-                .forEach(this::endIfAllInviteesVoted);
+            // System path with no caller identity, so no access lookup; the Polls are locked by step 1
+            voteRepository.findAllById(voteIds).forEach(this::endIfAllInviteesVoted);
         }
     }
 

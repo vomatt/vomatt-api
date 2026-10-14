@@ -894,6 +894,7 @@ class VoteServiceTest {
     class InviteOnlyTests {
 
         private final UUID inviteeId = UUID.randomUUID();
+        private final OffsetDateTime deadline = OffsetDateTime.now().plusDays(1);
 
         private void inviteOnly(OffsetDateTime end) {
             vote.setAudience(Audience.INVITE_ONLY);
@@ -1013,8 +1014,6 @@ class VoteServiceTest {
 
         // ─── Auto-end ─────────────────────────────────────────────────────────
 
-        private final OffsetDateTime deadline = OffsetDateTime.now().plusDays(1);
-
         private VoteResponse castAsInvitee() {
             inviteOnly(deadline);
             vote.setDeadline(deadline);
@@ -1050,6 +1049,7 @@ class VoteServiceTest {
         @DisplayName("should keep the Poll Open when some Invitee still holds no Ballot")
         void shouldKeepPollOpenWhenInviteeHasNoBallot() {
             when(inviteeRepository.allHoldBallot(voteId)).thenReturn(false);
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
 
             castAsInvitee();
 
@@ -1080,13 +1080,29 @@ class VoteServiceTest {
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
             when(inviteeRepository.findByVoteIdAndUserIdAndEmailIsNull(voteId, inviteeId)).thenReturn(Optional.of(invitee));
             when(inviteeRepository.allHoldBallot(voteId)).thenReturn(true);
-            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
 
             voteService.removeInvitee(voteId.toString(), inviteeId.toString(), userId.toString());
 
             verify(inviteeRepository).delete(invitee);
             assertThat(vote.getStatus()).isEqualTo(VoteStatus.ENDED);
             assertThat(vote.getDeadline()).isEqualTo(deadline);
+        }
+
+        @Test
+        @DisplayName("should not End a Scheduled Poll when removing its Invitee")
+        void shouldNotEndPollWhenRemovingInviteeWhileScheduled() {
+            vote.setAudience(Audience.INVITE_ONLY);
+            vote.setStartTime(OffsetDateTime.now().plusHours(1));
+            vote.setEndTime(deadline);
+            Invitee invitee = new Invitee(vote, User.builder().id(inviteeId).build());
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(inviteeRepository.findByVoteIdAndUserIdAndEmailIsNull(voteId, inviteeId)).thenReturn(Optional.of(invitee));
+
+            voteService.removeInvitee(voteId.toString(), inviteeId.toString(), userId.toString());
+
+            verify(inviteeRepository).delete(invitee);
+            verify(inviteeRepository, never()).allHoldBallot(any());
+            assertThat(vote.getStatus()).isEqualTo(VoteStatus.SCHEDULED);
         }
 
         @Test

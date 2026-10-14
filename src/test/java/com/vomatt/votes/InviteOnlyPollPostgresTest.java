@@ -238,6 +238,22 @@ class InviteOnlyPollPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should keep an Invite-only Poll created with no Invitees Open after the owner casts a Ballot")
+    void shouldNotEndPollWhenCreatedWithoutInvitees() {
+        String ownerId = owner.getId().toString();
+        CreateVoteRequest request = new CreateVoteRequest();
+        request.setTitle("empty " + word);
+        request.setOptions(List.of(option("A"), option("B")));
+        request.setEndTime(now.plusDays(1));
+        request.setAudience(Audience.INVITE_ONLY);
+        String id = voteService.createVote(request, ownerId).getId();
+
+        voteService.vote(id, ballotFor(id, ownerId), ownerId, null);
+
+        assertThat(ended(id)).isFalse();
+    }
+
+    @Test
     @DisplayName("should store Invitees once, replace them on edit and drop them when Audience changes, without counting tags")
     void shouldManageInviteesWhenCreatingAndEditing() {
         String ownerId = owner.getId().toString();

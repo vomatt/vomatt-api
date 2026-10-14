@@ -224,12 +224,14 @@ public class Vote extends AuditableEntity {
 
     /**
      * Auto-end: an Open Invite-only Poll Ends once every Invitee holds a Ballot, keeping its Deadline like a Close.
+     * A Deleted Poll is left as is.
      *
-     * @param allInviteesHoldBallot asked only for an Open Invite-only Poll; false when it has no Invitees
+     * @param allInviteesHoldBallot asked only for an Open, not Deleted Invite-only Poll; false when it has no Invitees
      * @return whether the Poll Ended now
      */
     public boolean endIfAllInviteesVotedAt(OffsetDateTime now, BooleanSupplier allInviteesHoldBallot) {
-        if (audience != Audience.INVITE_ONLY || statusAt(now) != VoteStatus.OPEN || !allInviteesHoldBallot.getAsBoolean()) {
+        if (deletedAt != null || audience != Audience.INVITE_ONLY || statusAt(now) != VoteStatus.OPEN
+                || !allInviteesHoldBallot.getAsBoolean()) {
             return false;
         }
         endAt(now);

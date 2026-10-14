@@ -1,6 +1,8 @@
 package com.vomatt.entity;
 
 import com.vomatt.common.constant.UserRole;
+import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.entity.common.AuditableEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -20,6 +22,7 @@ import java.time.OffsetDateTime;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Platform user. Signs in via Email/phone OTP or Google / LINE / Apple OAuth; no password is stored.
@@ -40,6 +43,7 @@ public class User extends AuditableEntity {
     @Column(name = "email", unique = true, length = 254)
     private String email;
 
+    /** Null for users who registered by email or OAuth. Stored as {@link #normalizePhone} (E.164). */
     @Column(name = "phone_number", unique = true, length = 20)
     private String phoneNumber;
 
@@ -110,6 +114,26 @@ public class User extends AuditableEntity {
         String local = normalized.substring(0, at);
         int plus = local.indexOf('+');
         return (plus < 0 ? local : local.substring(0, plus)).replace(".", "") + "@gmail.com";
+    }
+
+    private static final Pattern PHONE_SEPARATORS = Pattern.compile("[\\s()-]");
+    private static final Pattern E164 = Pattern.compile("^\\+[1-9]\\d{7,14}$");
+    private static final Pattern TW_MOBILE = Pattern.compile("^09\\d{8}$");
+
+    /**
+     * The one phone normalization, to E.164 with Taiwan as the default region, so one number maps to one account and one OTP key.
+     * Strips spaces, '-', '(' and ')'; keeps a '+' number as is, turns a Taiwan mobile 09xxxxxxxx into +8869xxxxxxxx;
+     * anything else is 400 {@code auth.phone.invalid}.
+     */
+    public static String normalizePhone(String phone) {
+        String digits = PHONE_SEPARATORS.matcher(phone).replaceAll("");
+        if (E164.matcher(digits).matches()) {
+            return digits;
+        }
+        if (TW_MOBILE.matcher(digits).matches()) {
+            return "+886" + digits.substring(1);
+        }
+        throw ApiException.badRequest(MessageKey.AUTH_PHONE_INVALID);
     }
 
     public void deductPoints(int points) {

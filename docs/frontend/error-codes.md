@@ -33,6 +33,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.identifier.required` | 400 | 請提供 email 或手機號碼 | Please provide an email or phone number | Show message so the user can fix the input | AuthService |
 | `auth.email.send_failed` | 400 | 郵件發送失敗：{0} | Email delivery failed: {0} | Show message so the user can fix the input | AuthService |
 | `auth.phone.not_registered` | 400 | 此手機號碼尚未註冊 | This phone number is not registered | Show message so the user can fix the input | AuthService |
+| `auth.phone.invalid` | 400 | 手機號碼格式錯誤，請輸入 09 開頭的台灣手機號碼或含國碼的號碼（例如 +886912345678） | Invalid phone number. Use a Taiwan mobile number starting with 09 or a number with a country code (e.g. +886912345678) | Show message so the user can fix the input | User |
 | `auth.sms.send_failed` | 400 | 簡訊發送失敗：{0} | SMS delivery failed: {0} | Show message so the user can fix the input | AuthService |
 | `auth.refresh_token.invalid` | 401 | Refresh token 無效或已過期 | Refresh token is invalid or has expired | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.suspicious_login` | 401 | 安全性警告：偵測到異常登入，已強制登出所有裝置，請重新登入 | Security alert: suspicious login detected. All sessions have been terminated, please log in again | See [auth-flow.md](auth-flow.md) | AuthService |

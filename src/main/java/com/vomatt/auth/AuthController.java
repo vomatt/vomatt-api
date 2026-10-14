@@ -165,9 +165,10 @@ public class AuthController {
             description = """
                     **Auth**: public
                     **Precondition**: for `type` "login" (the default) the phone number must already be registered
-                    **Behavior**: generates a 6-digit OTP, stores it with a TTL (default 180 s) and sends it by SMS. `type` is "login" or "signup"
+                    **Behavior**: normalizes the number to E.164 (`0912345678` and `+886912345678` are the same number), generates a 6-digit OTP, stores it with a TTL (default 180 s) and sends it by SMS. `type` is "login" or "signup"
                     **Side effects**: sends an SMS; replaces any previous OTP for this number. A resend is refused during the cooldown (default 180 s)
                     **Errors**:
+                    - 400 `auth.phone.invalid`: the number is neither a Taiwan mobile number (`09` + 8 digits) nor `+` country code and number (8-15 digits)
                     - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
                     - 400 `auth.phone.not_registered`: `type` is "login" and the number is not registered
                     - 400 `auth.sms.send_failed`: the SMS provider rejected the message""")
@@ -194,9 +195,10 @@ public class AuthController {
             description = """
                     **Auth**: public
                     **Precondition**: an OTP was sent to this number via `POST /api/auth/phone/send-otp` and has not expired
-                    **Behavior**: consumes the OTP and returns an access token and refresh token. Creates the user if the number is new, otherwise signs the existing user in
+                    **Behavior**: normalizes the number to E.164 like send-otp, so an OTP sent to `0912345678` verifies as `+886912345678`. Consumes the OTP and returns an access token and refresh token. Creates the user if the number is new, otherwise signs the existing user in
                     **Side effects**: the OTP is consumed on success; a new user (with a random bot avatar) is created if needed; `lastLoginAt` is updated. After 5 wrong codes the OTP is deleted and a new one must be requested
                     **Errors**:
+                    - 400 `auth.phone.invalid`: the number is not in a supported format (see send-otp)
                     - 401 `auth.otp.invalid_or_expired`: no OTP exists for this number (never sent, expired, or already used)
                     - 401 `auth.invalid_otp`: the code is wrong
                     - 401 `auth.otp.too_many_attempts`: 5th wrong code; the OTP is discarded

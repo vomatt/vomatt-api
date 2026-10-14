@@ -125,7 +125,7 @@ public class AuthService {
             }
             sendEmailOtp(normalizedEmail, code);
         } else if (phone != null && !phone.isBlank()) {
-            sendPhoneOtp(phone.trim(), otpType, code);
+            sendPhoneOtp(User.normalizePhone(phone), otpType, code);
         } else {
             throw ApiException.badRequest(MessageKey.AUTH_IDENTIFIER_REQUIRED);
         }
@@ -176,7 +176,7 @@ public class AuthService {
             }
             return verifyEmailOtp(normalizedEmail, code);
         } else if (phone != null && !phone.isBlank()) {
-            String normalizedPhone = phone.trim();
+            String normalizedPhone = User.normalizePhone(phone);
             // P5-#13: the phone path must also check the role before consuming the OTP (both paths covered).
             if (checkRole) {
                 requireExistingAdminByPhone(normalizedPhone);
@@ -541,11 +541,12 @@ public class AuthService {
     }
 
     User findOrCreateUserByPhone(String phone) {
-        return userRepository.findByPhoneNumber(phone).orElseGet(() -> {
+        String normalizedPhone = User.normalizePhone(phone);
+        return userRepository.findByPhoneNumber(normalizedPhone).orElseGet(() -> {
             User newUser = User.builder()
-                    .phoneNumber(phone)
+                    .phoneNumber(normalizedPhone)
                     .username(generateUsername("user"))
-                    .displayName(phone)
+                    .displayName(normalizedPhone)
                     .authMethod("phone_otp")
                     .avatarUrl(BotAvatar.random())
                     .build();

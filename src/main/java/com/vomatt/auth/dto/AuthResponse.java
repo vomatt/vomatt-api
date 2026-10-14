@@ -54,7 +54,7 @@ public record AuthResponse(
                     nullable = true)
             String avatarUrl,
 
-            @Schema(description = "Phone number. Null for users who signed up by email or OAuth and never added a phone", example = "0912345678", nullable = true)
+            @Schema(description = "Phone number in E.164. Null for users who signed up by email or OAuth and never added a phone", example = "+886912345678", nullable = true)
             String phoneNumber
     ) {
     }

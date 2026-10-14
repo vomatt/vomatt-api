@@ -267,9 +267,9 @@ class AuthServiceTest {
     @Test
     void verifyOtp_checkRolePhone_nonAdmin_shouldThrow403WithoutConsumingOtp() {
         // Phone path covered too: non-admin -> 403 before consuming OTP
-        User customer = User.builder().id(UUID.randomUUID()).phoneNumber("0912345678")
+        User customer = User.builder().id(UUID.randomUUID()).phoneNumber("+886912345678")
                 .displayName("Customer").roles(new String[] { "user" }).build();
-        when(userRepository.findByPhoneNumber("0912345678")).thenReturn(Optional.of(customer));
+        when(userRepository.findByPhoneNumber("+886912345678")).thenReturn(Optional.of(customer));
 
         assertThatThrownBy(() -> authService.verifyOtp(null, "0912345678", "123456", true))
                 .isInstanceOf(ApiException.class)
@@ -536,16 +536,41 @@ class AuthServiceTest {
 
     @Test
     void findOrCreateUserByPhone_newPhone_shouldCreateUserWithGeneratedUsername() {
-        when(userRepository.findByPhoneNumber("0912345678")).thenReturn(Optional.empty());
+        when(userRepository.findByPhoneNumber("+886912345678")).thenReturn(Optional.empty());
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
         User result = authService.findOrCreateUserByPhone("0912345678");
 
-        assertThat(result.getPhoneNumber()).isEqualTo("0912345678");
+        assertThat(result.getPhoneNumber()).isEqualTo("+886912345678");
         assertThat(result.getEmail()).isNull();
         assertThat(result.getUsername()).matches("user_\\d{4}");
-        assertThat(result.getDisplayName()).isEqualTo("0912345678");
+        assertThat(result.getDisplayName()).isEqualTo("+886912345678");
         assertThat(result.getAvatarUrl()).matches(com.vomatt.users.BotAvatar.PATTERN);
+    }
+
+    @Test
+    void shouldResolveSameAccountWhenOtpSentToLocalFormAndVerifiedAsE164() {
+        User existing = User.builder().id(UUID.randomUUID()).phoneNumber("+886912345678")
+                .displayName("Phone User").roles(new String[] { "user" }).build();
+        when(userRepository.existsByPhoneNumber("+886912345678")).thenReturn(true);
+        when(userRepository.findByPhoneNumber("+886912345678")).thenReturn(Optional.of(existing));
+        when(redisService.get(eq("otp:phone"), eq("+886912345678"), eq(OtpRecord.class))).thenReturn(null);
+
+        authService.sendOtp(null, "0912345678", "login", false);
+
+        org.mockito.ArgumentCaptor<OtpRecord> sent = org.mockito.ArgumentCaptor.forClass(OtpRecord.class);
+        verify(redisService).setOrThrow(eq("otp:phone"), eq("+886912345678"), sent.capture(), any(Duration.class));
+        verify(smsService).sendOtp(eq("+886912345678"), eq(sent.getValue().code()));
+
+        when(redisService.get(eq("otp:phone"), eq("+886912345678"), eq(OtpRecord.class))).thenReturn(sent.getValue());
+        when(jwtUtil.generateToken(anyString(), any(), any())).thenReturn("access-token");
+        when(refreshTokenService.generate(anyString(), any(), any())).thenReturn("refresh-token");
+
+        AuthResponse response = authService.verifyOtp(null, "+886912345678", sent.getValue().code(), false);
+
+        assertThat(response.user().id()).isEqualTo(existing.getId().toString());
+        assertThat(response.user().phoneNumber()).isEqualTo("+886912345678");
+        assertThat(authService.findOrCreateUserByPhone("0912345678")).isSameAs(existing);
     }
 
     // ── buildAuthResponse: active=false (suspended) check ───────────────────────────

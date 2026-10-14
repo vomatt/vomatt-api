@@ -10,6 +10,7 @@ import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.sms.SmsService;
 import com.vomatt.entity.User;
 import com.vomatt.repository.UserRepository;
+import com.vomatt.groups.GroupService;
 import com.vomatt.votes.VoteService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,6 +48,8 @@ class AuthServiceTest {
     UserRepository userRepository;
     @Mock
     VoteService voteService;
+    @Mock
+    GroupService groupService;
     @Mock
     TransactionTemplate transactionTemplate;
     @Mock
@@ -445,9 +448,11 @@ class AuthServiceTest {
 
         authService.verifyOtp(" Carol@Example.com", null, "123456", false);
 
-        var order = inOrder(userRepository, voteService);
+        var order = inOrder(userRepository, voteService, groupService);
         order.verify(userRepository).save(any(User.class));
         order.verify(voteService).bindEmailInvitees(argThat(u -> carolId.equals(u.getId()) && "carol@example.com".equals(u.getEmail())));
+        // Polls are locked before Groups
+        order.verify(groupService).bindEmailMembers(argThat(u -> carolId.equals(u.getId())));
         verify(transactionTemplate).execute(any());
     }
 
@@ -465,6 +470,7 @@ class AuthServiceTest {
         authService.googleLogin("id-token");
 
         verify(voteService).bindEmailInvitees(carol);
+        verify(groupService).bindEmailMembers(carol);
     }
 
     @Test
@@ -478,6 +484,7 @@ class AuthServiceTest {
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_EMAIL_NOT_VERIFIED));
 
         verify(voteService, never()).bindEmailInvitees(any());
+        verify(groupService, never()).bindEmailMembers(any());
     }
 
     @Test

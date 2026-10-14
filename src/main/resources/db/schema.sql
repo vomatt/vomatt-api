@@ -111,6 +111,29 @@ CREATE TABLE IF NOT EXISTS vomatt.vote_invitees (
     CONSTRAINT chk_vote_invitees_user_or_email CHECK (user_id IS NOT NULL OR email IS NOT NULL)
 );
 
+-- Groups: an owner's private, reusable invite lists. Inviting a Group copies its current members into a Poll's
+-- Invitees, so Group edits or deletion never touch existing Polls
+CREATE TABLE IF NOT EXISTS vomatt.groups (
+    id         UUID         PRIMARY KEY,
+    owner_id   UUID         NOT NULL REFERENCES vomatt.users (id) ON DELETE CASCADE,
+    name       VARCHAR(50)  NOT NULL,
+    created_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+-- Same shape as vote_invitees: a member added by ID holds the user; one added by email keeps that normalized email
+-- for life and gains the user once the address belongs to an active account (at add time, or when verified)
+CREATE TABLE IF NOT EXISTS vomatt.group_members (
+    id         UUID         PRIMARY KEY,
+    group_id   UUID         NOT NULL REFERENCES vomatt.groups (id) ON DELETE CASCADE,
+    user_id    UUID         REFERENCES vomatt.users (id) ON DELETE CASCADE,
+    email      VARCHAR(254),
+    created_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    UNIQUE (group_id, user_id),
+    CONSTRAINT chk_group_members_user_or_email CHECK (user_id IS NOT NULL OR email IS NOT NULL)
+);
+
 -- For RANKING / RATING poll types (Phase 2, no entity / service yet)
 CREATE TABLE IF NOT EXISTS vomatt.user_rankings (
     id            UUID        PRIMARY KEY,
@@ -236,6 +259,11 @@ CREATE INDEX IF NOT EXISTS idx_vote_options_vote_order     ON vomatt.vote_option
 CREATE INDEX IF NOT EXISTS idx_user_votes_vote_option      ON vomatt.user_votes (vote_id, option_id);
 CREATE INDEX IF NOT EXISTS idx_user_votes_vote_created     ON vomatt.user_votes (vote_id, created_at, id);
 CREATE INDEX IF NOT EXISTS idx_vote_invitees_user_id       ON vomatt.vote_invitees (user_id);
+CREATE INDEX IF NOT EXISTS idx_groups_owner_id             ON vomatt.groups (owner_id);
+CREATE INDEX IF NOT EXISTS idx_group_members_user_id       ON vomatt.group_members (user_id);
+-- One row per Group + email; the email index serves binding at sign-up / sign-in
+CREATE UNIQUE INDEX IF NOT EXISTS uk_group_members_group_email ON vomatt.group_members (group_id, email) WHERE email IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_group_members_email         ON vomatt.group_members (email) WHERE email IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_user_rankings_vote_id       ON vomatt.user_rankings (vote_id);
 CREATE INDEX IF NOT EXISTS idx_user_ratings_vote_id        ON vomatt.user_ratings (vote_id);
 CREATE INDEX IF NOT EXISTS idx_vote_comments_vote_created  ON vomatt.vote_comments (vote_id, created_at) WHERE is_deleted = FALSE;

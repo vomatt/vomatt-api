@@ -6088,7 +6088,7 @@
     },
     "/api/votes" : {
       "get" : {
-        "description" : "**Auth**: public (optional login changes response: `myOptionId` of each item is filled for the caller's Ballots)\n**Precondition**: none\n**Behavior**: cursor-paged list of Open or Ended PUBLIC Polls; Scheduled, UNLISTED and INVITE_ONLY Polls never appear.\n- `status=open` (default) + `sort=newest` (default): most recently opened first (the Feed)\n- `status=open` + `sort=closing`: closing soonest first\n- `status=ended`: most recently ended first; `sort` must be omitted\n- `tag`: only Polls under that tag slug (Explore); `q`: free-text match on title and description, option text is not matched (Search), at least 2 characters\n- Filters combine. `nextCursor` null means the last page; pass it back unchanged as `cursor`. `limit` is clamped to 1-50 (default 20).\n**Side effects**: none\n**Errors**:\n- 400 `common.invalid_status`: `status` is neither `open` nor `ended`\n- 400 `common.invalid_sort`: `sort` is neither `newest` nor `closing`\n- 400 `vote.list.sort_not_allowed`: `sort` was sent together with `status=ended`\n- 400 `vote.search.query_too_short`: `q` is shorter than 2 characters\n- 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list or another ordering of this list\n",
+        "description" : "**Auth**: public (optional login changes response: `myOptionId` of each item is filled for the caller's Ballots)\n**Precondition**: none\n**Behavior**: cursor-paged list of Open or Ended PUBLIC Polls; Scheduled, UNLISTED and INVITE_ONLY Polls never appear.\n- `status=open` (default) + `sort=newest` (default): most recently opened first (the Feed)\n- `status=open` + `sort=closing`: closing soonest first\n- `status=open` + `sort=top`: highest Turnout (`participantCount`) first, ties most recently opened first (Top); Turnout can change between pages, so dedupe items by `id`\n- `status=ended`: most recently ended first; `sort` must be omitted\n- `tag`: only Polls under that tag slug (Explore); `q`: free-text match on title and description, option text is not matched (Search), at least 2 characters\n- Filters combine. `nextCursor` null means the last page; pass it back unchanged as `cursor`. `limit` is clamped to 1-50 (default 20).\n**Side effects**: none\n**Errors**:\n- 400 `common.invalid_status`: `status` is neither `open` nor `ended`\n- 400 `common.invalid_sort`: `sort` is not `newest`, `closing` or `top`\n- 400 `vote.list.sort_not_allowed`: `sort` was sent together with `status=ended`\n- 400 `vote.search.query_too_short`: `q` is shorter than 2 characters\n- 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list or another ordering of this list\n",
         "operationId" : "listVotes",
         "parameters" : [ {
           "description" : "`open` (default) or `ended`",
@@ -6100,7 +6100,7 @@
             "type" : "string"
           }
         }, {
-          "description" : "`newest` (default) or `closing`; only valid with `status=open`",
+          "description" : "`newest` (default), `closing` or `top`; only valid with `status=open`",
           "example" : "closing",
           "in" : "query",
           "name" : "sort",
@@ -6226,7 +6226,7 @@
             "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
           }
         },
-        "summary" : "List Polls (Feed / Explore / Search)",
+        "summary" : "List Polls (Feed / Explore / Search / Top)",
         "tags" : [ "Vote" ]
       },
       "post" : {

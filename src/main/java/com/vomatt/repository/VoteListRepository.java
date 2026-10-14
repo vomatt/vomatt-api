@@ -15,7 +15,7 @@ import jakarta.persistence.Query;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Keyset pages of Polls for Feed / Explore / Search (Public Polls only) and My Polls (any Audience, Invite-only ones the user is invited to included). SQL is assembled from constant fragments only;
+ * Keyset pages of Polls for Feed / Explore / Search / Top (Public Polls only) and My Polls (any Audience, Invite-only ones the user is invited to included). SQL is assembled from constant fragments only;
  * every value is a bound parameter.
  */
 @Repository
@@ -45,9 +45,10 @@ public class VoteListRepository {
     public List<Vote> findPage(VoteListOrder order, String tag, String query, Cursor after, OffsetDateTime now,
                                int limit) {
         StringBuilder sql = new StringBuilder("SELECT v.* FROM vomatt.votes v WHERE v.deleted_at IS NULL AND v.audience = 'PUBLIC' AND ");
-        String sortColumn = switch (order) {
-            case NEWEST -> "v.start_time";
-            case CLOSING, ENDED -> "v.end_time";
+        List<String> sortColumns = switch (order) {
+            case NEWEST -> List.of("v.start_time");
+            case CLOSING, ENDED -> List.of("v.end_time");
+            case TOP -> List.of("v.turnout", "v.start_time");
         };
         boolean descending = order != VoteListOrder.CLOSING;
 
@@ -64,12 +65,13 @@ public class VoteListRepository {
                .append(" AND lower(COALESCE(v.title, '') || ' ' || COALESCE(v.description, '')) LIKE :pattern ESCAPE '\\'");
         }
         if (after != null) {
-            sql.append(" AND (").append(sortColumn).append(", v.id) ").append(descending ? "<" : ">")
-               .append(" (:afterKey, :afterId)");
+            sql.append(" AND (").append(String.join(", ", sortColumns)).append(", v.id) ").append(descending ? "<" : ">")
+               .append(order == VoteListOrder.TOP ? " (:afterCount, :afterKey, :afterId)" : " (:afterKey, :afterId)");
         }
         String direction = descending ? " DESC" : " ASC";
-        sql.append(" ORDER BY ").append(sortColumn).append(direction).append(", v.id").append(direction)
-           .append(" LIMIT :limit");
+        sql.append(" ORDER BY ");
+        sortColumns.forEach(column -> sql.append(column).append(direction).append(", "));
+        sql.append("v.id").append(direction).append(" LIMIT :limit");
 
         Query nativeQuery = em.createNativeQuery(sql.toString(), Vote.class)
                 .setParameter("now", now)
@@ -81,7 +83,10 @@ public class VoteListRepository {
             nativeQuery.setParameter("q", query)
                     .setParameter("pattern", "%" + escapeLike(query.toLowerCase()) + "%");
         }
-        if (after != null) {
+        if (after != null && order == VoteListOrder.TOP) {
+            nativeQuery.setParameter("afterCount", after.countKey())
+                    .setParameter("afterKey", after.compoundTimeKey()).setParameter("afterId", after.id());
+        } else if (after != null) {
             nativeQuery.setParameter("afterKey", after.timeKey()).setParameter("afterId", after.id());
         }
         return nativeQuery.getResultList();

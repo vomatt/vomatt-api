@@ -35,6 +35,7 @@ import com.vomatt.repository.UserPreferenceRepository;
 import com.vomatt.users.dto.UpdateProfileRequest;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.VoteOptionRepository;
+import com.vomatt.repository.VoteRepository;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("UserService")
@@ -45,10 +46,11 @@ class UserServiceTest {
     @Spy UserMapper userMapper = new UserMapper();
     @Mock RefreshTokenService refreshTokenService;
     @Mock VoteOptionRepository voteOptionRepository;
+    @Mock VoteRepository voteRepository;
     @InjectMocks UserService userService;
 
     @Test
-    @DisplayName("should release user's Ballot from option counts before deleting account")
+    @DisplayName("should release user's Ballot from option counts and Turnout before deleting account")
     void shouldReleaseBallotCountsBeforeDeletingUser() {
         UUID id = UUID.randomUUID();
         User user = User.builder().id(id).username("u").build();
@@ -56,7 +58,8 @@ class UserServiceTest {
 
         userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), "u@test.local", List.of("user")));
 
-        InOrder order = inOrder(voteOptionRepository, userRepository);
+        InOrder order = inOrder(voteOptionRepository, voteRepository, userRepository);
+        order.verify(voteRepository).decrementTurnoutForUserBallots(id);
         order.verify(voteOptionRepository).decrementForUserBallots(id);
         order.verify(userRepository).delete(user);
     }

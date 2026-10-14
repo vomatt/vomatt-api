@@ -22,7 +22,7 @@ public record Cursor(String key, UUID id) {
      * Filters ({@code tag}, {@code q}) and the parent id are not part of it: the keyset position stays valid under them.
      */
     public enum Scope {
-        FEED_NEWEST, FEED_CLOSING, FEED_ENDED, MY_OPEN, MY_ENDED, USER_POLLS,
+        FEED_NEWEST, FEED_CLOSING, FEED_ENDED, FEED_TOP, MY_OPEN, MY_ENDED, USER_POLLS,
         COMMENTS, REPLIES, VOTERS, USER_SEARCH, POPULAR_TAGS
     }
 
@@ -36,6 +36,11 @@ public record Cursor(String key, UUID id) {
 
     public static Cursor of(String value, UUID id) {
         return new Cursor(value, id);
+    }
+
+    /** Compound key for orderings by a count, then time, then id (Top). */
+    public static Cursor of(long count, OffsetDateTime time, UUID id) {
+        return new Cursor(count + "," + time.toInstant(), id);
     }
 
     // A client may send a cursor from another list; a key of the wrong kind is a bad cursor, not a 500
@@ -53,6 +58,24 @@ public record Cursor(String key, UUID id) {
         } catch (NumberFormatException e) {
             throw ApiException.badRequest(MessageKey.COMMON_CURSOR_INVALID);
         }
+    }
+
+    /** Count half of a compound key from {@link #of(long, OffsetDateTime, UUID)}. */
+    public long countKey() {
+        return new Cursor(keyPart(0), id).longKey();
+    }
+
+    /** Time half of a compound key from {@link #of(long, OffsetDateTime, UUID)}. */
+    public OffsetDateTime compoundTimeKey() {
+        return new Cursor(keyPart(1), id).timeKey();
+    }
+
+    private String keyPart(int index) {
+        String[] parts = key.split(",", 2);
+        if (parts.length != 2) {
+            throw ApiException.badRequest(MessageKey.COMMON_CURSOR_INVALID);
+        }
+        return parts[index];
     }
 
     public String encode(Scope scope) {

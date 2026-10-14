@@ -27,11 +27,12 @@ import com.vomatt.entity.VoteOption;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.VoteOptionRepository;
+import com.vomatt.repository.VoteRepository;
 import com.vomatt.votes.dto.VoteRequest;
 import com.vomatt.votes.dto.VoteResponse;
 
 /**
- * Ballot writes against real Postgres with real commits: stored option counts must always equal the Ballot rows.
+ * Ballot writes against real Postgres with real commits: stored option counts and Turnout must always equal the Ballot rows.
  */
 @Import(VoteServiceSlice.class)
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -40,6 +41,7 @@ class BallotPostgresTest extends PostgresRepositoryTest {
 
     @Autowired VoteService voteService;
     @Autowired VoteOptionRepository voteOptionRepository;
+    @Autowired VoteRepository voteRepository;
     @Autowired UserRepository userRepository;
     @Autowired TransactionTemplate tx;
 
@@ -96,6 +98,14 @@ class BallotPostgresTest extends PostgresRepositoryTest {
 
     private void assertStoredMatchesActual() {
         counts().values().forEach(c -> assertThat(c[0]).as("stored vs actual").isEqualTo(c[1]));
+        long actualTurnout = ((Number) em.createNativeQuery("SELECT COUNT(*) FROM vomatt.user_votes WHERE vote_id = :voteId")
+                .setParameter("voteId", poll.getId()).getSingleResult()).longValue();
+        assertThat((long) turnout()).as("stored vs actual Turnout").isEqualTo(actualTurnout);
+    }
+
+    private int turnout() {
+        return ((Number) em.createNativeQuery("SELECT turnout FROM vomatt.votes WHERE id = :voteId")
+                .setParameter("voteId", poll.getId()).getSingleResult()).intValue();
     }
 
     @Test
@@ -112,6 +122,7 @@ class BallotPostgresTest extends PostgresRepositoryTest {
         Map<UUID, long[]> counts = counts();
         assertThat(counts.get(optionA)[0]).isZero();
         assertThat(counts.get(optionB)[0]).isEqualTo(1);
+        assertThat(turnout()).isEqualTo(1);
         assertStoredMatchesActual();
     }
 
@@ -122,6 +133,7 @@ class BallotPostgresTest extends PostgresRepositoryTest {
         cast(voter, optionA);
 
         assertThat(counts().get(optionA)[0]).isEqualTo(1);
+        assertThat(turnout()).isEqualTo(1);
         assertStoredMatchesActual();
     }
 
@@ -141,6 +153,32 @@ class BallotPostgresTest extends PostgresRepositoryTest {
 
         Map<UUID, long[]> counts = counts();
         assertThat(counts.get(optionA)[1] + counts.get(optionB)[1]).isEqualTo(1);
+        assertThat(turnout()).isEqualTo(1);
+        assertStoredMatchesActual();
+    }
+
+    @Test
+    @DisplayName("should count every Participant without deadlock when different users cast concurrently")
+    void shouldCountTurnoutWhenDifferentUsersCastConcurrently() throws Exception {
+        List<User> voters = new ArrayList<>();
+        tx.executeWithoutResult(s -> {
+            for (int i = 0; i < 12; i++) {
+                voters.add(track(persistUser("crowd-" + UUID.randomUUID())));
+            }
+        });
+        List<Callable<Object>> calls = new ArrayList<>();
+        for (int i = 0; i < voters.size(); i++) {
+            User user = voters.get(i);
+            UUID option = i % 2 == 0 ? optionA : optionB;
+            calls.add(() -> cast(user, option));
+        }
+        try (var pool = Executors.newFixedThreadPool(8)) {
+            for (Future<Object> f : pool.invokeAll(calls)) {
+                f.get();
+            }
+        }
+
+        assertThat(turnout()).isEqualTo(voters.size());
         assertStoredMatchesActual();
     }
 
@@ -155,6 +193,18 @@ class BallotPostgresTest extends PostgresRepositoryTest {
         assertThat(response.getTotalVotes()).isZero();
         assertThat(response.getOptions()).extracting(VoteResponse.VoteOptionResponse::getVotes).containsOnlyNulls();
         assertThat(counts().get(optionA)[0]).isZero();
+        assertThat(turnout()).isZero();
+        assertStoredMatchesActual();
+    }
+
+    @Test
+    @DisplayName("should release Turnout when removing the Selection")
+    void shouldReleaseTurnoutWhenSelectionRemoved() {
+        cast(voter, optionA);
+
+        voteService.removeVote(poll.getId().toString(), optionA.toString(), voter.getId().toString());
+
+        assertThat(turnout()).isZero();
         assertStoredMatchesActual();
     }
 
@@ -165,6 +215,7 @@ class BallotPostgresTest extends PostgresRepositoryTest {
         voteService.retract(poll.getId().toString(), voter.getId().toString());
 
         counts().values().forEach(c -> assertThat(c[0]).isZero());
+        assertThat(turnout()).isZero();
     }
 
     @Test
@@ -173,11 +224,13 @@ class BallotPostgresTest extends PostgresRepositoryTest {
         cast(voter, optionA);
 
         tx.executeWithoutResult(s -> {
+            voteRepository.decrementTurnoutForUserBallots(voter.getId());
             voteOptionRepository.decrementForUserBallots(voter.getId());
             userRepository.deleteById(voter.getId());
         });
 
         assertThat(counts().get(optionA)[0]).isZero();
+        assertThat(turnout()).isZero();
         assertStoredMatchesActual();
     }
 }

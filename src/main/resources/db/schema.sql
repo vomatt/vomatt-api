@@ -268,6 +268,14 @@ ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS audience VARCHAR(20) NOT NULL 
 ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS deadline TIMESTAMPTZ;
 UPDATE vomatt.votes SET deadline = end_time WHERE deadline IS NULL;
 ALTER TABLE vomatt.votes ALTER COLUMN deadline SET NOT NULL;
+-- Turnout (Participants) for Top: atomically adjusted with option counts; backfilled here, reconciled by db/reconcile-vote-counts.sql
+ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS turnout INTEGER NOT NULL DEFAULT 0;
+UPDATE vomatt.votes v SET turnout = c.actual
+FROM (SELECT v2.id, COUNT(uv.id) AS actual
+      FROM vomatt.votes v2 LEFT JOIN vomatt.user_votes uv ON uv.vote_id = v2.id
+      GROUP BY v2.id) c
+WHERE c.id = v.id AND v.turnout <> c.actual;
+CREATE INDEX IF NOT EXISTS idx_votes_turnout_start_id ON vomatt.votes (turnout DESC, start_time DESC, id DESC);
 -- Comment replies (one level): parent_id only points to top-level comments
 ALTER TABLE vomatt.vote_comments ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES vomatt.vote_comments (id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS idx_vote_comments_parent ON vomatt.vote_comments (parent_id, created_at, id);

@@ -17,6 +17,7 @@ import com.vomatt.common.response.Cursor;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.VoteOptionRepository;
+import com.vomatt.repository.VoteRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Limit;
@@ -39,6 +40,7 @@ public class UserService {
     private final UserMapper userMapper;
     private final RefreshTokenService refreshTokenService;
     private final VoteOptionRepository voteOptionRepository;
+    private final VoteRepository voteRepository;
 
     /** The user themself or an ADMIN can delete the account; deletion also revokes all of the user's refresh tokens. */
     @Transactional
@@ -49,7 +51,9 @@ public class UserService {
         }
         User user = findUserById(userId);
         refreshTokenService.revokeAllForUser(userId);
-        // user_votes rows cascade with the user; release them from stored option counts first
+        // user_votes rows cascade with the user; release them from stored option counts and Turnout first.
+        // Poll rows before option rows, the same lock order as a Ballot, so a concurrent Ballot cannot deadlock it
+        voteRepository.decrementTurnoutForUserBallots(user.getId());
         voteOptionRepository.decrementForUserBallots(user.getId());
         userRepository.delete(user);
         log.info("User {} deleted by {}", userId, principal.userId());

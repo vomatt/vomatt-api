@@ -88,7 +88,7 @@ public class AuthController {
             description = """
                     **Auth**: public
                     **Precondition**: none; the same endpoint serves login and signup (the server picks which by whether the email is registered)
-                    **Behavior**: generates a 6-digit OTP, stores it with a TTL (default 180 s) and emails it. The email is lower-cased and trimmed. \
+                    **Behavior**: generates a 6-digit OTP, stores it with a TTL (default 180 s) and emails it. The email is lower-cased and trimmed; a Gmail address (gmail.com / googlemail.com) also loses its +tag and dots and moves to gmail.com. \
                     If `checkRole` is "true", only an existing admin account may request an OTP (admin console login)
                     **Side effects**: sends an email; replaces any previous OTP for this address. A resend is refused during the cooldown (default 180 s)
                     **Errors**:

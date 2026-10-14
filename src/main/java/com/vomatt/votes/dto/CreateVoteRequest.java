@@ -75,7 +75,7 @@ public class CreateVoteRequest {
 
     @Schema(description = "Email addresses to invite, for people who may not have an account yet; only for an INVITE_ONLY Poll "
             + "(otherwise 400 `vote.invitee.not_invite_only`). At most 100; null elements and invalid addresses are rejected. "
-            + "Addresses are lower-cased and trimmed like sign-in does; duplicates and the owner's own address are ignored. "
+            + "Addresses are normalized like sign-in does: lower-cased, trimmed, Gmail in canonical form; duplicates and the owner's own address are ignored. "
             + "Each address is listed as entered and gets an invitation email; an active account's user gets access right away, "
             + "any other address once someone verifies it at sign-up / sign-in. "
             + "On edit the list replaces the Invitees added by email (matched by address); null keeps them",

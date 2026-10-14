@@ -260,7 +260,7 @@ public class GroupController {
     @Operation(summary = "Remove an email Group member", description = """
             **Auth**: required (owner only)
             **Precondition**: none
-            **Behavior**: removes the member added by this address (lower-cased and trimmed like sign-in does), whether or not it belongs to an account. \
+            **Behavior**: removes the member added by this address (normalized like sign-in does: lower-cased, trimmed, Gmail in canonical form), whether or not it belongs to an account. \
             Idempotent: succeeds, changing nothing, when the address is not a member. Polls the Group was already invited into keep their Invitees. \
             Returns the full member list.
             **Side effects**: the action is audit-logged.

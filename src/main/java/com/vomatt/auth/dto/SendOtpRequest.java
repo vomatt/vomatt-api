@@ -11,7 +11,7 @@ import jakarta.validation.constraints.Email;
 @Schema(description = "Request to send an email OTP")
 public record SendOtpRequest(
 
-        @Schema(description = "Email address; the server lower-cases and trims it. Required in practice: a missing or blank value yields 400 auth.identifier.required", example = "user@example.com")
+        @Schema(description = "Email address; the server lower-cases and trims it, and stores a Gmail address in canonical form (no +tag or dots, domain gmail.com). Required in practice: a missing or blank value yields 400 auth.identifier.required", example = "user@example.com")
         @Email String email,
 
         @Schema(description = "Set to \"true\" to restrict to admin accounts (admin console login). Any other value, or null, means no restriction",

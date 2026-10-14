@@ -741,7 +741,7 @@ public class VoteController {
     @Operation(summary = "Remove an email Invitee", description = """
             **Auth**: required (owner only)
             **Precondition**: the Poll is INVITE_ONLY and Scheduled or Open, and the Invitee holds no Ballot
-            **Behavior**: removes the Invitee added by this address (lower-cased and trimmed like sign-in does), whether or not it belongs to an account; \
+            **Behavior**: removes the Invitee added by this address (normalized like sign-in does: lower-cased, trimmed, Gmail in canonical form), whether or not it belongs to an account; \
             from then on the Poll is 404 `vote.not_found` for that person and verifying the address no longer grants access. \
             Idempotent: succeeds, changing nothing, when the address is not an Invitee. Returns the full Invitee list.
             **Side effects**: `inviteeCount` drops; the action is audit-logged. When every remaining Invitee of an Open Poll holds a Ballot \

@@ -4,7 +4,6 @@ import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.email.EmailService;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.i18n.MessageKey;
-import com.vomatt.common.util.UUIDv7Generator;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -16,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -436,13 +436,13 @@ public class VoteService {
         return invitees(vote.getId());
     }
 
-    /** Removes one user Invitee (owner only); refused when they hold a Ballot, a no-op when they are not invited. */
+    /** Removes one Invitee added by ID (owner only); refused when they hold a Ballot, a no-op when they are not invited. */
     public List<InviteeResponse> removeInvitee(String voteId, String inviteeUserId, String userId) {
         UUID inviteeUuid = UUID.fromString(inviteeUserId);
-        return removeInvitee(voteId, userId, id -> inviteeRepository.findByVoteIdAndUserId(id, inviteeUuid));
+        return removeInvitee(voteId, userId, id -> inviteeRepository.findByVoteIdAndUserIdAndEmailIsNull(id, inviteeUuid));
     }
 
-    /** Removes one pending email Invitee (owner only); a no-op when that address is not a pending Invitee. */
+    /** Removes one Invitee added by email (owner only); refused when they hold a Ballot, a no-op when the address is not invited. */
     public List<InviteeResponse> removeEmailInvitee(String voteId, String email, String userId) {
         String normalized = User.normalizeEmail(email);
         return removeInvitee(voteId, userId, id -> inviteeRepository.findByVoteIdAndEmail(id, normalized));
@@ -454,7 +454,7 @@ public class VoteService {
         Vote vote = requireOwned(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), userId);
         vote.checkInviteesEditable(OffsetDateTime.now());
         findInvitee.apply(vote.getId()).ifPresent(invitee -> {
-            // A pending email Invitee cannot hold a Ballot
+            // An email Invitee holds a Ballot only once tied to a user
             if (invitee.getUser() != null && userVoteRepository.existsByUserIdAndVoteId(invitee.getUser().getId(), vote.getId())) {
                 throw ApiException.badRequest(MessageKey.VOTE_INVITEE_HAS_BALLOT);
             }
@@ -467,50 +467,62 @@ public class VoteService {
 
     private List<InviteeResponse> invitees(UUID voteId) {
         return inviteeRepository.findStatuses(voteId).stream()
-            .map(s -> new InviteeResponse(s.getUserId() == null ? null : s.getUserId().toString(), s.getUsername(), s.getEmail(),
-                s.getHasBallot(), s.getInvitedAt()))
+            // An Invitee added by email is shown only by that address, never revealing whether it has an account
+            .map(s -> s.getEmail() != null
+                ? new InviteeResponse(null, null, s.getEmail(), s.getHasBallot(), s.getInvitedAt())
+                : new InviteeResponse(s.getUserId().toString(), s.getUsername(), null, s.getHasBallot(), s.getInvitedAt()))
             .toList();
     }
 
     /**
-     * Duplicates, the owner (never an Invitee) and anyone already invited are skipped. An email of a registered user
-     * invites that user; any other email becomes a pending email Invitee and is sent an invitation once committed.
+     * Duplicates, the owner (never an Invitee) and anyone already invited are skipped. An email row keeps the address;
+     * one of an active account also holds that user, so they get access right away. Any other address (unknown or
+     * suspended) stays pending until verified. Every new email row is sent an invitation once committed.
      */
     private void insertInvitees(Vote vote, Collection<UUID> userIds, Collection<String> emails) {
+        UUID ownerId = vote.getCreator().getId();
         Set<UUID> ids = new HashSet<>(userIds);
-        Set<String> pendingEmails = emails.stream().map(User::normalizeEmail).collect(Collectors.toCollection(HashSet::new));
-        if (!pendingEmails.isEmpty()) {
-            for (User registered : userRepository.findByEmailIn(pendingEmails)) {
-                pendingEmails.remove(registered.getEmail());
-                ids.add(registered.getId());
-            }
-        }
-        ids.remove(vote.getCreator().getId());
-        if (ids.isEmpty() && pendingEmails.isEmpty()) {
+        ids.remove(ownerId);
+        Set<String> newEmails = emails.stream().map(User::normalizeEmail).collect(Collectors.toCollection(HashSet::new));
+        if (ids.isEmpty() && newEmails.isEmpty()) {
             return;
         }
-        // Suspended users cannot be invited, same as unknown ones
+        // Suspended users cannot be invited by ID, same as unknown ones
         List<User> users = ids.isEmpty() ? List.of() : userRepository.findAllById(ids).stream().filter(User::isActive).toList();
         if (users.size() != ids.size()) {
             throw ApiException.badRequest(MessageKey.VOTE_INVITEE_IDS_INVALID);
         }
         List<Invitee> invited = inviteeRepository.findByVoteId(vote.getId());
         Set<UUID> invitedUsers = invited.stream().filter(i -> i.getUser() != null)
-            .map(i -> i.getUser().getId()).collect(Collectors.toSet());
-        invited.forEach(i -> pendingEmails.remove(i.getEmail()));
-        List<User> addedUsers = users.stream().filter(u -> !invitedUsers.contains(u.getId())).toList();
-        List<Invitee> added = new ArrayList<>(addedUsers.stream().map(u -> new Invitee(vote, u)).toList());
-        pendingEmails.forEach(email -> added.add(new Invitee(vote, email)));
+            .map(i -> i.getUser().getId()).collect(Collectors.toCollection(HashSet::new));
+        invited.forEach(i -> newEmails.remove(i.getEmail()));
+        List<Invitee> added = new ArrayList<>();
+        users.stream().filter(u -> invitedUsers.add(u.getId())).forEach(u -> added.add(new Invitee(vote, u)));
+        Map<String, User> accounts = newEmails.isEmpty() ? Map.of() : userRepository.findByEmailIn(newEmails).stream()
+            .filter(User::isActive).collect(Collectors.toMap(User::getEmail, u -> u));
+        for (String email : newEmails) {
+            User account = accounts.get(email);
+            if (account == null) {
+                added.add(new Invitee(vote, email));
+            } else if (!account.getId().equals(ownerId) && invitedUsers.add(account.getId())) {
+                added.add(new Invitee(vote, account, email));
+            }
+        }
+        if (added.isEmpty()) {
+            return;
+        }
         inviteeRepository.saveAllAndFlush(added);
         // A removed and re-added Invitee sees the Invitation unread again
-        notificationReadRepository.deleteReads(vote.getId(), addedUsers.stream().map(User::getId).toList());
-        sendInvitations(vote, pendingEmails);
+        notificationReadRepository.deleteReads(vote.getId(),
+            added.stream().filter(i -> i.getUser() != null).map(i -> i.getUser().getId()).toList());
+        sendInvitations(vote, added.stream().map(Invitee::getEmail).filter(Objects::nonNull).toList());
     }
 
     /**
      * Edit only happens while Scheduled, so no Invitee can hold a Ballot yet. A null list keeps that kind of Invitee.
-     * A user listed in either list (by ID, or by the email of their account) is kept, never deleted and re-added,
-     * so only truly new Invitees see the Invitation unread again.
+     * An Invitee added by email is kept when its stored address is listed; one added by ID when the user is listed in
+     * either list (by ID, or by the email of their account). Kept ones are never deleted and re-added, so only truly
+     * new Invitees see the Invitation unread again.
      */
     private void replaceInvitees(Vote vote, List<UUID> userIds, List<String> emails) {
         Set<String> keptEmails = emails == null ? null : emails.stream().map(User::normalizeEmail).collect(Collectors.toSet());
@@ -519,9 +531,9 @@ public class VoteService {
             userRepository.findByEmailIn(keptEmails).forEach(u -> keptUsers.add(u.getId()));
         }
         inviteeRepository.deleteAll(inviteeRepository.findByVoteId(vote.getId()).stream()
-            .filter(i -> i.getUser() != null
-                ? keptUsers != null && !keptUsers.contains(i.getUser().getId())
-                : keptEmails != null && !keptEmails.contains(i.getEmail()))
+            .filter(i -> i.getEmail() != null
+                ? keptEmails != null && !keptEmails.contains(i.getEmail())
+                : keptUsers != null && !keptUsers.contains(i.getUser().getId()))
             .toList());
         // Hibernate flushes inserts before deletes; flush now so a re-added Invitee cannot hit a unique constraint
         inviteeRepository.flush();
@@ -588,20 +600,23 @@ public class VoteService {
     }
 
     /**
-     * Turns the email Invitees of the user's verified email into user Invitees. Called only from the find-or-create
-     * by verified email in auth, inside its transaction; rerunning it binds nothing new. Steps 1-3 share
-     * {@link InviteeRepository#BINDABLE}, so they agree on which rows bind.
+     * Ties the pending email Invitees of the user's verified email to the user; each keeps its address. Called only
+     * from the find-or-create by verified email in auth, inside its transaction; rerunning it binds nothing new.
+     * Steps 2-4 share {@link InviteeRepository#BINDABLE}, so they agree on which rows bind.
      */
     public void bindEmailInvitees(User user) {
         String email = user.getEmail();
-        // 1. Invitation unread again, as for any newly added Invitee
-        notificationReadRepository.deleteReadsForEmailBinding(user.getId(), email);
-        // 2. A user row per bindable email row
-        for (UUID rowId : inviteeRepository.findIdsByEmail(email)) {
-            inviteeRepository.bindEmailRow(UUIDv7Generator.generateId(), rowId, user.getId());
+        // 1. Serialize with the owners' Invitee changes on those Polls
+        List<UUID> voteIds = inviteeRepository.lockVotesWithPendingEmail(email);
+        if (voteIds.isEmpty()) {
+            return;
         }
-        // 3. Email rows now covered by a user row (or the owner's own address) go
-        inviteeRepository.deleteUnbindableEmail(user.getId(), email);
+        // 2. Invitation unread again, as for any newly added Invitee
+        notificationReadRepository.deleteReadsForEmailBinding(user.getId(), email, voteIds);
+        // 3. Bind
+        inviteeRepository.bindEmail(user.getId(), email, voteIds);
+        // 4. Pending rows already covered by a user row (or the owner's own address) go
+        inviteeRepository.deleteUnbindableEmail(user.getId(), email, voteIds);
     }
 
     /**

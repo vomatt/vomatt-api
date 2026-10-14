@@ -15,8 +15,9 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 
 /**
- * A user, or a normalized email not yet tied to a user (exactly one is set), the owner of an Invite-only Poll
- * allowed to see it and cast a Ballot in it. An email row becomes a user row once someone verifies that email.
+ * Someone the owner of an Invite-only Poll allowed to see it and cast a Ballot in it. Added by ID it holds the user;
+ * added by email it keeps that normalized email for life and also holds the user once the address belongs to an
+ * active account (at invite time, or when someone verifies that email). An email row is always shown by its address.
  */
 @Entity
 @Table(name = "vote_invitees", uniqueConstraints = {

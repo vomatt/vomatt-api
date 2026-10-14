@@ -121,15 +121,15 @@ public class VoteController {
             An UNLISTED Poll is reachable only through its link: it stays out of Feed / Explore / Search and the owner's profile, \
             and is listed only in My Polls. An INVITE_ONLY Poll is reachable only by its owner and its Invitees: the users in `inviteeIds` and the addresses in `inviteeEmails` \
             (duplicates and the owner's own ID / address are ignored; more can be added later); everyone else gets 404 `vote.not_found`. \
-            An address of a registered user invites that user; any other address is a pending email Invitee until someone verifies it at sign-up / sign-in.
+            An address is always listed as entered, whether or not it belongs to an account; an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in.
             **Side effects**: usage count of each attached tag +1 for a PUBLIC Poll (UNLISTED and INVITE_ONLY Polls are not counted); \
-            each user Invitee gets an unread Invitation notification (unread count, `unread` on My Polls `status=open`); each new pending email Invitee \
+            each Invitee tied to a user gets an unread Invitation notification (unread count, `unread` on My Polls `status=open`); each new email Invitee \
             is sent an invitation email linking to the Poll (only when email is enabled) \
             (at most once per address per Poll, even after removing and re-adding it, and at most `EMAIL_INVITATION_DAILY_LIMIT` (default 200) per owner per day; \
-            over the limit the Invitee is still added and only the email is skipped) and gets the Invitation notification once bound; the creation is audit-logged.
+            over the limit the Invitee is still added and only the email is skipped) and gets the Invitation notification once tied to a user; the creation is audit-logged.
             **Errors**:
                     - 400 `vote.invitee.not_invite_only`: `inviteeIds` or `inviteeEmails` is not empty but `audience` is not INVITE_ONLY
-                    - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` (or a registered address in `inviteeEmails`) is not an existing user or is suspended
+                    - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended (`inviteeEmails` never cause it)
                     - 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true
                     - 400 `vote.options.min`: fewer than 2 options
                     - 400 `vote.options.max`: more than 10 options
@@ -177,16 +177,16 @@ public class VoteController {
             An omitted `startTime`, `voterVisibility`, `audience`, `inviteeIds` or `inviteeEmails` keeps the current value; the Poll does not open on edit. \
             Audience can change only here, so it is fixed once the Poll is Open.
             **Side effects**: all options are replaced, so option IDs change; tag usage counts are adjusted for added / removed tags \
-            and for an Audience change (only PUBLIC Polls are counted). `inviteeIds` replaces the user Invitees and `inviteeEmails` the pending email Invitees; \
-            an Audience other than INVITE_ONLY removes them all. Each new user Invitee gets an unread Invitation notification, including one removed and invited again; \
-            each newly added pending email Invitee is sent an invitation email (at most once per address per Poll, even after removing and re-adding it, and at most `EMAIL_INVITATION_DAILY_LIMIT` (default 200) per owner per day; \
+            and for an Audience change (only PUBLIC Polls are counted). `inviteeIds` replaces the Invitees added by ID and `inviteeEmails` those added by email (matched by address); \
+            an Audience other than INVITE_ONLY removes them all. Each new Invitee tied to a user gets an unread Invitation notification, including one removed and invited again; \
+            each newly added email Invitee is sent an invitation email (at most once per address per Poll, even after removing and re-adding it, and at most `EMAIL_INVITATION_DAILY_LIMIT` (default 200) per owner per day; \
             over the limit the Invitee is still added and only the email is skipped).
             **Errors**:
             - 403 `vote.forbidden`: the caller is not the owner
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
             - 400 `vote.not_editable`: the Poll is Open or Ended
             - 400 `vote.invitee.not_invite_only`: `inviteeIds` or `inviteeEmails` is not empty but the resulting Audience is not INVITE_ONLY
-            - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` (or a registered address in `inviteeEmails`) is not an existing user or is suspended
+            - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended (`inviteeEmails` never cause it)
             - 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true
             - 400 `vote.options.min`: fewer than 2 options
             - 400 `vote.options.max`: more than 10 options
@@ -612,7 +612,8 @@ public class VoteController {
             **Auth**: required (owner only)
             **Precondition**: none; the list is empty for a Poll that is not INVITE_ONLY
             **Behavior**: the Poll's Invitees, earliest invited first, each with `hasBallot` so the owner sees who has not answered yet. \
-            Pending email Invitees (not yet tied to a user) are included with `email` set and `userId` / `username` null. \
+            An Invitee added by email is always listed by that address with `userId` / `username` null, whether or not the address belongs to an account \
+            (`hasBallot` turns true once that person casts a Ballot). \
             Never tells which option anyone chose, so Sealed results stay sealed.
             **Side effects**: none
             **Errors**:
@@ -641,18 +642,18 @@ public class VoteController {
             **Auth**: required (owner only)
             **Precondition**: the Poll is INVITE_ONLY and Scheduled or Open (Invitees can still be added after it opened)
             **Behavior**: adds the users and email addresses as Invitees, so they can see the Poll, cast a Ballot and Comment, and find it in My Polls. \
-            Users or addresses already invited, duplicates and the owner's own ID / address are ignored. An address of a registered user invites that user; \
-            any other address becomes a pending email Invitee, which turns into that user once someone verifies the address at sign-up / sign-in. \
+            Users or addresses already invited, duplicates and the owner's own ID / address are ignored. \
+            An address is always listed as entered, whether or not it belongs to an account; an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in. \
             Returns the full Invitee list.
-            **Side effects**: `inviteeCount` grows (pending email Invitees included); each new user Invitee gets an unread Invitation notification \
-            (again unread for one removed and invited again) and later the Ended Notification; each new pending email Invitee is sent an invitation email \
+            **Side effects**: `inviteeCount` grows (email Invitees included); each new Invitee tied to a user gets an unread Invitation notification \
+            (again unread for one removed and invited again) and later the Ended Notification; each new email Invitee is sent an invitation email \
             (at most once per address per Poll, even after removing and re-adding it, and at most `EMAIL_INVITATION_DAILY_LIMIT` (default 200) per owner per day; \
             over the limit the Invitee is still added and only the email is skipped) \
-            linking to the Poll (only when email is enabled) and gets both notifications once bound; the action is audit-logged.
+            linking to the Poll (only when email is enabled) and gets both notifications once tied to a user; the action is audit-logged.
             **Errors**:
             - 400 `vote.invitee.not_invite_only`: the Poll is not INVITE_ONLY
             - 400 `vote.ended`: the Poll has Ended
-            - 400 `vote.invitee.ids_invalid`: one of `userIds` (or a registered address in `emails`) is not an existing user or is suspended
+            - 400 `vote.invitee.ids_invalid`: one of `userIds` is not an existing user or is suspended (`emails` never cause it)
             - 400 `common.validation_failed`: both `userIds` and `emails` are empty, one holds more than 100 entries, a null element or an invalid address
             - 403 `vote.forbidden`: the caller is not the owner
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
@@ -686,8 +687,9 @@ public class VoteController {
     @Operation(summary = "Remove an Invitee", description = """
             **Auth**: required (owner only)
             **Precondition**: the Poll is INVITE_ONLY and Scheduled or Open, and the Invitee holds no Ballot
-            **Behavior**: removes the user from the Invitees; from then on the Poll is 404 `vote.not_found` for them. \
-            Idempotent: succeeds, changing nothing, when the user is not an Invitee. Returns the full Invitee list.
+            **Behavior**: removes the Invitee added by this user ID; from then on the Poll is 404 `vote.not_found` for them. \
+            Idempotent: succeeds, changing nothing, when the user is not an Invitee added by ID; one added by email \
+            is removed through `DELETE /api/votes/{voteId}/invitees?email=`. Returns the full Invitee list.
             **Side effects**: `inviteeCount` drops; the action is audit-logged.
             **Errors**:
             - 400 `vote.invitee.has_ballot`: the Invitee holds a Ballot, so counted Ballots are never orphaned
@@ -719,14 +721,15 @@ public class VoteController {
     @DeleteMapping(value = "/{voteId}/invitees", params = "email")
     @Auditable(action = "UNINVITE", resourceType = "VOTE", resourceIdIndex = 0)
     @CommonApiResponses
-    @Operation(summary = "Remove a pending email Invitee", description = """
+    @Operation(summary = "Remove an email Invitee", description = """
             **Auth**: required (owner only)
-            **Precondition**: the Poll is INVITE_ONLY and Scheduled or Open
-            **Behavior**: removes the pending email Invitee (lower-cased and trimmed like sign-in does), so verifying that address no longer grants access. \
-            Idempotent: succeeds, changing nothing, when the address is not a pending Invitee; an address already tied to a user \
-            is removed through `DELETE /api/votes/{voteId}/invitees/{userId}`. Returns the full Invitee list.
+            **Precondition**: the Poll is INVITE_ONLY and Scheduled or Open, and the Invitee holds no Ballot
+            **Behavior**: removes the Invitee added by this address (lower-cased and trimmed like sign-in does), whether or not it belongs to an account; \
+            from then on the Poll is 404 `vote.not_found` for that person and verifying the address no longer grants access. \
+            Idempotent: succeeds, changing nothing, when the address is not an Invitee. Returns the full Invitee list.
             **Side effects**: `inviteeCount` drops; the action is audit-logged.
             **Errors**:
+            - 400 `vote.invitee.has_ballot`: the Invitee holds a Ballot, so counted Ballots are never orphaned
             - 400 `vote.invitee.not_invite_only`: the Poll is not INVITE_ONLY
             - 400 `vote.ended`: the Poll has Ended
             - 403 `vote.forbidden`: the caller is not the owner
@@ -734,9 +737,9 @@ public class VoteController {
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Invitees after the removal",
             content = @Content(examples = @ExampleObject(name = "Invitees", value = EX_INVITEES)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Poll is not Invite-only (`vote.invitee.not_invite_only`) or has Ended (`vote.ended`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invitee holds a Ballot (`vote.invitee.has_ballot`), Poll is not Invite-only (`vote.invitee.not_invite_only`) or has Ended (`vote.ended`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "vote.ended", value = ERR_MESSAGE + "This poll has ended; ballots can no longer be cast or retracted" + ERR_CODE + "vote.ended" + ERR_ERROR + "This poll has ended; ballots can no longer be cast or retracted" + ERR_END)))
+                    examples = @ExampleObject(name = "vote.invitee.has_ballot", value = ERR_MESSAGE + "An Invitee who holds a Ballot cannot be removed" + ERR_CODE + "vote.invitee.has_ballot" + ERR_ERROR + "An Invitee who holds a Ballot cannot be removed" + ERR_END)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Caller is not the owner (`vote.forbidden`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.forbidden", value = ERR_MESSAGE + "Not allowed to modify this Poll" + ERR_CODE + "vote.forbidden" + ERR_ERROR + "Not allowed to modify this Poll" + ERR_END)))
@@ -746,7 +749,7 @@ public class VoteController {
     public ResponseEntity<ApiResponse<List<InviteeResponse>>> removeEmailInvitee(
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
             @PathVariable String voteId,
-            @Parameter(description = "Email address of the pending Invitee", required = true, example = "dave@example.com")
+            @Parameter(description = "Email address the Invitee was added by", required = true, example = "dave@example.com")
             @RequestParam String email,
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(voteService.removeEmailInvitee(voteId, email, principal.userId())));

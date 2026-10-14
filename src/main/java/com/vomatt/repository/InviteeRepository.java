@@ -18,7 +18,8 @@ public interface InviteeRepository extends JpaRepository<Invitee, UUID> {
 
     boolean existsByVoteIdAndUserId(UUID voteId, UUID userId);
 
-    Optional<Invitee> findByVoteIdAndUserId(UUID voteId, UUID userId);
+    /** The Invitee added by ID, never one added by email (that one is reached only by its address). */
+    Optional<Invitee> findByVoteIdAndUserIdAndEmailIsNull(UUID voteId, UUID userId);
 
     Optional<Invitee> findByVoteIdAndEmail(UUID voteId, String email);
 
@@ -43,30 +44,36 @@ public interface InviteeRepository extends JpaRepository<Invitee, UUID> {
             (NOT EXISTS (SELECT 1 FROM vomatt.vote_invitees u WHERE u.vote_id = i.vote_id AND u.user_id = :userId)
              AND NOT EXISTS (SELECT 1 FROM vomatt.votes v WHERE v.id = i.vote_id AND v.creator_id = :userId))""";
 
-    @Query(value = "SELECT i.id FROM vomatt.vote_invitees i WHERE i.email = :email", nativeQuery = true)
-    List<UUID> findIdsByEmail(@Param("email") String email);
+    /**
+     * Binding step 1: share-locks the Polls holding a pending row of this email, in id order. The owner changes
+     * Invitees under the Poll's write lock, so binding and a concurrent invite of the same user serialize and
+     * cannot both add that user. A Ballot on such a Poll waits for the sign-in (and vice versa); both are short.
+     */
+    @Query(value = """
+            SELECT v.id FROM vomatt.votes v
+            WHERE v.id IN (SELECT i.vote_id FROM vomatt.vote_invitees i WHERE i.email = :email AND i.user_id IS NULL)
+            ORDER BY v.id FOR SHARE""", nativeQuery = true)
+    List<UUID> lockVotesWithPendingEmail(@Param("email") String email);
+
+    /** Binding step 3: ties the bindable pending rows of the locked Polls to the user; each keeps its email. */
+    @Modifying(flushAutomatically = true)
+    @Query(value = """
+            UPDATE vomatt.vote_invitees i SET user_id = :userId, updated_at = now()
+            WHERE i.email = :email AND i.user_id IS NULL AND i.vote_id IN (:voteIds) AND """ + BINDABLE,
+            nativeQuery = true)
+    int bindEmail(@Param("userId") UUID userId, @Param("email") String email, @Param("voteIds") Collection<UUID> voteIds);
 
     /**
-     * Binding step 2, per pending row: adds the user Invitee in its place. An INSERT rather than an UPDATE of the email
-     * row, because ON CONFLICT DO NOTHING absorbs an owner inviting the same user concurrently: an UPDATE would hit
-     * UNIQUE (vote_id, user_id) and roll back the whole sign-up. Step 3 then drops the email row either way.
+     * Binding step 4: drops the pending rows of the locked Polls left unbound, i.e. already covered by a user row
+     * (an Invitee added by ID) or the owner's own address.
      */
     @Modifying(flushAutomatically = true)
     @Query(value = """
-            INSERT INTO vomatt.vote_invitees (id, vote_id, user_id, created_at, updated_at)
-            SELECT :id, i.vote_id, :userId, i.created_at, now() FROM vomatt.vote_invitees i
-            WHERE i.id = :rowId AND """ + BINDABLE + """
-
-            ON CONFLICT (vote_id, user_id) DO NOTHING""", nativeQuery = true)
-    int bindEmailRow(@Param("id") UUID id, @Param("rowId") UUID rowId, @Param("userId") UUID userId);
-
-    /**
-     * Binding step 3: drops the email rows that are no longer bindable, i.e. now covered by a user row (bound in step 2
-     * or invited before) or the owner's own address. Rows added after step 2 stay pending and bind at the next sign-in.
-     */
-    @Modifying(flushAutomatically = true)
-    @Query(value = "DELETE FROM vomatt.vote_invitees i WHERE i.email = :email AND NOT " + BINDABLE, nativeQuery = true)
-    int deleteUnbindableEmail(@Param("userId") UUID userId, @Param("email") String email);
+            DELETE FROM vomatt.vote_invitees i
+            WHERE i.email = :email AND i.user_id IS NULL AND i.vote_id IN (:voteIds) AND NOT """ + BINDABLE,
+            nativeQuery = true)
+    int deleteUnbindableEmail(@Param("userId") UUID userId, @Param("email") String email,
+            @Param("voteIds") Collection<UUID> voteIds);
 
     @Query(value = "SELECT EXISTS (SELECT 1 FROM vomatt.vote_invitation_emails WHERE vote_id = :voteId AND email = :email)",
             nativeQuery = true)

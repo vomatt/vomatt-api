@@ -76,9 +76,9 @@ public class CreateVoteRequest {
     @Schema(description = "Email addresses to invite, for people who may not have an account yet; only for an INVITE_ONLY Poll "
             + "(otherwise 400 `vote.invitee.not_invite_only`). At most 100; null elements and invalid addresses are rejected. "
             + "Addresses are lower-cased and trimmed like sign-in does; duplicates and the owner's own address are ignored. "
-            + "An address of a registered user invites that user (a suspended one is rejected with 400 `vote.invitee.ids_invalid`); "
-            + "any other address becomes a pending email Invitee, gets an invitation email, and turns into that user once someone verifies it at sign-up / sign-in. "
-            + "On edit the list replaces the current pending email Invitees; null keeps them",
+            + "Each address is listed as entered and gets an invitation email; an active account's user gets access right away, "
+            + "any other address once someone verifies it at sign-up / sign-in. "
+            + "On edit the list replaces the Invitees added by email (matched by address); null keeps them",
             example = "[\"carol@example.com\"]", nullable = true)
     @Size(max = 100, message = "Maximum 100 email addresses can be invited at once")
     private List<@NotNull(message = "Invitee email cannot be null") @Email(message = "Invalid invitee email") @Size(max = 254, message = "Invitee email cannot exceed 254 characters") String> inviteeEmails;

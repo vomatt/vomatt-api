@@ -24,8 +24,8 @@ public class InviteesRequest {
 
     @Size(max = 100, message = "Maximum 100 email addresses can be invited at once")
     @Schema(description = "Up to 100 email addresses to invite; null elements and invalid addresses are rejected. Lower-cased and trimmed like sign-in does; "
-            + "addresses already invited, duplicates and the owner's own address are ignored. An address of a registered user invites that user "
-            + "(a suspended one is rejected with 400 `vote.invitee.ids_invalid`); any other address becomes a pending email Invitee and gets an invitation email",
+            + "addresses already invited, duplicates and the owner's own address are ignored. Each address is listed as entered and gets an invitation email; "
+            + "an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in",
             example = "[\"carol@example.com\"]", nullable = true)
     private List<@NotNull(message = "Invitee email cannot be null") @Email(message = "Invalid invitee email") @Size(max = 254, message = "Invitee email cannot exceed 254 characters") String> emails;
 

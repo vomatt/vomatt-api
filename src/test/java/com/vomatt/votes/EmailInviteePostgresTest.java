@@ -53,6 +53,13 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
         return voteService.addInvitees(poll.getId().toString(), request, owner.getId().toString());
     }
 
+    private User account(String email) {
+        User user = User.builder().username("em-acct-" + System.nanoTime()).email(email).build();
+        em.persist(user);
+        em.flush();
+        return user;
+    }
+
     // What the find-or-create path in auth runs once the address is verified
     private User signUpAndBind(String email) {
         User user = User.builder().username("em-carol-" + System.nanoTime()).email(email).build();
@@ -80,17 +87,19 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("should turn the email Invitee into a user Invitee with access and a My Polls entry once the email is verified")
+    @DisplayName("should tie the email Invitee to the user once the email is verified, still listing it only by email, also after a rerun")
     void shouldBindEmailInviteeWhenEmailVerified() {
         inviteEmail(carolEmail);
 
         User carol = signUpAndBind(carolEmail);
+        voteService.bindEmailInvitees(carol);
+        em.clear();
 
-        List<InviteeResponse> invitees = voteService.getInvitees(poll.getId().toString(), owner.getId().toString());
-        assertThat(invitees).singleElement().satisfies(i -> {
-            assertThat(i.userId()).isEqualTo(carol.getId().toString());
-            assertThat(i.email()).isNull();
+        assertThat(inviteeRepository.findByVoteId(poll.getId())).singleElement().satisfies(i -> {
+            assertThat(i.getUser().getId()).isEqualTo(carol.getId());
+            assertThat(i.getEmail()).isEqualTo(carolEmail);
         });
+        assertEmailOnly(voteService.getInvitees(poll.getId().toString(), owner.getId().toString()));
         assertThat(voteService.getVote(poll.getId().toString(), carol.getId().toString()).getInviteeCount()).isEqualTo(1L);
         assertThat(voteService.getMyPolls(carol.getId().toString(), "open", null, null).items())
                 .extracting(VoteResponse::getId).containsExactly(poll.getId().toString());
@@ -144,14 +153,27 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("should store an email of a registered user as that user")
-    void shouldInviteUserWhenEmailRegistered() {
-        User carol = User.builder().username("em-carol-" + System.nanoTime()).email(carolEmail).build();
-        em.persist(carol);
+    @DisplayName("should list a registered user's email only by the address, while that user gets access right away")
+    void shouldShowEmailOnlyWhenEmailRegistered() {
+        User carol = account(carolEmail);
+
+        assertEmailOnly(inviteEmail(carolEmail));
+        em.clear();
+        assertEmailOnly(voteService.getInvitees(poll.getId().toString(), owner.getId().toString()));
+        assertThat(voteService.getVote(poll.getId().toString(), carol.getId().toString()).getInviteeCount()).isEqualTo(1L);
+        assertThat(notificationReadRepository.isNotified(carol.getId(), poll.getId(), now)).isTrue();
+    }
+
+    @Test
+    @DisplayName("should keep a suspended user's email as a pending email Invitee, listed like any address, without access")
+    void shouldKeepEmailPendingWhenUserSuspended() {
+        User gone = account(carolEmail);
+        gone.setActive(false);
         em.flush();
 
-        assertThat(inviteEmail(carolEmail)).singleElement()
-                .satisfies(i -> assertThat(i.userId()).isEqualTo(carol.getId().toString()));
+        assertEmailOnly(inviteEmail(carolEmail));
+        assertThat(inviteeRepository.findByVoteId(poll.getId())).singleElement()
+                .satisfies(i -> assertThat(i.getUser()).isNull());
     }
 
     @Test
@@ -160,6 +182,19 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
         inviteEmail(carolEmail);
 
         assertThat(voteService.removeEmailInvitee(poll.getId().toString(), carolEmail, owner.getId().toString())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("should remove an email Invitee tied to a user by its address, but not by that user's ID")
+    void shouldRemoveResolvedEmailInviteeOnlyByAddress() {
+        User carol = account(carolEmail);
+        inviteEmail(carolEmail);
+
+        assertEmailOnly(voteService.removeInvitee(poll.getId().toString(), carol.getId().toString(), owner.getId().toString()));
+        assertThat(voteService.removeEmailInvitee(poll.getId().toString(), carolEmail, owner.getId().toString())).isEmpty();
+        em.clear();
+        assertThatThrownBy(() -> voteService.getVote(poll.getId().toString(), carol.getId().toString()))
+                .isInstanceOf(ApiException.class);
     }
 
     @Test
@@ -173,9 +208,9 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("should reject a row with both user and email set")
-    void shouldRejectRowWhenUserAndEmailBothSet() {
-        em.persist(new Invitee(poll, owner, carolEmail));
+    @DisplayName("should reject a row with neither user nor email set")
+    void shouldRejectRowWhenNeitherUserNorEmailSet() {
+        em.persist(new Invitee(poll, null, null));
 
         assertThatThrownBy(() -> em.flush()).hasMessageContaining("chk_vote_invitees_user_or_email");
     }
@@ -220,6 +255,48 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
         // Not a new Invitee, so the read Invitation stays read
         assertThat(notificationReadRepository.isNotified(carol.getId(), scheduled.getId(), now)).isTrue();
         assertThat(notificationReadRepository.countUnread(carol.getId(), now)).isZero();
+    }
+
+    @Test
+    @DisplayName("should keep the email rows listed in inviteeEmails on edit, matched by address even when tied to a user, and drop the rest")
+    void shouldKeepEmailInviteesByAddressOnEdit() {
+        User carol = account(carolEmail);
+        String daveEmail = "dave-" + System.nanoTime() + "@example.com";
+        Vote scheduled = persistPoll(owner, now.plusDays(1), now.plusDays(2), "A", "B");
+        scheduled.setAudience(Audience.INVITE_ONLY);
+        em.persist(new Invitee(scheduled, carol, carolEmail));
+        em.persist(new Invitee(scheduled, daveEmail));
+        em.flush();
+        notificationReadRepository.markRead(carol.getId(), scheduled.getId(), now);
+        UUID before = inviteeRepository.findByVoteIdAndEmail(scheduled.getId(), carolEmail).orElseThrow().getId();
+        em.clear();
+
+        CreateVoteRequest edit = new CreateVoteRequest();
+        edit.setTitle("Edited");
+        edit.setOptions(List.of(option("A"), option("B")));
+        edit.setStartTime(now.plusDays(1));
+        edit.setEndTime(now.plusDays(2));
+        edit.setInviteeEmails(List.of(carolEmail));
+        voteService.updateVote(scheduled.getId().toString(), edit, owner.getId().toString());
+        em.flush();
+        em.clear();
+
+        assertThat(inviteeRepository.findByVoteId(scheduled.getId())).singleElement()
+                .satisfies(i -> assertThat(i.getId()).isEqualTo(before));
+        assertThat(notificationReadRepository.countUnread(carol.getId(), now)).isZero();
+
+        edit.setInviteeEmails(List.of());
+        voteService.updateVote(scheduled.getId().toString(), edit, owner.getId().toString());
+        em.flush();
+        assertThat(inviteeRepository.findByVoteId(scheduled.getId())).isEmpty();
+    }
+
+    private static void assertEmailOnly(List<InviteeResponse> invitees) {
+        assertThat(invitees).singleElement().satisfies(i -> {
+            assertThat(i.email()).isNotNull();
+            assertThat(i.userId()).isNull();
+            assertThat(i.username()).isNull();
+        });
     }
 
     private static CreateVoteRequest.VoteOptionRequest option(String text) {

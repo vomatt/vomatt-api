@@ -520,7 +520,7 @@ public class AuthService {
      *       <b>must not</b> merge into an existing account nor create a new one; throw
      *       {@link MessageKey#AUTH_EMAIL_NOT_VERIFIED}.</li>
      * </ul>
-     * <p>This is the only place an email is proven to be the user's, so email Invitees of it become user Invitees
+     * <p>This is the only place an email is proven to be the user's, so pending email Invitees of it are tied to the user
      * here, in the same transaction as the find-or-create; rerunning it binds nothing new.</p>
      */
     User findOrCreateUserByEmail(String email, String fullName, String authMethod, boolean emailVerified) {

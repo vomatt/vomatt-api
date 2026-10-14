@@ -31,6 +31,9 @@ public final class SecurityEndpoints {
     public static final String[] AUTHENTICATED_VOTES = { "/api/votes/my", "/api/votes/*/my-vote-status",
             "/api/votes/*/voters", "/api/votes/*/invitees", "/api/votes/*/invitees/*" };
 
+    /** Groups are owner-only, so every /api/groups path needs a token. */
+    public static final String[] AUTHENTICATED_GROUPS = { "/api/groups", "/api/groups/**" };
+
     /**
      * Poll ID (UUID) path segment. Matching only UUIDs means named sub-paths like {@code /api/votes/my} are never permitted by the public rules,
      * without relying on {@link #AUTHENTICATED_VOTES} being ordered first.

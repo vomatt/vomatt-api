@@ -9,6 +9,7 @@ import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
 import com.vomatt.entity.VoteStatus;
+import com.vomatt.groups.GroupService;
 import com.vomatt.repository.IdCount;
 import com.vomatt.repository.InviteeRepository;
 import com.vomatt.repository.NotificationReadRepository;
@@ -63,6 +64,7 @@ class VoteServiceTest {
     @Mock NotificationReadRepository notificationReadRepository;
     @Mock com.vomatt.common.email.EmailService emailService;
     @Mock com.vomatt.common.redis.RedisService redisService;
+    @Mock GroupService groupService;
     @Spy VoteMapper voteMapper = new VoteMapper();
 
     @InjectMocks
@@ -88,6 +90,7 @@ class VoteServiceTest {
         ReflectionTestUtils.setField(vote, "createdAt", OffsetDateTime.now());
         lenient().when(voteConfig.getDeleteWindow()).thenReturn(Duration.ofMinutes(20));
         ReflectionTestUtils.setField(voteService, "invitationDailyLimit", 200);
+        lenient().when(groupService.expand(any(), any())).thenReturn(new GroupService.Members(List.of(), List.of()));
 
         option = new VoteOption();
         option.setVote(vote);
@@ -246,6 +249,22 @@ class VoteServiceTest {
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_INVITEE_NOT_INVITE_ONLY));
             verify(voteRepository, never()).save(any());
             verifyNoInteractions(emailService);
+        }
+
+        @Test
+        @DisplayName("should throw 400 VOTE_INVITEE_NOT_INVITE_ONLY when groupIds are sent for a Public Poll")
+        void shouldRejectCreateWhenGroupIdsSentForPublicPoll() {
+            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
+            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
+            CreateVoteRequest request = new CreateVoteRequest();
+            request.setTitle("Test");
+            request.setOptions(List.of(buildOption("A"), buildOption("B")));
+            request.setGroupIds(List.of(UUID.randomUUID()));
+
+            assertThatThrownBy(() -> voteService.createVote(request, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_INVITEE_NOT_INVITE_ONLY));
+            verify(groupService, never()).expand(any(), any());
+            verify(voteRepository, never()).save(any());
         }
 
         @Test
@@ -1177,6 +1196,48 @@ class VoteServiceTest {
             verify(inviteeRepository).saveAllAndFlush(argThat(invitees ->
                     invitees instanceof List<?> list && list.size() == 1
                             && ((Invitee) list.getFirst()).getUser() == carol));
+        }
+
+        @Test
+        @DisplayName("should invite a Group's members together with the listed users in one insert when groupIds are added")
+        void shouldInviteGroupMembersWhenAddingGroupIds() {
+            inviteOnly(OffsetDateTime.now().plusDays(1));
+            User bob = User.builder().id(inviteeId).build();
+            User carol = User.builder().id(UUID.randomUUID()).build();
+            UUID groupId = UUID.randomUUID();
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(groupService.expand(List.of(groupId), userId))
+                    .thenReturn(new GroupService.Members(List.of(carol.getId(), bob.getId()), List.of("dave@example.com")));
+            when(userRepository.findAllById(Set.of(bob.getId(), carol.getId()))).thenReturn(List.of(bob, carol));
+            InviteesRequest invite = new InviteesRequest();
+            invite.setUserIds(List.of(bob.getId()));
+            invite.setGroupIds(List.of(groupId));
+
+            voteService.addInvitees(voteId.toString(), invite, userId.toString());
+
+            verify(inviteeRepository).saveAllAndFlush(argThat(invitees -> {
+                List<Invitee> rows = new ArrayList<>();
+                invitees.forEach(rows::add);
+                return rows.size() == 3
+                        && rows.stream().filter(i -> i.getUser() == bob).count() == 1
+                        && rows.stream().anyMatch(i -> i.getUser() == carol)
+                        && rows.stream().anyMatch(i -> i.getUser() == null && "dave@example.com".equals(i.getEmail()));
+            }));
+        }
+
+        @Test
+        @DisplayName("should throw 404 GROUP_NOT_FOUND and invite nobody when a Group is someone else's")
+        void shouldRefuseAddWhenGroupNotOwned() {
+            inviteOnly(OffsetDateTime.now().plusDays(1));
+            UUID groupId = UUID.randomUUID();
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(groupService.expand(List.of(groupId), userId)).thenThrow(ApiException.notFound(MessageKey.GROUP_NOT_FOUND));
+            InviteesRequest invite = new InviteesRequest();
+            invite.setGroupIds(List.of(groupId));
+
+            assertThatThrownBy(() -> voteService.addInvitees(voteId.toString(), invite, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.GROUP_NOT_FOUND));
+            verify(inviteeRepository, never()).saveAllAndFlush(any());
         }
 
         @Test

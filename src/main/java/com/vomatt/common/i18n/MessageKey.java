@@ -106,6 +106,12 @@ public enum MessageKey {
     COMMENT_PARENT_INVALID("comment.parent.invalid"),
     NOTIFICATION_NOT_FOUND("notification.not_found"),
 
+    // === Group ===
+    GROUP_NOT_FOUND("group.not_found"),
+    GROUP_MAX_REACHED("group.max_reached"),
+    GROUP_MEMBERS_MAX("group.members.max"),
+    GROUP_MEMBER_IDS_INVALID("group.member.ids_invalid"),
+
     // === Tag ===
     TAG_NOT_FOUND("tag.not_found"),
     TAG_NAME_EXISTS("tag.name.exists"),

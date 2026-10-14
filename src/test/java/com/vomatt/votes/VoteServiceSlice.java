@@ -7,13 +7,15 @@ import org.springframework.context.annotation.Import;
 
 import com.vomatt.common.email.EmailServiceNoOp;
 import com.vomatt.common.redis.RedisService;
+import com.vomatt.groups.GroupMapper;
+import com.vomatt.groups.GroupService;
 import com.vomatt.repository.NotificationReadRepository;
 import com.vomatt.repository.VoteListRepository;
 
 /** Beans VoteService needs on top of a @DataJpaTest slice (Spring Data repositories are already present). */
 @TestConfiguration
 @Import({ VoteService.class, VoteMapper.class, VoteConfigurationProperties.class, VoteListRepository.class,
-        NotificationReadRepository.class, EmailServiceNoOp.class })
+        NotificationReadRepository.class, EmailServiceNoOp.class, GroupService.class, GroupMapper.class })
 public class VoteServiceSlice {
 
     // No Redis in the slice: the invitation email counter always reads 0, so the daily limit never applies

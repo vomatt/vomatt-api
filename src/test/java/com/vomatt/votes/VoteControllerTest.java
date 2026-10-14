@@ -278,6 +278,30 @@ class VoteControllerTest {
             assertValidationFailed("/api/votes/{voteId}/invitees", "{\"userIds\": [null]}");
         }
 
+        @Test
+        @DisplayName("should return 200 when adding Invitees with only groupIds")
+        void shouldReturn200WhenOnlyGroupIdsAdded() throws Exception {
+            authenticate();
+            when(voteService.addInvitees(eq(voteId), any(InviteesRequest.class), eq(USER_ID))).thenReturn(List.of());
+
+            mockMvc.perform(post("/api/votes/{voteId}/invitees", voteId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"groupIds\": [\"" + UUID.randomUUID() + "\"]}"))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("should return 400 common.validation_failed when adding more than 20 groupIds")
+        void shouldReturn400WhenTooManyGroupIds() throws Exception {
+            assertValidationFailed("/api/votes/{voteId}/invitees", "{\"groupIds\": [" + ids(21) + "]}");
+        }
+
+        @Test
+        @DisplayName("should return 400 common.validation_failed when creating with a null groupId")
+        void shouldReturn400WhenGroupIdNullOnCreate() throws Exception {
+            assertValidationFailed("/api/votes", POLL_BODY + "], \"groupIds\": [null]}");
+        }
+
         private static final String POLL_BODY = "{\"title\":\"Q\",\"endTime\":\"2099-01-01T00:00:00Z\","
                 + "\"options\":[{\"text\":\"A\"},{\"text\":\"B\"}],\"audience\":\"INVITE_ONLY\",\"inviteeIds\":[";
 

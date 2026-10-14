@@ -304,6 +304,112 @@
         },
         "type" : "object"
       },
+      "ApiResponseGroupResponse" : {
+        "description" : "Envelope of every API response, success or error",
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/GroupResponse"
+          },
+          "error" : {
+            "description" : "Legacy duplicate of `message` on errors; null on success. Use `message` instead",
+            "example" : "Poll not found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "errorCode" : {
+            "description" : "Stable machine-readable error code (lowercase, dot-separated); branch on this, not on `message`. Null on success",
+            "example" : "vote.not_found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "message" : {
+            "description" : "Localized text following Accept-Language. On success it is usually null, except operations that attach a toast-ready text; on error it is the error message",
+            "example" : "Operation completed",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "success" : {
+            "description" : "true on success, false on error",
+            "example" : true,
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseListGroupMemberResponse" : {
+        "description" : "Envelope of every API response, success or error",
+        "properties" : {
+          "data" : {
+            "description" : "Response payload; null on errors (a few business errors carry structured data) and on operations without a result",
+            "items" : {
+              "$ref" : "#/components/schemas/GroupMemberResponse"
+            },
+            "nullable" : true,
+            "type" : "array"
+          },
+          "error" : {
+            "description" : "Legacy duplicate of `message` on errors; null on success. Use `message` instead",
+            "example" : "Poll not found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "errorCode" : {
+            "description" : "Stable machine-readable error code (lowercase, dot-separated); branch on this, not on `message`. Null on success",
+            "example" : "vote.not_found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "message" : {
+            "description" : "Localized text following Accept-Language. On success it is usually null, except operations that attach a toast-ready text; on error it is the error message",
+            "example" : "Operation completed",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "success" : {
+            "description" : "true on success, false on error",
+            "example" : true,
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseListGroupResponse" : {
+        "description" : "Envelope of every API response, success or error",
+        "properties" : {
+          "data" : {
+            "description" : "Response payload; null on errors (a few business errors carry structured data) and on operations without a result",
+            "items" : {
+              "$ref" : "#/components/schemas/GroupResponse"
+            },
+            "nullable" : true,
+            "type" : "array"
+          },
+          "error" : {
+            "description" : "Legacy duplicate of `message` on errors; null on success. Use `message` instead",
+            "example" : "Poll not found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "errorCode" : {
+            "description" : "Stable machine-readable error code (lowercase, dot-separated); branch on this, not on `message`. Null on success",
+            "example" : "vote.not_found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "message" : {
+            "description" : "Localized text following Accept-Language. On success it is usually null, except operations that attach a toast-ready text; on error it is the error message",
+            "example" : "Operation completed",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "success" : {
+            "description" : "true on success, false on error",
+            "example" : true,
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseListInviteeResponse" : {
         "description" : "Envelope of every API response, success or error",
         "properties" : {
@@ -1081,6 +1187,20 @@
             "format" : "date-time",
             "type" : "string"
           },
+          "groupIds" : {
+            "description" : "IDs of the caller's Groups (see `GET /api/groups`) whose current members to invite; only for an INVITE_ONLY Poll (otherwise 400 `vote.invitee.not_invite_only`). At most 20; null elements are rejected; a missing Group or someone else's is 404 `group.not_found`. Members added by ID join `inviteeIds` (suspended ones are skipped) and members added by email join `inviteeEmails`, by their stored address, with the same rules and invitation emails. The members are copied now: later Group changes never touch the Poll. On edit they are merged into whichever of `inviteeIds` / `inviteeEmails` is set (so already-invited members are kept as they are) and added on top of the current Invitees of a kind whose list is null",
+            "example" : [ "0199f2b0-7a1c-7e45-9b3d-2c8f6a4e1d07" ],
+            "items" : {
+              "description" : "IDs of the caller's Groups (see `GET /api/groups`) whose current members to invite; only for an INVITE_ONLY Poll (otherwise 400 `vote.invitee.not_invite_only`). At most 20; null elements are rejected; a missing Group or someone else's is 404 `group.not_found`. Members added by ID join `inviteeIds` (suspended ones are skipped) and members added by email join `inviteeEmails`, by their stored address, with the same rules and invitation emails. The members are copied now: later Group changes never touch the Poll. On edit they are merged into whichever of `inviteeIds` / `inviteeEmails` is set (so already-invited members are kept as they are) and added on top of the current Invitees of a kind whose list is null",
+              "format" : "uuid",
+              "nullable" : true,
+              "type" : "string"
+            },
+            "maxItems" : 20,
+            "minItems" : 0,
+            "nullable" : true,
+            "type" : "array"
+          },
           "inviteeEmails" : {
             "description" : "Email addresses to invite, for people who may not have an account yet; only for an INVITE_ONLY Poll (otherwise 400 `vote.invitee.not_invite_only`). At most 100; null elements and invalid addresses are rejected. Addresses are lower-cased and trimmed like sign-in does; duplicates and the owner's own address are ignored. Each address is listed as entered and gets an invitation email; an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in. On edit the list replaces the Invitees added by email (matched by address); null keeps them",
             "example" : [ "carol@example.com" ],
@@ -1297,6 +1417,117 @@
         "required" : [ "idToken" ],
         "type" : "object"
       },
+      "GroupMemberResponse" : {
+        "description" : "A member of a Group: a user added by ID, or an email address (never revealing whether it belongs to an account)",
+        "nullable" : true,
+        "properties" : {
+          "addedAt" : {
+            "description" : "When the member was added",
+            "example" : "2026-10-09T15:20:31+08:00",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "email" : {
+            "description" : "Email address a member was added by, for its whole life; null for one added by ID",
+            "example" : "dave@example.com",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "userId" : {
+            "description" : "User ID of a member added by ID; always null for one added by email",
+            "example" : "0199f2a1-2c5d-7f13-9b0e-7d4a1e3f6c82",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "username" : {
+            "description" : "Username of a member added by ID; always null for one added by email",
+            "example" : "bob",
+            "nullable" : true,
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "GroupMembersRequest" : {
+        "description" : "Body to add members to a Group; at least one of `userIds` / `emails` must be non-empty",
+        "properties" : {
+          "emails" : {
+            "description" : "Up to 100 email addresses to add; null elements and invalid addresses are rejected. Lower-cased and trimmed like sign-in does; addresses already in the Group, duplicates and the owner's own address are ignored. Each address is listed as entered, whether or not it belongs to an account; nobody is notified",
+            "example" : [ "carol@example.com" ],
+            "items" : {
+              "description" : "Up to 100 email addresses to add; null elements and invalid addresses are rejected. Lower-cased and trimmed like sign-in does; addresses already in the Group, duplicates and the owner's own address are ignored. Each address is listed as entered, whether or not it belongs to an account; nobody is notified",
+              "example" : "[\"carol@example.com\"]",
+              "format" : "email",
+              "maxLength" : 254,
+              "minLength" : 0,
+              "nullable" : true,
+              "type" : "string"
+            },
+            "maxItems" : 100,
+            "minItems" : 0,
+            "nullable" : true,
+            "type" : "array"
+          },
+          "userIds" : {
+            "description" : "Up to 100 User IDs to add (e.g. picked via `GET /api/users/search`); null elements are rejected. Members already in the Group, duplicates and the owner's own ID are ignored; unknown or suspended users are rejected with 400 `group.member.ids_invalid`",
+            "example" : [ "0199f2a1-2c5d-7f13-9b0e-7d4a1e3f6c82" ],
+            "items" : {
+              "description" : "Up to 100 User IDs to add (e.g. picked via `GET /api/users/search`); null elements are rejected. Members already in the Group, duplicates and the owner's own ID are ignored; unknown or suspended users are rejected with 400 `group.member.ids_invalid`",
+              "format" : "uuid",
+              "nullable" : true,
+              "type" : "string"
+            },
+            "maxItems" : 100,
+            "minItems" : 0,
+            "nullable" : true,
+            "type" : "array"
+          }
+        },
+        "type" : "object"
+      },
+      "GroupRequest" : {
+        "description" : "Body to create or rename a Group",
+        "properties" : {
+          "name" : {
+            "description" : "Group name, up to 50 characters; leading and trailing spaces are trimmed. Names need not be unique",
+            "example" : "Book club",
+            "maxLength" : 50,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "name" ],
+        "type" : "object"
+      },
+      "GroupResponse" : {
+        "description" : "A Group of the caller (only its owner ever sees it)",
+        "nullable" : true,
+        "properties" : {
+          "createdAt" : {
+            "description" : "When the Group was created",
+            "example" : "2026-10-09T15:20:31+08:00",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "id" : {
+            "description" : "Group ID; pass it in `groupIds` when creating or editing an Invite-only Poll or adding Invitees",
+            "example" : "0199f2b0-7a1c-7e45-9b3d-2c8f6a4e1d07",
+            "type" : "string"
+          },
+          "memberCount" : {
+            "description" : "Number of members (users and email addresses)",
+            "example" : 3,
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "name" : {
+            "description" : "Group name",
+            "example" : "Book club",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "InviteeResponse" : {
         "description" : "An Invitee of an Invite-only Poll, as seen by its owner: a user added by ID, or an email address (never revealing whether it belongs to an account)",
         "nullable" : true,
@@ -1334,7 +1565,7 @@
         "type" : "object"
       },
       "InviteesRequest" : {
-        "description" : "Body to add Invitees to an Invite-only Poll; at least one of `userIds` / `emails` must be non-empty",
+        "description" : "Body to add Invitees to an Invite-only Poll; at least one of `userIds` / `emails` / `groupIds` must be non-empty",
         "properties" : {
           "emails" : {
             "description" : "Up to 100 email addresses to invite; null elements and invalid addresses are rejected. Lower-cased and trimmed like sign-in does; addresses already invited, duplicates and the owner's own address are ignored. Each address is listed as entered and gets an invitation email; an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in",
@@ -1349,6 +1580,20 @@
               "type" : "string"
             },
             "maxItems" : 100,
+            "minItems" : 0,
+            "nullable" : true,
+            "type" : "array"
+          },
+          "groupIds" : {
+            "description" : "Up to 20 IDs of the caller's Groups (see `GET /api/groups`) whose current members to invite; null elements are rejected and a missing Group or someone else's is 404 `group.not_found`. Members added by ID join `userIds` (suspended ones are skipped) and members added by email join `emails`, by their stored address, with the same rules and invitation emails. The members are copied now: later Group changes never touch the Poll",
+            "example" : [ "0199f2b0-7a1c-7e45-9b3d-2c8f6a4e1d07" ],
+            "items" : {
+              "description" : "Up to 20 IDs of the caller's Groups (see `GET /api/groups`) whose current members to invite; null elements are rejected and a missing Group or someone else's is 404 `group.not_found`. Members added by ID join `userIds` (suspended ones are skipped) and members added by email join `emails`, by their stored address, with the same rules and invitation emails. The members are copied now: later Group changes never touch the Poll",
+              "format" : "uuid",
+              "nullable" : true,
+              "type" : "string"
+            },
+            "maxItems" : 20,
             "minItems" : 0,
             "nullable" : true,
             "type" : "array"
@@ -4586,6 +4831,931 @@
         "tags" : [ "Auth" ]
       }
     },
+    "/api/groups" : {
+      "get" : {
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: the caller's Groups by name, each with its member count. Nobody else ever sees them, members included.\n**Side effects**: none\n**Errors**: none\n",
+        "operationId" : "getGroups",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "Groups" : {
+                    "description" : "Groups",
+                    "value" : {
+                      "data" : [ {
+                        "createdAt" : "2026-10-09T15:20:31+08:00",
+                        "id" : "0199f2b0-7a1c-7e45-9b3d-2c8f6a4e1d07",
+                        "memberCount" : 3,
+                        "name" : "Book club"
+                      } ],
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListGroupResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "List my Groups",
+        "tags" : [ "Group" ]
+      },
+      "post" : {
+        "description" : "**Auth**: required\n**Precondition**: the caller has fewer than 50 Groups\n**Behavior**: creates an empty Group owned by the caller; add members through `POST /api/groups/{groupId}/members`.\n**Side effects**: the creation is audit-logged.\n**Errors**:\n- 400 `group.max_reached`: the caller already has 50 Groups\n- 400 `common.validation_failed`: `name` is blank or longer than 50 characters\n- 404 `user.not_found`: the signed-in user no longer exists\n",
+        "operationId" : "createGroup",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "examples" : {
+                "Book club" : {
+                  "description" : "Book club",
+                  "value" : {
+                    "name" : "Book club"
+                  }
+                }
+              },
+              "schema" : {
+                "$ref" : "#/components/schemas/GroupRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "Group" : {
+                    "description" : "Group",
+                    "value" : {
+                      "data" : {
+                        "createdAt" : "2026-10-09T15:20:31+08:00",
+                        "id" : "0199f2b0-7a1c-7e45-9b3d-2c8f6a4e1d07",
+                        "memberCount" : 0,
+                        "name" : "Book club"
+                      },
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseGroupResponse"
+                }
+              }
+            },
+            "description" : "Group created"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Create a Group",
+        "tags" : [ "Group" ]
+      }
+    },
+    "/api/groups/{groupId}" : {
+      "delete" : {
+        "description" : "**Auth**: required (owner only)\n**Precondition**: none\n**Behavior**: deletes the Group and its members. Polls the Group was already invited into keep their Invitees.\n**Side effects**: nobody is notified; the action is audit-logged.\n**Errors**:\n- 404 `group.not_found`: the Group does not exist or belongs to someone else",
+        "operationId" : "deleteGroup",
+        "parameters" : [ {
+          "description" : "Group ID",
+          "example" : "0199f2b0-7a1c-7e45-9b3d-2c8f6a4e1d07",
+          "in" : "path",
+          "name" : "groupId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "Deleted" : {
+                    "description" : "Deleted",
+                    "value" : {
+                      "data" : {
+                        "id" : null,
+                        "message" : null,
+                        "status" : null,
+                        "success" : true
+                      },
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseSimpleResultResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "group.not_found" : {
+                    "description" : "group.not_found",
+                    "value" : {
+                      "data" : null,
+                      "error" : "Group not found",
+                      "errorCode" : "group.not_found",
+                      "message" : "Group not found",
+                      "success" : false
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Group does not exist or belongs to someone else (`group.not_found`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Delete a Group",
+        "tags" : [ "Group" ]
+      },
+      "put" : {
+        "description" : "**Auth**: required (owner only)\n**Precondition**: none\n**Behavior**: renames the Group.\n**Side effects**: the action is audit-logged.\n**Errors**:\n- 400 `common.validation_failed`: `name` is blank or longer than 50 characters\n- 404 `group.not_found`: the Group does not exist or belongs to someone else",
+        "operationId" : "renameGroup",
+        "parameters" : [ {
+          "description" : "Group ID",
+          "example" : "0199f2b0-7a1c-7e45-9b3d-2c8f6a4e1d07",
+          "in" : "path",
+          "name" : "groupId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "examples" : {
+                "Rename" : {
+                  "description" : "Rename",
+                  "value" : {
+                    "name" : "Book club 2026"
+                  }
+                }
+              },
+              "schema" : {
+                "$ref" : "#/components/schemas/GroupRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "Group" : {
+                    "description" : "Group",
+                    "value" : {
+                      "data" : {
+                        "createdAt" : "2026-10-09T15:20:31+08:00",
+                        "id" : "0199f2b0-7a1c-7e45-9b3d-2c8f6a4e1d07",
+                        "memberCount" : 3,
+                        "name" : "Book club"
+                      },
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseGroupResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "group.not_found" : {
+                    "description" : "group.not_found",
+                    "value" : {
+                      "data" : null,
+                      "error" : "Group not found",
+                      "errorCode" : "group.not_found",
+                      "message" : "Group not found",
+                      "success" : false
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Group does not exist or belongs to someone else (`group.not_found`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Rename a Group",
+        "tags" : [ "Group" ]
+      }
+    },
+    "/api/groups/{groupId}/members" : {
+      "delete" : {
+        "description" : "**Auth**: required (owner only)\n**Precondition**: none\n**Behavior**: removes the member added by this address (lower-cased and trimmed like sign-in does), whether or not it belongs to an account. Idempotent: succeeds, changing nothing, when the address is not a member. Polls the Group was already invited into keep their Invitees. Returns the full member list.\n**Side effects**: the action is audit-logged.\n**Errors**:\n- 404 `group.not_found`: the Group does not exist or belongs to someone else",
+        "operationId" : "removeEmailMember",
+        "parameters" : [ {
+          "description" : "Group ID",
+          "example" : "0199f2b0-7a1c-7e45-9b3d-2c8f6a4e1d07",
+          "in" : "path",
+          "name" : "groupId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "description" : "Email address the member was added by",
+          "example" : "dave@example.com",
+          "in" : "query",
+          "name" : "email",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "Members" : {
+                    "description" : "Members",
+                    "value" : {
+                      "data" : [ {
+                        "addedAt" : "2026-10-09T15:20:31+08:00",
+                        "email" : null,
+                        "userId" : "0199f2a1-2c5d-7f13-9b0e-7d4a1e3f6c82",
+                        "username" : "bob"
+                      }, {
+                        "addedAt" : "2026-10-09T15:20:31+08:00",
+                        "email" : "dave@example.com",
+                        "userId" : null,
+                        "username" : null
+                      } ],
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListGroupMemberResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "group.not_found" : {
+                    "description" : "group.not_found",
+                    "value" : {
+                      "data" : null,
+                      "error" : "Group not found",
+                      "errorCode" : "group.not_found",
+                      "message" : "Group not found",
+                      "success" : false
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Group does not exist or belongs to someone else (`group.not_found`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Remove an email Group member",
+        "tags" : [ "Group" ]
+      },
+      "get" : {
+        "description" : "**Auth**: required (owner only)\n**Precondition**: none\n**Behavior**: the Group's members, earliest added first. A member added by email is always listed by that address with `userId` / `username` null, whether or not the address belongs to an account.\n**Side effects**: none\n**Errors**:\n- 404 `group.not_found`: the Group does not exist or belongs to someone else",
+        "operationId" : "getMembers",
+        "parameters" : [ {
+          "description" : "Group ID",
+          "example" : "0199f2b0-7a1c-7e45-9b3d-2c8f6a4e1d07",
+          "in" : "path",
+          "name" : "groupId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "Members" : {
+                    "description" : "Members",
+                    "value" : {
+                      "data" : [ {
+                        "addedAt" : "2026-10-09T15:20:31+08:00",
+                        "email" : null,
+                        "userId" : "0199f2a1-2c5d-7f13-9b0e-7d4a1e3f6c82",
+                        "username" : "bob"
+                      }, {
+                        "addedAt" : "2026-10-09T15:20:31+08:00",
+                        "email" : "dave@example.com",
+                        "userId" : null,
+                        "username" : null
+                      } ],
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListGroupMemberResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "group.not_found" : {
+                    "description" : "group.not_found",
+                    "value" : {
+                      "data" : null,
+                      "error" : "Group not found",
+                      "errorCode" : "group.not_found",
+                      "message" : "Group not found",
+                      "success" : false
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Group does not exist or belongs to someone else (`group.not_found`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "List Group members",
+        "tags" : [ "Group" ]
+      },
+      "post" : {
+        "description" : "**Auth**: required (owner only)\n**Precondition**: the Group stays within 100 members\n**Behavior**: adds the users and email addresses as members. Members already in the Group, duplicates and the owner's own ID / address are ignored. An address is always listed as entered, whether or not it belongs to an account; once someone verifies it at sign-up / sign-in it is tied to that user, still listed by the address. Returns the full member list.\n**Side effects**: nobody is notified (members never learn about the Group); the action is audit-logged.\n**Errors**:\n- 400 `group.member.ids_invalid`: one of `userIds` is not an existing user or is suspended (`emails` never cause it)\n- 400 `group.members.max`: the Group would hold more than 100 members\n- 400 `common.validation_failed`: both `userIds` and `emails` are empty, one holds more than 100 entries, a null element or an invalid address\n- 404 `group.not_found`: the Group does not exist or belongs to someone else",
+        "operationId" : "addMembers",
+        "parameters" : [ {
+          "description" : "Group ID",
+          "example" : "0199f2b0-7a1c-7e45-9b3d-2c8f6a4e1d07",
+          "in" : "path",
+          "name" : "groupId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "examples" : {
+                "Add bob and dave" : {
+                  "description" : "Add bob and dave",
+                  "value" : {
+                    "emails" : [ "dave@example.com" ],
+                    "userIds" : [ "0199f2a1-2c5d-7f13-9b0e-7d4a1e3f6c82" ]
+                  }
+                }
+              },
+              "schema" : {
+                "$ref" : "#/components/schemas/GroupMembersRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "Members" : {
+                    "description" : "Members",
+                    "value" : {
+                      "data" : [ {
+                        "addedAt" : "2026-10-09T15:20:31+08:00",
+                        "email" : null,
+                        "userId" : "0199f2a1-2c5d-7f13-9b0e-7d4a1e3f6c82",
+                        "username" : "bob"
+                      }, {
+                        "addedAt" : "2026-10-09T15:20:31+08:00",
+                        "email" : "dave@example.com",
+                        "userId" : null,
+                        "username" : null
+                      } ],
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListGroupMemberResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "group.not_found" : {
+                    "description" : "group.not_found",
+                    "value" : {
+                      "data" : null,
+                      "error" : "Group not found",
+                      "errorCode" : "group.not_found",
+                      "message" : "Group not found",
+                      "success" : false
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Group does not exist or belongs to someone else (`group.not_found`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Add Group members",
+        "tags" : [ "Group" ]
+      }
+    },
+    "/api/groups/{groupId}/members/{userId}" : {
+      "delete" : {
+        "description" : "**Auth**: required (owner only)\n**Precondition**: none\n**Behavior**: removes the member added by this user ID. Idempotent: succeeds, changing nothing, when the user is not a member added by ID; one added by email is removed through `DELETE /api/groups/{groupId}/members?email=`. Polls the Group was already invited into keep their Invitees. Returns the full member list.\n**Side effects**: the action is audit-logged.\n**Errors**:\n- 404 `group.not_found`: the Group does not exist or belongs to someone else",
+        "operationId" : "removeMember",
+        "parameters" : [ {
+          "description" : "Group ID",
+          "example" : "0199f2b0-7a1c-7e45-9b3d-2c8f6a4e1d07",
+          "in" : "path",
+          "name" : "groupId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "description" : "User ID of the member",
+          "example" : "0199f2a1-2c5d-7f13-9b0e-7d4a1e3f6c82",
+          "in" : "path",
+          "name" : "userId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "Members" : {
+                    "description" : "Members",
+                    "value" : {
+                      "data" : [ {
+                        "addedAt" : "2026-10-09T15:20:31+08:00",
+                        "email" : null,
+                        "userId" : "0199f2a1-2c5d-7f13-9b0e-7d4a1e3f6c82",
+                        "username" : "bob"
+                      }, {
+                        "addedAt" : "2026-10-09T15:20:31+08:00",
+                        "email" : "dave@example.com",
+                        "userId" : null,
+                        "username" : null
+                      } ],
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListGroupMemberResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "group.not_found" : {
+                    "description" : "group.not_found",
+                    "value" : {
+                      "data" : null,
+                      "error" : "Group not found",
+                      "errorCode" : "group.not_found",
+                      "message" : "Group not found",
+                      "success" : false
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Group does not exist or belongs to someone else (`group.not_found`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Remove a Group member",
+        "tags" : [ "Group" ]
+      }
+    },
     "/api/lookups/frontend" : {
       "get" : {
         "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: returns all active items flagged `frontendUsing`, grouped by `lookupType` (map key = type, ordered by `seq`). The result is cached server-side for 2 hours and evicted whenever an admin changes a frontend item, so clients may cache it for the session. A type with no matching items is absent from the map\n**Side effects**: none\n**Errors**: none specific to this endpoint (only the shared errors below)",
@@ -6273,7 +7443,7 @@
         "tags" : [ "Vote" ]
       },
       "post" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: creates a Poll owned by the caller. With no `startTime` (or a past one) the Poll is Open immediately; a future `startTime` makes it Scheduled until that time. `voterVisibility` defaults to OWNER; `audience` defaults to PUBLIC. An UNLISTED Poll is reachable only through its link: it stays out of Feed / Explore / Search and the owner's profile, and is listed only in My Polls. An INVITE_ONLY Poll is reachable only by its owner and its Invitees: the users in `inviteeIds` and the addresses in `inviteeEmails` (duplicates and the owner's own ID / address are ignored; more can be added later); everyone else gets 404 `vote.not_found`. An address is always listed as entered, whether or not it belongs to an account; an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in.\n**Side effects**: usage count of each attached tag +1 for a PUBLIC Poll (UNLISTED and INVITE_ONLY Polls are not counted); each Invitee tied to a user gets an unread Invitation notification (unread count, `unread` on My Polls `status=open`); each new email Invitee is sent an invitation email linking to the Poll (only when email is enabled) (at most once per address per Poll, even after removing and re-adding it, and at most `EMAIL_INVITATION_DAILY_LIMIT` (default 200) per owner per day; over the limit the Invitee is still added and only the email is skipped) and gets the Invitation notification once tied to a user; the creation is audit-logged.\n**Errors**:\n        - 400 `vote.invitee.not_invite_only`: `inviteeIds` or `inviteeEmails` is not empty but `audience` is not INVITE_ONLY\n        - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended (`inviteeEmails` never cause it)\n        - 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true\n        - 400 `vote.options.min`: fewer than 2 options\n        - 400 `vote.options.max`: more than 10 options\n        - 400 `vote.end_time.past`: `endTime` is in the past\n        - 400 `vote.end_time.before_start`: `endTime` is not after `startTime`\n        - 400 `vote.duration.exceeded`: `endTime` is more than 365 days after the start time\n        - 400 `tag.ids.invalid`: one of `tagIds` does not exist\n        - 400 `common.validation_failed`: a field breaks its size / required rule (first failing field only)\n- 404 `user.not_found`: the signed-in user no longer exists\n",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: creates a Poll owned by the caller. With no `startTime` (or a past one) the Poll is Open immediately; a future `startTime` makes it Scheduled until that time. `voterVisibility` defaults to OWNER; `audience` defaults to PUBLIC. An UNLISTED Poll is reachable only through its link: it stays out of Feed / Explore / Search and the owner's profile, and is listed only in My Polls. An INVITE_ONLY Poll is reachable only by its owner and its Invitees: the users in `inviteeIds` and the addresses in `inviteeEmails` (duplicates and the owner's own ID / address are ignored; more can be added later); everyone else gets 404 `vote.not_found`. An address is always listed as entered, whether or not it belongs to an account; an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in. `groupIds` invites the current members of the caller's Groups: members added by ID join `inviteeIds` (suspended ones are skipped) and members added by email join `inviteeEmails` by their stored address; later Group changes never touch the Poll.\n**Side effects**: usage count of each attached tag +1 for a PUBLIC Poll (UNLISTED and INVITE_ONLY Polls are not counted); each Invitee tied to a user gets an unread Invitation notification (unread count, `unread` on My Polls `status=open`); each new email Invitee is sent an invitation email linking to the Poll (only when email is enabled) (at most once per address per Poll, even after removing and re-adding it, and at most `EMAIL_INVITATION_DAILY_LIMIT` (default 200) per owner per day; over the limit the Invitee is still added and only the email is skipped) and gets the Invitation notification once tied to a user; the creation is audit-logged.\n**Errors**:\n        - 400 `vote.invitee.not_invite_only`: `inviteeIds`, `inviteeEmails` or `groupIds` is not empty but `audience` is not INVITE_ONLY\n        - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended (`inviteeEmails` and `groupIds` never cause it)\n        - 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true\n        - 400 `vote.options.min`: fewer than 2 options\n        - 400 `vote.options.max`: more than 10 options\n        - 400 `vote.end_time.past`: `endTime` is in the past\n        - 400 `vote.end_time.before_start`: `endTime` is not after `startTime`\n        - 400 `vote.duration.exceeded`: `endTime` is more than 365 days after the start time\n        - 400 `tag.ids.invalid`: one of `tagIds` does not exist\n        - 400 `common.validation_failed`: a field breaks its size / required rule (first failing field only)\n- 404 `user.not_found`: the signed-in user no longer exists\n- 404 `group.not_found`: one of `groupIds` does not exist or belongs to someone else\n",
         "operationId" : "createVote",
         "requestBody" : {
           "content" : {
@@ -6861,7 +8031,7 @@
         "tags" : [ "Vote" ]
       },
       "put" : {
-        "description" : "**Auth**: required (owner only)\n**Precondition**: the Poll is Scheduled (its start time has not arrived)\n**Behavior**: replaces title, description, times, Voter Visibility, Audience, Invitees, tags and options with the body (same body and validation as create). An omitted `startTime`, `voterVisibility`, `audience`, `inviteeIds` or `inviteeEmails` keeps the current value; the Poll does not open on edit. Audience can change only here, so it is fixed once the Poll is Open.\n**Side effects**: all options are replaced, so option IDs change; tag usage counts are adjusted for added / removed tags and for an Audience change (only PUBLIC Polls are counted). `inviteeIds` replaces the Invitees added by ID and `inviteeEmails` those added by email (matched by address); an Audience other than INVITE_ONLY removes them all. Each new Invitee tied to a user gets an unread Invitation notification, including one removed and invited again; each newly added email Invitee is sent an invitation email (at most once per address per Poll, even after removing and re-adding it, and at most `EMAIL_INVITATION_DAILY_LIMIT` (default 200) per owner per day; over the limit the Invitee is still added and only the email is skipped).\n**Errors**:\n- 403 `vote.forbidden`: the caller is not the owner\n- 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee\n- 400 `vote.not_editable`: the Poll is Open or Ended\n- 400 `vote.invitee.not_invite_only`: `inviteeIds` or `inviteeEmails` is not empty but the resulting Audience is not INVITE_ONLY\n- 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended (`inviteeEmails` never cause it)\n- 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true\n- 400 `vote.options.min`: fewer than 2 options\n- 400 `vote.options.max`: more than 10 options\n- 400 `vote.end_time.past`: `endTime` is in the past\n- 400 `vote.end_time.before_start`: `endTime` is not after `startTime`\n- 400 `vote.duration.exceeded`: `endTime` is more than 365 days after the start time\n- 400 `tag.ids.invalid`: one of `tagIds` does not exist\n- 400 `common.validation_failed`: a field breaks its size / required rule (first failing field only)\n",
+        "description" : "**Auth**: required (owner only)\n**Precondition**: the Poll is Scheduled (its start time has not arrived)\n**Behavior**: replaces title, description, times, Voter Visibility, Audience, Invitees, tags and options with the body (same body and validation as create). An omitted `startTime`, `voterVisibility`, `audience`, `inviteeIds` or `inviteeEmails` keeps the current value; the Poll does not open on edit. Audience can change only here, so it is fixed once the Poll is Open. `groupIds` expands the caller's Groups now: their members are merged into `inviteeIds` / `inviteeEmails` when that list is set (so already-invited members are kept as they are), and added on top of the current Invitees of a kind whose list is null.\n**Side effects**: all options are replaced, so option IDs change; tag usage counts are adjusted for added / removed tags and for an Audience change (only PUBLIC Polls are counted). `inviteeIds` replaces the Invitees added by ID and `inviteeEmails` those added by email (matched by address); an Audience other than INVITE_ONLY removes them all. Each new Invitee tied to a user gets an unread Invitation notification, including one removed and invited again; each newly added email Invitee is sent an invitation email (at most once per address per Poll, even after removing and re-adding it, and at most `EMAIL_INVITATION_DAILY_LIMIT` (default 200) per owner per day; over the limit the Invitee is still added and only the email is skipped).\n**Errors**:\n- 403 `vote.forbidden`: the caller is not the owner\n- 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee\n- 400 `vote.not_editable`: the Poll is Open or Ended\n- 400 `vote.invitee.not_invite_only`: `inviteeIds`, `inviteeEmails` or `groupIds` is not empty but the resulting Audience is not INVITE_ONLY\n- 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended (`inviteeEmails` and `groupIds` never cause it)\n- 404 `group.not_found`: one of `groupIds` does not exist or belongs to someone else\n- 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true\n- 400 `vote.options.min`: fewer than 2 options\n- 400 `vote.options.max`: more than 10 options\n- 400 `vote.end_time.past`: `endTime` is in the past\n- 400 `vote.end_time.before_start`: `endTime` is not after `startTime`\n- 400 `vote.duration.exceeded`: `endTime` is more than 365 days after the start time\n- 400 `tag.ids.invalid`: one of `tagIds` does not exist\n- 400 `common.validation_failed`: a field breaks its size / required rule (first failing field only)\n",
         "operationId" : "updateVote",
         "parameters" : [ {
           "description" : "Poll ID",
@@ -8246,7 +9416,7 @@
         "tags" : [ "Vote" ]
       },
       "post" : {
-        "description" : "**Auth**: required (owner only)\n**Precondition**: the Poll is INVITE_ONLY and Scheduled or Open (Invitees can still be added after it opened)\n**Behavior**: adds the users and email addresses as Invitees, so they can see the Poll, cast a Ballot and Comment, and find it in My Polls. Users or addresses already invited, duplicates and the owner's own ID / address are ignored. An address is always listed as entered, whether or not it belongs to an account; an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in. Returns the full Invitee list.\n**Side effects**: `inviteeCount` grows (email Invitees included); each new Invitee tied to a user gets an unread Invitation notification (again unread for one removed and invited again) and later the Ended Notification; each new email Invitee is sent an invitation email (at most once per address per Poll, even after removing and re-adding it, and at most `EMAIL_INVITATION_DAILY_LIMIT` (default 200) per owner per day; over the limit the Invitee is still added and only the email is skipped) linking to the Poll (only when email is enabled) and gets both notifications once tied to a user; the action is audit-logged.\n**Errors**:\n- 400 `vote.invitee.not_invite_only`: the Poll is not INVITE_ONLY\n- 400 `vote.ended`: the Poll has Ended\n- 400 `vote.invitee.ids_invalid`: one of `userIds` is not an existing user or is suspended (`emails` never cause it)\n- 400 `common.validation_failed`: both `userIds` and `emails` are empty, one holds more than 100 entries, a null element or an invalid address\n- 403 `vote.forbidden`: the caller is not the owner\n- 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee\n",
+        "description" : "**Auth**: required (owner only)\n**Precondition**: the Poll is INVITE_ONLY and Scheduled or Open (Invitees can still be added after it opened)\n**Behavior**: adds the users and email addresses as Invitees, so they can see the Poll, cast a Ballot and Comment, and find it in My Polls. Users or addresses already invited, duplicates and the owner's own ID / address are ignored. An address is always listed as entered, whether or not it belongs to an account; an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in. `groupIds` invites the current members of the caller's Groups: members added by ID join `userIds` (suspended ones are skipped) and members added by email join `emails` by their stored address; later Group changes never touch the Poll. Returns the full Invitee list.\n**Side effects**: `inviteeCount` grows (email Invitees included); each new Invitee tied to a user gets an unread Invitation notification (again unread for one removed and invited again) and later the Ended Notification; each new email Invitee is sent an invitation email (at most once per address per Poll, even after removing and re-adding it, and at most `EMAIL_INVITATION_DAILY_LIMIT` (default 200) per owner per day; over the limit the Invitee is still added and only the email is skipped) linking to the Poll (only when email is enabled) and gets both notifications once tied to a user; the action is audit-logged.\n**Errors**:\n- 400 `vote.invitee.not_invite_only`: the Poll is not INVITE_ONLY\n- 400 `vote.ended`: the Poll has Ended\n- 400 `vote.invitee.ids_invalid`: one of `userIds` is not an existing user or is suspended (`emails` and `groupIds` never cause it)\n- 400 `common.validation_failed`: `userIds`, `emails` and `groupIds` are all empty, `userIds` / `emails` hold more than 100 entries or `groupIds` more than 20, a null element or an invalid address\n- 403 `vote.forbidden`: the caller is not the owner\n- 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee\n- 404 `group.not_found`: one of `groupIds` does not exist or belongs to someone else\n",
         "operationId" : "addInvitees",
         "parameters" : [ {
           "description" : "Poll ID",
@@ -8262,6 +9432,12 @@
           "content" : {
             "application/json" : {
               "examples" : {
+                "Invite a Group" : {
+                  "description" : "Invite a Group",
+                  "value" : {
+                    "groupIds" : [ "0199f2b0-7a1c-7e45-9b3d-2c8f6a4e1d07" ]
+                  }
+                },
                 "Invite carol and dave" : {
                   "description" : "Invite carol and dave",
                   "value" : {
@@ -9409,6 +10585,9 @@
   }, {
     "description" : "Admin-only tag management APIs",
     "name" : "Admin Tag"
+  }, {
+    "description" : "Groups: the caller's private, reusable invite lists of users and email addresses",
+    "name" : "Group"
   }, {
     "description" : "Authentication: email OTP, phone OTP, Google / LINE / Apple login, token refresh and logout. See docs/frontend/auth-flow.md for the end-to-end flows.",
     "name" : "Auth"

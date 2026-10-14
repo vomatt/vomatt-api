@@ -141,7 +141,7 @@ class SecurityErrorHandlersTest {
     }
 
     @Test
-    void shouldSkipActiveCheckWhenSuspendedUserReads() throws Exception {
+    void shouldSkipActiveCheckWhenRead() throws Exception {
         FilterChain chain = mock(FilterChain.class);
 
         MockHttpServletResponse response = filterAs(UUID.randomUUID(), "GET", "/api/users/me", chain);

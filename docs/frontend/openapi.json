@@ -1303,7 +1303,7 @@
         "properties" : {
           "email" : {
             "description" : "Email address an Invitee was added by, for its whole life; null for one added by ID",
-            "example" : "null",
+            "example" : "dave@example.com",
             "nullable" : true,
             "type" : "string"
           },

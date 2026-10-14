@@ -186,7 +186,7 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
 
     @Test
     @DisplayName("should remove an email Invitee tied to a user by its address, but not by that user's ID")
-    void shouldRemoveResolvedEmailInviteeOnlyByAddress() {
+    void shouldRemoveOnlyByAddressWhenEmailInviteeTiedToUser() {
         User carol = account(carolEmail);
         inviteEmail(carolEmail);
 
@@ -259,7 +259,7 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
 
     @Test
     @DisplayName("should keep the email rows listed in inviteeEmails on edit, matched by address even when tied to a user, and drop the rest")
-    void shouldKeepEmailInviteesByAddressOnEdit() {
+    void shouldKeepEmailInviteesByAddressWhenEditing() {
         User carol = account(carolEmail);
         String daveEmail = "dave-" + System.nanoTime() + "@example.com";
         Vote scheduled = persistPoll(owner, now.plusDays(1), now.plusDays(2), "A", "B");

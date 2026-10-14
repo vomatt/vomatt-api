@@ -287,8 +287,20 @@ CREATE INDEX IF NOT EXISTS idx_vote_comments_parent ON vomatt.vote_comments (par
 -- The email index serves binding at sign-up / sign-in
 ALTER TABLE vomatt.vote_invitees ALTER COLUMN user_id DROP NOT NULL;
 ALTER TABLE vomatt.vote_invitees ADD COLUMN IF NOT EXISTS email VARCHAR(254);
-ALTER TABLE vomatt.vote_invitees DROP CONSTRAINT IF EXISTS chk_vote_invitees_user_or_email;
-ALTER TABLE vomatt.vote_invitees ADD CONSTRAINT chk_vote_invitees_user_or_email CHECK (user_id IS NOT NULL OR email IS NOT NULL);
+-- Guarded, so a re-run neither takes ACCESS EXCLUSIVE nor rescans the table: drops only the old exactly-one CHECK
+-- (num_nonnulls), adds the at-least-one CHECK only when missing
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint
+               WHERE conrelid = 'vomatt.vote_invitees'::regclass AND conname = 'chk_vote_invitees_user_or_email'
+                 AND pg_get_constraintdef(oid) LIKE '%num_nonnulls%') THEN
+        ALTER TABLE vomatt.vote_invitees DROP CONSTRAINT chk_vote_invitees_user_or_email;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                   WHERE conrelid = 'vomatt.vote_invitees'::regclass AND conname = 'chk_vote_invitees_user_or_email') THEN
+        ALTER TABLE vomatt.vote_invitees ADD CONSTRAINT chk_vote_invitees_user_or_email CHECK (user_id IS NOT NULL OR email IS NOT NULL);
+    END IF;
+END $$;
 CREATE UNIQUE INDEX IF NOT EXISTS uk_vote_invitees_vote_email ON vomatt.vote_invitees (vote_id, email) WHERE email IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_vote_invitees_email ON vomatt.vote_invitees (email) WHERE email IS NOT NULL;
 -- Addresses a Poll's invitation email went to: sent once per Poll + address, even after the Invitee is removed and re-added

@@ -33,6 +33,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     boolean existsByPhoneNumber(String phoneNumber);
 
+    boolean existsByIdAndActiveFalse(UUID id);
+
     /**
      * Search users by username containing the search term (case-insensitive)
      */

@@ -1,6 +1,7 @@
 package com.vomatt.common.security;
 
 import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.repository.UserRepository;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
@@ -17,7 +18,8 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Component
@@ -26,15 +28,20 @@ import java.util.stream.Collectors;
 public class JwtAuthFilter extends OncePerRequestFilter {
     public static final String AUTH_ERROR_ATTR = JwtAuthFilter.class.getName() + ".authError";
 
+    private static final Set<String> READ_METHODS = Set.of("GET", "HEAD", "OPTIONS");
+
     private final JwtUtil jwtUtil;
+    private final UserRepository userRepository;
+    private final SecurityErrorWriter errorWriter;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         String token = extractToken(request);
+        UserPrincipal principal = null;
         if (StringUtils.hasText(token)) {
             try {
-                UserPrincipal principal = jwtUtil.parseToken(token);
+                principal = jwtUtil.parseToken(token);
                 var authorities = principal.roles().stream()
                         .map(r -> new SimpleGrantedAuthority("ROLE_" + r.toUpperCase()))
                         .collect(Collectors.toList());
@@ -46,6 +53,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                         ? MessageKey.AUTH_TOKEN_EXPIRED : MessageKey.AUTH_TOKEN_INVALID);
                 log.debug("Invalid JWT token: {}", ex.getMessage());
             }
+        }
+        // Access tokens outlive a suspension, so writes re-check users.active; reads skip the DB hit.
+        // /api/auth/** keeps its own handling (login and refresh already reject suspended users).
+        if (principal != null && !READ_METHODS.contains(request.getMethod())
+                && !request.getRequestURI().startsWith("/api/auth/")
+                && userRepository.existsByIdAndActiveFalse(UUID.fromString(principal.userId()))) {
+            errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN, MessageKey.AUTH_ACCOUNT_BANNED);
+            return;
         }
         filterChain.doFilter(request, response);
     }

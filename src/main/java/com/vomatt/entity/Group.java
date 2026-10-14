@@ -10,7 +10,6 @@ import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 import lombok.ToString;
 
 /**
@@ -21,7 +20,6 @@ import lombok.ToString;
 @Entity(name = "InviteGroup")
 @Table(name = "groups")
 @Getter
-@Setter
 @NoArgsConstructor
 @ToString(exclude = "owner")
 public class Group extends AuditableEntity {
@@ -36,6 +34,10 @@ public class Group extends AuditableEntity {
 
     public Group(User owner, String name) {
         this.owner = owner;
+        this.name = name.strip();
+    }
+
+    public void rename(String name) {
         this.name = name.strip();
     }
 }

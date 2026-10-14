@@ -92,8 +92,8 @@ public class CreateVoteRequest {
             + "(otherwise 400 `vote.invitee.not_invite_only`). At most 20; null elements are rejected; a missing Group or someone else's is 404 `group.not_found`. "
             + "Members added by ID join `inviteeIds` (suspended ones are skipped) and members added by email join `inviteeEmails`, by their stored address, "
             + "with the same rules and invitation emails. The members are copied now: later Group changes never touch the Poll. "
-            + "On edit they are merged into whichever of `inviteeIds` / `inviteeEmails` is set (so already-invited members are kept as they are) "
-            + "and added on top of the current Invitees of a kind whose list is null",
+            + "On edit they are merged into whichever of `inviteeIds` / `inviteeEmails` is set, so an explicit `[]` plus `groupIds` replaces that kind of Invitee "
+            + "with the Groups' members (already-invited members are kept as they are); a null list keeps that kind of Invitee and adds the Groups' members on top",
             example = "[\"0199f2b0-7a1c-7e45-9b3d-2c8f6a4e1d07\"]", nullable = true)
     @Size(max = 20, message = "Maximum 20 groups can be invited at once")
     private List<@NotNull(message = "Group ID cannot be null") UUID> groupIds;

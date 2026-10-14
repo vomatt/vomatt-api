@@ -81,14 +81,13 @@ class GroupControllerTest {
     }
 
     @Test
-    @DisplayName("should require sign-in on every /api/groups path")
+    @DisplayName("should require sign-in on every /api/groups path: no public pattern matches, so anyRequest().authenticated() applies")
     void shouldRequireAuthenticationWhenCallingGroups() {
         AntPathMatcher matcher = new AntPathMatcher();
         for (String path : List.of("/api/groups", "/api/groups/" + groupId, "/api/groups/" + groupId + "/members",
                 "/api/groups/" + groupId + "/members/" + UUID.randomUUID())) {
-            assertThat(Arrays.stream(SecurityEndpoints.AUTHENTICATED_GROUPS).anyMatch(p -> matcher.match(p, path))).isTrue();
-            assertThat(Stream.of(SecurityEndpoints.PUBLIC_GET, SecurityEndpoints.PUBLIC_AUTH).flatMap(Arrays::stream)
-                    .anyMatch(p -> matcher.match(p, path))).isFalse();
+            assertThat(Stream.of(SecurityEndpoints.PUBLIC_GET, SecurityEndpoints.PUBLIC_AUTH, SecurityEndpoints.PUBLIC_SWAGGER,
+                    SecurityEndpoints.PUBLIC_ACTUATOR).flatMap(Arrays::stream).anyMatch(p -> matcher.match(p, path))).isFalse();
         }
     }
 
@@ -148,6 +147,17 @@ class GroupControllerTest {
         when(groupService.getMembers(groupId, USER_ID)).thenThrow(ApiException.notFound(MessageKey.GROUP_NOT_FOUND));
 
         mockMvc.perform(get("/api/groups/{groupId}/members", groupId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value(MessageKey.GROUP_NOT_FOUND.code()));
+    }
+
+    @Test
+    @DisplayName("should return the same 404 group.not_found when the Group does not exist")
+    void shouldReturn404WhenGroupMissing() throws Exception {
+        when(groupService.renameGroup(eq(groupId), any(GroupRequest.class), eq(USER_ID)))
+                .thenThrow(ApiException.notFound(MessageKey.GROUP_NOT_FOUND));
+
+        mockMvc.perform(put("/api/groups/{groupId}", groupId).contentType(MediaType.APPLICATION_JSON).content("{\"name\": \"x\"}"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value(MessageKey.GROUP_NOT_FOUND.code()));
     }

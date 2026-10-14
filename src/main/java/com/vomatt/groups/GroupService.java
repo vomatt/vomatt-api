@@ -77,7 +77,7 @@ public class GroupService {
 
     public GroupResponse renameGroup(String groupId, GroupRequest request, String userId) {
         Group group = requireOwned(groupId, userId);
-        group.setName(request.getName().strip());
+        group.rename(request.getName());
         group = groupRepository.saveAndFlush(group);
         return groupMapper.toResponse(group, groupMemberRepository.countByGroupId(group.getId()));
     }
@@ -99,13 +99,12 @@ public class GroupService {
      */
     public List<GroupMemberResponse> addMembers(String groupId, GroupMembersRequest request, String userId) {
         // Exclusive lock: concurrent adds and email binding on this Group cannot collide
-        Group group = groupRepository.findOwnedForUpdate(UUID.fromString(groupId), UUID.fromString(userId))
-            .orElseThrow(() -> ApiException.notFound(MessageKey.GROUP_NOT_FOUND));
+        Group group = requireOwnedForUpdate(groupId, userId);
         UUID ownerId = group.getOwner().getId();
         Set<UUID> ids = new HashSet<>(orEmpty(request.getUserIds()));
         ids.remove(ownerId);
-        Set<String> newEmails = orEmpty(request.getEmails()).stream().map(User::normalizeEmail)
-            .collect(Collectors.toCollection(HashSet::new));
+        // The DTO setter already normalized the addresses
+        Set<String> newEmails = new HashSet<>(orEmpty(request.getEmails()));
         // Suspended users cannot be added by ID, same as unknown ones
         List<User> users = ids.isEmpty() ? List.of() : userRepository.findAllById(ids).stream().filter(User::isActive).toList();
         if (users.size() != ids.size()) {
@@ -137,8 +136,7 @@ public class GroupService {
 
     /** Removes the member added by this user ID; a no-op when there is none. */
     public List<GroupMemberResponse> removeMember(String groupId, String memberUserId, String userId) {
-        Group group = groupRepository.findOwnedForUpdate(UUID.fromString(groupId), UUID.fromString(userId))
-            .orElseThrow(() -> ApiException.notFound(MessageKey.GROUP_NOT_FOUND));
+        Group group = requireOwnedForUpdate(groupId, userId);
         groupMemberRepository.findByGroupIdAndUserIdAndEmailIsNull(group.getId(), UUID.fromString(memberUserId))
             .ifPresent(this::deleteMember);
         return members(group.getId());
@@ -146,8 +144,7 @@ public class GroupService {
 
     /** Removes the member added by this address; a no-op when there is none. */
     public List<GroupMemberResponse> removeEmailMember(String groupId, String email, String userId) {
-        Group group = groupRepository.findOwnedForUpdate(UUID.fromString(groupId), UUID.fromString(userId))
-            .orElseThrow(() -> ApiException.notFound(MessageKey.GROUP_NOT_FOUND));
+        Group group = requireOwnedForUpdate(groupId, userId);
         groupMemberRepository.findByGroupIdAndEmail(group.getId(), User.normalizeEmail(email))
             .ifPresent(this::deleteMember);
         return members(group.getId());
@@ -190,6 +187,11 @@ public class GroupService {
 
     private Group requireOwned(String groupId, String userId) {
         return groupRepository.findByIdAndOwnerId(UUID.fromString(groupId), UUID.fromString(userId))
+            .orElseThrow(() -> ApiException.notFound(MessageKey.GROUP_NOT_FOUND));
+    }
+
+    private Group requireOwnedForUpdate(String groupId, String userId) {
+        return groupRepository.findOwnedForUpdate(UUID.fromString(groupId), UUID.fromString(userId))
             .orElseThrow(() -> ApiException.notFound(MessageKey.GROUP_NOT_FOUND));
     }
 

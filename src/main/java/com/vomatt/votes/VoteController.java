@@ -179,7 +179,8 @@ public class VoteController {
             **Behavior**: replaces title, description, times, Voter Visibility, Audience, Invitees, tags and options with the body (same body and validation as create). \
             An omitted `startTime`, `voterVisibility`, `audience`, `inviteeIds` or `inviteeEmails` keeps the current value; the Poll does not open on edit. \
             Audience can change only here, so it is fixed once the Poll is Open. `groupIds` expands the caller's Groups now: their members are merged into \
-            `inviteeIds` / `inviteeEmails` when that list is set (so already-invited members are kept as they are), and added on top of the current Invitees of a kind whose list is null.
+            `inviteeIds` / `inviteeEmails` when that list is set, so an explicit `[]` plus `groupIds` replaces that kind of Invitee with the Groups' members \
+            (already-invited members are kept as they are); a null list keeps that kind of Invitee and adds the Groups' members on top.
             **Side effects**: all options are replaced, so option IDs change; tag usage counts are adjusted for added / removed tags \
             and for an Audience change (only PUBLIC Polls are counted). `inviteeIds` replaces the Invitees added by ID and `inviteeEmails` those added by email (matched by address); \
             an Audience other than INVITE_ONLY removes them all. Each new Invitee tied to a user gets an unread Invitation notification, including one removed and invited again; \
@@ -191,7 +192,6 @@ public class VoteController {
             - 400 `vote.not_editable`: the Poll is Open or Ended
             - 400 `vote.invitee.not_invite_only`: `inviteeIds`, `inviteeEmails` or `groupIds` is not empty but the resulting Audience is not INVITE_ONLY
             - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended (`inviteeEmails` and `groupIds` never cause it)
-            - 404 `group.not_found`: one of `groupIds` does not exist or belongs to someone else
             - 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true
             - 400 `vote.options.min`: fewer than 2 options
             - 400 `vote.options.max`: more than 10 options
@@ -200,6 +200,7 @@ public class VoteController {
             - 400 `vote.duration.exceeded`: `endTime` is more than 365 days after the start time
             - 400 `tag.ids.invalid`: one of `tagIds` does not exist
             - 400 `common.validation_failed`: a field breaks its size / required rule (first failing field only)
+            - 404 `group.not_found`: one of `groupIds` does not exist or belongs to someone else
             """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = @ExampleObject(name = "Reschedule", value = """

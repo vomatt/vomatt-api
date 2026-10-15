@@ -7,6 +7,7 @@ import java.util.UUID;
 public interface InviteeStatus {
     UUID getUserId();
     String getUsername();
+    String getAvatarUrl();
     String getEmail();
     OffsetDateTime getInvitedAt();
     boolean getHasBallot();

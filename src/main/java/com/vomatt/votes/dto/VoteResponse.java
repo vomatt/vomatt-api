@@ -31,6 +31,10 @@ public class VoteResponse {
     @Schema(description = "Username of the owner", example = "alice")
     private String creatorUsername;
 
+    @Schema(description = "Avatar of the owner as `bot:<kind>` (the bot cast). Older accounts may hold an image URL; null if never set",
+            example = "bot:boba", nullable = true)
+    private String creatorAvatarUrl;
+
     @Schema(description = "When the Poll opens (or opened)", example = "2026-10-12T09:00:00+08:00")
     private OffsetDateTime startTime;
 

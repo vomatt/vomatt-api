@@ -17,7 +17,8 @@ public class GroupMapper {
     // A member added by email is shown only by that address, never revealing whether it has an account
     public GroupMemberResponse toMemberResponse(GroupMember member) {
         return member.getEmail() != null
-                ? new GroupMemberResponse(null, null, member.getEmail(), member.getCreatedAt())
-                : new GroupMemberResponse(member.getUser().getId().toString(), member.getUser().getUsername(), null, member.getCreatedAt());
+                ? new GroupMemberResponse(null, null, null, member.getEmail(), member.getCreatedAt())
+                : new GroupMemberResponse(member.getUser().getId().toString(), member.getUser().getUsername(),
+                        member.getUser().getAvatarUrl(), null, member.getCreatedAt());
     }
 }

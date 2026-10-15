@@ -27,6 +27,7 @@ public class VoteMapper {
         response.setDescription(vote.getDescription());
         response.setCreatorId(vote.getCreator().getId().toString());
         response.setCreatorUsername(vote.getCreator().getUsername());
+        response.setCreatorAvatarUrl(vote.getCreator().getAvatarUrl());
         response.setStartTime(vote.getStartTime());
         response.setEndTime(vote.getEndTime());
         response.setDeadline(vote.getDeadline());
@@ -78,6 +79,7 @@ public class VoteMapper {
         response.setDescription(vote.getDescription());
         response.setCreatorId(vote.getCreator().getId().toString());
         response.setCreatorUsername(vote.getCreator().getUsername());
+        response.setCreatorAvatarUrl(vote.getCreator().getAvatarUrl());
         response.setStartTime(vote.getStartTime());
         response.setEndTime(vote.getEndTime());
         response.setDeadline(vote.getDeadline());
@@ -106,7 +108,7 @@ public class VoteMapper {
     }
 
     public VoterResponse toVoterResponse(UserVote ballot) {
-        return new VoterResponse(ballot.getUser().getId().toString(), ballot.getUser().getUsername(),
+        return new VoterResponse(ballot.getUser().getId().toString(), ballot.getUser().getUsername(), ballot.getUser().getAvatarUrl(),
                 ballot.getOption().getId().toString(), ballot.getCreatedAt());
     }
 }

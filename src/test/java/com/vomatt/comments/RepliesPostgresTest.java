@@ -38,6 +38,7 @@ class RepliesPostgresTest extends PostgresRepositoryTest {
     @BeforeEach
     void setUp() {
         user = persistUser("rp-" + UUID.randomUUID());
+        user.setAvatarUrl("bot:boba");
         OffsetDateTime now = OffsetDateTime.now();
         poll = persistPoll(user, now.minusHours(1), now.plusDays(1), "A", "B");
         em.flush();
@@ -99,6 +100,8 @@ class RepliesPostgresTest extends PostgresRepositoryTest {
     void shouldKeepPlaceholderWhenDeletedCommentHasReplies() {
         CommentDto root = post("root", null);
         CommentDto reply = post("reply", root.getId());
+        assertThat(reply.getAuthorAvatarUrl()).isEqualTo("bot:boba");
+        assertThat(topLevel().getFirst().getAuthorAvatarUrl()).isEqualTo("bot:boba");
 
         commentService.deleteComment(UUID.fromString(root.getId()), user.getId().toString());
         em.flush();
@@ -106,6 +109,7 @@ class RepliesPostgresTest extends PostgresRepositoryTest {
         assertThat(placeholder.isDeleted()).isTrue();
         assertThat(placeholder.getText()).isNull();
         assertThat(placeholder.getAuthor()).isNull();
+        assertThat(placeholder.getAuthorAvatarUrl()).isNull();
         assertThat(placeholder.getReplyCount()).isEqualTo(1);
 
         commentService.deleteComment(UUID.fromString(reply.getId()), user.getId().toString());

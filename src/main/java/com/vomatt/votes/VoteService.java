@@ -496,8 +496,8 @@ public class VoteService {
         return inviteeRepository.findStatuses(voteId).stream()
             // An Invitee added by email is shown only by that address, never revealing whether it has an account
             .map(s -> s.getEmail() != null
-                ? new InviteeResponse(null, null, s.getEmail(), s.getHasBallot(), s.getInvitedAt())
-                : new InviteeResponse(s.getUserId().toString(), s.getUsername(), null, s.getHasBallot(), s.getInvitedAt()))
+                ? new InviteeResponse(null, null, null, s.getEmail(), s.getHasBallot(), s.getInvitedAt())
+                : new InviteeResponse(s.getUserId().toString(), s.getUsername(), s.getAvatarUrl(), null, s.getHasBallot(), s.getInvitedAt()))
             .toList();
     }
 

@@ -30,7 +30,7 @@ public interface InviteeRepository extends JpaRepository<Invitee, UUID> {
 
     /** Invitees of a Poll with whether each holds a Ballot, earliest invited first. */
     @Query("""
-            SELECT u.id AS userId, u.username AS username, i.email AS email, i.createdAt AS invitedAt,
+            SELECT u.id AS userId, u.username AS username, u.avatarUrl AS avatarUrl, i.email AS email, i.createdAt AS invitedAt,
                    CASE WHEN EXISTS (SELECT 1 FROM UserVote uv WHERE uv.vote.id = i.vote.id AND uv.user.id = u.id)
                         THEN true ELSE false END AS hasBallot
             FROM Invitee i LEFT JOIN i.user u WHERE i.vote.id = :voteId ORDER BY i.createdAt, i.id""")

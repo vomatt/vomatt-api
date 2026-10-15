@@ -64,7 +64,7 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
 
     // What the find-or-create path in auth runs once the address is verified
     private User signUpAndBind(String email) {
-        User user = User.builder().username("em-carol-" + System.nanoTime()).email(email).build();
+        User user = User.builder().username("em-carol-" + System.nanoTime()).email(email).avatarUrl("bot:boba").build();
         em.persist(user);
         voteService.bindEmailInvitees(user);
         em.clear();
@@ -382,6 +382,7 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
             assertThat(i.email()).isNotNull();
             assertThat(i.userId()).isNull();
             assertThat(i.username()).isNull();
+            assertThat(i.avatarUrl()).isNull();
         });
     }
 

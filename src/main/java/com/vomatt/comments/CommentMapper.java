@@ -17,6 +17,7 @@ public class CommentMapper {
         if (!comment.isDeleted()) {
             dto.setUserId(comment.getUser().getId().toString());
             dto.setAuthor(comment.getUser().getUsername());
+            dto.setAuthorAvatarUrl(comment.getUser().getAvatarUrl());
             dto.setText(comment.getContent());
         }
         dto.setCreatedAt(comment.getCreatedAt());

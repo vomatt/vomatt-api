@@ -1705,6 +1705,12 @@
             "example" : true,
             "type" : "boolean"
           },
+          "avatarUrl" : {
+            "description" : "Avatar as `bot:<kind>` (the bot cast); always public. Older accounts may hold an image URL; null if never set",
+            "example" : "bot:boba",
+            "nullable" : true,
+            "type" : "string"
+          },
           "bio" : {
             "description" : "Bio; null if not set",
             "example" : "Poll enthusiast",
@@ -2045,6 +2051,13 @@
       "UpdateProfileRequest" : {
         "description" : "Profile update; omitted or null fields are left unchanged",
         "properties" : {
+          "avatarUrl" : {
+            "description" : "New avatar, one of the bot cast as `bot:<kind>`; any other value is rejected. null or omitted keeps the current value",
+            "example" : "bot:boba",
+            "nullable" : true,
+            "pattern" : "^bot:(boba|bao|oolong|su|egg|ice|youtiao|tofu|sausage|chip|tower|lumen|mazu|tudi|yuelao|qiye|baye|shi|long|denglong|ding|jiaobei|xiang|banyan|gray|nordic|reptile|mantis|anu|tallwhite|moth|blob|cyclops|probe|saucer|trio|bear|magpie|pangolin|shihu|macaque|deer|pheasant|firefly|crab|flyfish|turtle|dog)$",
+            "type" : "string"
+          },
           "bio" : {
             "description" : "New bio (max 500 characters); null or omitted keeps the current value",
             "example" : "Poll enthusiast",
@@ -2062,12 +2075,12 @@
             "type" : "string"
           },
           "username" : {
-            "description" : "New username, used in the public profile path: 3-50 characters of [a-z0-9_], not a reserved name (search, account, explore, login, notifications, poll, sanity, api, me, my, admin, settings); null or omitted keeps the current value",
+            "description" : "New username, used in the public profile path: 3-50 characters of [a-z0-9_], not `search`; null or omitted keeps the current value",
             "example" : "alice_c",
             "maxLength" : 50,
             "minLength" : 3,
             "nullable" : true,
-            "pattern" : "^(?!(?:search|account|explore|login|notifications|poll|sanity|api|me|my|admin|settings)$)[a-z0-9_]{3,50}$",
+            "pattern" : "^(?!search$)[a-z0-9_]{3,50}$",
             "type" : "string"
           }
         },
@@ -2164,8 +2177,8 @@
         "nullable" : true,
         "properties" : {
           "avatarUrl" : {
-            "description" : "Avatar URL. Null until the user or an OAuth provider (Google / LINE) supplies one",
-            "example" : "https://cdn.example.com/avatar/abc.jpg",
+            "description" : "Avatar as `bot:<kind>` (the bot cast), assigned at random on sign-up. Older accounts may hold an image URL or null",
+            "example" : "bot:boba",
             "nullable" : true,
             "type" : "string"
           },
@@ -2216,6 +2229,12 @@
         "description" : "Public view of a user; optional fields are null when the owner has not made them visible",
         "nullable" : true,
         "properties" : {
+          "avatarUrl" : {
+            "description" : "Avatar as `bot:<kind>` (the bot cast); always public. Older accounts may hold an image URL; null if never set",
+            "example" : "bot:boba",
+            "nullable" : true,
+            "type" : "string"
+          },
           "bio" : {
             "description" : "Bio; null if the owner hid it (public by default) or never set one",
             "example" : "Poll enthusiast",
@@ -3810,7 +3829,7 @@
     },
     "/api/auth/apple" : {
       "post" : {
-        "description" : "**Auth**: public\n**Precondition**: the client obtained an Apple identity token (Sign in with Apple)\n**Behavior**: verifies the token signature against Apple's public keys, then its issuer, audience and expiry. Signs in the user with the token's email, creating it if new. `fullName` is used only when a new user is created. An existing account with the same email is reused only when Apple reports the email as verified\n**Side effects**: creates a user on first login; `lastLoginAt` is updated\n**Errors**:\n- 401 `auth.apple.invalid_token`: the token is malformed or has no key ID\n- 401 `auth.apple.key_not_found`: no Apple public key matches the token\n- 401 `auth.apple.invalid_signature`: the signature does not verify\n- 401 `auth.apple.invalid_issuer`: the issuer is not Apple\n- 401 `auth.apple.invalid_audience`: the token was issued for a different client ID\n- 401 `auth.apple.token_expired`: the token has expired\n- 401 `auth.apple.no_email`: the token carries no email\n- 401 `auth.email_not_verified`: Apple reports the email as unverified\n- 401 `auth.apple.login_failed`: any other failure while processing the token\n- 403 `auth.account_banned`: the user is suspended (`active=false`)\n- 503 `common.service_unavailable`: Apple's key endpoint failed or returned an unusable response",
+        "description" : "**Auth**: public\n**Precondition**: the client obtained an Apple identity token (Sign in with Apple)\n**Behavior**: verifies the token signature against Apple's public keys, then its issuer, audience and expiry. Signs in the user with the token's email, creating it if new. `fullName` is used only when a new user is created. An existing account with the same email is reused only when Apple reports the email as verified\n**Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated\n**Errors**:\n- 401 `auth.apple.invalid_token`: the token is malformed or has no key ID\n- 401 `auth.apple.key_not_found`: no Apple public key matches the token\n- 401 `auth.apple.invalid_signature`: the signature does not verify\n- 401 `auth.apple.invalid_issuer`: the issuer is not Apple\n- 401 `auth.apple.invalid_audience`: the token was issued for a different client ID\n- 401 `auth.apple.token_expired`: the token has expired\n- 401 `auth.apple.no_email`: the token carries no email\n- 401 `auth.email_not_verified`: Apple reports the email as unverified\n- 401 `auth.apple.login_failed`: any other failure while processing the token\n- 403 `auth.account_banned`: the user is suspended (`active=false`)\n- 503 `common.service_unavailable`: Apple's key endpoint failed or returned an unusable response",
         "operationId" : "appleLogin",
         "requestBody" : {
           "content" : {
@@ -3835,7 +3854,7 @@
                     "refreshToken" : "8c7e3f4a-1234-5678-90ab-cdef12345678",
                     "token" : "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTkwYThiMi0xMjM0LTc4OTAtYWJjZC1lZjAxMjM0NTY3ODkifQ.sig",
                     "user" : {
-                      "avatarUrl" : null,
+                      "avatarUrl" : "bot:boba",
                       "displayName" : "Ming Wang",
                       "email" : "user@example.com",
                       "id" : "0190a8b2-1234-7890-abcd-ef0123456789",
@@ -4015,7 +4034,7 @@
     },
     "/api/auth/google" : {
       "post" : {
-        "description" : "**Auth**: public\n**Precondition**: the client obtained a Google ID token (Google Sign-In)\n**Behavior**: validates the ID token with Google and checks its audience. Signs in the user with that email, creating the user if new. An existing account with the same email is reused only when Google reports the email as verified\n**Side effects**: creates a user on first login; sets the avatar from the Google picture when the user has none; `lastLoginAt` is updated\n**Errors**:\n- 400 `auth.google.not_configured`: Google login is not configured on the server\n- 401 `auth.google.no_email`: the token is invalid or carries no email\n- 401 `auth.google.invalid_audience`: the token was issued for a different client ID\n- 401 `auth.email_not_verified`: Google reports the email as unverified\n- 403 `auth.account_banned`: the user is suspended (`active=false`)",
+        "description" : "**Auth**: public\n**Precondition**: the client obtained a Google ID token (Google Sign-In)\n**Behavior**: validates the ID token with Google and checks its audience. Signs in the user with that email, creating the user if new. An existing account with the same email is reused only when Google reports the email as verified\n**Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated\n**Errors**:\n- 400 `auth.google.not_configured`: Google login is not configured on the server\n- 401 `auth.google.no_email`: the token is invalid or carries no email\n- 401 `auth.google.invalid_audience`: the token was issued for a different client ID\n- 401 `auth.email_not_verified`: Google reports the email as unverified\n- 403 `auth.account_banned`: the user is suspended (`active=false`)",
         "operationId" : "googleLogin",
         "requestBody" : {
           "content" : {
@@ -4039,7 +4058,7 @@
                     "refreshToken" : "8c7e3f4a-1234-5678-90ab-cdef12345678",
                     "token" : "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTkwYThiMi0xMjM0LTc4OTAtYWJjZC1lZjAxMjM0NTY3ODkifQ.sig",
                     "user" : {
-                      "avatarUrl" : null,
+                      "avatarUrl" : "bot:boba",
                       "displayName" : "Ming Wang",
                       "email" : "user@example.com",
                       "id" : "0190a8b2-1234-7890-abcd-ef0123456789",
@@ -4134,7 +4153,7 @@
     },
     "/api/auth/line" : {
       "post" : {
-        "description" : "**Auth**: public\n**Precondition**: the client completed LINE Login and holds the authorization `code` and the `redirectUri` it used\n**Behavior**: exchanges the code with LINE, reads the LINE profile and signs in the matching user, creating it if new. If LINE provides no email, a synthetic `line_<userId>@line.oauth` email is used, so `user.email` in the response is never null for LINE logins\n**Side effects**: creates a user on first login; sets the avatar from the LINE picture when the user has none; `lastLoginAt` is updated\n**Errors**:\n- 400 `auth.line.not_configured`: LINE login is not configured on the server\n- 401 `auth.line.token_exchange_failed`: LINE did not return an access token for this code\n- 401 `auth.line.profile_failed`: the LINE profile could not be read\n- 403 `auth.account_banned`: the user is suspended (`active=false`)",
+        "description" : "**Auth**: public\n**Precondition**: the client completed LINE Login and holds the authorization `code` and the `redirectUri` it used\n**Behavior**: exchanges the code with LINE, reads the LINE profile and signs in the matching user, creating it if new. If LINE provides no email, a synthetic `line_<userId>@line.oauth` email is used, so `user.email` in the response is never null for LINE logins\n**Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated\n**Errors**:\n- 400 `auth.line.not_configured`: LINE login is not configured on the server\n- 401 `auth.line.token_exchange_failed`: LINE did not return an access token for this code\n- 401 `auth.line.profile_failed`: the LINE profile could not be read\n- 403 `auth.account_banned`: the user is suspended (`active=false`)",
         "operationId" : "lineLogin",
         "requestBody" : {
           "content" : {
@@ -4159,7 +4178,7 @@
                     "refreshToken" : "8c7e3f4a-1234-5678-90ab-cdef12345678",
                     "token" : "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTkwYThiMi0xMjM0LTc4OTAtYWJjZC1lZjAxMjM0NTY3ODkifQ.sig",
                     "user" : {
-                      "avatarUrl" : null,
+                      "avatarUrl" : "bot:boba",
                       "displayName" : "Ming Wang",
                       "email" : "user@example.com",
                       "id" : "0190a8b2-1234-7890-abcd-ef0123456789",
@@ -4405,7 +4424,7 @@
     },
     "/api/auth/phone/verify-otp" : {
       "post" : {
-        "description" : "**Auth**: public\n**Precondition**: an OTP was sent to this number via `POST /api/auth/phone/send-otp` and has not expired\n**Behavior**: consumes the OTP and returns an access token and refresh token. Creates the user if the number is new, otherwise signs the existing user in\n**Side effects**: the OTP is consumed on success; a new user is created if needed; `lastLoginAt` is updated. After 5 wrong codes the OTP is deleted and a new one must be requested\n**Errors**:\n- 401 `auth.otp.invalid_or_expired`: no OTP exists for this number (never sent, expired, or already used)\n- 401 `auth.invalid_otp`: the code is wrong\n- 401 `auth.otp.too_many_attempts`: 5th wrong code; the OTP is discarded\n- 403 `auth.account_banned`: the user is suspended (`active=false`)",
+        "description" : "**Auth**: public\n**Precondition**: an OTP was sent to this number via `POST /api/auth/phone/send-otp` and has not expired\n**Behavior**: consumes the OTP and returns an access token and refresh token. Creates the user if the number is new, otherwise signs the existing user in\n**Side effects**: the OTP is consumed on success; a new user (with a random bot avatar) is created if needed; `lastLoginAt` is updated. After 5 wrong codes the OTP is deleted and a new one must be requested\n**Errors**:\n- 401 `auth.otp.invalid_or_expired`: no OTP exists for this number (never sent, expired, or already used)\n- 401 `auth.invalid_otp`: the code is wrong\n- 401 `auth.otp.too_many_attempts`: 5th wrong code; the OTP is discarded\n- 403 `auth.account_banned`: the user is suspended (`active=false`)",
         "operationId" : "phoneVerifyOtp",
         "requestBody" : {
           "content" : {
@@ -4430,7 +4449,7 @@
                     "refreshToken" : "8c7e3f4a-1234-5678-90ab-cdef12345678",
                     "token" : "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTkwYThiMi0xMjM0LTc4OTAtYWJjZC1lZjAxMjM0NTY3ODkifQ.sig",
                     "user" : {
-                      "avatarUrl" : null,
+                      "avatarUrl" : "bot:boba",
                       "displayName" : "Ming Wang",
                       "email" : "user@example.com",
                       "id" : "0190a8b2-1234-7890-abcd-ef0123456789",
@@ -4712,7 +4731,7 @@
     },
     "/api/auth/verify-otp" : {
       "post" : {
-        "description" : "**Auth**: public\n**Precondition**: an OTP was sent to this email via `POST /api/auth/send-otp` and has not expired\n**Behavior**: consumes the OTP and returns an access token and refresh token. Creates the user if the email is new (signup), otherwise signs the existing user in. If `checkRole` is \"true\", the account must already exist and be an admin, and this is checked before the OTP is consumed\n**Side effects**: the OTP is consumed on success; a new user is created and a welcome email sent on signup; `lastLoginAt` is updated. After 5 wrong codes the OTP is deleted and a new one must be requested\n**Errors**:\n- 400 `auth.identifier.required`: `email` is missing or blank\n- 401 `auth.otp.invalid_or_expired`: no OTP exists for this email (never sent, expired, or already used)\n- 401 `auth.invalid_otp`: the code is wrong\n- 401 `auth.otp.too_many_attempts`: 5th wrong code; the OTP is discarded\n- 403 `auth.admin.forbidden`: `checkRole` is \"true\" and the account is not an existing admin\n- 403 `auth.account_banned`: the user is suspended (`active=false`)",
+        "description" : "**Auth**: public\n**Precondition**: an OTP was sent to this email via `POST /api/auth/send-otp` and has not expired\n**Behavior**: consumes the OTP and returns an access token and refresh token. Creates the user if the email is new (signup), otherwise signs the existing user in. If `checkRole` is \"true\", the account must already exist and be an admin, and this is checked before the OTP is consumed\n**Side effects**: the OTP is consumed on success; a new user (with a random bot avatar) is created and a welcome email sent on signup; `lastLoginAt` is updated. After 5 wrong codes the OTP is deleted and a new one must be requested\n**Errors**:\n- 400 `auth.identifier.required`: `email` is missing or blank\n- 401 `auth.otp.invalid_or_expired`: no OTP exists for this email (never sent, expired, or already used)\n- 401 `auth.invalid_otp`: the code is wrong\n- 401 `auth.otp.too_many_attempts`: 5th wrong code; the OTP is discarded\n- 403 `auth.admin.forbidden`: `checkRole` is \"true\" and the account is not an existing admin\n- 403 `auth.account_banned`: the user is suspended (`active=false`)",
         "operationId" : "verifyOtp",
         "requestBody" : {
           "content" : {
@@ -4738,7 +4757,7 @@
                     "refreshToken" : "8c7e3f4a-1234-5678-90ab-cdef12345678",
                     "token" : "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTkwYThiMi0xMjM0LTc4OTAtYWJjZC1lZjAxMjM0NTY3ODkifQ.sig",
                     "user" : {
-                      "avatarUrl" : null,
+                      "avatarUrl" : "bot:boba",
                       "displayName" : "Ming Wang",
                       "email" : "user@example.com",
                       "id" : "0190a8b2-1234-7890-abcd-ef0123456789",
@@ -6548,6 +6567,7 @@
                 "example" : {
                   "data" : {
                     "active" : true,
+                    "avatarUrl" : "bot:boba",
                     "bio" : "Poll enthusiast",
                     "displayName" : "Alice",
                     "email" : "alice@example.com",
@@ -6652,7 +6672,7 @@
         "tags" : [ "User" ]
       },
       "patch" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: updates `username`, `displayName` and/or `bio`. Sending the current `username` is a no-op, except that an older account holding a reserved name gets 400 (omit `username` when unchanged). A field that is omitted or `null` is left unchanged (`null` cannot be used to clear a value; send an empty string instead). Returns the public profile after the update, so the optional fields are masked by the caller's own visibility settings.\n**Side effects**: persists the new values; after a `username` change the old public profile path returns 404\n**Errors**:\n- 400 `common.validation_failed`: `username` is not 3-50 characters of [a-z0-9_] or is a reserved name (see the `username` schema), `displayName` exceeds 100 characters, or `bio` exceeds 500 characters\n- 404 `user.not_found`: the account no longer exists\n- 409 `user.username.taken`: another account already uses `username`",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: updates `username`, `displayName`, `bio` and/or `avatarUrl`. `avatarUrl` must be `bot:<kind>` with one of the bot cast kinds. Sending the current `username` is a no-op. A field that is omitted or `null` is left unchanged (`null` cannot be used to clear a value; send an empty string instead). Returns the public profile after the update, so the optional fields are masked by the caller's own visibility settings.\n**Side effects**: persists the new values; after a `username` change the old public profile path returns 404\n**Errors**:\n- 400 `common.validation_failed`: `username` is not 3-50 characters of [a-z0-9_] or is `search`, `displayName` exceeds 100 characters, `bio` exceeds 500 characters, or `avatarUrl` is not a known `bot:<kind>`\n- 404 `user.not_found`: the account no longer exists\n- 409 `user.username.taken`: another account already uses `username`",
         "operationId" : "updateMyProfile",
         "requestBody" : {
           "content" : {
@@ -6670,6 +6690,7 @@
               "application/json" : {
                 "example" : {
                   "data" : {
+                    "avatarUrl" : "bot:boba",
                     "bio" : "Poll enthusiast",
                     "displayName" : "Alice C.",
                     "email" : null,
@@ -7101,7 +7122,7 @@
     },
     "/api/users/{username}" : {
       "get" : {
-        "description" : "**Auth**: public (the response is the same whether or not the caller is signed in)\n**Precondition**: none\n**Behavior**: returns the public view of a user. `username`, `joinedAt`, `totalPolls` and `totalVotes` are always present. Every optional field is `null` unless the owner made it visible: `displayName` and `bio` are visible by default, `email`, `firstName`, `lastName`, `location`, `points` and `membershipLevel` are hidden by default. `totalPolls` counts only Polls that have opened (Open and Ended), matching `GET /api/users/{username}/votes`.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended",
+        "description" : "**Auth**: public (the response is the same whether or not the caller is signed in)\n**Precondition**: none\n**Behavior**: returns the public view of a user. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` are always present (`avatarUrl` is `null` when never set). Every optional field is `null` unless the owner made it visible: `displayName` and `bio` are visible by default, `email`, `firstName`, `lastName`, `location`, `points` and `membershipLevel` are hidden by default. `totalPolls` counts only Polls that have opened (Open and Ended), matching `GET /api/users/{username}/votes`.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended",
         "operationId" : "getUserProfile",
         "parameters" : [ {
           "description" : "Username of the user to look up",
@@ -7119,6 +7140,7 @@
               "application/json" : {
                 "example" : {
                   "data" : {
+                    "avatarUrl" : "bot:boba",
                     "bio" : "Poll enthusiast",
                     "displayName" : "Alice",
                     "email" : null,

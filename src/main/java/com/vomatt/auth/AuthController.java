@@ -50,7 +50,7 @@ public class AuthController {
                   "username": "user_0427",
                   "displayName": "Ming Wang",
                   "roles": ["user"],
-                  "avatarUrl": null,
+                  "avatarUrl": "bot:boba",
                   "phoneNumber": null
                 }
               },
@@ -121,7 +121,7 @@ public class AuthController {
                     **Precondition**: an OTP was sent to this email via `POST /api/auth/send-otp` and has not expired
                     **Behavior**: consumes the OTP and returns an access token and refresh token. Creates the user if the email is new (signup), \
                     otherwise signs the existing user in. If `checkRole` is "true", the account must already exist and be an admin, and this is checked before the OTP is consumed
-                    **Side effects**: the OTP is consumed on success; a new user is created and a welcome email sent on signup; `lastLoginAt` is updated. \
+                    **Side effects**: the OTP is consumed on success; a new user (with a random bot avatar) is created and a welcome email sent on signup; `lastLoginAt` is updated. \
                     After 5 wrong codes the OTP is deleted and a new one must be requested
                     **Errors**:
                     - 400 `auth.identifier.required`: `email` is missing or blank
@@ -195,7 +195,7 @@ public class AuthController {
                     **Auth**: public
                     **Precondition**: an OTP was sent to this number via `POST /api/auth/phone/send-otp` and has not expired
                     **Behavior**: consumes the OTP and returns an access token and refresh token. Creates the user if the number is new, otherwise signs the existing user in
-                    **Side effects**: the OTP is consumed on success; a new user is created if needed; `lastLoginAt` is updated. After 5 wrong codes the OTP is deleted and a new one must be requested
+                    **Side effects**: the OTP is consumed on success; a new user (with a random bot avatar) is created if needed; `lastLoginAt` is updated. After 5 wrong codes the OTP is deleted and a new one must be requested
                     **Errors**:
                     - 401 `auth.otp.invalid_or_expired`: no OTP exists for this number (never sent, expired, or already used)
                     - 401 `auth.invalid_otp`: the code is wrong
@@ -226,7 +226,7 @@ public class AuthController {
                     **Precondition**: the client obtained a Google ID token (Google Sign-In)
                     **Behavior**: validates the ID token with Google and checks its audience. Signs in the user with that email, creating the user if new. \
                     An existing account with the same email is reused only when Google reports the email as verified
-                    **Side effects**: creates a user on first login; sets the avatar from the Google picture when the user has none; `lastLoginAt` is updated
+                    **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated
                     **Errors**:
                     - 400 `auth.google.not_configured`: Google login is not configured on the server
                     - 401 `auth.google.no_email`: the token is invalid or carries no email
@@ -257,7 +257,7 @@ public class AuthController {
                     **Precondition**: the client completed LINE Login and holds the authorization `code` and the `redirectUri` it used
                     **Behavior**: exchanges the code with LINE, reads the LINE profile and signs in the matching user, creating it if new. \
                     If LINE provides no email, a synthetic `line_<userId>@line.oauth` email is used, so `user.email` in the response is never null for LINE logins
-                    **Side effects**: creates a user on first login; sets the avatar from the LINE picture when the user has none; `lastLoginAt` is updated
+                    **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated
                     **Errors**:
                     - 400 `auth.line.not_configured`: LINE login is not configured on the server
                     - 401 `auth.line.token_exchange_failed`: LINE did not return an access token for this code
@@ -290,7 +290,7 @@ public class AuthController {
                     **Precondition**: the client obtained an Apple identity token (Sign in with Apple)
                     **Behavior**: verifies the token signature against Apple's public keys, then its issuer, audience and expiry. Signs in the user with the token's email, creating it if new. \
                     `fullName` is used only when a new user is created. An existing account with the same email is reused only when Apple reports the email as verified
-                    **Side effects**: creates a user on first login; `lastLoginAt` is updated
+                    **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated
                     **Errors**:
                     - 401 `auth.apple.invalid_token`: the token is malformed or has no key ID
                     - 401 `auth.apple.key_not_found`: no Apple public key matches the token

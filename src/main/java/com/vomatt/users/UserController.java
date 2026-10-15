@@ -49,7 +49,7 @@ public class UserController {
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":null,"firstName":"Alice","lastName":"Chen","displayName":"Alice","bio":"Poll enthusiast","location":"Taipei","points":120,"membershipLevel":"basic","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"visibilitySettings":{"email":false,"firstName":false,"lastName":false,"location":false,"points":false,"displayName":true,"bio":true,"membershipLevel":false}},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":null,"firstName":"Alice","lastName":"Chen","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","points":120,"membershipLevel":"basic","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"visibilitySettings":{"email":false,"firstName":false,"lastName":false,"location":false,"points":false,"displayName":true,"bio":true,"membershipLevel":false}},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
@@ -100,7 +100,7 @@ public class UserController {
     @PublicApiResponse
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"username":"alice","displayName":"Alice","bio":"Poll enthusiast","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"email":null,"firstName":"Alice","lastName":null,"location":null,"points":null,"membershipLevel":null},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"username":"alice","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"email":null,"firstName":"Alice","lastName":null,"location":null,"points":null,"membershipLevel":null},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No user with this username (errorCode `user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
@@ -108,7 +108,8 @@ public class UserController {
     @Operation(summary = "Get user public profile", description = """
             **Auth**: public (the response is the same whether or not the caller is signed in)
             **Precondition**: none
-            **Behavior**: returns the public view of a user. `username`, `joinedAt`, `totalPolls` and `totalVotes` are always present. \
+            **Behavior**: returns the public view of a user. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` are always present \
+            (`avatarUrl` is `null` when never set). \
             Every optional field is `null` unless the owner made it visible: `displayName` and `bio` are visible by default, \
             `email`, `firstName`, `lastName`, `location`, `points` and `membershipLevel` are hidden by default. \
             `totalPolls` counts only Polls that have opened (Open and Ended), matching `GET /api/users/{username}/votes`.
@@ -154,7 +155,7 @@ public class UserController {
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"username":"alice","displayName":"Alice C.","bio":"Poll enthusiast","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"email":null,"firstName":"Alice","lastName":null,"location":null,"points":null,"membershipLevel":null},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"username":"alice","displayName":"Alice C.","bio":"Poll enthusiast","avatarUrl":"bot:boba","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"email":null,"firstName":"Alice","lastName":null,"location":null,"points":null,"membershipLevel":null},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
@@ -166,13 +167,13 @@ public class UserController {
     @Operation(summary = "Update my profile", description = """
             **Auth**: required
             **Precondition**: none
-            **Behavior**: updates `username`, `displayName` and/or `bio`. Sending the current `username` is a no-op, except that an older account holding a reserved name gets 400 (omit `username` when unchanged). A field that is omitted or `null` is left unchanged \
+            **Behavior**: updates `username`, `displayName`, `bio` and/or `avatarUrl`. `avatarUrl` must be `bot:<kind>` with one of the bot cast kinds. Sending the current `username` is a no-op, except that an older account holding a reserved name gets 400 (omit `username` when unchanged). A field that is omitted or `null` is left unchanged \
             (`null` cannot be used to clear a value; send an empty string instead). Returns the public profile after the update, \
             so the optional fields are masked by the caller's own visibility settings.
             **Side effects**: persists the new values; after a `username` change the old public profile path returns 404
             **Errors**:
             - 400 `common.validation_failed`: `username` is not 3-50 characters of [a-z0-9_] or is a reserved name (see the `username` schema), \
-            `displayName` exceeds 100 characters, or `bio` exceeds 500 characters
+            `displayName` exceeds 100 characters, `bio` exceeds 500 characters, or `avatarUrl` is not a known `bot:<kind>`
             - 404 `user.not_found`: the account no longer exists
             - 409 `user.username.taken`: another account already uses `username`""")
     public ResponseEntity<ApiResponse<UserProfileResponse>> updateMyProfile(

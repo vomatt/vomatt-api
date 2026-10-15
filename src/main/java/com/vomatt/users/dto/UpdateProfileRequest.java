@@ -1,7 +1,7 @@
 package com.vomatt.users.dto;
 
 import com.vomatt.common.constant.ReservedUsernames;
-
+import com.vomatt.users.BotAvatar; 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -27,4 +27,9 @@ public class UpdateProfileRequest {
             example = "Poll enthusiast", maxLength = 500, nullable = true)
     @Size(max = 500, message = "Bio cannot exceed 500 characters")
     private String bio;
+
+    @Schema(description = "New avatar, one of the bot cast as `bot:<kind>`; any other value is rejected. "
+            + "null or omitted keeps the current value", example = "bot:boba", nullable = true)
+    @Pattern(regexp = BotAvatar.PATTERN, message = "Avatar must be bot:<kind> with a known bot kind")
+    private String avatarUrl;
 }

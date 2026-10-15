@@ -412,6 +412,7 @@ class AuthServiceTest {
         assertThat(result.getUsername()).matches("fresh_\\d{4}");
         assertThat(result.getRoles()).containsExactly("user");
         assertThat(result.isActive()).isTrue();
+        assertThat(result.getAvatarUrl()).matches(com.vomatt.users.BotAvatar.PATTERN);
         verify(userRepository).save(any(User.class));
     }
 
@@ -486,6 +487,23 @@ class AuthServiceTest {
     }
 
     @Test
+    void shouldNotCopyGooglePictureWhenSigningIn() {
+        ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
+        ReflectionTestUtils.setField(authService, "googleTokenInfoUrl", "https://oauth2.googleapis.com/tokeninfo");
+        stubJwksFetch(java.util.Map.of("email", "carol@example.com", "aud", "client-id", "email_verified", "true",
+                "picture", "https://lh3.googleusercontent.com/carol.jpg"), null);
+        User carol = User.builder().id(UUID.randomUUID()).email("carol@example.com").displayName("Carol")
+                .roles(new String[] { "user" }).build();
+        when(userRepository.findByEmail("carol@example.com")).thenReturn(Optional.of(carol));
+        when(jwtUtil.generateToken(anyString(), anyString(), any())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), anyString(), any())).thenReturn("mock-refresh-token");
+
+        authService.googleLogin("id-token");
+
+        assertThat(carol.getAvatarUrl()).isNull();
+    }
+
+    @Test
     void shouldNotBindEmailInviteesWhenGoogleEmailUnverified() {
         ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
         ReflectionTestUtils.setField(authService, "googleTokenInfoUrl", "https://oauth2.googleapis.com/tokeninfo");
@@ -510,6 +528,7 @@ class AuthServiceTest {
         assertThat(result.getEmail()).isNull();
         assertThat(result.getUsername()).matches("user_\\d{4}");
         assertThat(result.getDisplayName()).isEqualTo("0912345678");
+        assertThat(result.getAvatarUrl()).matches(com.vomatt.users.BotAvatar.PATTERN);
     }
 
     // ── buildAuthResponse: active=false (suspended) check ───────────────────────────

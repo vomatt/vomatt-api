@@ -81,6 +81,7 @@ class UserProfileVisibilityTest {
             @Override public String getUsername() { return USERNAME; }
             @Override public String getDisplayName() { return "TestDisplay"; }
             @Override public String getBio() { return "Hello world"; }
+            @Override public String getAvatarUrl() { return "bot:boba"; }
             @Override public OffsetDateTime getCreatedAt() { return JOINED_AT; }
             @Override public Long getTotalPolls() { return 5L; }
             @Override public Long getTotalVotes() { return 10L; }
@@ -116,7 +117,7 @@ class UserProfileVisibilityTest {
             UserProfileProjection projection = createTestProjection();
             MyProfileResponse expectedResponse = new MyProfileResponse(
                     USER_ID, USERNAME, "test@example.com", "0912345678",
-                    "Test", "User", "TestDisplay", "Hello world", "Taipei",
+                    "Test", "User", "TestDisplay", "Hello world", "bot:boba", "Taipei",
                     100, "SILVER", true, null,
                     JOINED_AT, 5, 10,
                     Map.of("email", false, "firstName", false, "lastName", false,
@@ -193,7 +194,7 @@ class UserProfileVisibilityTest {
             // Given
             UserProfileProjection projection = createTestProjection();
             UserProfileResponse expectedResponse = new UserProfileResponse(
-                    USERNAME, "TestDisplay", "Hello world",
+                    USERNAME, "TestDisplay", "Hello world", "bot:boba",
                     JOINED_AT, 5, 10,
                     null, null, null, null, null, null
             );
@@ -240,7 +241,7 @@ class UserProfileVisibilityTest {
             UserPreference emailPref = createPref("visibility.email", "true");
 
             UserProfileResponse expectedResponse = new UserProfileResponse(
-                    USERNAME, "TestDisplay", "Hello world",
+                    USERNAME, "TestDisplay", "Hello world", "bot:boba",
                     JOINED_AT, 5, 10,
                     "test@example.com", null, null, null, null, null
             );

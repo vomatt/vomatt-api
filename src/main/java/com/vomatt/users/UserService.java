@@ -154,6 +154,9 @@ public class UserService {
         if (request.getBio() != null) {
             user.setBio(request.getBio());
         }
+        if (request.getAvatarUrl() != null) {
+            user.setAvatarUrl(request.getAvatarUrl());
+        }
         userRepository.save(user);
         return getUserProfile(user.getUsername(), true);
     }

@@ -51,7 +51,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.apple.no_email` | 401 | Apple 驗證失敗：無法取得用戶信箱 | Apple verification failed: unable to retrieve email | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.apple.login_failed` | 401 | Apple 登入失敗 | Apple login failed | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.email_not_verified` | 401 | 此 OAuth 帳號的 email 尚未驗證，無法登入或合併既有帳號 | This OAuth account's email is not verified; cannot sign in or merge an existing account | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.account_banned` | 403 | 此帳號已被停權，無法登入 | This account has been banned and cannot sign in | Show a permission-denied notice | AuthService |
+| `auth.account_banned` | 403 | 此帳號已被停權，無法登入 | This account has been banned and cannot sign in | Show a permission-denied notice | AuthService, JwtAuthFilter |
 | `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | GroupService, UserService, VoteCommentService, VoteService |
 | `user.username.taken` | 409 | 使用者名稱已被使用 | Username already taken | Show message (resource state conflict) | UserService |
 | `user.delete.forbidden` | 403 | 只能刪除自己的帳號 | You can only delete your own account | Show a permission-denied notice | UserService |

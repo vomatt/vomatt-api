@@ -1,6 +1,7 @@
 package com.vomatt.common.security;
 
 import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.repository.UserRepository;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import jakarta.servlet.FilterChain;
@@ -18,10 +19,15 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.Date;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class SecurityErrorHandlersTest {
@@ -31,7 +37,8 @@ class SecurityErrorHandlersTest {
     private final SecurityErrorWriter writer = SecurityTestSupport.errorWriter();
     private final JwtAuthenticationEntryPoint entryPoint = new JwtAuthenticationEntryPoint(writer);
     private final JwtUtil jwtUtil = new JwtUtil(SECRET, 3600);
-    private final JwtAuthFilter jwtAuthFilter = new JwtAuthFilter(jwtUtil);
+    private final UserRepository userRepository = mock(UserRepository.class);
+    private final JwtAuthFilter jwtAuthFilter = new JwtAuthFilter(jwtUtil, userRepository, writer);
 
     private MockHttpServletResponse commence(MockHttpServletRequest request) throws Exception {
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -85,7 +92,7 @@ class SecurityErrorHandlersTest {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/users/me");
         request.addHeader("Authorization", "Bearer token");
 
-        assertThatThrownBy(() -> new JwtAuthFilter(brokenJwtUtil)
+        assertThatThrownBy(() -> new JwtAuthFilter(brokenJwtUtil, userRepository, writer)
                 .doFilter(request, new MockHttpServletResponse(), mock(FilterChain.class)))
                 .isInstanceOf(IllegalStateException.class);
         assertThat(request.getAttribute(JwtAuthFilter.AUTH_ERROR_ATTR)).isNull();
@@ -107,6 +114,63 @@ class SecurityErrorHandlersTest {
         String token = jwtUtil.generateToken("u1", "a@b.c", List.of("user"));
 
         assertThat(requestWithBearer(token).getAttribute(JwtAuthFilter.AUTH_ERROR_ATTR)).isNull();
+    }
+
+    private MockHttpServletResponse filterAs(UUID userId, String method, String uri, FilterChain chain)
+            throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest(method, uri);
+        request.addHeader("Authorization", "Bearer " + jwtUtil.generateToken(userId.toString(), "a@b.c", List.of("user")));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        jwtAuthFilter.doFilter(request, response, chain);
+        SecurityContextHolder.clearContext();
+        return response;
+    }
+
+    @Test
+    void shouldReturn403AccountBannedWhenSuspendedUserCastsBallot() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.existsByIdAndActiveFalse(userId)).thenReturn(true);
+        FilterChain chain = mock(FilterChain.class);
+
+        MockHttpServletResponse response = filterAs(userId, "POST", "/api/votes/" + UUID.randomUUID() + "/vote", chain);
+
+        assertThat(response.getStatus()).isEqualTo(403);
+        assertThat(response.getContentAsString())
+                .contains("\"success\":false", "\"errorCode\":\"" + MessageKey.AUTH_ACCOUNT_BANNED.code() + "\"");
+        verifyNoInteractions(chain);
+    }
+
+    @Test
+    void shouldSkipActiveCheckWhenRead() throws Exception {
+        FilterChain chain = mock(FilterChain.class);
+
+        MockHttpServletResponse response = filterAs(UUID.randomUUID(), "GET", "/api/users/me", chain);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        verify(chain).doFilter(any(), any());
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void shouldPassThroughWhenActiveUserWrites() throws Exception {
+        UUID userId = UUID.randomUUID();
+        FilterChain chain = mock(FilterChain.class);
+
+        MockHttpServletResponse response = filterAs(userId, "POST", "/api/votes/" + UUID.randomUUID() + "/vote", chain);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        verify(chain).doFilter(any(), any());
+        verify(userRepository).existsByIdAndActiveFalse(userId);
+    }
+
+    @Test
+    void shouldSkipActiveCheckWhenAuthEndpoint() throws Exception {
+        FilterChain chain = mock(FilterChain.class);
+
+        filterAs(UUID.randomUUID(), "POST", "/api/auth/refresh", chain);
+
+        verify(chain).doFilter(any(), any());
+        verify(userRepository, never()).existsByIdAndActiveFalse(any());
     }
 
     @Test

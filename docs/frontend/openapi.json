@@ -1839,7 +1839,7 @@
         "description" : "Request to send a phone OTP by SMS",
         "properties" : {
           "phone" : {
-            "description" : "Phone number",
+            "description" : "Phone number: a Taiwan mobile number (09xxxxxxxx) or E.164 (+ country code and number). Spaces, '-', '(' and ')' are ignored; stored and matched as E.164",
             "example" : "0912345678",
             "type" : "string"
           },
@@ -1863,7 +1863,7 @@
             "type" : "string"
           },
           "phone" : {
-            "description" : "Phone number",
+            "description" : "Phone number: a Taiwan mobile number (09xxxxxxxx) or E.164 (+ country code and number). Spaces, '-', '(' and ')' are ignored; stored and matched as E.164",
             "example" : "0912345678",
             "type" : "string"
           }
@@ -2218,8 +2218,8 @@
             "type" : "string"
           },
           "phoneNumber" : {
-            "description" : "Phone number. Null for users who signed up by email or OAuth and never added a phone",
-            "example" : "0912345678",
+            "description" : "Phone number in E.164. Null for users who signed up by email or OAuth and never added a phone",
+            "example" : "+886912345678",
             "nullable" : true,
             "type" : "string"
           },
@@ -4384,7 +4384,7 @@
     },
     "/api/auth/phone/send-otp" : {
       "post" : {
-        "description" : "**Auth**: public\n**Precondition**: for `type` \"login\" (the default) the phone number must already be registered\n**Behavior**: generates a 6-digit OTP, stores it with a TTL (default 180 s) and sends it by SMS. `type` is \"login\" or \"signup\"\n**Side effects**: sends an SMS; replaces any previous OTP for this number. A resend is refused during the cooldown (default 180 s)\n**Errors**:\n- 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left\n- 400 `auth.phone.not_registered`: `type` is \"login\" and the number is not registered\n- 400 `auth.sms.send_failed`: the SMS provider rejected the message",
+        "description" : "**Auth**: public\n**Precondition**: for `type` \"login\" (the default) the phone number must already be registered\n**Behavior**: normalizes the number to E.164 (`0912345678` and `+886912345678` are the same number), generates a 6-digit OTP, stores it with a TTL (default 180 s) and sends it by SMS. `type` is \"login\" or \"signup\"\n**Side effects**: sends an SMS; replaces any previous OTP for this number. A resend is refused during the cooldown (default 180 s)\n**Errors**:\n- 400 `auth.phone.invalid`: the number is neither a Taiwan mobile number (`09` + 8 digits) nor `+` country code and number (8-15 digits)\n- 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left\n- 400 `auth.phone.not_registered`: `type` is \"login\" and the number is not registered\n- 400 `auth.sms.send_failed`: the SMS provider rejected the message",
         "operationId" : "phoneSendOtp",
         "requestBody" : {
           "content" : {
@@ -4460,7 +4460,7 @@
     },
     "/api/auth/phone/verify-otp" : {
       "post" : {
-        "description" : "**Auth**: public\n**Precondition**: an OTP was sent to this number via `POST /api/auth/phone/send-otp` and has not expired\n**Behavior**: consumes the OTP and returns an access token and refresh token. Creates the user if the number is new, otherwise signs the existing user in\n**Side effects**: the OTP is consumed on success; a new user (with a random bot avatar) is created if needed; `lastLoginAt` is updated. After 5 wrong codes the OTP is deleted and a new one must be requested\n**Errors**:\n- 401 `auth.otp.invalid_or_expired`: no OTP exists for this number (never sent, expired, or already used)\n- 401 `auth.invalid_otp`: the code is wrong\n- 401 `auth.otp.too_many_attempts`: 5th wrong code; the OTP is discarded\n- 403 `auth.account_banned`: the user is suspended (`active=false`)",
+        "description" : "**Auth**: public\n**Precondition**: an OTP was sent to this number via `POST /api/auth/phone/send-otp` and has not expired\n**Behavior**: normalizes the number to E.164 like send-otp, so an OTP sent to `0912345678` verifies as `+886912345678`. Consumes the OTP and returns an access token and refresh token. Creates the user if the number is new, otherwise signs the existing user in\n**Side effects**: the OTP is consumed on success; a new user (with a random bot avatar) is created if needed; `lastLoginAt` is updated. After 5 wrong codes the OTP is deleted and a new one must be requested\n**Errors**:\n- 400 `auth.phone.invalid`: the number is not in a supported format (see send-otp)\n- 401 `auth.otp.invalid_or_expired`: no OTP exists for this number (never sent, expired, or already used)\n- 401 `auth.invalid_otp`: the code is wrong\n- 401 `auth.otp.too_many_attempts`: 5th wrong code; the OTP is discarded\n- 403 `auth.account_banned`: the user is suspended (`active=false`)",
         "operationId" : "phoneVerifyOtp",
         "requestBody" : {
           "content" : {

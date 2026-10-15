@@ -1,11 +1,17 @@
 package com.vomatt.entity;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
-@DisplayName("User.normalizeEmail")
+import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
+
+@DisplayName("User")
 class UserTest {
 
     @Test
@@ -40,5 +46,36 @@ class UserTest {
     @DisplayName("should map googlemail.com to gmail.com")
     void shouldMapToGmailWhenGooglemail() {
         assertThat(User.normalizeEmail("A.b+x@GoogleMail.com")).isEqualTo("ab@gmail.com");
+    }
+
+    @Test
+    @DisplayName("should convert a Taiwan mobile number to E.164 when it starts with 09")
+    void shouldConvertToE164WhenTaiwanMobile() {
+        assertThat(User.normalizePhone("0912345678")).isEqualTo("+886912345678");
+    }
+
+    @Test
+    @DisplayName("should strip spaces, dashes and parentheses when normalizing")
+    void shouldStripSeparatorsWhenNormalizing() {
+        assertThat(User.normalizePhone(" 0912-345 678 ")).isEqualTo("+886912345678");
+        assertThat(User.normalizePhone("(0912) 345-678")).isEqualTo("+886912345678");
+        assertThat(User.normalizePhone("+886 912-345-678")).isEqualTo("+886912345678");
+    }
+
+    @Test
+    @DisplayName("should keep a + number as is when it is already E.164")
+    void shouldKeepNumberWhenAlreadyE164() {
+        assertThat(User.normalizePhone("+886912345678")).isEqualTo("+886912345678");
+        assertThat(User.normalizePhone("+14155552671")).isEqualTo("+14155552671");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "", "912345678", "091234567", "09123456789", "0212345678", "+0912345678", "+1234567",
+            "+1234567890123456", "+886-abc-1234", "0912345678x", "886912345678" })
+    @DisplayName("should reject with auth.phone.invalid when the number is in no supported format")
+    void shouldThrowWhenPhoneInvalid(String phone) {
+        assertThatThrownBy(() -> User.normalizePhone(phone))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.AUTH_PHONE_INVALID));
     }
 }

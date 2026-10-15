@@ -963,6 +963,12 @@
             "nullable" : true,
             "type" : "string"
           },
+          "authorAvatarUrl" : {
+            "description" : "Avatar of the author as `bot:<kind>` (the bot cast). Older accounts may hold an image URL; null if never set, and on a deleted placeholder (`deleted` = true)",
+            "example" : "bot:boba",
+            "nullable" : true,
+            "type" : "string"
+          },
           "createdAt" : {
             "description" : "Creation time (ISO-8601 with offset)",
             "example" : "2026-10-09T12:34:56+08:00",
@@ -970,7 +976,7 @@
             "type" : "string"
           },
           "deleted" : {
-            "description" : "True for a deleted top-level Comment kept as a placeholder because it still has Replies; userId, author and text are then null. Deleted Comments without Replies are not returned at all",
+            "description" : "True for a deleted top-level Comment kept as a placeholder because it still has Replies; userId, author, authorAvatarUrl and text are then null. Deleted Comments without Replies are not returned at all",
             "example" : false,
             "type" : "boolean"
           },
@@ -1427,6 +1433,12 @@
             "format" : "date-time",
             "type" : "string"
           },
+          "avatarUrl" : {
+            "description" : "Avatar of a member added by ID as `bot:<kind>` (the bot cast); older accounts may hold an image URL. Null if never set, and always null for one added by email",
+            "example" : "bot:boba",
+            "nullable" : true,
+            "type" : "string"
+          },
           "email" : {
             "description" : "Email address a member was added by, for its whole life; null for one added by ID",
             "example" : "dave@example.com",
@@ -1532,6 +1544,12 @@
         "description" : "An Invitee of an Invite-only Poll, as seen by its owner: a user added by ID, or an email address (never revealing whether it belongs to an account)",
         "nullable" : true,
         "properties" : {
+          "avatarUrl" : {
+            "description" : "Avatar of an Invitee added by ID as `bot:<kind>` (the bot cast); older accounts may hold an image URL. Null if never set, and always null for one added by email",
+            "example" : "bot:boba",
+            "nullable" : true,
+            "type" : "string"
+          },
           "email" : {
             "description" : "Email address an Invitee was added by, for its whole life; null for one added by ID",
             "example" : "dave@example.com",
@@ -2518,6 +2536,12 @@
             "format" : "date-time",
             "type" : "string"
           },
+          "creatorAvatarUrl" : {
+            "description" : "Avatar of the owner as `bot:<kind>` (the bot cast). Older accounts may hold an image URL; null if never set",
+            "example" : "bot:boba",
+            "nullable" : true,
+            "type" : "string"
+          },
           "creatorId" : {
             "description" : "User ID of the owner",
             "example" : "0199f2a1-1b4c-7e02-8a9d-6c3f0d2e5b71",
@@ -2654,6 +2678,12 @@
             "format" : "date-time",
             "type" : "string"
           },
+          "creatorAvatarUrl" : {
+            "description" : "Avatar of the owner as `bot:<kind>` (the bot cast). Older accounts may hold an image URL; null if never set",
+            "example" : "bot:boba",
+            "nullable" : true,
+            "type" : "string"
+          },
           "creatorId" : {
             "description" : "User ID of the owner",
             "example" : "0199f2a1-1b4c-7e02-8a9d-6c3f0d2e5b71",
@@ -2727,6 +2757,12 @@
       "VoterResponse" : {
         "description" : "A Participant of an Ended Poll and the option they chose",
         "properties" : {
+          "avatarUrl" : {
+            "description" : "Avatar as `bot:<kind>` (the bot cast). Older accounts may hold an image URL; null if never set",
+            "example" : "bot:boba",
+            "nullable" : true,
+            "type" : "string"
+          },
           "optionId" : {
             "description" : "ID of the option the Participant chose",
             "example" : "0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813",

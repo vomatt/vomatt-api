@@ -24,6 +24,10 @@ public class CommentDto {
             example = "alice", nullable = true)
     private String author;
 
+    @Schema(description = "Avatar of the author as `bot:<kind>` (the bot cast). Older accounts may hold an image URL; null if never set, and on a deleted placeholder (`deleted` = true)",
+            example = "bot:boba", nullable = true)
+    private String authorAvatarUrl;
+
     @Schema(description = "Comment text (max 2000 characters). Null only on a deleted placeholder (`deleted` = true)",
             example = "I would pick option B, it is the cheaper one.", nullable = true)
     private String text;
@@ -55,7 +59,7 @@ public class CommentDto {
     private long replyCount;
 
     @Getter(onMethod_ = @Schema(description = "True for a deleted top-level Comment kept as a placeholder because it still has Replies; "
-            + "userId, author and text are then null. Deleted Comments without Replies are not returned at all",
+            + "userId, author, authorAvatarUrl and text are then null. Deleted Comments without Replies are not returned at all",
             example = "false"))
     private boolean isDeleted;
 }

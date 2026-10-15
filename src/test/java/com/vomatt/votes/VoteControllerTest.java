@@ -219,7 +219,7 @@ class VoteControllerTest {
         void shouldReturn200WhenOwnerListsInvitees() throws Exception {
             authenticate();
             when(voteService.getInvitees(voteId, USER_ID))
-                    .thenReturn(List.of(new InviteeResponse(inviteeId, "bob", null, true, null)));
+                    .thenReturn(List.of(new InviteeResponse(inviteeId, "bob", null, null, true, null)));
 
             mockMvc.perform(get("/api/votes/{voteId}/invitees", voteId))
                     .andExpect(status().isOk())
@@ -232,7 +232,7 @@ class VoteControllerTest {
         void shouldReturn200WhenOwnerAddsInvitees() throws Exception {
             authenticate();
             when(voteService.addInvitees(eq(voteId), any(InviteesRequest.class), eq(USER_ID)))
-                    .thenReturn(List.of(new InviteeResponse(inviteeId, "bob", null, false, null)));
+                    .thenReturn(List.of(new InviteeResponse(inviteeId, "bob", null, null, false, null)));
 
             mockMvc.perform(post("/api/votes/{voteId}/invitees", voteId)
                             .contentType(MediaType.APPLICATION_JSON)
@@ -334,7 +334,7 @@ class VoteControllerTest {
         void shouldReturn200WhenOwnerAddsEmailInvitees() throws Exception {
             authenticate();
             when(voteService.addInvitees(eq(voteId), any(InviteesRequest.class), eq(USER_ID)))
-                    .thenReturn(List.of(new InviteeResponse(null, null, "carol@example.com", false, null)));
+                    .thenReturn(List.of(new InviteeResponse(null, null, null, "carol@example.com", false, null)));
 
             mockMvc.perform(post("/api/votes/{voteId}/invitees", voteId)
                             .contentType(MediaType.APPLICATION_JSON)

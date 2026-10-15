@@ -131,7 +131,7 @@ class GroupControllerTest {
     @DisplayName("should return 200 with members listed by address when the owner adds an email")
     void shouldReturn200WhenOwnerAddsMembers() throws Exception {
         when(groupService.addMembers(eq(groupId), any(GroupMembersRequest.class), eq(USER_ID)))
-                .thenReturn(List.of(new GroupMemberResponse(null, null, "dave@example.com", null)));
+                .thenReturn(List.of(new GroupMemberResponse(null, null, null, "dave@example.com", null)));
 
         mockMvc.perform(post("/api/groups/{groupId}/members", groupId).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"emails\": [\" Dave@Example.com\"]}"))

@@ -55,6 +55,7 @@ class GroupPostgresTest extends PostgresRepositoryTest {
     void setUp() {
         owner = persistUser("gr-owner-" + System.nanoTime());
         bob = persistUser("gr-bob-" + System.nanoTime());
+        bob.setAvatarUrl("bot:boba");
         em.flush();
         ownerId = owner.getId().toString();
         groupId = groupService.createGroup(name("Book club"), ownerId).id();
@@ -99,8 +100,8 @@ class GroupPostgresTest extends PostgresRepositoryTest {
 
         List<InviteeResponse> invitees = inviteGroup(poll, groupId, ownerId);
 
-        assertThat(invitees).extracting(InviteeResponse::userId, InviteeResponse::email).containsExactlyInAnyOrder(
-                Tuple.tuple(bob.getId().toString(), null), Tuple.tuple(null, carolEmail));
+        assertThat(invitees).extracting(InviteeResponse::userId, InviteeResponse::avatarUrl, InviteeResponse::email).containsExactlyInAnyOrder(
+                Tuple.tuple(bob.getId().toString(), "bot:boba", null), Tuple.tuple(null, null, carolEmail));
         groupService.removeMember(groupId, bob.getId().toString(), ownerId);
         // A fresh request: the database cascades the members, none are loaded in this session
         em.flush();
@@ -119,8 +120,8 @@ class GroupPostgresTest extends PostgresRepositoryTest {
         addMembers(groupId, List.of(bob.getId()), List.of(carolEmail), ownerId);
         List<GroupMemberResponse> members = addMembers(groupId, List.of(bob.getId(), bob.getId()), List.of(carolEmail), ownerId);
 
-        assertThat(members).extracting(GroupMemberResponse::username, GroupMemberResponse::email).containsExactly(
-                Tuple.tuple(bob.getUsername(), null), Tuple.tuple(null, carolEmail));
+        assertThat(members).extracting(GroupMemberResponse::username, GroupMemberResponse::avatarUrl, GroupMemberResponse::email)
+                .containsExactly(Tuple.tuple(bob.getUsername(), "bot:boba", null), Tuple.tuple(null, null, carolEmail));
         assertThat(groupService.renameGroup(groupId, name("  Chess club "), ownerId).name()).isEqualTo("Chess club");
         assertThat(groupService.getGroups(ownerId)).singleElement().satisfies(g -> {
             assertThat(g.name()).isEqualTo("Chess club");
@@ -150,7 +151,7 @@ class GroupPostgresTest extends PostgresRepositoryTest {
     @DisplayName("should tie an email member to the user on verification, still listing it by address, also after a rerun")
     void shouldBindEmailMemberWhenEmailVerified() {
         addMembers(groupId, List.of(), List.of(carolEmail), ownerId);
-        User carol = User.builder().username("gr-carol-" + System.nanoTime()).email(carolEmail).build();
+        User carol = User.builder().username("gr-carol-" + System.nanoTime()).email(carolEmail).avatarUrl("bot:boba").build();
         em.persist(carol);
 
         groupService.bindEmailMembers(carol);
@@ -163,6 +164,7 @@ class GroupPostgresTest extends PostgresRepositoryTest {
         });
         assertThat(groupService.getMembers(groupId, ownerId)).singleElement().satisfies(m -> {
             assertThat(m.userId()).isNull();
+            assertThat(m.avatarUrl()).isNull();
             assertThat(m.email()).isEqualTo(carolEmail);
         });
         // Expanded by its stored address, so the Poll lists the address too

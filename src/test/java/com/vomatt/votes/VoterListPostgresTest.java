@@ -55,4 +55,25 @@ class VoterListPostgresTest extends PostgresRepositoryTest {
         assertThat(pages).isEqualTo(3);
         assertThat(seen).containsExactlyInAnyOrderElementsOf(expected).doesNotHaveDuplicates();
     }
+
+    @Test
+    @DisplayName("should carry the owner's and each Participant's avatar on the Poll, its results and its voters")
+    void shouldCarryAvatarsWhenPollEnded() {
+        User owner = persistUser("vl-av-owner");
+        owner.setAvatarUrl("bot:boba");
+        OffsetDateTime now = OffsetDateTime.now();
+        Vote poll = persistPoll(owner, now.minusDays(2), now.minusDays(1), "A", "B");
+        User voter = persistUser("vl-av-voter");
+        voter.setAvatarUrl("bot:mochi");
+        em.persist(new UserVote(voter, poll, poll.getOptions().iterator().next(), null));
+        em.flush();
+        em.clear();
+        String pollId = poll.getId().toString();
+        String ownerId = owner.getId().toString();
+
+        assertThat(voteService.getVote(pollId, ownerId).getCreatorAvatarUrl()).isEqualTo("bot:boba");
+        assertThat(voteService.getVoteResults(pollId, ownerId).getCreatorAvatarUrl()).isEqualTo("bot:boba");
+        assertThat(voteService.getVoters(pollId, ownerId, null, null).items())
+                .extracting(VoterResponse::avatarUrl).containsExactly("bot:mochi");
+    }
 }

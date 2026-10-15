@@ -89,6 +89,7 @@ class VoteServiceTest {
         setId(vote, voteId);
         ReflectionTestUtils.setField(vote, "createdAt", OffsetDateTime.now());
         lenient().when(voteConfig.getDeleteWindow()).thenReturn(Duration.ofMinutes(20));
+        lenient().when(voteConfig.getBallotRateLimit()).thenReturn(new VoteConfigurationProperties.BallotRateLimit());
         ReflectionTestUtils.setField(voteService, "invitationDailyLimit", 200);
         lenient().when(groupService.expand(any(), any())).thenReturn(new GroupService.Members(List.of(), List.of()));
 
@@ -413,6 +414,66 @@ class VoteServiceTest {
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_OPTION_NOT_IN_VOTE));
 
             verify(userVoteRepository, never()).save(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("Ballot rate limit")
+    class BallotRateLimitTests {
+
+        private void stubBallotCounter(Long first, Long... rest) {
+            when(redisService.incrementAndExpire(eq("rate:limit:ballot"), eq(userId.toString()), eq(Duration.ofSeconds(60))))
+                    .thenReturn(first, rest);
+        }
+
+        @Test
+        @DisplayName("should throw 429 COMMON_RATE_LIMITED before locking the Poll when user exceeds the window capacity")
+        void shouldThrowTooManyRequestsWhenOverLimit() {
+            stubBallotCounter(31L);
+            VoteRequest request = new VoteRequest();
+            request.setOptionIds(List.of(UUID.randomUUID().toString()));
+
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1"))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.TOO_MANY_REQUESTS, MessageKey.COMMON_RATE_LIMITED));
+            verify(voteRepository, never()).findByIdForUpdate(any());
+        }
+
+        @Test
+        @DisplayName("should throw 429 on retract and removeVote when user exceeds the window capacity")
+        void shouldThrowTooManyRequestsWhenOverLimitOnRetractAndRemove() {
+            stubBallotCounter(31L);
+
+            assertThatThrownBy(() -> voteService.retract(voteId.toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.TOO_MANY_REQUESTS, MessageKey.COMMON_RATE_LIMITED));
+            assertThatThrownBy(() -> voteService.removeVote(voteId.toString(), UUID.randomUUID().toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.TOO_MANY_REQUESTS, MessageKey.COMMON_RATE_LIMITED));
+            verify(voteRepository, never()).findByIdForUpdate(any());
+        }
+
+        @Test
+        @DisplayName("should let the request through when a new window starts")
+        void shouldPassWhenNewWindowStarts() {
+            stubBallotCounter(31L, 1L);
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> voteService.retract(voteId.toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.TOO_MANY_REQUESTS, MessageKey.COMMON_RATE_LIMITED));
+            // Reaching the Poll lookup proves the limiter let the second request through
+            assertThatThrownBy(() -> voteService.retract(voteId.toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
+            verify(voteRepository).findByIdForUpdate(voteId);
+        }
+
+        @Test
+        @DisplayName("should fail open when Redis is unavailable")
+        void shouldPassWhenRedisFails() {
+            when(redisService.incrementAndExpire(eq("rate:limit:ballot"), eq(userId.toString()), any()))
+                    .thenThrow(new com.vomatt.common.redis.RedisOperationException("down", null));
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> voteService.retract(voteId.toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
+            verify(voteRepository).findByIdForUpdate(voteId);
         }
     }
 

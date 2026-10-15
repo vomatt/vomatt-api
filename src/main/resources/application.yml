@@ -125,6 +125,9 @@ app:
     delete-window: ${VOTE_DELETE_WINDOW:PT20M}
     allow-anonymous-voting: ${VOTE_ALLOW_ANONYMOUS:true}
     allow-multiple-choices-by-default: ${VOTE_ALLOW_MULTIPLE_DEFAULT:false}
+    ballot-rate-limit:
+      capacity: ${VOTE_BALLOT_RATE_LIMIT_CAPACITY:30}
+      window: ${VOTE_BALLOT_RATE_LIMIT_WINDOW:PT60S}
   audit:
     enabled: ${AUDIT_ENABLED:true}
 

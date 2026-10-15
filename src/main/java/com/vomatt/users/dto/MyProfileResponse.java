@@ -26,6 +26,9 @@ public record MyProfileResponse(
         String displayName,
         @Schema(description = "Bio; null if not set", example = "Poll enthusiast", nullable = true)
         String bio,
+        @Schema(description = "Avatar as `bot:<kind>` (the bot cast); always public. Older accounts may hold an image URL; null if never set",
+                example = "bot:boba", nullable = true)
+        String avatarUrl,
         @Schema(description = "Location; null if not set", example = "Taipei", nullable = true)
         String location,
         @Schema(description = "Points", example = "120")

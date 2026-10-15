@@ -33,6 +33,7 @@ import com.vomatt.entity.UserPreference;
 import com.vomatt.users.dto.UserDto;
 import com.vomatt.repository.UserPreferenceRepository;
 import com.vomatt.users.dto.UpdateProfileRequest;
+import com.vomatt.repository.UserProfileProjection;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.VoteRepository;
@@ -62,6 +63,26 @@ class UserServiceTest {
         order.verify(voteRepository).decrementTurnoutForUserBallots(id);
         order.verify(voteOptionRepository).decrementForUserBallots(id);
         order.verify(userRepository).delete(user);
+    }
+
+    @Test
+    @DisplayName("should set avatarUrl when given and keep it when null")
+    void shouldUpdateAvatarUrlWhenGiven() {
+        UUID id = UUID.randomUUID();
+        User user = User.builder().id(id).username("alice").avatarUrl("bot:boba").build();
+        when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        UserProfileProjection profile = org.mockito.Mockito.mock(UserProfileProjection.class);
+        when(profile.getActive()).thenReturn(true);
+        when(profile.getId()).thenReturn(id);
+        when(userRepository.findProfileByUsername("alice")).thenReturn(Optional.of(profile));
+        UpdateProfileRequest request = new UpdateProfileRequest();
+
+        userService.updateMyProfile(id.toString(), request);
+        assertThat(user.getAvatarUrl()).isEqualTo("bot:boba");
+
+        request.setAvatarUrl("bot:dog");
+        userService.updateMyProfile(id.toString(), request);
+        assertThat(user.getAvatarUrl()).isEqualTo("bot:dog");
     }
 
     @Test

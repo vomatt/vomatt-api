@@ -2,6 +2,8 @@ package com.vomatt.users;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -14,6 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.util.Arrays;
 import java.util.List;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -25,6 +28,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.PathContainer;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -35,7 +41,9 @@ import com.vomatt.common.exception.GlobalExceptionHandler;
 import com.vomatt.common.i18n.LocalizedMessageService;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.security.SecurityEndpoints;
+import com.vomatt.common.security.UserPrincipal;
 import com.vomatt.users.dto.UserDto;
+import com.vomatt.users.dto.UserProfileResponse;
 import com.vomatt.votes.VoteService;
 import com.vomatt.votes.dto.VoteResponse;
 
@@ -56,6 +64,60 @@ class UserControllerTest {
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler(messageService))
                 .build();
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
+
+    private void signIn(String userId) {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new UserPrincipal(userId, "alice@example.com", List.of("user")), null,
+                AuthorityUtils.createAuthorityList("ROLE_USER")));
+    }
+
+    @Test
+    @DisplayName("should accept every bot kind as avatarUrl when updating profile")
+    void shouldAcceptAvatarUrlWhenBotKindKnown() throws Exception {
+        signIn("u1");
+        when(userService.updateMyProfile(eq("u1"), any())).thenAnswer(inv -> new UserProfileResponse("alice", null, null,
+                inv.<com.vomatt.users.dto.UpdateProfileRequest>getArgument(1).getAvatarUrl(), null, 0, 0,
+                null, null, null, null, null, null));
+
+        for (String kind : BotAvatar.KINDS) {
+            mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"avatarUrl\":\"bot:" + kind + "\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.avatarUrl").value("bot:" + kind));
+        }
+        assertThat(BotAvatar.KINDS).hasSize(48).doesNotHaveDuplicates();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"bot:unicorn", "boba", "bot:", "bot:Boba", "bot:boba ", "https://cdn.example.com/a.png", ""})
+    @DisplayName("should reject avatarUrl when it is not a known bot kind")
+    void shouldRejectAvatarUrlWhenNotBotKind(String avatarUrl) throws Exception {
+        signIn("u1");
+        mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"avatarUrl\":\"" + avatarUrl + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("common.validation_failed"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith("avatarUrl:")));
+        verifyNoInteractions(userService);
+    }
+
+    @Test
+    @DisplayName("should leave avatarUrl unchanged when omitted")
+    void shouldPassNullAvatarUrlWhenOmitted() throws Exception {
+        signIn("u1");
+        when(userService.updateMyProfile(eq("u1"), argThat(r -> r.getAvatarUrl() == null && "Al".equals(r.getDisplayName()))))
+                .thenReturn(new UserProfileResponse("alice", "Al", null, "bot:boba", null, 0, 0,
+                        null, null, null, null, null, null));
+
+        mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON).content("{\"displayName\":\"Al\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.avatarUrl").value("bot:boba"));
     }
 
     @Test

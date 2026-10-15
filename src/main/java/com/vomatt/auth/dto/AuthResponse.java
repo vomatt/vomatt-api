@@ -50,7 +50,7 @@ public record AuthResponse(
                     allowableValues = {"user", "moderator", "admin"})
             List<String> roles,
 
-            @Schema(description = "Avatar URL. Null until the user or an OAuth provider (Google / LINE) supplies one", example = "https://cdn.example.com/avatar/abc.jpg",
+            @Schema(description = "Avatar as `bot:<kind>` (the bot cast), assigned at random on sign-up. Older accounts may hold an image URL or null", example = "bot:boba",
                     nullable = true)
             String avatarUrl,
 

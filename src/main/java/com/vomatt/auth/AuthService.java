@@ -12,6 +12,7 @@ import com.vomatt.common.sms.SmsService;
 import com.vomatt.entity.User;
 import com.vomatt.groups.GroupService;
 import com.vomatt.repository.UserRepository;
+import com.vomatt.users.BotAvatar;
 import com.vomatt.votes.VoteService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -297,16 +298,11 @@ public class AuthService {
 
         String email = (String) response.get("email");
         String name = (String) response.getOrDefault("name", "");
-        String picture = (String) response.get("picture");
 
         // Google tokeninfo usually returns email_verified as the string "true"/"false", occasionally as a boolean; parse defensively
         boolean emailVerified = "true".equals(String.valueOf(response.get("email_verified")));
 
         User user = findOrCreateUserByEmail(User.normalizeEmail(email), name, "google", emailVerified);
-        if (picture != null && user.getAvatarUrl() == null) {
-            user.setAvatarUrl(picture);
-            userRepository.save(user);
-        }
         return buildAuthResponse(user);
     }
 
@@ -371,15 +367,10 @@ public class AuthService {
         }
 
         String displayName = (String) lineProfile.getOrDefault("displayName", "");
-        String pictureUrl = (String) lineProfile.get("pictureUrl");
 
         // LINE's verify endpoint only returns the email when it is verified; otherwise the synthesized
         // line_<userId>@line.oauth is unique and cannot be set by an attacker to a victim's real email -> both cases are safely treated as verified
         User user = findOrCreateUserByEmail(User.normalizeEmail(email), displayName, "line", true);
-        if (pictureUrl != null && user.getAvatarUrl() == null) {
-            user.setAvatarUrl(pictureUrl);
-            userRepository.save(user);
-        }
         return buildAuthResponse(user);
     }
 
@@ -539,6 +530,7 @@ public class AuthService {
                         .username(generateUsername(email.split("@")[0]))
                         .displayName((fullName != null && !fullName.isBlank()) ? fullName : email.split("@")[0])
                         .authMethod(authMethod)
+                        .avatarUrl(BotAvatar.random())
                         .build();
                 return userRepository.save(newUser);
             });
@@ -555,6 +547,7 @@ public class AuthService {
                     .username(generateUsername("user"))
                     .displayName(phone)
                     .authMethod("phone_otp")
+                    .avatarUrl(BotAvatar.random())
                     .build();
             return userRepository.save(newUser);
         });

@@ -11,6 +11,7 @@ public interface UserProfileProjection {
     String getUsername();
     String getDisplayName();
     String getBio();
+    String getAvatarUrl();
     OffsetDateTime getCreatedAt();
     Long getTotalPolls();
     Long getTotalVotes();

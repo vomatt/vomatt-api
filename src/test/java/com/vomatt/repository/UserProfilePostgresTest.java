@@ -24,6 +24,7 @@ class UserProfilePostgresTest extends PostgresRepositoryTest {
     void shouldCountOnlyOpenedPolls() {
         OffsetDateTime now = OffsetDateTime.now();
         User owner = persistUser("pp-" + System.nanoTime());
+        owner.setAvatarUrl("bot:dog");
         persistPoll(owner, now.minusHours(1), now.plusDays(1), "A", "B");   // Open
         persistPoll(owner, now.minusDays(3), now.minusDays(1), "A", "B");   // Ended
         persistPoll(owner, now.plusHours(1), now.plusDays(1), "A", "B");    // Scheduled
@@ -35,6 +36,7 @@ class UserProfilePostgresTest extends PostgresRepositoryTest {
 
         assertThat(profile.getTotalPolls()).isEqualTo(2L);
         assertThat(profile.getActive()).isTrue();
+        assertThat(profile.getAvatarUrl()).isEqualTo("bot:dog");
     }
 
     @Test

@@ -43,6 +43,8 @@ sequenceDiagram
 | 2 | `POST /api/auth/send-otp` | OTP is valid for 180 seconds by default; resending to the same email has a cooldown (default 180 seconds) |
 | 3 | `POST /api/auth/verify-otp` | Success consumes the OTP; a new email automatically creates an account |
 
+Emails are trimmed and lower-cased. A Gmail address (`gmail.com` / `googlemail.com`) also loses its dots and `+tag` and moves to `gmail.com`, so `A.B+news@GoogleMail.com` and `ab@gmail.com` are one account. `user.email` comes back in this canonical form.
+
 ## 3. Phone OTP login / signup
 
 ```mermaid
@@ -58,6 +60,7 @@ sequenceDiagram
 
 - Omitting `type` is the same as `login`; the phone number must then already be registered, otherwise 400 `auth.phone.not_registered`. For new numbers, send `type: "signup"`.
 - `verify-otp` has no `type`: if the number does not exist an account is created; if it exists the user is logged in.
+- Numbers are stored as E.164 with Taiwan as the default region: a Taiwan mobile number `09xxxxxxxx` or `+` country code and number are accepted, spaces, `-`, `(` and `)` are ignored. `0912345678` and `+886912345678` are the same number, and `user.phoneNumber` comes back as `+886912345678`. Any other format gets 400 `auth.phone.invalid`.
 
 ## 4. Google / LINE / Apple sign-in
 
@@ -165,9 +168,9 @@ async function request(input, init) {
 |------|------|
 | Any login method (OTP / Google / LINE / Apple) | 403 `auth.account_banned`; no token issued |
 | refresh | 401 `auth.refresh_token.invalid`, and all of that user's refresh tokens are revoked |
-| An access token already held and not yet expired | Not blocked immediately; it can be used until the access token expires, after which refresh fails and the user is logged out |
+| An access token already held and not yet expired | Reads (GET / HEAD / OPTIONS) keep working until it expires; any other request outside `/api/auth/**` gets 403 `auth.account_banned` right away. Once it expires, refresh fails and the user is logged out |
 
-UI: on `auth.account_banned` at login, show "This account has been suspended" and do not retry.
+UI: on `auth.account_banned`, at login or on any write, show "This account has been suspended" and do not retry.
 
 ## 9. Admin console login (`checkRole`)
 
@@ -186,11 +189,12 @@ UI: on `auth.account_banned` at login, show "This account has been suspended" an
 | `auth.otp.resend_cooldown` | 400 | Resent during the cooldown; `message` includes the remaining seconds | Allow resend only after the countdown |
 | `auth.email.send_failed` / `auth.sms.send_failed` | 400 | Failed to send the email / SMS | Ask the user to retry later |
 | `auth.phone.not_registered` | 400 | `type=login` but the number is not registered | Go to the signup flow (`type=signup`) |
+| `auth.phone.invalid` | 400 | The number is neither `09xxxxxxxx` nor `+` country code and number | Show the accepted formats next to the field |
 | `auth.otp.invalid_or_expired` | 401 | No valid OTP (expired, already used, or never sent) | Guide the user to resend |
 | `auth.invalid_otp` | 401 | Wrong code | Ask the user to re-enter |
 | `auth.otp.too_many_attempts` | 401 | 5 wrong attempts in a row; the OTP has been invalidated | Require a resend |
 | `auth.admin.forbidden` | 403 | `checkRole` but not an admin | Show no permission |
-| `auth.account_banned` | 403 | Account is suspended | Show that the account is suspended |
+| `auth.account_banned` | 403 | Account is suspended (at login, or on a write with a still-valid access token) | Show that the account is suspended |
 | `auth.email_not_verified` | 401 | The OAuth provider's email is not verified | Suggest another login method |
 | `auth.google.*` / `auth.line.*` / `auth.apple.*` | 400 / 401 | Provider credential is invalid or the backend is not configured | Suggest another method or retry later |
 | `common.service_unavailable` | 503 | Apple key endpoint is down | Retry (exponential backoff) |

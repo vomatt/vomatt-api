@@ -94,6 +94,7 @@ Before the Poll is Ended, every level returns 403 `vote.results.sealed`. Partici
 | `vote.forbidden` | 403 | A non-owner edits / Closes | Hide the edit / Close entry |
 | `vote.results.sealed` | 403 | `/results` or `/voters` requested before the Poll is Ended | Show only Turnout |
 | `vote.voters.hidden` | 403 | Voter Visibility does not allow the current user | Do not show the voter list |
+| `common.rate_limited` | 429 | More than 30 Ballot writes by this account within 60 seconds (no `Retry-After`), or the per-IP limit | Disable the vote button and retry after about a minute |
 | `vote.options.min` / `vote.options.max` | 400 | Fewer than 2 or more than 10 options | Form hint |
 | `vote.end_time.past` | 400 | `endTime` is in the past | Form hint |
 | `vote.end_time.before_start` | 400 | `endTime` is not later than `startTime` | Form hint |

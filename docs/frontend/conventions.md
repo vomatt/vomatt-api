@@ -63,4 +63,5 @@ List endpoints return `ApiResponse<CursorResponse<T>>`:
 - All limited requests from one IP share one counter.
 - Counted per client IP; default 300 requests per 60 seconds (fixed window). Auth and write requests use separate counters, so heavy voting does not block login or token refresh. Exceeding it returns 429 + `Retry-After`.
 - If Redis fails, `/api/auth/**` fails closed (returns 429 directly) while other paths are let through.
+- Ballot writes (cast, Retract, remove Selection) also have a per-account limit: 30 per 60 seconds (fixed window), on top of the per-IP one. Exceeding it returns 429 `common.rate_limited` **without** `Retry-After`; wait about a minute. If Redis fails this check lets the request through.
 - Frontend: on 429, count down using `Retry-After` and disable the submit button during the countdown. When the rate limiter itself is down, auth endpoints return 429 without `Retry-After`; show "try again later".

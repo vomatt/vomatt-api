@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -16,15 +18,19 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.MediaType;
 import org.springframework.http.server.PathContainer;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.util.pattern.PathPatternParser;
 
+import com.vomatt.common.constant.ReservedUsernames;
 import com.vomatt.common.exception.GlobalExceptionHandler;
 import com.vomatt.common.i18n.LocalizedMessageService;
 import com.vomatt.common.response.CursorResponse;
@@ -87,6 +93,24 @@ class UserControllerTest {
         mockMvc.perform(get("/api/users/search").param("username", "  "))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("common.missing_param"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"search", "account", "explore", "login", "notifications", "poll", "sanity", "api", "admin",
+            "settings"})
+    @DisplayName("should reject a reserved username on profile update")
+    void shouldRejectProfileUpdateWhenUsernameReserved(String username) throws Exception {
+        mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"" + username + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("common.validation_failed"));
+        verifyNoInteractions(userService);
+    }
+
+    @Test
+    @DisplayName("should accept usernames that only contain a reserved name")
+    void shouldAcceptUsernameWhenOnlyContainingReservedName() {
+        assertThat(List.of("admin_1", "searcher", "my_polls", "poll_fan")).allMatch(u -> u.matches(ReservedUsernames.USERNAME_PATTERN));
     }
 
     @Test

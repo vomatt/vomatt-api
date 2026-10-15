@@ -166,12 +166,12 @@ public class UserController {
     @Operation(summary = "Update my profile", description = """
             **Auth**: required
             **Precondition**: none
-            **Behavior**: updates `username`, `displayName` and/or `bio`. Sending the current `username` is a no-op. A field that is omitted or `null` is left unchanged \
+            **Behavior**: updates `username`, `displayName` and/or `bio`. Sending the current `username` is a no-op, except that an older account holding a reserved name gets 400 (omit `username` when unchanged). A field that is omitted or `null` is left unchanged \
             (`null` cannot be used to clear a value; send an empty string instead). Returns the public profile after the update, \
             so the optional fields are masked by the caller's own visibility settings.
             **Side effects**: persists the new values; after a `username` change the old public profile path returns 404
             **Errors**:
-            - 400 `common.validation_failed`: `username` is not 3-50 characters of [a-z0-9_] or is `search`, \
+            - 400 `common.validation_failed`: `username` is not 3-50 characters of [a-z0-9_] or is a reserved name (see the `username` schema), \
             `displayName` exceeds 100 characters, or `bio` exceeds 500 characters
             - 404 `user.not_found`: the account no longer exists
             - 409 `user.username.taken`: another account already uses `username`""")

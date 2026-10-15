@@ -470,6 +470,23 @@ class AuthServiceTest {
     }
 
     @Test
+    void shouldResolveSameAccountWhenGmailVariantVerifiesOtp() {
+        User existing = User.builder().id(UUID.randomUUID()).email("ab@gmail.com")
+                .roles(new String[] { "user" }).build();
+        when(redisService.get(eq("otp:email"), eq("ab@gmail.com"), eq(OtpRecord.class)))
+                .thenReturn(new OtpRecord("123456", "login", Instant.now(), 0));
+        when(redisService.delete(eq("otp:email"), eq("ab@gmail.com"))).thenReturn(true);
+        when(userRepository.findByEmail("ab@gmail.com")).thenReturn(Optional.of(existing));
+        when(jwtUtil.generateToken(anyString(), anyString(), any())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), anyString(), any())).thenReturn("mock-refresh-token");
+
+        AuthResponse response = authService.verifyOtp("A.B+x@gmail.com", null, "123456", false);
+
+        assertThat(response.user().id()).isEqualTo(existing.getId().toString());
+        verify(voteService).bindEmailInvitees(existing);
+    }
+
+    @Test
     void shouldBindEmailInviteesWhenGoogleEmailVerified() {
         ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
         ReflectionTestUtils.setField(authService, "googleTokenInfoUrl", "https://oauth2.googleapis.com/tokeninfo");

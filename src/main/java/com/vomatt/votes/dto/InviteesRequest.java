@@ -23,7 +23,7 @@ public class InviteesRequest {
     private List<@NotNull(message = "Invitee ID cannot be null") UUID> userIds;
 
     @Size(max = 100, message = "Maximum 100 email addresses can be invited at once")
-    @Schema(description = "Up to 100 email addresses to invite; null elements and invalid addresses are rejected. Lower-cased and trimmed like sign-in does; "
+    @Schema(description = "Up to 100 email addresses to invite; null elements and invalid addresses are rejected. Normalized like sign-in does (lower-cased, trimmed, Gmail in canonical form); "
             + "addresses already invited, duplicates and the owner's own address are ignored. Each address is listed as entered and gets an invitation email; "
             + "an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in",
             example = "[\"carol@example.com\"]", nullable = true)

@@ -1208,10 +1208,10 @@
             "type" : "array"
           },
           "inviteeEmails" : {
-            "description" : "Email addresses to invite, for people who may not have an account yet; only for an INVITE_ONLY Poll (otherwise 400 `vote.invitee.not_invite_only`). At most 100; null elements and invalid addresses are rejected. Addresses are lower-cased and trimmed like sign-in does; duplicates and the owner's own address are ignored. Each address is listed as entered and gets an invitation email; an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in. On edit the list replaces the Invitees added by email (matched by address); null keeps them",
+            "description" : "Email addresses to invite, for people who may not have an account yet; only for an INVITE_ONLY Poll (otherwise 400 `vote.invitee.not_invite_only`). At most 100; null elements and invalid addresses are rejected. Addresses are normalized like sign-in does: lower-cased, trimmed, Gmail in canonical form; duplicates and the owner's own address are ignored. Each address is listed as entered and gets an invitation email; an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in. On edit the list replaces the Invitees added by email (matched by address); null keeps them",
             "example" : [ "carol@example.com" ],
             "items" : {
-              "description" : "Email addresses to invite, for people who may not have an account yet; only for an INVITE_ONLY Poll (otherwise 400 `vote.invitee.not_invite_only`). At most 100; null elements and invalid addresses are rejected. Addresses are lower-cased and trimmed like sign-in does; duplicates and the owner's own address are ignored. Each address is listed as entered and gets an invitation email; an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in. On edit the list replaces the Invitees added by email (matched by address); null keeps them",
+              "description" : "Email addresses to invite, for people who may not have an account yet; only for an INVITE_ONLY Poll (otherwise 400 `vote.invitee.not_invite_only`). At most 100; null elements and invalid addresses are rejected. Addresses are normalized like sign-in does: lower-cased, trimmed, Gmail in canonical form; duplicates and the owner's own address are ignored. Each address is listed as entered and gets an invitation email; an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in. On edit the list replaces the Invitees added by email (matched by address); null keeps them",
               "example" : "[\"carol@example.com\"]",
               "format" : "email",
               "maxLength" : 254,
@@ -1464,10 +1464,10 @@
         "description" : "Body to add members to a Group; at least one of `userIds` / `emails` must be non-empty",
         "properties" : {
           "emails" : {
-            "description" : "Up to 100 email addresses to add; null elements and invalid addresses are rejected. Lower-cased and trimmed like sign-in does; addresses already in the Group, duplicates and the owner's own address are ignored. Each address is listed as entered, whether or not it belongs to an account; nobody is notified",
+            "description" : "Up to 100 email addresses to add; null elements and invalid addresses are rejected. Normalized like sign-in does (lower-cased, trimmed, Gmail in canonical form); addresses already in the Group, duplicates and the owner's own address are ignored. Each address is listed as entered, whether or not it belongs to an account; nobody is notified",
             "example" : [ "carol@example.com" ],
             "items" : {
-              "description" : "Up to 100 email addresses to add; null elements and invalid addresses are rejected. Lower-cased and trimmed like sign-in does; addresses already in the Group, duplicates and the owner's own address are ignored. Each address is listed as entered, whether or not it belongs to an account; nobody is notified",
+              "description" : "Up to 100 email addresses to add; null elements and invalid addresses are rejected. Normalized like sign-in does (lower-cased, trimmed, Gmail in canonical form); addresses already in the Group, duplicates and the owner's own address are ignored. Each address is listed as entered, whether or not it belongs to an account; nobody is notified",
               "example" : "[\"carol@example.com\"]",
               "format" : "email",
               "maxLength" : 254,
@@ -1586,10 +1586,10 @@
         "description" : "Body to add Invitees to an Invite-only Poll; at least one of `userIds` / `emails` / `groupIds` must be non-empty",
         "properties" : {
           "emails" : {
-            "description" : "Up to 100 email addresses to invite; null elements and invalid addresses are rejected. Lower-cased and trimmed like sign-in does; addresses already invited, duplicates and the owner's own address are ignored. Each address is listed as entered and gets an invitation email; an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in",
+            "description" : "Up to 100 email addresses to invite; null elements and invalid addresses are rejected. Normalized like sign-in does (lower-cased, trimmed, Gmail in canonical form); addresses already invited, duplicates and the owner's own address are ignored. Each address is listed as entered and gets an invitation email; an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in",
             "example" : [ "carol@example.com" ],
             "items" : {
-              "description" : "Up to 100 email addresses to invite; null elements and invalid addresses are rejected. Lower-cased and trimmed like sign-in does; addresses already invited, duplicates and the owner's own address are ignored. Each address is listed as entered and gets an invitation email; an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in",
+              "description" : "Up to 100 email addresses to invite; null elements and invalid addresses are rejected. Normalized like sign-in does (lower-cased, trimmed, Gmail in canonical form); addresses already invited, duplicates and the owner's own address are ignored. Each address is listed as entered and gets an invitation email; an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in",
               "example" : "[\"carol@example.com\"]",
               "format" : "email",
               "maxLength" : 254,
@@ -1894,7 +1894,7 @@
             "type" : "string"
           },
           "email" : {
-            "description" : "Email address; the server lower-cases and trims it. Required in practice: a missing or blank value yields 400 auth.identifier.required",
+            "description" : "Email address; the server lower-cases and trims it, and stores a Gmail address in canonical form (no +tag or dots, domain gmail.com). Required in practice: a missing or blank value yields 400 auth.identifier.required",
             "example" : "user@example.com",
             "format" : "email",
             "type" : "string"
@@ -4674,7 +4674,7 @@
     },
     "/api/auth/send-otp" : {
       "post" : {
-        "description" : "**Auth**: public\n**Precondition**: none; the same endpoint serves login and signup (the server picks which by whether the email is registered)\n**Behavior**: generates a 6-digit OTP, stores it with a TTL (default 180 s) and emails it. The email is lower-cased and trimmed. If `checkRole` is \"true\", only an existing admin account may request an OTP (admin console login)\n**Side effects**: sends an email; replaces any previous OTP for this address. A resend is refused during the cooldown (default 180 s)\n**Errors**:\n- 400 `auth.identifier.required`: `email` is missing or blank\n- 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left\n- 400 `auth.email.send_failed`: the email provider rejected the message\n- 403 `auth.admin.forbidden`: `checkRole` is \"true\" and the account is not an admin",
+        "description" : "**Auth**: public\n**Precondition**: none; the same endpoint serves login and signup (the server picks which by whether the email is registered)\n**Behavior**: generates a 6-digit OTP, stores it with a TTL (default 180 s) and emails it. The email is lower-cased and trimmed; a Gmail address (gmail.com / googlemail.com) also loses its +tag and dots and moves to gmail.com. If `checkRole` is \"true\", only an existing admin account may request an OTP (admin console login)\n**Side effects**: sends an email; replaces any previous OTP for this address. A resend is refused during the cooldown (default 180 s)\n**Errors**:\n- 400 `auth.identifier.required`: `email` is missing or blank\n- 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left\n- 400 `auth.email.send_failed`: the email provider rejected the message\n- 403 `auth.admin.forbidden`: `checkRole` is \"true\" and the account is not an admin",
         "operationId" : "sendOtp",
         "requestBody" : {
           "content" : {
@@ -5308,7 +5308,7 @@
     },
     "/api/groups/{groupId}/members" : {
       "delete" : {
-        "description" : "**Auth**: required (owner only)\n**Precondition**: none\n**Behavior**: removes the member added by this address (lower-cased and trimmed like sign-in does), whether or not it belongs to an account. Idempotent: succeeds, changing nothing, when the address is not a member. Polls the Group was already invited into keep their Invitees. Returns the full member list.\n**Side effects**: the action is audit-logged.\n**Errors**:\n- 404 `group.not_found`: the Group does not exist or belongs to someone else",
+        "description" : "**Auth**: required (owner only)\n**Precondition**: none\n**Behavior**: removes the member added by this address (normalized like sign-in does: lower-cased, trimmed, Gmail in canonical form), whether or not it belongs to an account. Idempotent: succeeds, changing nothing, when the address is not a member. Polls the Group was already invited into keep their Invitees. Returns the full member list.\n**Side effects**: the action is audit-logged.\n**Errors**:\n- 404 `group.not_found`: the Group does not exist or belongs to someone else",
         "operationId" : "removeEmailMember",
         "parameters" : [ {
           "description" : "Group ID",
@@ -9217,7 +9217,7 @@
     },
     "/api/votes/{voteId}/invitees" : {
       "delete" : {
-        "description" : "**Auth**: required (owner only)\n**Precondition**: the Poll is INVITE_ONLY and Scheduled or Open, and the Invitee holds no Ballot\n**Behavior**: removes the Invitee added by this address (lower-cased and trimmed like sign-in does), whether or not it belongs to an account; from then on the Poll is 404 `vote.not_found` for that person and verifying the address no longer grants access. Idempotent: succeeds, changing nothing, when the address is not an Invitee. Returns the full Invitee list.\n**Side effects**: `inviteeCount` drops; the action is audit-logged. When every remaining Invitee of an Open Poll holds a Ballot (and at least one remains), the Poll Ends now (`endTime` moves, `deadline` stays) and the Ended Notification follows. This check also runs when nothing was removed, so even a no-op call can end such a Poll.\n**Errors**:\n- 400 `vote.invitee.has_ballot`: the Invitee holds a Ballot, so counted Ballots are never orphaned\n- 400 `vote.invitee.not_invite_only`: the Poll is not INVITE_ONLY\n- 400 `vote.ended`: the Poll has Ended\n- 403 `vote.forbidden`: the caller is not the owner\n- 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee\n",
+        "description" : "**Auth**: required (owner only)\n**Precondition**: the Poll is INVITE_ONLY and Scheduled or Open, and the Invitee holds no Ballot\n**Behavior**: removes the Invitee added by this address (normalized like sign-in does: lower-cased, trimmed, Gmail in canonical form), whether or not it belongs to an account; from then on the Poll is 404 `vote.not_found` for that person and verifying the address no longer grants access. Idempotent: succeeds, changing nothing, when the address is not an Invitee. Returns the full Invitee list.\n**Side effects**: `inviteeCount` drops; the action is audit-logged. When every remaining Invitee of an Open Poll holds a Ballot (and at least one remains), the Poll Ends now (`endTime` moves, `deadline` stays) and the Ended Notification follows. This check also runs when nothing was removed, so even a no-op call can end such a Poll.\n**Errors**:\n- 400 `vote.invitee.has_ballot`: the Invitee holds a Ballot, so counted Ballots are never orphaned\n- 400 `vote.invitee.not_invite_only`: the Poll is not INVITE_ONLY\n- 400 `vote.ended`: the Poll has Ended\n- 403 `vote.forbidden`: the caller is not the owner\n- 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee\n",
         "operationId" : "removeEmailInvitee",
         "parameters" : [ {
           "description" : "Poll ID",

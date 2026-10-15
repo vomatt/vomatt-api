@@ -23,7 +23,7 @@ public class GroupMembersRequest {
     private List<@NotNull(message = "Member ID cannot be null") UUID> userIds;
 
     @Size(max = 100, message = "Maximum 100 email addresses can be added at once")
-    @Schema(description = "Up to 100 email addresses to add; null elements and invalid addresses are rejected. Lower-cased and trimmed like sign-in does; "
+    @Schema(description = "Up to 100 email addresses to add; null elements and invalid addresses are rejected. Normalized like sign-in does (lower-cased, trimmed, Gmail in canonical form); "
             + "addresses already in the Group, duplicates and the owner's own address are ignored. Each address is listed as entered, "
             + "whether or not it belongs to an account; nobody is notified",
             example = "[\"carol@example.com\"]", nullable = true)

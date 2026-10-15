@@ -108,6 +108,19 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should store a Gmail variant in canonical form and bind it to the user who verifies another variant")
+    void shouldBindEmailInviteeWhenGmailVariantVerified() {
+        String local = "carol" + System.nanoTime();
+        List<InviteeResponse> invitees = inviteEmail("Ca.rol" + local.substring(5) + "+polls@googlemail.com");
+
+        User carol = signUpAndBind(User.normalizeEmail("c.a.r.o.l" + local.substring(5) + "@gmail.com"));
+
+        assertThat(invitees).singleElement().satisfies(i -> assertThat(i.email()).isEqualTo(local + "@gmail.com"));
+        assertThat(inviteeRepository.findByVoteId(poll.getId())).singleElement()
+                .satisfies(i -> assertThat(i.getUser().getId()).isEqualTo(carol.getId()));
+    }
+
+    @Test
     @DisplayName("should give an unbound email no Invitation, Ended Notification, My Polls entry or access; after binding the user gets them")
     void shouldNotifyOnlyAfterBindingWhenInvitedByEmail() {
         inviteEmail(carolEmail);

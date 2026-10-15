@@ -10,7 +10,7 @@ public record UserDto(
         String username,
         @Schema(description = "Display name; null if the owner hid it (public by default) or never set one", example = "Alice", nullable = true)
         String displayName,
-        @Schema(description = "Avatar URL; null until the user or an OAuth provider (Google / LINE) supplies one",
-                example = "https://cdn.example.com/avatar/abc.jpg", nullable = true)
+        @Schema(description = "Avatar as `bot:<kind>` (the bot cast). Older accounts may hold an image URL; null if never set",
+                example = "bot:boba", nullable = true)
         String avatarUrl
 ) {}

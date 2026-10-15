@@ -168,7 +168,7 @@ public class UserController {
             **Auth**: required
             **Precondition**: none
             **Behavior**: updates `username`, `displayName`, `bio` and/or `avatarUrl`. `avatarUrl` must be `bot:<kind>` with one of the bot cast kinds. Sending the current `username` is a no-op, except that an older account holding a reserved name gets 400 (omit `username` when unchanged). A field that is omitted or `null` is left unchanged \
-            (`null` cannot be used to clear a value; send an empty string instead). Returns the public profile after the update, \
+            (`null` cannot be used to clear a value; send an empty string instead, except `avatarUrl`, which cannot be cleared). Returns the public profile after the update, \
             so the optional fields are masked by the caller's own visibility settings.
             **Side effects**: persists the new values; after a `username` change the old public profile path returns 404
             **Errors**:
@@ -188,7 +188,7 @@ public class UserController {
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"items":[{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice","avatarUrl":"https://cdn.example.com/avatar/abc.jpg"},{"id":"0199c1a2-8c4f-7e5b-a021-3d6f9b2c4e58","username":"alicia","displayName":null,"avatarUrl":null}],"nextCursor":null},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"items":[{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice","avatarUrl":"bot:boba"},{"id":"0199c1a2-8c4f-7e5b-a021-3d6f9b2c4e58","username":"alicia","displayName":null,"avatarUrl":null}],"nextCursor":null},"message":null,"errorCode":null,"error":null}""")))
     @Operation(summary = "Search users by username", description = """
             **Auth**: required
             **Precondition**: `username` is not blank

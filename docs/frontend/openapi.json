@@ -2075,12 +2075,12 @@
             "type" : "string"
           },
           "username" : {
-            "description" : "New username, used in the public profile path: 3-50 characters of [a-z0-9_], not `search`; null or omitted keeps the current value",
+            "description" : "New username, used in the public profile path: 3-50 characters of [a-z0-9_], not a reserved name (search, account, explore, login, notifications, poll, sanity, api, me, my, admin, settings); null or omitted keeps the current value",
             "example" : "alice_c",
             "maxLength" : 50,
             "minLength" : 3,
             "nullable" : true,
-            "pattern" : "^(?!search$)[a-z0-9_]{3,50}$",
+            "pattern" : "^(?!(?:search|account|explore|login|notifications|poll|sanity|api|me|my|admin|settings)$)[a-z0-9_]{3,50}$",
             "type" : "string"
           }
         },
@@ -6672,7 +6672,7 @@
         "tags" : [ "User" ]
       },
       "patch" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: updates `username`, `displayName`, `bio` and/or `avatarUrl`. `avatarUrl` must be `bot:<kind>` with one of the bot cast kinds. Sending the current `username` is a no-op. A field that is omitted or `null` is left unchanged (`null` cannot be used to clear a value; send an empty string instead, except `avatarUrl`, which cannot be cleared). Returns the public profile after the update, so the optional fields are masked by the caller's own visibility settings.\n**Side effects**: persists the new values; after a `username` change the old public profile path returns 404\n**Errors**:\n- 400 `common.validation_failed`: `username` is not 3-50 characters of [a-z0-9_] or is `search`, `displayName` exceeds 100 characters, `bio` exceeds 500 characters, or `avatarUrl` is not a known `bot:<kind>`\n- 404 `user.not_found`: the account no longer exists\n- 409 `user.username.taken`: another account already uses `username`",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: updates `username`, `displayName`, `bio` and/or `avatarUrl`. `avatarUrl` must be `bot:<kind>` with one of the bot cast kinds. Sending the current `username` is a no-op, except that an older account holding a reserved name gets 400 (omit `username` when unchanged). A field that is omitted or `null` is left unchanged (`null` cannot be used to clear a value; send an empty string instead, except `avatarUrl`, which cannot be cleared). Returns the public profile after the update, so the optional fields are masked by the caller's own visibility settings.\n**Side effects**: persists the new values; after a `username` change the old public profile path returns 404\n**Errors**:\n- 400 `common.validation_failed`: `username` is not 3-50 characters of [a-z0-9_] or is a reserved name (see the `username` schema), `displayName` exceeds 100 characters, `bio` exceeds 500 characters, or `avatarUrl` is not a known `bot:<kind>`\n- 404 `user.not_found`: the account no longer exists\n- 409 `user.username.taken`: another account already uses `username`",
         "operationId" : "updateMyProfile",
         "requestBody" : {
           "content" : {

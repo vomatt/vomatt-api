@@ -1,6 +1,7 @@
 package com.vomatt.auth;
 
 import com.vomatt.auth.dto.AuthResponse;
+import com.vomatt.common.constant.ReservedUsernames;
 import com.vomatt.common.email.EmailService;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
@@ -427,6 +428,17 @@ class AuthServiceTest {
         assertThat(result.getUsername()).matches("fresh_\\d{4}");
         // When fullName is empty, displayName falls back to the email local part
         assertThat(result.getDisplayName()).isEqualTo("fresh");
+    }
+
+    @Test
+    void shouldNeverGenerateReservedUsernameWhenEmailLocalPartIsReserved() {
+        when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.empty());
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        User result = authService.findOrCreateUserByEmail("admin@example.com", null, "email_otp", true);
+
+        assertThat(result.getUsername()).matches("admin_\\d{4}");
+        assertThat(ReservedUsernames.contains(result.getUsername())).isFalse();
     }
 
     // ── Email Invitee binding: only a verified email turns email Invitees into user Invitees ────────────

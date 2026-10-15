@@ -171,7 +171,7 @@ public class UserController {
             so the optional fields are masked by the caller's own visibility settings.
             **Side effects**: persists the new values; after a `username` change the old public profile path returns 404
             **Errors**:
-            - 400 `common.validation_failed`: `username` is not 3-50 characters of [a-z0-9_] or is `search`, \
+            - 400 `common.validation_failed`: `username` is not 3-50 characters of [a-z0-9_] or is a reserved name (see the `username` schema), \
             `displayName` exceeds 100 characters, or `bio` exceeds 500 characters
             - 404 `user.not_found`: the account no longer exists
             - 409 `user.username.taken`: another account already uses `username`""")

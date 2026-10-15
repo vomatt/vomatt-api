@@ -2,6 +2,10 @@
 
 Contract changes that affect the frontend. 💥 BREAKING means frontend code must change. See [openapi.json](openapi.json) for the contract snapshot and [error-codes.md](error-codes.md) for error codes.
 
+## 2026-10-15
+
+- Reserved usernames: `PATCH /api/users/me` rejects a `username` equal to `search`, `account`, `explore`, `login`, `notifications`, `poll`, `sanity`, `api`, `admin` or `settings` with 400 `common.validation_failed` (field error on `username`), because profiles live at `/{username}` on the web and would shadow those routes. `me` and `my` are reserved too but already fail the 3-character minimum. The `[a-z0-9_]{3,50}` rule is unchanged, names that only contain a reserved word (e.g. `admin_1`) are allowed, and existing accounts that already hold a reserved name keep it (such an account gets the same 400 if it sends its current `username` back, so omit `username` when it is unchanged). Usernames generated at sign-up are never reserved.
+
 ## 2026-10-14
 
 - Invite-only auto-end: an Open `INVITE_ONLY` Poll Ends as soon as every Invitee holds a Ballot, after `POST /api/votes/{voteId}/vote`, `DELETE /api/votes/{voteId}/invitees/{userId}` or `DELETE /api/votes/{voteId}/invitees?email=` (removing the last Invitee without a Ballot while at least one remains). The owner's own Ballot never counts, a pending email Invitee (not yet tied to a user) keeps the Poll Open, and a Poll with no Invitees never auto-ends. Verifying an email can also end it, when the verified address's pending row was the last one blocking and is dropped because that user was already invited by ID or owns the Poll. It ends like a Close: `endTime` moves to now, `deadline` stays, results unseal and the Ended Notification follows. Later Ballots get 400 `vote.ended`. Retract never ends a Poll. A remove-Invitee call runs the check even when it removes nothing, so it can end a Poll whose Invitees have all already voted.

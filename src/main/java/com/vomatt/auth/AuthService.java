@@ -1,6 +1,7 @@
 package com.vomatt.auth;
 
 import com.vomatt.auth.dto.AuthResponse;
+import com.vomatt.common.constant.ReservedUsernames;
 import com.vomatt.common.constant.UserRole;
 import com.vomatt.common.email.EmailService;
 import com.vomatt.common.exception.ApiException;
@@ -560,7 +561,7 @@ public class AuthService {
     }
 
     /**
-     * Generates a unique username from the email local part (or a fixed prefix): keeps only [a-z0-9_], at most 40 chars, plus a 4-digit random suffix to avoid collisions.
+     * Generates a unique username from the email local part (or a fixed prefix): keeps only [a-z0-9_], at most 40 chars, plus a 4-digit random suffix to avoid collisions; never returns a reserved username.
      */
     private String generateUsername(String seed) {
         String base = seed.toLowerCase().replaceAll("[^a-z0-9_]", "");
@@ -569,7 +570,7 @@ public class AuthService {
         String candidate;
         do {
             candidate = base + "_" + "%04d".formatted(RANDOM.nextInt(10000));
-        } while (userRepository.existsByUsername(candidate));
+        } while (ReservedUsernames.contains(candidate) || userRepository.existsByUsername(candidate));
         return candidate;
     }
 

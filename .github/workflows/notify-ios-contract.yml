@@ -1,0 +1,24 @@
+# Tells vomatt-ios that the API contract changed, so its sync workflow
+# can add the matching app features and open a PR.
+name: Notify vomatt-ios of contract change
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/frontend/openapi.json
+  workflow_dispatch:
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send repository_dispatch to vomatt-ios
+        env:
+          # Fine-grained PAT with "Contents: read and write" on vomatt/vomatt-ios
+          GH_TOKEN: ${{ secrets.IOS_DISPATCH_TOKEN }}
+        run: |
+          gh api repos/vomatt/vomatt-ios/dispatches \
+            -f event_type=api-contract-updated \
+            -f "client_payload[sha]=${{ github.sha }}" \
+            -f "client_payload[before]=${{ github.event.before || '' }}"

@@ -1,6 +1,7 @@
 package com.vomatt.votes;
 
 import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.util.AfterCommit;
 import com.vomatt.common.email.EmailService;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.i18n.MessageKey;
@@ -29,8 +30,6 @@ import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.vomatt.votes.dto.CreateVoteRequest;
@@ -59,6 +58,7 @@ import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.BallotSelection;
 import com.vomatt.repository.IdCount;
 import com.vomatt.repository.InviteeRepository;
+import com.vomatt.repository.LockTimeout;
 import com.vomatt.repository.NotificationReadRepository;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.repository.VoteListRepository;
@@ -90,6 +90,7 @@ public class VoteService {
     private final GroupService groupService;
     private final UserPreferenceRepository preferenceRepository;
     private final TransactionTemplate transactionTemplate;
+    private final LockTimeout lockTimeout;
 
     private static final String INVITATION_COUNTER_NS = "email:invitation";
     private static final String BALLOT_RATE_LIMIT_NS = "rate:limit:ballot";
@@ -671,17 +672,7 @@ public class VoteService {
         String inviterName = owner.getDisplayName() != null ? owner.getDisplayName() : owner.getUsername();
         String title = vote.getTitle();
         Locale locale = LocaleContextHolder.getLocale();
-        Runnable send = () -> emailService.sendInvitationEmails(recipients, inviterName, title, voteId, locale);
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            send.run();
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                send.run();
-            }
-        });
+        AfterCommit.run(() -> emailService.sendInvitationEmails(recipients, inviterName, title, voteId, locale));
     }
 
     /**
@@ -850,7 +841,7 @@ public class VoteService {
      */
     public Optional<Vote> lockVote(UUID voteId) {
         try {
-            voteRepository.setLockTimeout();
+            lockTimeout.apply();
             return voteRepository.findByIdForUpdate(voteId);
         } catch (PessimisticLockingFailureException e) {
             throw ApiException.conflict(MessageKey.COMMON_CONFLICT);

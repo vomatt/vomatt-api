@@ -19,6 +19,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -49,6 +51,7 @@ class UserServiceTest {
     @Mock RefreshTokenService refreshTokenService;
     @Mock VoteOptionRepository voteOptionRepository;
     @Mock VoteRepository voteRepository;
+    @Mock com.vomatt.repository.LockTimeout lockTimeout;
     @InjectMocks UserService userService;
 
     @Test
@@ -127,9 +130,41 @@ class UserServiceTest {
         assertThatThrownBy(() -> userService.requireAnotherActiveAdmin(admin))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.COMMON_CONFLICT));
-        InOrder order = inOrder(voteRepository, userRepository);
-        order.verify(voteRepository).setLockTimeout();
+        InOrder order = inOrder(lockTimeout, userRepository);
+        order.verify(lockTimeout).apply();
         order.verify(userRepository).lockActiveAdminIds();
+        verify(lockTimeout, never()).reset();
+    }
+
+    @Test
+    void shouldResetLockTimeoutWhenAdminRowsLocked() {
+        UUID id = UUID.randomUUID();
+        User admin = User.builder().id(id).username("a").roles(new String[] { "admin" }).build();
+        when(userRepository.lockActiveAdminIds()).thenReturn(List.of(id, UUID.randomUUID()));
+
+        userService.requireAnotherActiveAdmin(admin);
+
+        InOrder order = inOrder(lockTimeout, userRepository);
+        order.verify(lockTimeout).apply();
+        order.verify(userRepository).lockActiveAdminIds();
+        order.verify(lockTimeout).reset();
+    }
+
+    @Test
+    void shouldRevokeTokensOnlyAfterCommitWhenDeletingUser() {
+        UUID id = UUID.randomUUID();
+        User user = User.builder().id(id).username("u").build();
+        when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), "u@test.local", List.of("user")));
+
+            verify(refreshTokenService, never()).revokeAllForUser(any());
+            TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+            verify(refreshTokenService).revokeAllForUser(id.toString());
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test

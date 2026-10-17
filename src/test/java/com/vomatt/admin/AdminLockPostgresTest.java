@@ -1,12 +1,14 @@
 package com.vomatt.admin;
 
 import com.vomatt.entity.User;
+import com.vomatt.repository.LockTimeout;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.repository.UserRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Import;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -28,11 +30,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Two admins removing each other at once, with real commits: the last-admin guard's row lock makes the second wait
  * and then see the first one's change, so it cannot also pass.
  */
+@Import(LockTimeout.class)
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class AdminLockPostgresTest extends PostgresRepositoryTest {
 
     @Autowired UserRepository userRepository;
     @Autowired TransactionTemplate tx;
+    @Autowired LockTimeout lockTimeout;
 
     private final ExecutorService pool = Executors.newFixedThreadPool(2);
     private User alice;
@@ -102,6 +106,18 @@ class AdminLockPostgresTest extends PostgresRepositoryTest {
 
         release.countDown();
         guard.get(5, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void shouldRestoreDefaultLockTimeoutWhenReset() {
+        String timeout = tx.execute(s -> {
+            lockTimeout.apply();
+            userRepository.lockActiveAdminIds();
+            lockTimeout.reset();
+            return (String) em.createNativeQuery("SHOW lock_timeout").getSingleResult();
+        });
+
+        assertThat(timeout).isEqualTo("0");
     }
 
     private static void await(CountDownLatch latch) {

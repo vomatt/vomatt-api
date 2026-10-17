@@ -76,6 +76,7 @@ class VoteServiceTest {
     @Mock GroupService groupService;
     @Mock com.vomatt.repository.UserPreferenceRepository preferenceRepository;
     @Mock TransactionTemplate transactionTemplate;
+    @Mock com.vomatt.repository.LockTimeout lockTimeout;
     @Spy VoteMapper voteMapper = new VoteMapper();
 
     @InjectMocks

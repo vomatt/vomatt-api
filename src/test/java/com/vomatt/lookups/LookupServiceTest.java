@@ -81,11 +81,20 @@ class LookupServiceTest {
             Lookup active = buildLookup("CITY", "TPE", true, false);
             Lookup inactive = buildLookup("CITY", "KHH", false, false);
             when(lookupRepository.findByLookupTypeOrderBySeqAsc("CITY")).thenReturn(List.of(active, inactive));
+            when(lookupRepository.findByLookupTypeAndIsActiveTrueOrderBySeqAsc("CITY")).thenReturn(List.of(active));
             when(lookupMapper.toDto(any(Lookup.class))).thenReturn(buildDto("CITY", "TPE"));
 
             assertThat(lookupService.listForAdmin("CITY", true)).hasSize(2);
             assertThat(lookupService.listForAdmin("CITY", false)).hasSize(1);
             verifyNoInteractions(redisService);
+        }
+
+        @Test
+        void shouldQueryActiveOnlyWhenInactiveExcludedForEveryType() {
+            when(lookupRepository.findByIsActiveTrueOrderByLookupTypeAscSeqAsc()).thenReturn(List.of());
+
+            assertThat(lookupService.listForAdmin(null, false)).isEmpty();
+            verify(lookupRepository, never()).findAllByOrderByLookupTypeAscSeqAsc();
         }
 
         @Test

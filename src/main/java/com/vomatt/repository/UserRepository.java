@@ -46,7 +46,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
      * Locks every active admin row and returns their ids, so concurrent admin removals serialize: a waiter re-reads the
      * rows once the first commits and no longer sees an admin it suspended or demoted. FOR NO KEY UPDATE, not FOR UPDATE:
      * it does not conflict with the KEY SHARE lock that foreign-key inserts (Ballots, Comments, Polls) take on the user
-     * row, so the admins' own writes neither block nor deadlock against it. Call {@code setLockTimeout()} first.
+     * row, so the admins' own writes neither block nor deadlock against it. Call {@link LockTimeout#apply()} first.
      */
     @Query(value = "SELECT id FROM vomatt.users WHERE active = true AND 'admin' = ANY(roles) FOR NO KEY UPDATE", nativeQuery = true)
     List<UUID> lockActiveAdminIds();

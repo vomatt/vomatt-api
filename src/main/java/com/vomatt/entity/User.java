@@ -15,10 +15,12 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
+import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
@@ -27,7 +29,10 @@ import java.util.regex.Pattern;
 /**
  * Platform user. Signs in via Email/phone OTP or Google / LINE / Apple OAuth; no password is stored.
  */
+// Only changed columns are written, so a profile edit or sign-in saving the row cannot write back a stale active / roles
+// over a suspension or role change committed in between
 @Entity
+@DynamicUpdate
 @Table(name = "users")
 @Getter
 @Setter
@@ -93,6 +98,10 @@ public class User extends AuditableEntity {
     @Builder.Default
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<UserPreference> preferences = new HashSet<>();
+
+    public boolean isAdmin() {
+        return Arrays.asList(roles).contains(UserRole.ADMIN);
+    }
 
     public void addPoints(int points) {
         this.points += points;

@@ -20,6 +20,8 @@ public interface LookupRepository extends JpaRepository<Lookup, UUID> {
 
     List<Lookup> findAllByOrderByLookupTypeAscSeqAsc();
 
+    List<Lookup> findByIsActiveTrueOrderByLookupTypeAscSeqAsc();
+
     /**
      * Query item for specific type + key combination
      */

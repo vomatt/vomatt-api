@@ -2,7 +2,6 @@ package com.vomatt.users;
 
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
-import com.vomatt.common.constant.UserRole;
 import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.security.UserPrincipal;
 import com.vomatt.users.dto.MyProfileResponse;
@@ -18,6 +17,8 @@ import com.vomatt.common.response.CursorResponse;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.VoteRepository;
+import com.vomatt.repository.LockTimeout;
+import com.vomatt.common.util.AfterCommit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.PessimisticLockingFailureException;
@@ -42,6 +43,7 @@ public class UserService {
     private final RefreshTokenService refreshTokenService;
     private final VoteOptionRepository voteOptionRepository;
     private final VoteRepository voteRepository;
+    private final LockTimeout lockTimeout;
 
     /**
      * The user themself or an active admin can delete the account; deletion also revokes all of the user's refresh tokens.
@@ -55,7 +57,8 @@ public class UserService {
         }
         User user = findUserById(userId);
         requireAnotherActiveAdmin(user);
-        refreshTokenService.revokeAllForUser(userId);
+        // After commit: a sign-in or refresh before then still sees the account, and a rollback keeps its tokens
+        AfterCommit.run(() -> refreshTokenService.revokeAllForUser(userId));
         // user_votes rows cascade with the user; release them from stored option counts and Turnout first.
         // Poll rows before option rows, the same lock order as a Ballot, so a concurrent Ballot cannot deadlock it
         voteRepository.decrementTurnoutForUserBallots(user.getId());
@@ -71,17 +74,19 @@ public class UserService {
      */
     @Transactional
     public void requireAnotherActiveAdmin(User user) {
-        if (!user.isActive() || !Arrays.asList(user.getRoles()).contains(UserRole.ADMIN)) {
+        if (!user.isActive() || !user.isAdmin()) {
             return;
         }
         List<UUID> activeAdmins;
         try {
             // Same 3 s lock_timeout as the Poll-row lock: a waiter gives up with 409 instead of holding a pooled connection
-            voteRepository.setLockTimeout();
+            lockTimeout.apply();
             activeAdmins = userRepository.lockActiveAdminIds();
         } catch (PessimisticLockingFailureException e) {
             throw ApiException.conflict(MessageKey.COMMON_CONFLICT);
         }
+        // Only this lock is bounded; later statements of the caller (e.g. deleteUser's Poll-row updates) wait as usual
+        lockTimeout.reset();
         if (activeAdmins.stream().allMatch(user.getId()::equals)) {
             throw ApiException.conflict(MessageKey.ADMIN_LAST_ADMIN);
         }

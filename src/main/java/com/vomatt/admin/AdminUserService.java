@@ -4,6 +4,7 @@ import static com.vomatt.admin.AdminService.blankToNull;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -16,6 +17,7 @@ import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.PageResponse;
 import com.vomatt.common.security.RefreshTokenService;
+import com.vomatt.common.util.AfterCommit;
 import com.vomatt.entity.User;
 import com.vomatt.repository.AdminQueryRepository;
 import com.vomatt.repository.UserRepository;
@@ -50,7 +52,8 @@ public class AdminUserService {
     /** @param status active, suspended, or null for both */
     @Transactional(readOnly = true)
     public PageResponse<AdminUserResponse> listUsers(String q, String status, String role, Integer page, Integer limit) {
-        Boolean active = switch (status == null ? "" : status) {
+        String statusFilter = blankToNull(status);
+        Boolean active = switch (statusFilter == null ? "" : statusFilter) {
             case "" -> null;
             case "active" -> true;
             case "suspended" -> false;
@@ -76,7 +79,8 @@ public class AdminUserService {
         }
         userService.requireAnotherActiveAdmin(user);
         user.setActive(false);
-        refreshTokenService.revokeAllForUser(userId.toString());
+        // After commit: a sign-in or refresh in between would otherwise still see the account active
+        AfterCommit.run(() -> refreshTokenService.revokeAllForUser(userId.toString()));
         log.info("User {} suspended by admin {}", userId, actorId);
         return detail(user);
     }
@@ -90,20 +94,20 @@ public class AdminUserService {
 
     public AdminUserDetail updateRoles(UUID userId, List<String> roles, String actorId) {
         User user = findUser(userId);
-        if (isAdmin(user) && !roles.contains(UserRole.ADMIN)) {
+        // Unchanged role set: nothing to write and no reason to sign the user out
+        if (Set.copyOf(roles).equals(Set.copyOf(Arrays.asList(user.getRoles())))) {
+            return detail(user);
+        }
+        if (user.isAdmin() && !roles.contains(UserRole.ADMIN)) {
             if (user.getId().toString().equals(actorId)) {
                 throw ApiException.forbidden(MessageKey.ADMIN_SELF_ACTION_FORBIDDEN);
             }
             userService.requireAnotherActiveAdmin(user);
         }
         user.setRoles(roles.stream().distinct().toArray(String[]::new));
-        refreshTokenService.revokeAllForUser(userId.toString());
+        AfterCommit.run(() -> refreshTokenService.revokeAllForUser(userId.toString()));
         log.info("User {} roles set to {} by admin {}", userId, roles, actorId);
         return detail(user);
-    }
-
-    private static boolean isAdmin(User user) {
-        return Arrays.asList(user.getRoles()).contains(UserRole.ADMIN);
     }
 
     private User findUser(UUID userId) {

@@ -28,19 +28,12 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
      * Delete; each waits for the others on the same Poll. Ballots take it too, not a shared lock, because each one
      * updates the Poll's Turnout and two shared-lock holders updating the same row would deadlock.
      * Must be the first load of the Poll in the transaction, so its status is read from the locked row.
-     * Call {@link #setLockTimeout()} first so a waiter gives up instead of holding a pooled connection while the Poll is busy.
+     * Call {@link LockTimeout#apply()} first so a waiter gives up instead of holding a pooled connection while the Poll is busy.
      */
     // ponytail: Ballots on one Poll serialize; move Turnout to a separate counter row if a hot Poll needs more throughput
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT v FROM Vote v WHERE v.id = :id")
     Optional<Vote> findByIdForUpdate(@Param("id") UUID id);
-
-    /**
-     * Lock waits in the rest of this transaction fail after 3 s (SQLState 55P03). Hibernate ignores a positive
-     * jakarta.persistence.lock.timeout hint on Postgres (no FOR UPDATE WAIT n), so it is set per transaction instead.
-     */
-    @Query(value = "SELECT set_config('lock_timeout', '3s', true)", nativeQuery = true)
-    String setLockTimeout();
 
     /** Atomic +/- on the stored Turnout; never read-modify-write. */
     @Modifying(flushAutomatically = true, clearAutomatically = true)

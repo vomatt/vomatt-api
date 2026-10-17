@@ -228,7 +228,7 @@ public class UserController {
             **Precondition**: `userId` is the caller's own id, or the caller is an active admin in the database
             **Behavior**: permanently deletes the account. The user's Ballots are removed and released from the stored option counts \
             (this is a Retraction of every Ballot the user held).
-            **Side effects**: all refresh tokens of the user are revoked, so the client must discard its tokens and sign out; \
+            **Side effects**: once the deletion commits, all refresh tokens of the user are revoked, so the client must discard its tokens and sign out; \
             the deletion is written to the audit log
             **Errors**:
             - 403 `user.delete.forbidden`: deleting another user's account without being an active admin (checked against the database, not the token)

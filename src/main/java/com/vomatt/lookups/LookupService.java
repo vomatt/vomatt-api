@@ -48,13 +48,15 @@ public class LookupService {
     /** Admin listing: one type (or every type when null), inactive items included on request; never cached. */
     @Transactional(readOnly = true)
     public List<LookupDto> listForAdmin(String lookupType, boolean includeInactive) {
-        List<Lookup> rows = lookupType == null
-                ? lookupRepository.findAllByOrderByLookupTypeAscSeqAsc()
-                : lookupRepository.findByLookupTypeOrderBySeqAsc(lookupType);
-        return rows.stream()
-                .filter(l -> includeInactive || Boolean.TRUE.equals(l.getIsActive()))
-                .map(lookupMapper::toDto)
-                .toList();
+        List<Lookup> rows;
+        if (lookupType == null) {
+            rows = includeInactive ? lookupRepository.findAllByOrderByLookupTypeAscSeqAsc()
+                    : lookupRepository.findByIsActiveTrueOrderByLookupTypeAscSeqAsc();
+        } else {
+            rows = includeInactive ? lookupRepository.findByLookupTypeOrderBySeqAsc(lookupType)
+                    : lookupRepository.findByLookupTypeAndIsActiveTrueOrderBySeqAsc(lookupType);
+        }
+        return rows.stream().map(lookupMapper::toDto).toList();
     }
 
     @Transactional(readOnly = true)

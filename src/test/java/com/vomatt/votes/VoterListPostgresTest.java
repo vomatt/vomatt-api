@@ -1,6 +1,7 @@
 package com.vomatt.votes;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -11,6 +12,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 
+import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserVote;
@@ -75,5 +78,41 @@ class VoterListPostgresTest extends PostgresRepositoryTest {
         assertThat(voteService.getVoteResults(pollId, ownerId).getCreatorAvatarUrl()).isEqualTo("bot:boba");
         assertThat(voteService.getVoters(pollId, ownerId, null, null).items())
                 .extracting(VoterResponse::avatarUrl).containsExactly("bot:mochi");
+    }
+
+    @Test
+    @DisplayName("should hide the voter list while 1 to K-1 Anonymous Ballots exist and leave them out from K on")
+    void shouldGateVoterListWhenAnonymousBallotsBelowK() {
+        User owner = persistUser("vl-anon-owner");
+        OffsetDateTime now = OffsetDateTime.now();
+        Vote poll = persistPoll(owner, now.minusDays(2), now.minusDays(1), "A", "B");
+        VoteOption option = poll.getOptions().iterator().next();
+        em.persist(new UserVote(persistUser("vl-anon-named"), poll, option, null));
+        persistAnonymousBallot(persistUser("vl-anon-hidden-0"), poll, option);
+        em.flush();
+        em.clear();
+        String pollId = poll.getId().toString();
+        String ownerId = owner.getId().toString();
+
+        assertThatThrownBy(() -> voteService.getVoters(pollId, ownerId, null, null))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_VOTERS_HIDDEN));
+
+        Vote reloaded = em.find(Vote.class, poll.getId());
+        VoteOption reloadedOption = em.find(VoteOption.class, option.getId());
+        for (int i = 1; i < VoteService.ANONYMOUS_BALLOT_K; i++) {
+            persistAnonymousBallot(persistUser("vl-anon-hidden-" + i), reloaded, reloadedOption);
+        }
+        em.flush();
+        em.clear();
+
+        assertThat(voteService.getVoters(pollId, ownerId, null, null).items())
+                .extracting(VoterResponse::username).containsExactly("vl-anon-named");
+    }
+
+    private void persistAnonymousBallot(User user, Vote poll, VoteOption option) {
+        UserVote ballot = new UserVote(user, poll, option, null);
+        ballot.setAnonymous(true);
+        em.persist(ballot);
     }
 }

@@ -47,12 +47,14 @@ import com.vomatt.entity.Invitee;
 import com.vomatt.entity.User;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.entity.Tag;
+import com.vomatt.entity.UserPreference;
 import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
 import com.vomatt.entity.VoteStatus;
 import com.vomatt.groups.GroupService;
 import com.vomatt.repository.TagRepository;
+import com.vomatt.repository.UserPreferenceRepository;
 import com.vomatt.repository.UserVoteRepository;
 import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.BallotSelection;
@@ -87,10 +89,20 @@ public class VoteService {
     private final EmailService emailService;
     private final RedisService redisService;
     private final GroupService groupService;
+    private final UserPreferenceRepository preferenceRepository;
     private final TransactionTemplate transactionTemplate;
 
     private static final String INVITATION_COUNTER_NS = "email:invitation";
     private static final String BALLOT_RATE_LIMIT_NS = "rate:limit:ballot";
+
+    /**
+     * k-anonymity floor for the voter list: an Ended Poll holding 1 to K-1 Anonymous Ballots hides its voter list.
+     * Otherwise the owner of an Invite-only Poll could subtract the named voters from the Invitees holding a Ballot
+     * and, with the per-option counts, recover who voted anonymously and for what. With K or more Anonymous Ballots
+     * the owner still learns which Invitees voted anonymously and how many anonymous Ballots each option got, so if
+     * all of them chose the same option their choice is still inferable.
+     */
+    static final int ANONYMOUS_BALLOT_K = 3;
 
     @Value("${app.email.invitation-daily-limit:200}")
     private int invitationDailyLimit;
@@ -287,7 +299,7 @@ public class VoteService {
 
     /**
      * Casts a Ballot: replaces the user's previous Ballot in this Poll within one transaction.
-     * Casting the same option again changes nothing.
+     * Casting the same option again only updates whether the Ballot is Anonymous. An omitted flag keeps the current Ballot's; a first Ballot uses the user's default.
      * The response is built after the locked write commits, so the Poll-row lock covers only the write.
      */
     @Transactional(propagation = Propagation.SUPPORTS)
@@ -316,16 +328,28 @@ public class VoteService {
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
 
         Optional<UserVote> previous = userVoteRepository.findByUserIdAndVoteId(userUuid, voteUuid);
+        // An omitted flag keeps the current Ballot's, so a client that does not resend it never unmasks the user
+        boolean anonymous = request.getAnonymous() != null ? request.getAnonymous()
+            : previous.map(UserVote::isAnonymous).orElseGet(() -> anonymousByDefault(userUuid));
         boolean unchanged = previous.filter(b -> b.getOption().getId().equals(optionUuid)).isPresent();
-        if (!unchanged) {
+        if (unchanged) {
+            previous.get().setAnonymous(anonymous);
+        } else {
             Optional<UUID> releasedOptionId = previous.map(this::deleteBallot);
-            userVoteRepository.save(new UserVote(user, vote, option, ipAddress));
+            UserVote ballot = new UserVote(user, vote, option, ipAddress);
+            ballot.setAnonymous(anonymous);
+            userVoteRepository.save(ballot);
             releasedOptionId.ifPresent(id -> voteOptionRepository.adjustVoteCount(id, -1));
             voteOptionRepository.adjustVoteCount(optionUuid, 1);
             if (previous.isEmpty()) {
                 voteRepository.adjustTurnout(voteUuid, 1);
             }
-            log.info("User {} cast ballot on vote {} for option {}", userId, voteId, optionUuid);
+            // The option of an Anonymous Ballot stays out of the logs
+            if (anonymous) {
+                log.info("User {} cast anonymous ballot on vote {}", userId, voteId);
+            } else {
+                log.info("User {} cast ballot on vote {} for option {}", userId, voteId, optionUuid);
+            }
             // adjustVoteCount cleared the persistence context: re-load the (still locked) Poll as a managed entity
             voteRepository.findById(voteUuid).ifPresent(this::endIfAllInviteesVoted);
         }
@@ -356,8 +380,11 @@ public class VoteService {
         transactionTemplate.execute(s -> {
             lockOpenVote(voteUuid, userId);
             userVoteRepository.findByUserIdAndVoteIdAndOptionId(userUuid, voteUuid, UUID.fromString(optionId))
-                .ifPresent(this::releaseBallot);
-            log.info("User {} removed vote from option {} in vote {}", userId, optionId, voteId);
+                .ifPresent(ballot -> {
+                    releaseBallot(ballot);
+                    log.info("User {} removed vote from {} in vote {}", userId,
+                        ballot.isAnonymous() ? "an anonymous ballot" : "option " + optionId, voteId);
+                });
             return null;
         });
         return transactionTemplate.execute(s -> convertToVoteResponse(voteUuid, userId));
@@ -378,7 +405,10 @@ public class VoteService {
         return voteMapper.toResultResponse(vote, options);
     }
 
-    /** Who chose what in an Ended Poll, as allowed by its Voter Visibility; oldest Ballot first. */
+    /**
+     * Who chose what in an Ended Poll, as allowed by its Voter Visibility; oldest Ballot first.
+     * Hidden while the Poll holds 1 to {@link #ANONYMOUS_BALLOT_K}-1 Anonymous Ballots.
+     */
     @Transactional(readOnly = true)
     public CursorResponse<VoterResponse> getVoters(String voteId, String userId, String cursor, Integer limit) {
         Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
@@ -392,6 +422,11 @@ public class VoteService {
             case SIGNED_IN -> true;
         };
         if (!allowed) {
+            throw ApiException.forbidden(MessageKey.VOTE_VOTERS_HIDDEN);
+        }
+        // Ballots are frozen once Ended, so this count cannot change between pages
+        long anonymousBallots = userVoteRepository.countByVoteIdAndAnonymousTrue(vote.getId());
+        if (anonymousBallots > 0 && anonymousBallots < ANONYMOUS_BALLOT_K) {
             throw ApiException.forbidden(MessageKey.VOTE_VOTERS_HIDDEN);
         }
 
@@ -636,6 +671,12 @@ public class VoteService {
             log.warn("Invitation email limit check failed for owner {}: {}", ownerId, e.getMessage());
             return false;
         }
+    }
+
+    private boolean anonymousByDefault(UUID userId) {
+        return preferenceRepository.findByUserIdAndKey(userId, UserPreference.ANONYMOUS_BALLOT_KEY)
+            .map(pref -> Boolean.parseBoolean(pref.getValue()))
+            .orElse(false);
     }
 
     // Runs before any row lock so throttled requests never touch the Poll; fails open like RateLimitFilter's write path

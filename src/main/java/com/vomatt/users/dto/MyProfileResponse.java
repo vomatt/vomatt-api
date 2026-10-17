@@ -48,5 +48,7 @@ public record MyProfileResponse(
         @Schema(description = "Field name to visible flag, i.e. what other users see on the public profile; "
                 + "keys: email, firstName, lastName, location, points, displayName, bio, membershipLevel",
                 example = "{\"email\": false, \"displayName\": true, \"bio\": true}")
-        Map<String, Boolean> visibilitySettings
+        Map<String, Boolean> visibilitySettings,
+        @Schema(description = "Whether Ballots are Anonymous when a Ballot does not say otherwise; false until set", example = "false")
+        boolean anonymousBallotByDefault
 ) {}

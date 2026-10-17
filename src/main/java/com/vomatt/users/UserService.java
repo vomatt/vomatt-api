@@ -107,11 +107,15 @@ public class UserService {
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
 
         Map<String, Boolean> visibility = loadVisibilitySettings(UUID.fromString(userId), false);
+        boolean anonymousBallotByDefault = preferenceRepository.findByUserIdAndKey(user.getId(), UserPreference.ANONYMOUS_BALLOT_KEY)
+                .map(pref -> Boolean.parseBoolean(pref.getValue()))
+                .orElse(false);
         return userMapper.toMyProfileResponse(
                 user,
                 projection.getTotalPolls().intValue(),
                 projection.getTotalVotes().intValue(),
-                visibility
+                visibility,
+                anonymousBallotByDefault
         );
     }
 
@@ -122,21 +126,23 @@ public class UserService {
 
         for (Map.Entry<String, Boolean> entry : visibility.entrySet()) {
             // Only process valid field names, ignore unknown fields
-            VisibilityField.fromFieldName(entry.getKey()).ifPresent(field -> {
-                String prefKey = field.preferenceKey();
-                UserPreference pref = preferenceRepository.findByUserIdAndKey(userUuid, prefKey)
-                        .orElseGet(() -> {
-                            UserPreference newPref = new UserPreference();
-                            newPref.setUser(user);
-                            newPref.setKey(prefKey);
-                            return newPref;
-                        });
-                pref.setValue(entry.getValue().toString());
-                preferenceRepository.save(pref);
-            });
+            VisibilityField.fromFieldName(entry.getKey())
+                    .ifPresent(field -> savePreference(user, field.preferenceKey(), entry.getValue().toString()));
         }
         log.info("Visibility settings updated for user: {}", userId);
         return loadVisibilitySettings(userUuid, false);
+    }
+
+    private void savePreference(User user, String key, String value) {
+        UserPreference pref = preferenceRepository.findByUserIdAndKey(user.getId(), key)
+                .orElseGet(() -> {
+                    UserPreference newPref = new UserPreference();
+                    newPref.setUser(user);
+                    newPref.setKey(key);
+                    return newPref;
+                });
+        pref.setValue(value);
+        preferenceRepository.save(pref);
     }
 
     @Transactional
@@ -156,6 +162,9 @@ public class UserService {
         }
         if (request.getAvatarUrl() != null) {
             user.setAvatarUrl(request.getAvatarUrl());
+        }
+        if (request.getAnonymousBallotByDefault() != null) {
+            savePreference(user, UserPreference.ANONYMOUS_BALLOT_KEY, request.getAnonymousBallotByDefault().toString());
         }
         userRepository.save(user);
         return getUserProfile(user.getUsername(), true);

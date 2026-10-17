@@ -91,6 +91,8 @@ CREATE TABLE IF NOT EXISTS vomatt.user_votes (
     vote_id    UUID        NOT NULL REFERENCES vomatt.votes (id)        ON DELETE CASCADE,
     option_id  UUID        NOT NULL REFERENCES vomatt.vote_options (id) ON DELETE CASCADE,
     ip_address VARCHAR(45),
+    -- Anonymous Ballot: left out of the voter list whatever the Poll's Voter Visibility
+    anonymous  BOOLEAN     NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- Polls are single-choice: one Ballot row per user per Poll
@@ -314,6 +316,8 @@ FROM (SELECT v2.id, COUNT(uv.id) AS actual
       GROUP BY v2.id) c
 WHERE c.id = v.id AND v.turnout <> c.actual;
 CREATE INDEX IF NOT EXISTS idx_votes_turnout_start_id ON vomatt.votes (turnout DESC, start_time DESC, id DESC);
+-- Anonymous Ballot: hidden from the voter list; existing Ballots stay named
+ALTER TABLE vomatt.user_votes ADD COLUMN IF NOT EXISTS anonymous BOOLEAN NOT NULL DEFAULT FALSE;
 -- Comment replies (one level): parent_id only points to top-level comments
 ALTER TABLE vomatt.vote_comments ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES vomatt.vote_comments (id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS idx_vote_comments_parent ON vomatt.vote_comments (parent_id, created_at, id);

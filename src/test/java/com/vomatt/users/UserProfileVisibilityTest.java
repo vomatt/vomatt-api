@@ -121,14 +121,15 @@ class UserProfileVisibilityTest {
                     100, "SILVER", true, null,
                     JOINED_AT, 5, 10,
                     Map.of("email", false, "firstName", false, "lastName", false,
-                           "location", false, "points", false, "membershipLevel", false)
+                           "location", false, "points", false, "membershipLevel", false),
+                    false
             );
 
             when(userRepository.findById(USER_UUID)).thenReturn(Optional.of(user));
             when(userRepository.findProfileByUsername(USERNAME)).thenReturn(Optional.of(projection));
             when(preferenceRepository.findByUserIdAndKeyStartingWith(USER_UUID, "visibility."))
                     .thenReturn(Collections.emptyList());
-            when(userMapper.toMyProfileResponse(eq(user), eq(5), eq(10), anyMap()))
+            when(userMapper.toMyProfileResponse(eq(user), eq(5), eq(10), anyMap(), eq(false)))
                     .thenReturn(expectedResponse);
 
             // When
@@ -160,7 +161,7 @@ class UserProfileVisibilityTest {
             // Then
             verify(userMapper).toMyProfileResponse(eq(user), eq(5), eq(10), argThat(v ->
                     Boolean.TRUE.equals(v.get("displayName")) && Boolean.TRUE.equals(v.get("bio"))
-                            && Boolean.FALSE.equals(v.get("email")) && Boolean.FALSE.equals(v.get("location"))));
+                            && Boolean.FALSE.equals(v.get("email")) && Boolean.FALSE.equals(v.get("location"))), eq(false));
         }
 
         @Test
@@ -178,7 +179,7 @@ class UserProfileVisibilityTest {
 
             // Then
             verify(userMapper).toMyProfileResponse(eq(user), eq(5), eq(10),
-                    argThat(v -> Boolean.FALSE.equals(v.get("displayName")) && Boolean.TRUE.equals(v.get("bio"))));
+                    argThat(v -> Boolean.FALSE.equals(v.get("displayName")) && Boolean.TRUE.equals(v.get("bio"))), eq(false));
         }
     }
 

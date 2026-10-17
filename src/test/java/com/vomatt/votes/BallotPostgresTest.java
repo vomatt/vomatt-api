@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.vomatt.entity.User;
+import com.vomatt.entity.UserPreference;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
 import com.vomatt.repository.PostgresRepositoryTest;
@@ -77,9 +78,19 @@ class BallotPostgresTest extends PostgresRepositoryTest {
     }
 
     private VoteResponse cast(User user, UUID optionId) {
+        return cast(user, optionId, null);
+    }
+
+    private VoteResponse cast(User user, UUID optionId, Boolean anonymous) {
         VoteRequest request = new VoteRequest();
         request.setOptionIds(List.of(optionId.toString()));
+        request.setAnonymous(anonymous);
         return voteService.vote(poll.getId().toString(), request, user.getId().toString(), "127.0.0.1");
+    }
+
+    private boolean storedAnonymous(User user) {
+        return (Boolean) em.createNativeQuery("SELECT anonymous FROM vomatt.user_votes WHERE user_id = :userId AND vote_id = :voteId")
+                .setParameter("userId", user.getId()).setParameter("voteId", poll.getId()).getSingleResult();
     }
 
     // option id -> {stored vote_count, actual Ballot rows}
@@ -135,6 +146,50 @@ class BallotPostgresTest extends PostgresRepositoryTest {
         assertThat(counts().get(optionA)[0]).isEqualTo(1);
         assertThat(turnout()).isEqualTo(1);
         assertStoredMatchesActual();
+    }
+
+    @Test
+    @DisplayName("should use the account default when the Ballot omits anonymous, and the Ballot's flag when it sends one")
+    void shouldUseAccountDefaultWhenBallotOmitsAnonymous() {
+        tx.executeWithoutResult(s -> {
+            UserPreference pref = new UserPreference();
+            pref.setUser(em.find(User.class, voter.getId()));
+            pref.setKey(UserPreference.ANONYMOUS_BALLOT_KEY);
+            pref.setValue("true");
+            em.persist(pref);
+        });
+
+        cast(voter, optionA);
+        assertThat(storedAnonymous(voter)).isTrue();
+
+        cast(voter, optionB, false);
+        assertThat(storedAnonymous(voter)).isFalse();
+    }
+
+    @Test
+    @DisplayName("should update only the anonymous flag when the same option is cast again")
+    void shouldUpdateAnonymousWhenSameOptionCastAgain() {
+        cast(voter, optionA);
+        assertThat(storedAnonymous(voter)).isFalse();
+
+        cast(voter, optionA, true);
+
+        assertThat(storedAnonymous(voter)).isTrue();
+        assertThat(counts().get(optionA)[0]).isEqualTo(1);
+        assertThat(turnout()).isEqualTo(1);
+        assertStoredMatchesActual();
+    }
+
+    @Test
+    @DisplayName("should keep the Ballot Anonymous when a recast or change of option omits anonymous")
+    void shouldKeepAnonymousWhenRecastOmitsFlag() {
+        cast(voter, optionA, true);
+
+        cast(voter, optionA);
+        assertThat(storedAnonymous(voter)).isTrue();
+
+        cast(voter, optionB);
+        assertThat(storedAnonymous(voter)).isTrue();
     }
 
     @Test

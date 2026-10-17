@@ -32,4 +32,8 @@ public class UpdateProfileRequest {
             + "null or omitted keeps the current value", example = "bot:boba", nullable = true)
     @Pattern(regexp = BotAvatar.PATTERN, message = "Avatar must be bot:<kind> with a known bot kind")
     private String avatarUrl;
+
+    @Schema(description = "Whether Ballots are Anonymous when `POST /api/votes/{voteId}/vote` omits `anonymous`; "
+            + "existing Ballots are unchanged. null or omitted keeps the current value", example = "true", nullable = true)
+    private Boolean anonymousBallotByDefault;
 }

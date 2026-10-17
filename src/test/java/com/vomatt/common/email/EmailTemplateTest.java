@@ -7,9 +7,11 @@ import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.beans.factory.config.YamlPropertiesFactoryBean;
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.core.env.StandardEnvironment;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -76,11 +78,11 @@ class EmailTemplateTest {
         UUID pollId = UUID.fromString("0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05");
         emailService.sendInvitationEmails(List.of("a@example.com"), "Amy", "Lunch <b>vote</b>", pollId, ZH_TW);
         assertThat(sentHtml()).contains("Amy 邀請您", "Lunch &lt;b&gt;vote&lt;/b&gt;",
-                "https://staging.vomatt.com/votes/" + pollId, "前往投票").doesNotContain("??", "<b>vote");
+                "https://staging.vomatt.com/poll/" + pollId, "前往投票").doesNotContain("??", "<b>vote", "謝謝");
 
         emailService.sendInvitationEmails(List.of("b@example.com"), "Amy", "Lunch", pollId, Locale.ENGLISH);
-        assertThat(sentHtml()).contains("Amy invited you", "Open the Poll", "https://staging.vomatt.com/votes/" + pollId)
-                .doesNotContain("??");
+        assertThat(sentHtml()).contains("Amy invited you", "Open the Poll", "https://staging.vomatt.com/poll/" + pollId)
+                .doesNotContain("??", "Thank you");
     }
 
     @Test
@@ -90,10 +92,17 @@ class EmailTemplateTest {
     }
 
     @Test
-    void shouldKeepVoteIdTokenWhenPollPathDefaultResolved() {
-        // Same placeholder as application.yml / EmailServiceImpl: the braces of {voteId} must survive resolution
-        assertThat(new StandardEnvironment().resolvePlaceholders("${EMAIL_POLL_PATH_UNSET:/votes/{voteId}}"))
-                .isEqualTo("/votes/{voteId}");
+    void shouldPointToFrontendPollRouteWhenPollPathDefaultResolved() {
+        // The braces of {voteId} must survive placeholder resolution
+        assertThat(defaultPollPath()).isEqualTo("/poll/{voteId}");
+    }
+
+    /** {@code app.email.poll-path} from application.yml, resolved as Spring would with EMAIL_POLL_PATH unset. */
+    private static String defaultPollPath() {
+        YamlPropertiesFactoryBean yaml = new YamlPropertiesFactoryBean();
+        yaml.setResources(new ClassPathResource("application.yml"));
+        String placeholder = yaml.getObject().getProperty("app.email.poll-path");
+        return new StandardEnvironment().resolvePlaceholders(placeholder.replace("EMAIL_POLL_PATH", "EMAIL_POLL_PATH_UNSET"));
     }
 
     private String sentHtml() throws Exception {
@@ -140,7 +149,7 @@ class EmailTemplateTest {
         ReflectionTestUtils.setField(service, "fromEmail", "noreply@vomatt.com");
         ReflectionTestUtils.setField(service, "siteUrl", "https://staging.vomatt.com");
         ReflectionTestUtils.setField(service, "otpTtlSeconds", 180L);
-        ReflectionTestUtils.setField(service, "pollPath", "/votes/{voteId}");
+        ReflectionTestUtils.setField(service, "pollPath", defaultPollPath());
         return service;
     }
 }

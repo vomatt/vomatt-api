@@ -37,7 +37,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.phone.invalid` | 400 | 手機號碼格式錯誤，請輸入 09 開頭的台灣手機號碼或含國碼的號碼（例如 +886912345678） | Invalid phone number. Use a Taiwan mobile number starting with 09 or a number with a country code (e.g. +886912345678) | Show message so the user can fix the input | User |
 | `auth.sms.send_failed` | 400 | 簡訊發送失敗：{0} | SMS delivery failed: {0} | Show message so the user can fix the input | AuthService |
 | `auth.refresh_token.invalid` | 401 | Refresh token 無效或已過期 | Refresh token is invalid or has expired | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.suspicious_login` | 401 | 安全性警告：偵測到異常登入，已強制登出所有裝置，請重新登入 | Security alert: suspicious login detected. All sessions have been terminated, please log in again | See [auth-flow.md](auth-flow.md) | AuthService |
+| `auth.suspicious_login` | 401 | 安全性警告：此登入階段被重複更新，已將其登出，請重新登入 | Security alert: this session was refreshed twice, so it has been signed out. Please log in again | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.google.not_configured` | 400 | Google OAuth 尚未設定 | Google OAuth is not configured | Show message so the user can fix the input | AuthService |
 | `auth.google.no_email` | 401 | Google 驗證失敗：無法取得用戶信箱 | Google verification failed: unable to retrieve email | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.google.invalid_audience` | 401 | Google 驗證失敗：audience 不正確 | Google verification failed: incorrect audience | See [auth-flow.md](auth-flow.md) | AuthService |

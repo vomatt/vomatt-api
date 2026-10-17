@@ -27,14 +27,16 @@ public class RefreshTokenService {
     private final UserRepository userRepository;
 
     private static final String NAMESPACE = "refresh";
-    // Consumed (rotated) tokens, used for reuse detection; kept as long as the refresh token itself could have lived,
-    // so a stolen token replayed at any point in its lifetime still trips the detector
+    // Consumed (rotated) token -> the token it rotated into, used for reuse detection; kept as long as the refresh token
+    // itself could have lived, so a stolen token replayed at any point in its lifetime still trips the detector
     private static final String CONSUMED_NS = "refresh:consumed";
     // User -> active token index, used to revoke all
     private static final String USER_IDX_NS = "refresh:idx";
     // In-flight race grace cache: the same oldToken returns the same pair within the TTL, so a cross-instance race does not trigger a reuse alert
     private static final String GRACE_NS = "refresh:grace";
     private static final int SHA_PREFIX_LEN = 8;
+    // ponytail: successor walk capped at 3000 hops (one rotation per 15 min for 30 days); a longer chain keeps its live end
+    private static final int MAX_CHAIN_HOPS = 3000;
 
     @Value("${jwt.refresh-expiration-days:30}")
     private long refreshExpirationDays;
@@ -69,7 +71,8 @@ public class RefreshTokenService {
      * Flow (order must not change):
      *   1. Grace cache hit -> return the already issued pair (no reuse alert, no namespace writes)
      *   2. Atomic GETDEL to take the old token data
-     *   3. data == null -> check CONSUMED_NS for reuse; on a hit, throw RefreshTokenReuseException and revoke all of the user's sessions
+     *   3. data == null -> check CONSUMED_NS for reuse; on a hit, revoke the session the token rotated into and throw
+     *      RefreshTokenReuseException (the user's other sessions are untouched)
      *   4. data != null -> generate a new pair, write grace -> consumed -> namespace -> userIdx
      *
      * Returns null if the token is invalid or expired (not reused).
@@ -86,11 +89,18 @@ public class RefreshTokenService {
         RefreshTokenData data = redisService.getAndDelete(NAMESPACE, oldToken, RefreshTokenData.class);
         if (data == null) {
             // Step 3: reuse detection
-            String consumedUserId = redisService.get(CONSUMED_NS, oldToken, String.class);
-            if (consumedUserId != null) {
-                log.warn("SECURITY_BREACH: Refresh token reuse detected, revoking all sessions for userId={}", consumedUserId);
-                revokeAllForUser(consumedUserId);
-                throw new RefreshTokenReuseException("Refresh token reuse detected for userId=" + consumedUserId);
+            String successor = redisService.getAndDelete(CONSUMED_NS, oldToken, String.class);
+            if (successor != null) {
+                String userId = revokeSuccessorChain(successor);
+                // Markers written before 2026-10-17 hold the userId instead of a successor: fall back to revoking all.
+                // Remove after 2026-11-16, when the last of them has expired with its refresh lifetime.
+                if (userId == null && redisService.hasKey(USER_IDX_NS, successor)) {
+                    userId = successor;
+                    revokeAllForUser(userId);
+                }
+                log.warn("SECURITY_BREACH: Refresh token reuse detected, revoked the session it rotated into refreshToken_sha={} userId={}",
+                        sha256Prefix(oldToken, SHA_PREFIX_LEN), userId);
+                throw new RefreshTokenReuseException("Refresh token reuse detected for userId=" + userId);
             }
             return null;
         }
@@ -126,7 +136,7 @@ public class RefreshTokenService {
         // are correctness-critical and used to take one round-trip each. They are now applied atomically in a single MULTI/EXEC: one round-trip,
         // fully atomic (no intermediate "partially written then threw" state), and a connection failure throws for the whole batch (fail-fast, no weaker than the old per-write throwing).
         redisService.execInTransaction(List.of(
-                RedisService.RedisWrite.set(CONSUMED_NS, oldToken, freshData.userId(), refreshTtl),
+                RedisService.RedisWrite.set(CONSUMED_NS, oldToken, newRefreshToken, refreshTtl),
                 RedisService.RedisWrite.set(NAMESPACE, newRefreshToken, freshData, refreshTtl),
                 RedisService.RedisWrite.hput(USER_IDX_NS, freshData.userId(), newRefreshToken, "1"),
                 RedisService.RedisWrite.expire(USER_IDX_NS, freshData.userId(), refreshTtl),
@@ -135,6 +145,25 @@ public class RefreshTokenService {
 
         log.debug("Refresh token rotated for userId={}", freshData.userId());
         return result;
+    }
+
+    /**
+     * Follows a reused token's successors to the live token of that session and revokes it, so whoever holds the
+     * session (the thief or the real user) must sign in again while the user's other devices stay signed in.
+     * Consumed markers and grace entries are deleted along the way, so a replay neither re-walks the chain nor hits
+     * a cached pair. Returns the session's userId, or null if the session already ended.
+     */
+    private String revokeSuccessorChain(String token) {
+        for (int hop = 0; token != null && hop < MAX_CHAIN_HOPS; hop++) {
+            RefreshTokenData live = redisService.getAndDelete(NAMESPACE, token, RefreshTokenData.class);
+            if (live != null) {
+                redisService.hDelete(USER_IDX_NS, live.userId(), token);
+                return live.userId();
+            }
+            redisService.delete(GRACE_NS, token);
+            token = redisService.getAndDelete(CONSUMED_NS, token, String.class);
+        }
+        return null;
     }
 
     /**

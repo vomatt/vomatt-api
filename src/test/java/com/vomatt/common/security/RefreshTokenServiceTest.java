@@ -100,7 +100,7 @@ class RefreshTokenServiceTest {
         String oldToken = "unknown-token";
         when(redisService.get(GRACE_NS, oldToken, RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getAndDelete(NAMESPACE, oldToken, RefreshTokenService.RefreshTokenData.class)).thenReturn(null);
-        when(redisService.get(CONSUMED_NS, oldToken, String.class)).thenReturn(null);
+        when(redisService.getAndDelete(CONSUMED_NS, oldToken, String.class)).thenReturn(null);
 
         RefreshTokenService.RotateResult result = service.rotate(oldToken);
 
@@ -142,7 +142,7 @@ class RefreshTokenServiceTest {
         inOrder.verify(redisService).execInTransaction(writesCaptor.capture());
         List<RedisService.RedisWrite> writes = writesCaptor.getValue();
         assertThat(writes).containsExactly(
-                RedisService.RedisWrite.set(CONSUMED_NS, oldToken, userId, Duration.ofDays(30)),
+                RedisService.RedisWrite.set(CONSUMED_NS, oldToken, result.newRefreshToken(), Duration.ofDays(30)),
                 RedisService.RedisWrite.set(NAMESPACE, result.newRefreshToken(), result.data(), Duration.ofDays(30)),
                 RedisService.RedisWrite.hput(USER_IDX_NS, userId, result.newRefreshToken(), "1"),
                 RedisService.RedisWrite.expire(USER_IDX_NS, userId, Duration.ofDays(30)),
@@ -260,20 +260,59 @@ class RefreshTokenServiceTest {
     // ── rotate: reuse after grace ─────────────────────────────────────
 
     @Test
-    void rotate_afterGraceExpired_triggersReuseDetectionAndRevokesAll() {
+    void shouldRevokeOnlySuccessorSessionWhenTokenReusedAfterGrace() {
         String oldToken = "replayed-token";
+        RefreshTokenService.RefreshTokenData live = new RefreshTokenService.RefreshTokenData(
+                "user-victim", "victim@example.com", List.of("user"));
         when(redisService.get(GRACE_NS, oldToken, RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getAndDelete(NAMESPACE, oldToken, RefreshTokenService.RefreshTokenData.class)).thenReturn(null);
-        when(redisService.get(CONSUMED_NS, oldToken, String.class)).thenReturn("user-victim");
-        when(redisService.hGetAll(USER_IDX_NS, "user-victim")).thenReturn(Map.of("t1", "1", "t2", "1"));
+        when(redisService.getAndDelete(CONSUMED_NS, oldToken, String.class)).thenReturn("successor-1");
+        // successor-1 was itself rotated into successor-2, the session's live token
+        when(redisService.getAndDelete(NAMESPACE, "successor-1", RefreshTokenService.RefreshTokenData.class)).thenReturn(null);
+        when(redisService.getAndDelete(CONSUMED_NS, "successor-1", String.class)).thenReturn("successor-2");
+        when(redisService.getAndDelete(NAMESPACE, "successor-2", RefreshTokenService.RefreshTokenData.class)).thenReturn(live);
 
         assertThatThrownBy(() -> service.rotate(oldToken))
                 .isInstanceOf(RefreshTokenReuseException.class)
                 .hasMessageContaining("user-victim");
 
+        verify(redisService).delete(GRACE_NS, "successor-1");
+        verify(redisService).hDelete(USER_IDX_NS, "user-victim", "successor-2");
+        // The user's other sessions survive
+        verify(redisService, never()).hGetAll(anyString(), anyString());
+        verify(redisService, never()).delete(USER_IDX_NS, "user-victim");
+    }
+
+    @Test
+    void shouldRejectReuseWhenSuccessorSessionAlreadyEnded() {
+        String oldToken = "replayed-token";
+        when(redisService.get(GRACE_NS, oldToken, RefreshTokenService.RotateResult.class)).thenReturn(null);
+        when(redisService.getAndDelete(NAMESPACE, oldToken, RefreshTokenService.RefreshTokenData.class)).thenReturn(null);
+        when(redisService.getAndDelete(CONSUMED_NS, oldToken, String.class)).thenReturn("logged-out");
+
+        when(redisService.hasKey(USER_IDX_NS, "logged-out")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.rotate(oldToken)).isInstanceOf(RefreshTokenReuseException.class);
+
+        verify(redisService, never()).hDelete(anyString(), anyString(), anyString());
+        verify(redisService, never()).hGetAll(anyString(), anyString());
+    }
+
+    @Test
+    void shouldRevokeAllSessionsWhenLegacyMarkerHoldsUserId() {
+        String oldToken = "pre-deploy-token";
+        when(redisService.get(GRACE_NS, oldToken, RefreshTokenService.RotateResult.class)).thenReturn(null);
+        when(redisService.getAndDelete(NAMESPACE, oldToken, RefreshTokenService.RefreshTokenData.class)).thenReturn(null);
+        when(redisService.getAndDelete(CONSUMED_NS, oldToken, String.class)).thenReturn("user-legacy");
+        when(redisService.hasKey(USER_IDX_NS, "user-legacy")).thenReturn(true);
+        when(redisService.hGetAll(USER_IDX_NS, "user-legacy")).thenReturn(Map.of("t1", "1"));
+
+        assertThatThrownBy(() -> service.rotate(oldToken))
+                .isInstanceOf(RefreshTokenReuseException.class)
+                .hasMessageContaining("user-legacy");
+
         verify(redisService).delete(NAMESPACE, "t1");
-        verify(redisService).delete(NAMESPACE, "t2");
-        verify(redisService).delete(USER_IDX_NS, "user-victim");
+        verify(redisService).delete(USER_IDX_NS, "user-legacy");
     }
 
     // ── rotate: Step 4 reload User -- ban blocks ────────────────────────

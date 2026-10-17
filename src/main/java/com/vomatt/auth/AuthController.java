@@ -336,7 +336,7 @@ public class AuthController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
             description = "Refresh token invalid/expired/revoked (`auth.refresh_token.invalid`), or reuse of an already-rotated token detected (`auth.suspicious_login`); either way the client must sign in again",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
-                    {"success": false, "data": null, "message": "Security alert: suspicious login detected. All sessions have been terminated, please log in again", "errorCode": "auth.suspicious_login", "error": "Security alert: suspicious login detected. All sessions have been terminated, please log in again"}""")))
+                    {"success": false, "data": null, "message": "Security alert: this session was refreshed twice, so it has been signed out. Please log in again", "errorCode": "auth.suspicious_login", "error": "Security alert: this session was refreshed twice, so it has been signed out. Please log in again"}""")))
     @Operation(summary = "Refresh access token",
             description = """
                     **Auth**: public (authenticated by the refresh token in the body, not by the Authorization header)
@@ -344,11 +344,12 @@ public class AuthController {
                     **Behavior**: rotates the refresh token: the old one is spent and a new access token and refresh token are returned. \
                     The response `user` is null; keep the user info from login. Roles are re-read from the database, so a role change takes effect on refresh. \
                     A second call with the same old token within the grace window (default 10 s) returns the same new pair instead of failing, so concurrent refreshes are safe
-                    **Side effects**: the old refresh token is spent. If a spent token is presented again after the grace window, all of the user's refresh tokens are revoked. \
+                    **Side effects**: the old refresh token is spent. If a spent token is presented again after the grace window, the refresh token it rotated into \
+                    (the latest token of that sign-in) is revoked too, so that session must sign in again; the user's other devices stay signed in. \
                     If the user is missing or suspended, all their refresh tokens are revoked too
                     **Errors**:
                     - 401 `auth.refresh_token.invalid`: the token is unknown, expired, revoked, or its user is missing or suspended
-                    - 401 `auth.suspicious_login`: a spent token was reused; every session of the user is now terminated""")
+                    - 401 `auth.suspicious_login`: a spent token was reused after the grace window; the session it belonged to is now signed out""")
     public ResponseEntity<ApiResponse<AuthResponse>> refresh(@Valid @RequestBody RefreshRequest req) {
         return ResponseEntity.ok(ApiResponse.ok(authService.refresh(req.refreshToken())));
     }

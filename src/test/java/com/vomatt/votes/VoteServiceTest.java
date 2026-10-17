@@ -27,6 +27,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -52,6 +53,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
@@ -1198,10 +1200,15 @@ class VoteServiceTest {
         @DisplayName("should End the Poll and keep its Deadline when the Ballot leaves every Invitee holding one")
         void shouldEndPollWhenLastInviteeCastsBallot() {
             when(inviteeRepository.allHoldBallot(voteId)).thenReturn(true);
-            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
 
             VoteResponse response = castAsInvitee();
 
+            // Ended on the Poll loaded under the lock, before any count update detaches it; never re-selected
+            InOrder order = inOrder(inviteeRepository, voteOptionRepository);
+            order.verify(inviteeRepository).allHoldBallot(voteId);
+            order.verify(voteOptionRepository).adjustVoteCount(option.getId(), 1);
+            verify(voteRepository).findByIdForUpdate(voteId);
+            verify(voteRepository, never()).findById(any());
             assertThat(vote.getStatus()).isEqualTo(VoteStatus.ENDED);
             assertThat(vote.getDeadline()).isEqualTo(deadline);
             // Unsealed: the response already carries the Ended results
@@ -1212,7 +1219,6 @@ class VoteServiceTest {
         @DisplayName("should keep the Poll Open when some Invitee still holds no Ballot")
         void shouldKeepPollOpenWhenInviteeHasNoBallot() {
             when(inviteeRepository.allHoldBallot(voteId)).thenReturn(false);
-            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
 
             castAsInvitee();
 
@@ -1405,10 +1411,10 @@ class VoteServiceTest {
                         && rows.stream().anyMatch(i -> i.getUser() == null && "carol@example.com".equals(i.getEmail()));
             }));
             verify(notificationReadRepository).deleteReads(voteId, List.of(bob.getId()));
-            verify(emailService).sendInvitationEmail(eq("carol@example.com"), eq("Alice"), eq("Test Vote"), eq(voteId), any());
-            verify(emailService).sendInvitationEmail(eq("bob@example.com"), eq("Alice"), eq("Test Vote"), eq(voteId), any());
-            verify(inviteeRepository).recordInvitationSent(voteId, "carol@example.com");
-            verify(inviteeRepository).recordInvitationSent(voteId, "bob@example.com");
+            verify(emailService).sendInvitationEmails(argThat(to -> Set.copyOf(to).equals(Set.of("carol@example.com", "bob@example.com"))),
+                    eq("Alice"), eq("Test Vote"), eq(voteId), any());
+            verify(inviteeRepository).recordInvitationsSent(eq(voteId),
+                    argThat(to -> Set.of(to).equals(Set.of("carol@example.com", "bob@example.com"))));
             verifyNoMoreInteractions(emailService);
         }
 
@@ -1417,14 +1423,14 @@ class VoteServiceTest {
         void shouldNotResendWhenInvitationAlreadySent() {
             inviteOnly(OffsetDateTime.now().plusDays(1));
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
-            when(inviteeRepository.isInvitationSent(voteId, "carol@example.com")).thenReturn(true);
+            when(inviteeRepository.findInvitationsSent(voteId, List.of("carol@example.com"))).thenReturn(List.of("carol@example.com"));
             InviteesRequest invite = new InviteesRequest();
             invite.setEmails(List.of("carol@example.com"));
 
             voteService.addInvitees(voteId.toString(), invite, userId.toString());
 
             verify(inviteeRepository).saveAllAndFlush(argThat(invitees -> invitees.iterator().hasNext()));
-            verify(inviteeRepository, never()).recordInvitationSent(any(), any());
+            verify(inviteeRepository, never()).recordInvitationsSent(any(), any());
             verifyNoInteractions(emailService, redisService);
         }
 
@@ -1433,7 +1439,7 @@ class VoteServiceTest {
         void shouldSkipEmailWhenDailyLimitReached() {
             inviteOnly(OffsetDateTime.now().plusDays(1));
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
-            when(redisService.incrementAndExpire(eq("email:invitation"), org.mockito.ArgumentMatchers.startsWith(userId + ":"), any()))
+            when(redisService.incrementAndExpire(eq("email:invitation"), org.mockito.ArgumentMatchers.startsWith(userId + ":"), eq(1L), any()))
                     .thenReturn(201L);
             InviteesRequest invite = new InviteesRequest();
             invite.setEmails(List.of("carol@example.com"));
@@ -1441,8 +1447,28 @@ class VoteServiceTest {
             voteService.addInvitees(voteId.toString(), invite, userId.toString());
 
             verify(inviteeRepository).saveAllAndFlush(argThat(invitees -> invitees.iterator().hasNext()));
-            verify(inviteeRepository, never()).recordInvitationSent(any(), any());
+            verify(inviteeRepository, never()).recordInvitationsSent(any(), any());
             verifyNoInteractions(emailService);
+        }
+
+        @Test
+        @DisplayName("should take the whole batch from the quota with one INCRBY and mail only what fits in one background task")
+        void shouldMailWithinQuotaInOneTaskWhenBatchCrossesDailyLimit() {
+            inviteOnly(OffsetDateTime.now().plusDays(1));
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            // 199 already used today: of these 2, only one fits under the limit of 200
+            when(redisService.incrementAndExpire(eq("email:invitation"), org.mockito.ArgumentMatchers.startsWith(userId + ":"), eq(2L), any()))
+                    .thenReturn(201L);
+            InviteesRequest invite = new InviteesRequest();
+            invite.setEmails(List.of("carol@example.com", "dave@example.com"));
+
+            voteService.addInvitees(voteId.toString(), invite, userId.toString());
+
+            verify(redisService).incrementAndExpire(any(), any(), anyLong(), any());
+            verify(redisService, never()).incrementAndExpire(any(), any(), any());
+            verify(inviteeRepository).recordInvitationsSent(eq(voteId), argThat(to -> to.length == 1));
+            verify(emailService).sendInvitationEmails(argThat(to -> to.size() == 1), any(), any(), eq(voteId), any());
+            verifyNoMoreInteractions(emailService);
         }
 
         @Test
@@ -1490,7 +1516,7 @@ class VoteServiceTest {
 
             verify(inviteeRepository).saveAllAndFlush(argThat(invitees -> invitees instanceof List<?> list && list.size() == 1
                     && ((Invitee) list.getFirst()).getUser() == null && "gone@example.com".equals(((Invitee) list.getFirst()).getEmail())));
-            verify(emailService).sendInvitationEmail(eq("gone@example.com"), any(), any(), eq(voteId), any());
+            verify(emailService).sendInvitationEmails(eq(List.of("gone@example.com")), any(), any(), eq(voteId), any());
         }
 
         @Test

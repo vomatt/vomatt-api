@@ -79,15 +79,17 @@ public interface InviteeRepository extends JpaRepository<Invitee, UUID> {
     int deleteUnbindableEmail(@Param("userId") UUID userId, @Param("email") String email,
             @Param("voteIds") Collection<UUID> voteIds);
 
-    @Query(value = "SELECT EXISTS (SELECT 1 FROM vomatt.vote_invitation_emails WHERE vote_id = :voteId AND email = :email)",
+    /** The given addresses the Poll's invitation already went to. */
+    @Query(value = "SELECT email FROM vomatt.vote_invitation_emails WHERE vote_id = :voteId AND email IN (:emails)",
             nativeQuery = true)
-    boolean isInvitationSent(@Param("voteId") UUID voteId, @Param("email") String email);
+    List<String> findInvitationsSent(@Param("voteId") UUID voteId, @Param("emails") Collection<String> emails);
 
-    /** Records that the Poll's invitation went to this address, so it is never sent there again. */
+    /** Records that the Poll's invitation went to these addresses, so it is never sent there again. */
     @Modifying
-    @Query(value = "INSERT INTO vomatt.vote_invitation_emails (vote_id, email) VALUES (:voteId, :email) ON CONFLICT DO NOTHING",
-            nativeQuery = true)
-    void recordInvitationSent(@Param("voteId") UUID voteId, @Param("email") String email);
+    @Query(value = """
+            INSERT INTO vomatt.vote_invitation_emails (vote_id, email)
+            SELECT :voteId, unnest(CAST(:emails AS text[])) ON CONFLICT DO NOTHING""", nativeQuery = true)
+    void recordInvitationsSent(@Param("voteId") UUID voteId, @Param("emails") String[] emails);
 
     /** At least one Invitee, and none without a Ballot; an Invitee not tied to a user (NULL user_id) counts as without. */
     @Query(value = """

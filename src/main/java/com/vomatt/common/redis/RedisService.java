@@ -76,6 +76,9 @@ public interface RedisService {
      */
     long incrementAndExpire(String cacheName, String key, Duration ttl);
 
+    /** Same as {@link #incrementAndExpire(String, String, Duration)}, adding {@code delta} (INCRBY) in one round trip. */
+    long incrementAndExpire(String cacheName, String key, long delta, Duration ttl);
+
     // ── TTL / existence ───────────────────────────────────────────────
 
     boolean expire(String cacheName, String key, Duration ttl);

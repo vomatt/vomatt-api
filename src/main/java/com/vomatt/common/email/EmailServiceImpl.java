@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -82,9 +83,14 @@ public class EmailServiceImpl implements EmailService {
         }
     }
 
+    // Serial on purpose: one task per batch keeps a large invite from opening many SMTP sessions at once
     @Async
     @Override
-    public void sendInvitationEmail(String to, String inviterName, String pollTitle, UUID pollId, Locale locale) {
+    public void sendInvitationEmails(List<String> to, String inviterName, String pollTitle, UUID pollId, Locale locale) {
+        to.forEach(address -> sendInvitationEmail(address, inviterName, pollTitle, pollId, locale));
+    }
+
+    private void sendInvitationEmail(String to, String inviterName, String pollTitle, UUID pollId, Locale locale) {
         try {
             send(to, "email.invitation.subject", "email/invitation-email", locale,
                     Map.of("inviterName", Objects.toString(inviterName, ""),

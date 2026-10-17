@@ -231,14 +231,18 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("should keep a removed pending email's sent record, so re-adding it sends no second invitation")
+    @DisplayName("should record every address of one invite in a batch and keep a removed one's record, so re-adding it sends no second invitation")
     void shouldKeepSentRecordWhenEmailRemovedAndReAdded() {
-        inviteEmail(carolEmail);
+        String daveEmail = "dave-" + System.nanoTime() + "@example.com";
+        InviteesRequest request = new InviteesRequest();
+        request.setEmails(List.of(carolEmail, daveEmail));
+        voteService.addInvitees(poll.getId().toString(), request, owner.getId().toString());
         voteService.removeEmailInvitee(poll.getId().toString(), carolEmail, owner.getId().toString());
         em.flush();
 
-        assertThat(inviteeRepository.isInvitationSent(poll.getId(), carolEmail)).isTrue();
-        assertThat(inviteEmail(carolEmail)).singleElement().satisfies(i -> assertThat(i.email()).isEqualTo(carolEmail));
+        assertThat(inviteeRepository.findInvitationsSent(poll.getId(), List.of(carolEmail, daveEmail, "x@example.com")))
+                .containsExactlyInAnyOrder(carolEmail, daveEmail);
+        assertThat(inviteEmail(carolEmail)).extracting(InviteeResponse::email).containsExactlyInAnyOrder(carolEmail, daveEmail);
     }
 
     @Test

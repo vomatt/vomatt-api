@@ -37,6 +37,17 @@ class ClientIpResolverTest {
     }
 
     @Test
+    void shouldSkipTrustedHopsWhenForwardedForHasSeveralProxies() {
+        assertThat(ClientIpResolver.resolve(request("10.0.0.5", "6.6.6.6, 198.51.100.2, 10.1.2.3, 100.64.0.9")))
+                .isEqualTo("198.51.100.2");
+    }
+
+    @Test
+    void shouldUseLeftmostWhenEveryForwardedHopIsTrusted() {
+        assertThat(ClientIpResolver.resolve(request("10.0.0.5", "192.168.1.4, 10.1.2.3"))).isEqualTo("192.168.1.4");
+    }
+
+    @Test
     void shouldNotTrustAddressesOutsidePrivateRanges() {
         assertThat(ClientIpResolver.isTrustedProxy("172.32.0.1")).isFalse();
         assertThat(ClientIpResolver.isTrustedProxy("2001:db8::1")).isFalse();

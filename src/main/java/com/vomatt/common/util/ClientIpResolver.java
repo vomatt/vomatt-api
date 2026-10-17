@@ -13,8 +13,9 @@ import java.util.List;
  * <p>This service runs behind a platform proxy (Zeabur); {@code X-Forwarded-For} is appended by a trusted edge.
  * XFF is honored only when the direct peer ({@code remoteAddr}) is inside a trusted proxy CIDR
  * ({@code app.security.trusted-proxies}), otherwise a client reaching the app directly could spoof its IP. When trusted,
- * takes the <strong>rightmost</strong> non-empty IP: the client can forge the left segments freely, but cannot control
- * the rightmost one appended by the edge. Falls back to {@code remoteAddr} when there is no XFF or the peer is untrusted.</p>
+ * walks XFF from the <strong>right</strong>, skipping entries that are themselves trusted proxies (e.g. a CDN hop in front
+ * of the ingress), and takes the first other one: the client can forge the left segments freely, but not the ones our
+ * proxies appended. Falls back to {@code remoteAddr} when there is no XFF or the peer is untrusted.</p>
  */
 public final class ClientIpResolver {
 
@@ -59,11 +60,20 @@ public final class ClientIpResolver {
         String forwarded = request.getHeader("X-Forwarded-For");
         if (forwarded != null && !forwarded.isBlank() && isTrustedProxy(remoteAddr)) {
             String[] parts = forwarded.split(",");
+            String leftmost = null;
             for (int i = parts.length - 1; i >= 0; i--) {
                 String ip = parts[i].trim();
-                if (!ip.isEmpty()) {
+                if (ip.isEmpty()) {
+                    continue;
+                }
+                if (!isTrustedProxy(ip)) {
                     return ip;
                 }
+                leftmost = ip;
+            }
+            // Every hop is a trusted proxy: the leftmost is the closest thing to a client address
+            if (leftmost != null) {
+                return leftmost;
             }
         }
         return remoteAddr;

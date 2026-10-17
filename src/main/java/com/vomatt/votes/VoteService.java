@@ -337,7 +337,10 @@ public class VoteService {
             Optional<UUID> releasedOptionId = previous.map(this::deleteBallot);
             UserVote ballot = new UserVote(user, vote, option, ipAddress);
             ballot.setAnonymous(anonymous);
-            userVoteRepository.save(ballot);
+            userVoteRepository.saveAndFlush(ballot);
+            // Before the count updates below: each clears the persistence context, detaching the locked Poll, and the
+            // first one flushes its end
+            endIfAllInviteesVoted(vote);
             releasedOptionId.ifPresent(id -> voteOptionRepository.adjustVoteCount(id, -1));
             voteOptionRepository.adjustVoteCount(optionUuid, 1);
             if (previous.isEmpty()) {
@@ -349,8 +352,6 @@ public class VoteService {
             } else {
                 log.info("User {} cast ballot on vote {} for option {}", userId, voteId, optionUuid);
             }
-            // adjustVoteCount cleared the persistence context: re-load the (still locked) Poll as a managed entity
-            voteRepository.findById(voteUuid).ifPresent(this::endIfAllInviteesVoted);
         }
         return optionUuid;
     }
@@ -622,35 +623,35 @@ public class VoteService {
     /**
      * Sends each address the Poll's invitation at most once, ever (callers hold the Poll lock or own a new Poll, so the
      * check and record cannot race), and at most {@code invitationDailyLimit} per owner per UTC day. Over the cap the
-     * Invitee is kept and only the email is skipped. Sent after commit, so a rolled-back request sends nothing;
-     * plain values only, the mail is sent on another thread.
+     * Invitee is kept and only the email is skipped. A fixed number of round trips per call however many addresses;
+     * sent after commit, so a rolled-back request sends nothing, by one background task mailing them one at a time.
+     * Recorded as sent before mailing (at most once): a failed send or a crash mid-loop is not retried.
      */
-    private void sendInvitations(Vote vote, Collection<String> emails) {
-        User owner = vote.getCreator();
-        UUID voteId = vote.getId();
-        List<String> recipients = new ArrayList<>();
-        int overLimit = 0;
-        for (String email : emails) {
-            if (inviteeRepository.isInvitationSent(voteId, email)) {
-                continue;
-            }
-            if (!withinInvitationLimit(owner.getId())) {
-                overLimit++;
-                continue;
-            }
-            inviteeRepository.recordInvitationSent(voteId, email);
-            recipients.add(email);
-        }
-        if (overLimit > 0) {
-            log.warn("Invitation email daily limit reached: {} invitation(s) for vote {} by owner {} not sent", overLimit, voteId, owner.getId());
-        }
-        if (recipients.isEmpty()) {
+    private void sendInvitations(Vote vote, List<String> emails) {
+        if (emails.isEmpty()) {
             return;
         }
+        User owner = vote.getCreator();
+        UUID voteId = vote.getId();
+        List<String> unsent = new ArrayList<>(emails);
+        unsent.removeAll(inviteeRepository.findInvitationsSent(voteId, emails));
+        if (unsent.isEmpty()) {
+            return;
+        }
+        int allowed = takeInvitationQuota(owner.getId(), unsent.size());
+        if (allowed < unsent.size()) {
+            log.warn("Invitation email daily limit reached: {} invitation(s) for vote {} by owner {} not sent",
+                unsent.size() - allowed, voteId, owner.getId());
+        }
+        if (allowed == 0) {
+            return;
+        }
+        List<String> recipients = List.copyOf(unsent.subList(0, allowed));
+        inviteeRepository.recordInvitationsSent(voteId, recipients.toArray(String[]::new));
         String inviterName = owner.getDisplayName() != null ? owner.getDisplayName() : owner.getUsername();
         String title = vote.getTitle();
         Locale locale = LocaleContextHolder.getLocale();
-        Runnable send = () -> recipients.forEach(to -> emailService.sendInvitationEmail(to, inviterName, title, voteId, locale));
+        Runnable send = () -> emailService.sendInvitationEmails(recipients, inviterName, title, voteId, locale);
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             send.run();
             return;
@@ -663,14 +664,19 @@ public class VoteService {
         });
     }
 
-    // Fails closed: when Redis is down no invitation is sent, but the Invitees are still saved
-    private boolean withinInvitationLimit(UUID ownerId) {
+    /**
+     * Takes up to {@code n} emails from the owner's daily quota with one INCRBY; the counter moves by {@code n} even
+     * over the cap, as {@code n} single increments would. Fails closed: when Redis is down no invitation is sent, but
+     * the Invitees are still saved.
+     */
+    private int takeInvitationQuota(UUID ownerId, int n) {
         try {
             String day = LocalDate.now(ZoneOffset.UTC).toString();
-            return redisService.incrementAndExpire(INVITATION_COUNTER_NS, ownerId + ":" + day, Duration.ofDays(1)) <= invitationDailyLimit;
+            long count = redisService.incrementAndExpire(INVITATION_COUNTER_NS, ownerId + ":" + day, n, Duration.ofDays(1));
+            return Math.clamp(invitationDailyLimit - (count - n), 0, n);
         } catch (RuntimeException e) {
             log.warn("Invitation email limit check failed for owner {}: {}", ownerId, e.getMessage());
-            return false;
+            return 0;
         }
     }
 

@@ -1,5 +1,6 @@
 package com.vomatt.common.email;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -22,9 +23,11 @@ public interface EmailService {
     void sendWelcomeEmail(String to, String username, Locale locale);
 
     /**
-     * Sends an Invitation to an email Invitee in the background, linking to the Poll; failures are only logged.
+     * Sends the Poll's Invitation to each email Invitee, one after another in a single background task, linking to the
+     * Poll; failures are only logged and do not stop the rest. Callers record the addresses as sent before this runs,
+     * so delivery is at most once: a failed send, or a crash partway through the list, is never retried.
      *
      * @param locale captured from the inviting owner's request, because the background thread has no request locale
      */
-    void sendInvitationEmail(String to, String inviterName, String pollTitle, UUID pollId, Locale locale);
+    void sendInvitationEmails(List<String> recipients, String inviterName, String pollTitle, UUID pollId, Locale locale);
 }

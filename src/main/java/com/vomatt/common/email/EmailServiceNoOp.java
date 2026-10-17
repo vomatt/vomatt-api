@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -33,7 +34,7 @@ public class EmailServiceNoOp implements EmailService {
     }
 
     @Override
-    public void sendInvitationEmail(String to, String inviterName, String pollTitle, UUID pollId, Locale locale) {
-        logger.debug("Email service disabled: Skipping invitation email to {}", to);
+    public void sendInvitationEmails(List<String> recipients, String inviterName, String pollTitle, UUID pollId, Locale locale) {
+        logger.debug("Email service disabled: Skipping {} invitation email(s)", recipients.size());
     }
 }

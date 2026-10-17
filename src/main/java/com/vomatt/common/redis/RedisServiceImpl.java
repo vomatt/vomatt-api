@@ -28,11 +28,11 @@ public class RedisServiceImpl implements RedisService {
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
 
-    // P5-#10: INCR + first PEXPIRE run atomically in one Lua script, so a crash between INCR and EXPIRE cannot leave an orphan key without TTL.
-    // Eval with raw bytes (key/TTL are raw bytes) so the value serializer does not quote the numeric argument and break PEXPIRE.
+    // P5-#10: INCRBY + first PEXPIRE run atomically in one Lua script, so a crash between INCR and EXPIRE cannot leave an orphan key without TTL.
+    // Eval with raw bytes (key/TTL/delta are raw bytes) so the value serializer does not quote the numeric argument and break PEXPIRE.
     private static final byte[] INCR_AND_EXPIRE_LUA = (
-            "local c = redis.call('INCR', KEYS[1]) "
-            + "if c == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end "
+            "local c = redis.call('INCRBY', KEYS[1], ARGV[2]) "
+            + "if c == tonumber(ARGV[2]) then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end "
             + "return c").getBytes(StandardCharsets.UTF_8);
 
     // P1-#18: HSET + "set TTL only if the key has no TTL yet" run atomically in one Lua script,
@@ -242,16 +242,22 @@ public class RedisServiceImpl implements RedisService {
     // ── Counter ───────────────────────────────────────────────────────
 
     @Override
-    @SuppressWarnings("unchecked")
     public long incrementAndExpire(String cacheName, String key, Duration ttl) {
+        return incrementAndExpire(cacheName, key, 1, ttl);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public long incrementAndExpire(String cacheName, String key, long delta, Duration ttl) {
         String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
             RedisSerializer<String> keySer = (RedisSerializer<String>) redisTemplate.getKeySerializer();
             byte[] keyBytes = keySer.serialize(cacheKey);
             byte[] ttlBytes = Long.toString(ttl.toMillis()).getBytes(StandardCharsets.UTF_8);
-            // INCR and the first PEXPIRE run atomically in one Lua script (raw bytes, bypassing the value serializer).
+            byte[] deltaBytes = Long.toString(delta).getBytes(StandardCharsets.UTF_8);
+            // INCRBY and the first PEXPIRE run atomically in one Lua script (raw bytes, bypassing the value serializer).
             Long count = redisTemplate.execute((RedisCallback<Long>) connection -> connection.scriptingCommands()
-                    .eval(INCR_AND_EXPIRE_LUA, ReturnType.INTEGER, 1, keyBytes, ttlBytes));
+                    .eval(INCR_AND_EXPIRE_LUA, ReturnType.INTEGER, 1, keyBytes, ttlBytes, deltaBytes));
             if (count == null) {
                 throw new RedisOperationException("Redis INCR returned null, key=" + cacheKey, null);
             }

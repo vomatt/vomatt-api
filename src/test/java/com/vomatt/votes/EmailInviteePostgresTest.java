@@ -237,8 +237,21 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
         voteService.removeEmailInvitee(poll.getId().toString(), carolEmail, owner.getId().toString());
         em.flush();
 
-        assertThat(inviteeRepository.isInvitationSent(poll.getId(), carolEmail)).isTrue();
+        assertThat(inviteeRepository.findInvitationsSent(poll.getId(), List.of(carolEmail))).containsExactly(carolEmail);
         assertThat(inviteEmail(carolEmail)).singleElement().satisfies(i -> assertThat(i.email()).isEqualTo(carolEmail));
+    }
+
+    @Test
+    @DisplayName("should record every address of one invite as sent in one batch, and no other address")
+    void shouldRecordEveryAddressWhenInvitingSeveralEmails() {
+        String daveEmail = "dave-" + System.nanoTime() + "@example.com";
+        InviteesRequest request = new InviteesRequest();
+        request.setEmails(List.of(carolEmail, daveEmail));
+        voteService.addInvitees(poll.getId().toString(), request, owner.getId().toString());
+        em.flush();
+
+        assertThat(inviteeRepository.findInvitationsSent(poll.getId(), List.of(carolEmail, daveEmail, "x@example.com")))
+                .containsExactlyInAnyOrder(carolEmail, daveEmail);
     }
 
     @Test

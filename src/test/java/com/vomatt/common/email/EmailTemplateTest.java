@@ -16,6 +16,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.thymeleaf.spring6.SpringTemplateEngine;
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -73,11 +74,11 @@ class EmailTemplateTest {
     @Test
     void shouldRenderInvitationEmailWithPollLinkWhenLocaleIsZhTwOrEn() throws Exception {
         UUID pollId = UUID.fromString("0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05");
-        emailService.sendInvitationEmail("a@example.com", "Amy", "Lunch <b>vote</b>", pollId, ZH_TW);
+        emailService.sendInvitationEmails(List.of("a@example.com"), "Amy", "Lunch <b>vote</b>", pollId, ZH_TW);
         assertThat(sentHtml()).contains("Amy 邀請您", "Lunch &lt;b&gt;vote&lt;/b&gt;",
                 "https://staging.vomatt.com/votes/" + pollId, "前往投票").doesNotContain("??", "<b>vote");
 
-        emailService.sendInvitationEmail("b@example.com", "Amy", "Lunch", pollId, Locale.ENGLISH);
+        emailService.sendInvitationEmails(List.of("b@example.com"), "Amy", "Lunch", pollId, Locale.ENGLISH);
         assertThat(sentHtml()).contains("Amy invited you", "Open the Poll", "https://staging.vomatt.com/votes/" + pollId)
                 .doesNotContain("??");
     }

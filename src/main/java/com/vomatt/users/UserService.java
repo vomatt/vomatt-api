@@ -50,6 +50,7 @@ public class UserService {
             throw ApiException.forbidden(MessageKey.USER_DELETE_FORBIDDEN);
         }
         User user = findUserById(userId);
+        requireAnotherActiveAdmin(user);
         refreshTokenService.revokeAllForUser(userId);
         // user_votes rows cascade with the user; release them from stored option counts and Turnout first.
         // Poll rows before option rows, the same lock order as a Ballot, so a concurrent Ballot cannot deadlock it
@@ -57,6 +58,21 @@ public class UserService {
         voteOptionRepository.decrementForUserBallots(user.getId());
         userRepository.delete(user);
         log.info("User {} deleted by {}", userId, principal.userId());
+    }
+
+    /**
+     * The one last-admin guard, run before an account stops being an active admin (delete, suspend, demote): at least one
+     * other active admin must remain. Locks the active admin rows first, so two admins removing each other concurrently
+     * cannot both pass. A no-op when the account is not an active admin.
+     */
+    @Transactional
+    public void requireAnotherActiveAdmin(User user) {
+        if (!user.isActive() || !Arrays.asList(user.getRoles()).contains(UserRole.ADMIN)) {
+            return;
+        }
+        if (userRepository.lockActiveAdminIds().stream().allMatch(user.getId()::equals)) {
+            throw ApiException.conflict(MessageKey.ADMIN_LAST_ADMIN);
+        }
     }
 
     @Transactional(readOnly = true)

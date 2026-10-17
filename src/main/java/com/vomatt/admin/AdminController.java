@@ -1,6 +1,7 @@
 package com.vomatt.admin;
 
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 import com.vomatt.admin.dto.AdminStatsResponse;
 import com.vomatt.admin.dto.AuditLogResponse;
@@ -69,7 +70,7 @@ public class AdminController {
                     **Behavior**: read-only offset page of audit log entries, newest first. Filters (all optional, exact match, combined with AND): `userId` (actor), `action`, `resourceType`, `resourceId`, and the time range `from` (inclusive) to `to` (exclusive) as ISO-8601 date-times. `page` is 1-based (default 1), `limit` 1-50 (default 20). Entries are written asynchronously, so an action may show up a moment after it returns
                     **Side effects**: none
                     **Errors**:
-                    - 400 `common.type_mismatch`: `from` or `to` is not an ISO-8601 date-time""")
+                    - 400 `common.type_mismatch`: `userId` or `resourceId` is not a valid UUID, or `from` / `to` is not an ISO-8601 date-time""")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of audit log entries",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "AuditLogs", value = """
                     {
@@ -102,12 +103,12 @@ public class AdminController {
                       "error": null
                     }""")))
     public ResponseEntity<ApiResponse<PageResponse<AuditLogResponse>>> listAuditLogs(
-            @Parameter(description = "Actor's user ID") @RequestParam(required = false) String userId,
+            @Parameter(description = "Actor's user ID (UUID)") @RequestParam(required = false) UUID userId,
             @Parameter(description = "Action, e.g. DELETE, SUSPEND, FORCE_CLOSE", example = "SUSPEND")
             @RequestParam(required = false) String action,
             @Parameter(description = "Resource type, e.g. VOTE, COMMENT, USER", example = "USER")
             @RequestParam(required = false) String resourceType,
-            @Parameter(description = "Affected resource ID") @RequestParam(required = false) String resourceId,
+            @Parameter(description = "Affected resource ID (UUID; every audited resource has a UUID id)") @RequestParam(required = false) UUID resourceId,
             @Parameter(description = "Inclusive start, ISO-8601 (URL-encode a `+` offset as `%2B`)", example = "2026-10-01T00:00:00Z")
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
             @Parameter(description = "Exclusive end, ISO-8601 (URL-encode a `+` offset as `%2B`)", example = "2026-10-17T00:00:00Z")

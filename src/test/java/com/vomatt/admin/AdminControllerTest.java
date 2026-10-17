@@ -78,10 +78,14 @@ class AdminControllerTest {
     }
 
     @Test
-    void shouldReturn400WhenFromNotIsoDateTime() throws Exception {
+    void shouldReturn400WhenFilterMalformed() throws Exception {
         authenticateAs("admin");
 
         mockMvc.perform(get("/api/admin/audit-logs").param("from", "yesterday")).andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/admin/audit-logs").param("userId", "not-a-uuid"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("common.type_mismatch"));
+        mockMvc.perform(get("/api/admin/audit-logs").param("resourceId", "42")).andExpect(status().isBadRequest());
 
         verify(adminService, never()).listAuditLogs(any(), any(), any(), any(), any(), any(), any(), any());
     }

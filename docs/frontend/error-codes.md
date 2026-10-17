@@ -15,13 +15,13 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `common.internal_error` | 500 | 伺服器錯誤，請稍後再試 | Internal server error, please try again later | Show a generic error notice | GlobalExceptionHandler |
 | `common.service_unavailable` | 503 | 服務暫時無法使用，請稍後再試 | Service temporarily unavailable, please try again later | Show service temporarily unavailable, retry later | AuthService, GlobalExceptionHandler |
 | `common.unauthorized` | 401 | 未授權的請求 | Unauthorized request | See [auth-flow.md](auth-flow.md) | JwtAuthenticationEntryPoint |
-| `common.forbidden` | 403 | 沒有權限執行此操作 | You do not have permission to perform this action | Show a permission-denied notice | GlobalExceptionHandler, JwtAccessDeniedHandler |
+| `common.forbidden` | 403 | 沒有權限執行此操作 | You do not have permission to perform this action | Show a permission-denied notice | GlobalExceptionHandler, JwtAccessDeniedHandler, JwtAuthFilter |
 | `common.rate_limited` | 429 | 請求過於頻繁，請稍後再試 | Too many requests, please try again later | Retry after the `Retry-After` seconds | RateLimitFilter, VoteService |
 | `common.conflict` | 409 | 資源衝突，請重試 | Resource conflict, please try again | Show message (resource state conflict) | AdminVoteService, GlobalExceptionHandler, VoteService |
 | `common.validation_failed` | 400 | 輸入資料驗證失敗 | Validation failed | Show message so the user can fix the input | GlobalExceptionHandler |
 | `common.missing_param` | 400 | 缺少必要參數：{0} | Missing required parameter: {0} | Show message so the user can fix the input | GlobalExceptionHandler, UserController |
 | `common.type_mismatch` | 400 | 參數格式錯誤：{0} | Invalid parameter format: {0} | Show message so the user can fix the input | GlobalExceptionHandler |
-| `common.invalid_status` | 400 | 無效的狀態：{0} | Invalid status: {0} | Show message so the user can fix the input | AdminUserService, AdminVoteService, VoteListOrder, VoteService |
+| `common.invalid_status` | 400 | 無效的狀態：{0} | Invalid status: {0} | Show message so the user can fix the input | AdminUserService, VoteListOrder, VoteService, VoteStatus |
 | `common.invalid_sort` | 400 | 無效的排序：{0} | Invalid sort: {0} | Show message so the user can fix the input | VoteListOrder |
 | `common.cursor_invalid` | 400 | 分頁 cursor 無效 | Invalid pagination cursor | Show message so the user can fix the input | Cursor |
 | `auth.token.invalid` | 401 | Token 無效 | Invalid token | See [auth-flow.md](auth-flow.md) | JwtAuthFilter |
@@ -67,7 +67,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `vote.voters.hidden` | 403 | 你沒有權限查看此投票的投票者 | You are not allowed to see who voted in this poll | Show a permission-denied notice | VoteService |
 | `vote.not_editable` | 400 | 只能在投票開始前編輯 | A poll can only be edited before it opens | Show message so the user can fix the input | Vote, VoteService |
 | `vote.list.sort_not_allowed` | 400 | 已結束的投票固定依結束時間排序，不可指定 sort | Ended polls are always ordered by end time; sort is not allowed | Show message so the user can fix the input | VoteListOrder |
-| `vote.search.query_too_short` | 400 | 搜尋字串至少需要 2 個字 | Search query must be at least 2 characters | Show message so the user can fix the input | AdminVoteService, VoteService |
+| `vote.search.query_too_short` | 400 | 搜尋字串至少需要 2 個字 | Search query must be at least 2 characters | Show message so the user can fix the input | VoteService |
 | `vote.multiple.not_allowed` | 400 | 此投票不允許複選 | Multiple choices not allowed for this vote | Show message so the user can fix the input | VoteService |
 | `vote.end_time.past` | 400 | 結束時間不可早於現在 | End time cannot be in the past | Show message so the user can fix the input | VoteService |
 | `vote.end_time.before_start` | 400 | 結束時間不可早於開始時間 | End time cannot be before start time | Show message so the user can fix the input | VoteService |
@@ -97,7 +97,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `lookup.not_found` | 404 | 找不到字典資料 | Lookup not found | Show resource not found | LookupService |
 | `lookup.exists` | 409 | 字典資料已存在：{0}/{1} | Dictionary item already exists: {0}/{1} | Show message (resource state conflict) | LookupService |
 | `admin.self_action_forbidden` | 403 | 不能停權自己或移除自己的管理員角色 | You cannot suspend yourself or remove your own admin role | Show a permission-denied notice | AdminUserService |
-| `admin.last_admin` | 409 | 不能移除最後一位管理員 | Cannot remove the last active admin | Show message (resource state conflict) | AdminUserService |
+| `admin.last_admin` | 409 | 不能移除最後一位管理員 | Cannot remove the last active admin | Show message (resource state conflict) | UserService |
 
 ## Success messages and others
 

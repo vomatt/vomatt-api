@@ -302,4 +302,12 @@ class VoteTest {
                 .isInstanceOfSatisfying(ApiException.class,
                         ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_INVITEE_NOT_INVITE_ONLY));
     }
+
+    @Test
+    void shouldParseLowerCaseStatusWhenKnown() {
+        assertThat(VoteStatus.parse("scheduled")).isEqualTo(VoteStatus.SCHEDULED);
+        assertThat(VoteStatus.parse("ended")).isEqualTo(VoteStatus.ENDED);
+        assertThatThrownBy(() -> VoteStatus.parse("OPEN")).isInstanceOfSatisfying(ApiException.class,
+                e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.COMMON_INVALID_STATUS));
+    }
 }

@@ -95,6 +95,16 @@ class AdminVoteServiceTest {
     }
 
     @Test
+    void shouldReturn404WhenClosingDeletedPoll() {
+        vote.setAudience(Audience.UNLISTED);
+        vote.setDeletedAt(OffsetDateTime.now().minusHours(1));
+
+        assertThatThrownBy(() -> service.closeVote(voteId, adminId)).isInstanceOfSatisfying(ApiException.class,
+                e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.VOTE_NOT_FOUND));
+        assertThat(vote.getStatus()).isEqualTo(VoteStatus.OPEN);
+    }
+
+    @Test
     void shouldSoftDeleteAndReleaseTagsWhenOwnerWindowPassed() {
         service.deleteVote(voteId, adminId);
 

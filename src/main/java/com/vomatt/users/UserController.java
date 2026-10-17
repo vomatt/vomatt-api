@@ -232,6 +232,7 @@ public class UserController {
             the deletion is written to the audit log
             **Errors**:
             - 403 `user.delete.forbidden`: deleting another user's account without the admin role
+            - 409 `admin.last_admin`: the account is the only active admin
             - 404 `user.not_found`: no account with this id
             - 400 `common.bad_request`: `userId` is not a valid id (admin callers only; other callers get 403 first)""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> deleteUser(

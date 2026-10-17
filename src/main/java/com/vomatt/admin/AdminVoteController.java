@@ -167,14 +167,14 @@ public class AdminVoteController {
     @Operation(summary = "Close Poll",
             description = """
                     **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
-                    **Precondition**: the Poll exists and is Open with Audience UNLISTED or INVITE_ONLY, the same rules as the owner's Close (to take down a Public or Scheduled Poll, Delete it)
+                    **Precondition**: the Poll exists, is not Deleted, and is Open with Audience UNLISTED or INVITE_ONLY, the same rules as the owner's Close (to take down a Public or Scheduled Poll, Delete it)
                     **Behavior**: Closes the Poll for its owner: it Ends now and keeps its Deadline. An Ended Poll is left as is (idempotent). Returns the Poll, whose results are now unsealed
                     **Side effects**: Participants see the Poll Ended in their notifications. Written to the audit log
                     **Errors**:
                     - 400 `common.type_mismatch`: `voteId` is not a valid UUID
                     - 400 `vote.close.public_not_allowed`: the Poll is Public
                     - 400 `vote.close.scheduled`: the Poll is Scheduled
-                    - 404 `vote.not_found`: no Poll with this ID
+                    - 404 `vote.not_found`: no Poll with this ID, or the Poll is Deleted (Restore it first)
                     - 409 `common.conflict`: the Poll is busy (a Ballot or another change holds it); retry""")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Poll Closed",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Closed", value = """

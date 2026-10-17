@@ -126,13 +126,13 @@ public class AdminQueryRepository {
     }
 
     /** @param from inclusive lower bound on created_at, or null; {@code to} is the exclusive upper bound, or null */
-    public Page<AuditLog> findAuditLogs(String userId, String action, String resourceType, String resourceId,
+    public Page<AuditLog> findAuditLogs(UUID userId, String action, String resourceType, UUID resourceId,
                                         OffsetDateTime from, OffsetDateTime to, Pageable pageable) {
         StringBuilder sql = new StringBuilder("FROM vomatt.audit_logs a WHERE true");
         Map<String, Object> params = new HashMap<>();
         if (userId != null) {
             sql.append(" AND a.user_id = :userId");
-            params.put("userId", userId);
+            params.put("userId", userId.toString());
         }
         if (action != null) {
             sql.append(" AND a.action = :action");
@@ -144,7 +144,7 @@ public class AdminQueryRepository {
         }
         if (resourceId != null) {
             sql.append(" AND a.resource_id = :resourceId");
-            params.put("resourceId", resourceId);
+            params.put("resourceId", resourceId.toString());
         }
         if (from != null) {
             sql.append(" AND a.created_at >= :from");

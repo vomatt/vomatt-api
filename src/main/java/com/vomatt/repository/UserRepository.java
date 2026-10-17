@@ -42,9 +42,17 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     boolean existsByIdAndActiveFalse(UUID id);
 
-    /** Active accounts holding the admin role; guards against removing the last one. */
-    @Query(value = "SELECT count(*) FROM vomatt.users WHERE active = true AND 'admin' = ANY(roles)", nativeQuery = true)
-    long countActiveAdmins();
+    /**
+     * Locks every active admin row (FOR UPDATE) and returns their ids, so concurrent admin removals serialize: a waiter
+     * re-reads the rows once the first commits and no longer sees an admin it suspended or demoted.
+     */
+    @Query(value = "SELECT id FROM vomatt.users WHERE active = true AND 'admin' = ANY(roles) FOR UPDATE", nativeQuery = true)
+    List<UUID> lockActiveAdminIds();
+
+    /** Whether the account is active and still holds the admin role; checked per request on /api/admin/**. */
+    @Query(value = "SELECT EXISTS (SELECT 1 FROM vomatt.users WHERE id = :id AND active = true AND 'admin' = ANY(roles))",
+           nativeQuery = true)
+    boolean isActiveAdmin(@Param("id") UUID id);
 
     /**
      * Keyset page of username search (case-insensitive contains), ordered by username; null cursor for the first page.

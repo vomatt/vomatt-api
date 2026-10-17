@@ -49,19 +49,8 @@ public class AdminVoteService {
     @Transactional(readOnly = true)
     public PageResponse<AdminVoteResponse> listVotes(String q, String status, UUID creatorId, Audience audience,
                                                      Boolean deleted, Integer page, Integer limit) {
-        String query = blankToNull(q);
-        // one-character queries cannot use the bigram index (ADR 0001)
-        if (query != null && query.codePointCount(0, query.length()) < 2) {
-            throw ApiException.badRequest(MessageKey.VOTE_SEARCH_QUERY_TOO_SHORT);
-        }
-        VoteStatus voteStatus = switch (status == null ? "" : status) {
-            case "" -> null;
-            case "scheduled" -> VoteStatus.SCHEDULED;
-            case "open" -> VoteStatus.OPEN;
-            case "ended" -> VoteStatus.ENDED;
-            default -> throw ApiException.badRequest(MessageKey.COMMON_INVALID_STATUS, status);
-        };
-        Page<Vote> votes = adminQueryRepository.findVotes(query, voteStatus, creatorId, audience, deleted,
+        VoteStatus voteStatus = blankToNull(status) == null ? null : VoteStatus.parse(status);
+        Page<Vote> votes = adminQueryRepository.findVotes(VoteService.searchQuery(q), voteStatus, creatorId, audience, deleted,
                 OffsetDateTime.now(), PageResponse.pageable(page, limit));
         return PageResponse.of(toResponses(votes.getContent()), votes.getTotalElements(), votes.getNumber() + 1,
                 votes.getSize());
@@ -76,6 +65,10 @@ public class AdminVoteService {
     /** Close as the owner would (same Audience and status rules), without the owner check. */
     public AdminVoteResponse closeVote(UUID voteId, String actorId) {
         Vote vote = lockVote(voteId);
+        // A Deleted Poll is frozen: restore it first
+        if (vote.getDeletedAt() != null) {
+            throw ApiException.notFound(MessageKey.VOTE_NOT_FOUND);
+        }
         vote.closeAt(OffsetDateTime.now());
         log.info("Vote {} closed by admin {}", voteId, actorId);
         return toResponse(vote);

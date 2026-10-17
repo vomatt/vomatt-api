@@ -1,5 +1,6 @@
 package com.vomatt.common.security;
 
+import com.vomatt.common.constant.UserRole;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.repository.UserRepository;
 import io.jsonwebtoken.ExpiredJwtException;
@@ -54,9 +55,17 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 log.debug("Invalid JWT token: {}", ex.getMessage());
             }
         }
+        // Admin roles outlive a demotion or suspension in the token, so every /api/admin/** call (reads included) by an
+        // admin token re-checks the account in one query; tokens without the admin claim are refused by the security rules
+        boolean adminCall = principal != null && request.getRequestURI().startsWith("/api/admin/")
+                && principal.roles().contains(UserRole.ADMIN);
+        if (adminCall && !userRepository.isActiveAdmin(UUID.fromString(principal.userId()))) {
+            errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN, MessageKey.COMMON_FORBIDDEN);
+            return;
+        }
         // Access tokens outlive a suspension, so writes re-check users.active; reads skip the DB hit.
         // /api/auth/** keeps its own handling (login and refresh already reject suspended users).
-        if (principal != null && !READ_METHODS.contains(request.getMethod())
+        if (!adminCall && principal != null && !READ_METHODS.contains(request.getMethod())
                 && !request.getRequestURI().startsWith("/api/auth/")
                 && userRepository.existsByIdAndActiveFalse(UUID.fromString(principal.userId()))) {
             errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN, MessageKey.AUTH_ACCOUNT_BANNED);

@@ -22,6 +22,7 @@ import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.UserVoteRepository;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.repository.VoteRepository;
+import com.vomatt.users.UserService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,6 +44,7 @@ public class AdminUserService {
     private final UserVoteRepository userVoteRepository;
     private final VoteCommentRepository voteCommentRepository;
     private final RefreshTokenService refreshTokenService;
+    private final UserService userService;
     private final AdminMapper adminMapper;
 
     /** @param status active, suspended, or null for both */
@@ -68,9 +70,7 @@ public class AdminUserService {
         if (user.getId().toString().equals(actorId)) {
             throw ApiException.forbidden(MessageKey.ADMIN_SELF_ACTION_FORBIDDEN);
         }
-        if (user.isActive() && isAdmin(user)) {
-            requireAnotherActiveAdmin();
-        }
+        userService.requireAnotherActiveAdmin(user);
         user.setActive(false);
         refreshTokenService.revokeAllForUser(userId.toString());
         log.info("User {} suspended by admin {}", userId, actorId);
@@ -90,21 +90,12 @@ public class AdminUserService {
             if (user.getId().toString().equals(actorId)) {
                 throw ApiException.forbidden(MessageKey.ADMIN_SELF_ACTION_FORBIDDEN);
             }
-            if (user.isActive()) {
-                requireAnotherActiveAdmin();
-            }
+            userService.requireAnotherActiveAdmin(user);
         }
         user.setRoles(roles.stream().distinct().toArray(String[]::new));
         refreshTokenService.revokeAllForUser(userId.toString());
         log.info("User {} roles set to {} by admin {}", userId, roles, actorId);
         return detail(user);
-    }
-
-    // The target is an active admin about to lose that status, so at least one other must remain
-    private void requireAnotherActiveAdmin() {
-        if (userRepository.countActiveAdmins() <= 1) {
-            throw ApiException.conflict(MessageKey.ADMIN_LAST_ADMIN);
-        }
     }
 
     private static boolean isAdmin(User user) {

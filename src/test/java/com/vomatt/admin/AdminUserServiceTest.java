@@ -9,6 +9,7 @@ import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.UserVoteRepository;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.repository.VoteRepository;
+import com.vomatt.users.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -47,8 +48,10 @@ class AdminUserServiceTest {
 
     @BeforeEach
     void setUp() {
+        // The real guard, so these tests cover the shared last-admin rule as admins reach it
+        UserService userService = new UserService(userRepository, null, null, refreshTokenService, null, voteRepository);
         service = new AdminUserService(adminQueryRepository, userRepository, voteRepository, userVoteRepository,
-                voteCommentRepository, refreshTokenService, new AdminMapper());
+                voteCommentRepository, refreshTokenService, userService, new AdminMapper());
     }
 
     private User user(UUID id, String... roles) {
@@ -87,7 +90,8 @@ class AdminUserServiceTest {
     @Test
     void shouldRefuseWhenSuspendingLastActiveAdmin() {
         User target = user(targetId, "admin");
-        when(userRepository.countActiveAdmins()).thenReturn(1L);
+        // the target is the only active admin
+        when(userRepository.lockActiveAdminIds()).thenReturn(List.of(targetId));
 
         assertApiError(() -> service.suspend(targetId, actorId.toString()), HttpStatus.CONFLICT, MessageKey.ADMIN_LAST_ADMIN);
         assertThat(target.isActive()).isTrue();
@@ -96,7 +100,7 @@ class AdminUserServiceTest {
     @Test
     void shouldSuspendAdminWhenAnotherActiveAdminRemains() {
         User target = user(targetId, "admin");
-        when(userRepository.countActiveAdmins()).thenReturn(2L);
+        when(userRepository.lockActiveAdminIds()).thenReturn(List.of(targetId, actorId));
 
         service.suspend(targetId, actorId.toString());
 
@@ -146,13 +150,13 @@ class AdminUserServiceTest {
         service.updateRoles(actorId, List.of("user", "moderator", "admin"), actorId.toString());
 
         assertThat(self.getRoles()).containsExactly("user", "moderator", "admin");
-        verify(userRepository, never()).countActiveAdmins();
+        verify(userRepository, never()).lockActiveAdminIds();
     }
 
     @Test
     void shouldRefuseWhenDemotingLastActiveAdmin() {
         user(targetId, "admin");
-        when(userRepository.countActiveAdmins()).thenReturn(1L);
+        when(userRepository.lockActiveAdminIds()).thenReturn(List.of(targetId));
 
         assertApiError(() -> service.updateRoles(targetId, List.of("user"), actorId.toString()),
                 HttpStatus.CONFLICT, MessageKey.ADMIN_LAST_ADMIN);
@@ -166,7 +170,7 @@ class AdminUserServiceTest {
         service.updateRoles(targetId, List.of("user"), actorId.toString());
 
         assertThat(target.getRoles()).containsExactly("user");
-        verify(userRepository, never()).countActiveAdmins();
+        verify(userRepository, never()).lockActiveAdminIds();
     }
 
     @Test

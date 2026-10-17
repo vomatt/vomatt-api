@@ -98,11 +98,19 @@ class AdminUserControllerTest {
     }
 
     @Test
-    void shouldReturn400WhenSuspendReasonBlank() throws Exception {
+    void shouldSuspendWhenBodyOmitted() throws Exception {
+        authenticateAs("admin");
+        when(adminUserService.suspend(userId, ADMIN_ID)).thenReturn(detail(false));
+
+        mockMvc.perform(patch("/api/admin/users/{id}/suspend", userId)).andExpect(status().isOk());
+    }
+
+    @Test
+    void shouldReturn400WhenSuspendReasonTooLong() throws Exception {
         authenticateAs("admin");
 
         mockMvc.perform(patch("/api/admin/users/{id}/suspend", userId)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\" \"}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"" + "x".repeat(501) + "\"}"))
                 .andExpect(status().isBadRequest());
 
         verify(adminUserService, never()).suspend(any(), anyString());

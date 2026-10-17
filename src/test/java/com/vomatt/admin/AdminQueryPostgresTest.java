@@ -166,11 +166,11 @@ class AdminQueryPostgresTest extends PostgresRepositoryTest {
         em.persist(other);
         em.flush();
 
-        Page<AuditLog> byActor = repository.findAuditLogs(actor, null, null, null, null, null, firstPage);
+        Page<AuditLog> byActor = repository.findAuditLogs(UUID.fromString(actor), null, null, null, null, null, firstPage);
         assertThat(byActor.getTotalElements()).isEqualTo(2);
-        assertThat(repository.findAuditLogs(actor, "SUSPEND", "USER", target, now.minusMinutes(1), now.plusMinutes(1), firstPage)
+        assertThat(repository.findAuditLogs(UUID.fromString(actor), "SUSPEND", "USER", UUID.fromString(target), now.minusMinutes(1), now.plusMinutes(1), firstPage)
                 .getContent()).singleElement().satisfies(log -> assertThat(log.getDetails()).contains("spam"));
-        assertThat(repository.findAuditLogs(actor, null, null, null, now.plusMinutes(1), null, firstPage).getContent()).isEmpty();
+        assertThat(repository.findAuditLogs(UUID.fromString(actor), null, null, null, now.plusMinutes(1), null, firstPage).getContent()).isEmpty();
     }
 
     @Test
@@ -199,15 +199,19 @@ class AdminQueryPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    void shouldCountOnlyActiveAdminsWhenGuardingLastAdmin() {
-        long before = userRepository.countActiveAdmins();
+    void shouldReturnOnlyActiveAdminsWhenGuardingLastAdmin() {
         User admin = persistUser(unique("adm"));
         admin.setRoles(new String[] { "user", "admin" });
         User suspendedAdmin = persistUser(unique("adm"));
         suspendedAdmin.setRoles(new String[] { "admin" });
         suspendedAdmin.setActive(false);
+        User plain = persistUser(unique("usr"));
         em.flush();
 
-        assertThat(userRepository.countActiveAdmins() - before).isEqualTo(1);
+        assertThat(userRepository.lockActiveAdminIds()).contains(admin.getId())
+                .doesNotContain(suspendedAdmin.getId(), plain.getId());
+        assertThat(userRepository.isActiveAdmin(admin.getId())).isTrue();
+        assertThat(userRepository.isActiveAdmin(suspendedAdmin.getId())).isFalse();
+        assertThat(userRepository.isActiveAdmin(plain.getId())).isFalse();
     }
 }

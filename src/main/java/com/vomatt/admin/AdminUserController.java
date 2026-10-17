@@ -160,11 +160,11 @@ public class AdminUserController {
             description = """
                     **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
                     **Precondition**: the account exists, is not the caller, and is not the last active admin
-                    **Behavior**: sets `active` to false and returns the account. Idempotent: suspending a suspended account succeeds
-                    **Side effects**: every refresh token of the user is revoked, so they cannot refresh or sign in; their unexpired access token still reads but every write gets 403 `auth.account_banned`. Written to the audit log with the reason in `details`
+                    **Behavior**: sets `active` to false and returns the account. Idempotent: suspending a suspended account succeeds. The body is optional; its `reason` is audit-only (kept in the audit log entry's `details`, not on the account), and the audit log is written asynchronously on a best-effort basis
+                    **Side effects**: every refresh token of the user is revoked, so they cannot refresh or sign in; their unexpired access token still reads but every write gets 403 `auth.account_banned`, and a suspended admin loses back-office access at once. Written to the audit log with the reason in `details`
                     **Errors**:
                     - 400 `common.type_mismatch`: `userId` is not a valid UUID
-                    - 400 `common.validation_failed`: `reason` is blank or longer than 500 characters
+                    - 400 `common.validation_failed`: `reason` is longer than 500 characters
                     - 403 `admin.self_action_forbidden`: the caller tried to suspend themself
                     - 404 `user.not_found`: no account with this ID
                     - 409 `admin.last_admin`: the account is the only active admin""")
@@ -200,7 +200,7 @@ public class AdminUserController {
                             }""")))
     public ResponseEntity<ApiResponse<AdminUserDetail>> suspendUser(
             @Parameter(description = "User ID (UUIDv7)", required = true) @PathVariable UUID userId,
-            @Valid @RequestBody SuspendUserRequest request,
+            @Valid @RequestBody(required = false) SuspendUserRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(adminUserService.suspend(userId, principal.userId())));
     }
@@ -236,7 +236,7 @@ public class AdminUserController {
                     **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
                     **Precondition**: the account exists; when the change drops the admin role, the account is not the caller and not the last active admin
                     **Behavior**: replaces the account's roles with `roles` (each `user`, `moderator` or `admin`; duplicates ignored) and returns the account
-                    **Side effects**: every refresh token of the user is revoked, so the new roles apply from their next sign-in; an access token already issued keeps its old roles until it expires. Written to the audit log with the new roles in `details`
+                    **Side effects**: every refresh token of the user is revoked, so the new roles apply from their next sign-in; an access token already issued keeps its old roles until it expires, except that a removed admin role stops working on `/api/admin/**` at once. Written to the audit log with the new roles in `details`
                     **Errors**:
                     - 400 `common.type_mismatch`: `userId` is not a valid UUID
                     - 400 `common.validation_failed`: `roles` is empty or holds an unknown role

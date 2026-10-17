@@ -225,11 +225,7 @@ public class VoteService {
                                                   Integer limit, String userId) {
         int size = CursorResponse.limit(limit);
         String tagSlug = tag == null || tag.isBlank() ? null : tag;
-        String query = q == null || q.isBlank() ? null : q.strip();
-        // one-character queries cannot use the bigram index (ADR 0001)
-        if (query != null && query.codePointCount(0, query.length()) < 2) {
-            throw ApiException.badRequest(MessageKey.VOTE_SEARCH_QUERY_TOO_SHORT);
-        }
+        String query = searchQuery(q);
         Cursor.Scope scope = switch (order) {
             case NEWEST -> Cursor.Scope.FEED_NEWEST;
             case CLOSING -> Cursor.Scope.FEED_CLOSING;
@@ -254,10 +250,10 @@ public class VoteService {
      */
     @Transactional(readOnly = true)
     public CursorResponse<VoteResponse> getMyPolls(String userId, String status, String cursor, Integer limit) {
-        boolean ended = switch (status == null ? "open" : status) {
-            case "open" -> false;
-            case "ended" -> true;
-            default -> throw ApiException.badRequest(MessageKey.COMMON_INVALID_STATUS, status);
+        boolean ended = switch (status == null ? VoteStatus.OPEN : VoteStatus.parse(status)) {
+            case OPEN -> false;
+            case ENDED -> true;
+            case SCHEDULED -> throw ApiException.badRequest(MessageKey.COMMON_INVALID_STATUS, status);
         };
         int size = CursorResponse.limit(limit);
         UUID userUuid = UUID.fromString(userId);
@@ -857,6 +853,18 @@ public class VoteService {
         UUID voteId = ballot.getVote().getId();
         voteOptionRepository.adjustVoteCount(deleteBallot(ballot), -1);
         voteRepository.adjustTurnout(voteId, -1);
+    }
+
+    /**
+     * Poll search text ({@code q}) for the bigram index: stripped, null when blank, 400
+     * {@code vote.search.query_too_short} for one character, which has no bigrams (ADR 0001).
+     */
+    public static String searchQuery(String q) {
+        String query = q == null || q.isBlank() ? null : q.strip();
+        if (query != null && query.codePointCount(0, query.length()) < 2) {
+            throw ApiException.badRequest(MessageKey.VOTE_SEARCH_QUERY_TOO_SHORT);
+        }
+        return query;
     }
 
     /** Tags whose usage count includes the Poll: popular tag counts include only Public Polls. */

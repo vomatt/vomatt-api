@@ -25,6 +25,7 @@ import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.security.UserPrincipal;
 import com.vomatt.common.response.CursorResponse;
@@ -63,6 +64,42 @@ class UserServiceTest {
         order.verify(voteRepository).decrementTurnoutForUserBallots(id);
         order.verify(voteOptionRepository).decrementForUserBallots(id);
         order.verify(userRepository).delete(user);
+    }
+
+    @Test
+    void shouldRefuseWhenDeletingLastActiveAdmin() {
+        UUID id = UUID.randomUUID();
+        User admin = User.builder().id(id).username("root").roles(new String[] { "user", "admin" }).build();
+        when(userRepository.findById(id)).thenReturn(Optional.of(admin));
+        when(userRepository.lockActiveAdminIds()).thenReturn(List.of(id));
+
+        assertThatThrownBy(() -> userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), "r@test.local", List.of("admin"))))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.ADMIN_LAST_ADMIN));
+        verify(userRepository, never()).delete(any());
+        verify(refreshTokenService, never()).revokeAllForUser(any());
+    }
+
+    @Test
+    void shouldDeleteAdminWhenAnotherActiveAdminRemains() {
+        UUID id = UUID.randomUUID();
+        User admin = User.builder().id(id).username("root").roles(new String[] { "admin" }).build();
+        when(userRepository.findById(id)).thenReturn(Optional.of(admin));
+        when(userRepository.lockActiveAdminIds()).thenReturn(List.of(id, UUID.randomUUID()));
+
+        userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), "r@test.local", List.of("admin")));
+
+        verify(userRepository).delete(admin);
+    }
+
+    @Test
+    void shouldSkipAdminLockWhenAccountIsNotActiveAdmin() {
+        User suspendedAdmin = User.builder().id(UUID.randomUUID()).username("x").roles(new String[] { "admin" }).active(false).build();
+
+        userService.requireAnotherActiveAdmin(suspendedAdmin);
+        userService.requireAnotherActiveAdmin(User.builder().id(UUID.randomUUID()).username("y").build());
+
+        verify(userRepository, never()).lockActiveAdminIds();
     }
 
     @Test

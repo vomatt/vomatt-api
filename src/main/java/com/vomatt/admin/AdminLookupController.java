@@ -78,8 +78,7 @@ public class AdminLookupController {
             @RequestParam(required = false) String type,
             @Parameter(description = "Include deactivated items (default true)", example = "true")
             @RequestParam(defaultValue = "true") boolean includeInactive) {
-        String lookupType = type == null || type.isBlank() ? null : type.strip();
-        return ResponseEntity.ok(ApiResponse.ok(lookupService.listForAdmin(lookupType, includeInactive)));
+        return ResponseEntity.ok(ApiResponse.ok(lookupService.listForAdmin(AdminService.blankToNull(type), includeInactive)));
     }
 
     @PostMapping

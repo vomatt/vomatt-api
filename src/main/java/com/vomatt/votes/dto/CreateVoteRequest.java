@@ -4,6 +4,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -34,7 +35,7 @@ public class CreateVoteRequest {
     @NotEmpty(message = "At least one option is required")
     @Schema(description = "Options of the Poll; the number of options must be between 2 and 10 (`vote.options.min` / `vote.options.max`)",
             requiredMode = Schema.RequiredMode.REQUIRED)
-    private List<VoteOptionRequest> options;
+    private List<@Valid VoteOptionRequest> options;
     
     @Schema(description = "When the Poll opens (ISO-8601 with offset). Null on create means open immediately; "
             + "a future time makes the Poll Scheduled. Null on edit keeps the current start time. Must be before `endTime`",

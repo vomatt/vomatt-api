@@ -35,14 +35,6 @@ public class RedisServiceImpl implements RedisService {
             + "if c == tonumber(ARGV[2]) then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end "
             + "return c").getBytes(StandardCharsets.UTF_8);
 
-    // P1-#18: HSET + "set TTL only if the key has no TTL yet" run atomically in one Lua script,
-    // replacing the old three steps "HSET -> getExpire probe -> expire" (an extra RTT + a TTL race).
-    // value/field are serialized with the template's existing serializer so they read back consistently via opsForHash().get.
-    private static final byte[] HSET_AND_EXPIRE_LUA = (
-            "redis.call('HSET', KEYS[1], ARGV[1], ARGV[2]) "
-            + "if redis.call('PTTL', KEYS[1]) == -1 then redis.call('PEXPIRE', KEYS[1], ARGV[3]) end "
-            + "return 1").getBytes(StandardCharsets.UTF_8);
-
     // ── Basic String value ───────────────────────────────────────────
 
     @Override
@@ -161,45 +153,6 @@ public class RedisServiceImpl implements RedisService {
     }
 
     // ── Hash ─────────────────────────────────────────────────────────
-
-    @Override
-    public void hSet(String cacheName, String key, String field, Object value, Duration ttl) {
-        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
-        try {
-            hSetAndExpireAtomic(cacheKey, field, value, ttl);
-            log.debug("Redis HSET: key={}, field={}", cacheKey, field);
-        } catch (Exception e) {
-            log.warn("Redis HSET failed, key={}, field={}: {}", cacheKey, field, e.getMessage());
-        }
-    }
-
-    @Override
-    public void hSetOrThrow(String cacheName, String key, String field, Object value, Duration ttl) {
-        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
-        try {
-            hSetAndExpireAtomic(cacheKey, field, value, ttl);
-            log.debug("Redis HSET (orThrow): key={}, field={}", cacheKey, field);
-        } catch (Exception e) {
-            throw new RedisOperationException("Redis HSET failed, key=" + cacheKey + ", field=" + field, e);
-        }
-    }
-
-    /**
-     * P1-#18: atomically performs HSET + "set TTL only if the key has no TTL yet" in one Lua script, avoiding the extra RTT and race of a getExpire probe.
-     * value/field are serialized with the template's existing serializer so {@code opsForHash().get} reads them back correctly.
-     */
-    @SuppressWarnings("unchecked")
-    private void hSetAndExpireAtomic(String cacheKey, String field, Object value, Duration ttl) {
-        RedisSerializer<String> keySer = (RedisSerializer<String>) redisTemplate.getKeySerializer();
-        RedisSerializer<String> hashKeySer = (RedisSerializer<String>) redisTemplate.getHashKeySerializer();
-        RedisSerializer<Object> hashValSer = (RedisSerializer<Object>) redisTemplate.getHashValueSerializer();
-        byte[] keyBytes = keySer.serialize(cacheKey);
-        byte[] fieldBytes = hashKeySer.serialize(field);
-        byte[] valueBytes = hashValSer.serialize(value);
-        byte[] ttlBytes = Long.toString(ttl.toMillis()).getBytes(StandardCharsets.UTF_8);
-        redisTemplate.execute((RedisCallback<Object>) connection -> connection.scriptingCommands()
-                .eval(HSET_AND_EXPIRE_LUA, ReturnType.INTEGER, 1, keyBytes, fieldBytes, valueBytes, ttlBytes));
-    }
 
     @Override
     @SuppressWarnings("unchecked")

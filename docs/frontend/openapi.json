@@ -4004,6 +4004,13 @@
           "503" : {
             "content" : {
               "application/json" : {
+                "example" : {
+                  "data" : null,
+                  "error" : "Service temporarily unavailable, please try again later",
+                  "errorCode" : "common.service_unavailable",
+                  "message" : "Service temporarily unavailable, please try again later",
+                  "success" : false
+                },
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -4093,7 +4100,7 @@
     },
     "/api/auth/google" : {
       "post" : {
-        "description" : "**Auth**: public\n**Precondition**: the client obtained a Google ID token (Google Sign-In)\n**Behavior**: validates the ID token with Google and checks its audience. Signs in the user with that email, creating the user if new. An existing account with the same email is reused only when Google reports the email as verified\n**Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated\n**Errors**:\n- 400 `auth.google.not_configured`: Google login is not configured on the server\n- 401 `auth.google.no_email`: the token is invalid or carries no email\n- 401 `auth.google.invalid_audience`: the token was issued for a different client ID\n- 401 `auth.email_not_verified`: Google reports the email as unverified\n- 403 `auth.account_banned`: the user is suspended (`active=false`)",
+        "description" : "**Auth**: public\n**Precondition**: the client obtained a Google ID token (Google Sign-In)\n**Behavior**: verifies the ID token signature against Google's public keys, then its issuer, audience and expiry. Signs in the user with that email, creating the user if new. An existing account with the same email is reused only when Google reports the email as verified\n**Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated\n**Errors**:\n- 400 `auth.google.not_configured`: Google login is not configured on the server\n- 401 `auth.google.no_email`: the token is invalid (malformed, bad signature, wrong issuer, expired) or carries no email\n- 401 `auth.google.invalid_audience`: the token was issued for a different client ID\n- 401 `auth.email_not_verified`: Google reports the email as unverified\n- 403 `auth.account_banned`: the user is suspended (`active=false`)\n- 503 `common.service_unavailable`: Google's key endpoint is unreachable",
         "operationId" : "googleLogin",
         "requestBody" : {
           "content" : {
@@ -4204,6 +4211,23 @@
               }
             },
             "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          },
+          "503" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : null,
+                  "error" : "Service temporarily unavailable, please try again later",
+                  "errorCode" : "common.service_unavailable",
+                  "message" : "Service temporarily unavailable, please try again later",
+                  "success" : false
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Google's key endpoint is unreachable; safe to retry (`common.service_unavailable`)"
           }
         },
         "summary" : "Sign in with Google",

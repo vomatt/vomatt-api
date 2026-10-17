@@ -26,7 +26,6 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
-import org.springframework.web.util.UriComponentsBuilder;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -50,19 +49,26 @@ public class AuthService {
     private static final tools.jackson.databind.json.JsonMapper JSON_MAPPER =
             tools.jackson.databind.json.JsonMapper.builder().build();
 
-    // P6-#21: short-TTL in-memory cache for Apple JWKS, so each Apple login does not hit the JWKS endpoint.
-    // Self-contained in AuthService (no Redis); implemented as a volatile holder + timestamp. With mostly
+    // P6-#21: short-TTL in-memory cache for the Apple / Google JWKS, so each login does not hit the JWKS endpoint.
+    // Self-contained in AuthService (no Redis); one holder + timestamp per JWKS URL. With mostly
     // reads and rare writes, an occasional duplicate fetch is acceptable (no lock needed).
-    private static final Duration APPLE_JWKS_CACHE_TTL = Duration.ofMinutes(10);
+    private static final Duration JWKS_CACHE_TTL = Duration.ofMinutes(10);
+    // A kid miss refetches the JWKS (the provider may have rotated keys), but at most once per minute per URL,
+    // so forged kids cannot turn every login attempt into an outbound fetch
+    private static final Duration JWKS_REFETCH_COOLDOWN = Duration.ofMinutes(1);
+    // Tolerated clock drift between us and the provider when checking id_token exp
+    private static final Duration ID_TOKEN_CLOCK_SKEW = Duration.ofSeconds(60);
 
-    /** Apple JWKS cache holder: keys is the parsed public key list, fetchedAt is the fetch time. */
-    private record AppleJwksCache(List<java.util.Map<String, Object>> keys, Instant fetchedAt) {
-        boolean isFresh() {
-            return Duration.between(fetchedAt, Instant.now()).compareTo(APPLE_JWKS_CACHE_TTL) < 0;
+    private static final java.util.Set<String> GOOGLE_ISSUERS = java.util.Set.of("accounts.google.com", "https://accounts.google.com");
+
+    /** JWKS cache holder: keys is the parsed public key list, fetchedAt is the fetch time. */
+    private record JwksCache(List<java.util.Map<String, Object>> keys, Instant fetchedAt) {
+        boolean isYoungerThan(Duration age) {
+            return Duration.between(fetchedAt, Instant.now()).compareTo(age) < 0;
         }
     }
 
-    private volatile AppleJwksCache appleJwksCache;
+    private final java.util.Map<String, JwksCache> jwksCache = new java.util.concurrent.ConcurrentHashMap<>();
 
     private final UserRepository userRepository;
     private final VoteService voteService;
@@ -78,8 +84,8 @@ public class AuthService {
     @Value("${google.client-id:}")
     private String googleClientId;
 
-    @Value("${oauth.google.token-info-url}")
-    private String googleTokenInfoUrl;
+    @Value("${oauth.google.jwks-url}")
+    private String googleJwksUrl;
 
     @Value("${line.channel-id:}")
     private String lineChannelId;
@@ -336,32 +342,47 @@ public class AuthService {
 
     // ── Google OAuth ──────────────────────────────────────────────────
 
-    @SuppressWarnings("unchecked")
     public AuthResponse googleLogin(String idToken) {
         if (googleClientId == null || googleClientId.isBlank()) {
             throw ApiException.badRequest(MessageKey.AUTH_GOOGLE_NOT_CONFIGURED);
         }
+        // JWKS outage -> 503 (thrown before the try, so it is not reported as an invalid token)
+        List<java.util.Map<String, Object>> keys = fetchJwks(googleJwksUrl, "Google", false);
 
-        var response = restClient.get()
-                .uri(UriComponentsBuilder.fromUriString(googleTokenInfoUrl).queryParam("id_token", idToken).encode().build().toUri())
-                .retrieve()
-                .body(java.util.Map.class);
-
-        if (response == null || response.get("email") == null) {
+        String email;
+        String name;
+        boolean emailVerified;
+        try {
+            // Every local verification failure maps to auth.google.no_email ("token invalid"), except a wrong audience
+            java.util.function.Supplier<ApiException> invalid = () -> ApiException.unauthorized(MessageKey.AUTH_GOOGLE_NO_EMAIL);
+            var payload = verifyRs256(idToken, keys, googleJwksUrl, "Google", invalid, invalid, invalid);
+            if (!GOOGLE_ISSUERS.contains(payload.get("iss"))) {
+                throw invalid.get();
+            }
+            // google.client-id may list several client ids (web / iOS / Android), comma-separated
+            boolean audOk = java.util.Arrays.stream(googleClientId.split(","))
+                    .map(String::trim).anyMatch(id -> id.equals(payload.get("aud")));
+            if (!audOk) {
+                throw ApiException.unauthorized(MessageKey.AUTH_GOOGLE_INVALID_AUDIENCE);
+            }
+            if (isExpired(payload.get("exp"))) {
+                throw invalid.get();
+            }
+            if (!(payload.get("email") instanceof String e)) {
+                throw invalid.get();
+            }
+            email = e;
+            name = payload.get("name") instanceof String n ? n : "";
+            // ID tokens carry email_verified as a boolean; parse defensively in case it arrives as a string
+            emailVerified = "true".equals(String.valueOf(payload.get("email_verified")));
+        } catch (ApiException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.warn("Google id_token verification error: {}", ex.getMessage());
             throw ApiException.unauthorized(MessageKey.AUTH_GOOGLE_NO_EMAIL);
         }
 
-        String aud = (String) response.get("aud");
-        if (!googleClientId.equals(aud)) {
-            throw ApiException.unauthorized(MessageKey.AUTH_GOOGLE_INVALID_AUDIENCE);
-        }
-
-        String email = (String) response.get("email");
-        String name = (String) response.getOrDefault("name", "");
-
-        // Google tokeninfo usually returns email_verified as the string "true"/"false", occasionally as a boolean; parse defensively
-        boolean emailVerified = "true".equals(String.valueOf(response.get("email_verified")));
-
+        // Outside the try: DB / Redis failures must surface as themselves, not as an invalid-token 401
         User user = findOrCreateUserByEmail(User.normalizeEmail(email), name, "google", emailVerified);
         return buildAuthResponse(user);
     }
@@ -444,41 +465,13 @@ public class AuthService {
         }
         // P6-#16: JWKS fetching (external call + null guard + 5xx/connection failure classification) stays outside the try,
         // so a 503 external error from an Apple/network failure is not swallowed by the broad catch below and misreported as a 401 login failure.
-        List<java.util.Map<String, Object>> keys = fetchAppleJwks();
+        List<java.util.Map<String, Object>> keys = fetchJwks(appleJwksUrl, "Apple", false);
 
         try {
-            String[] parts = idToken.split("\\.");
-            if (parts.length != 3)
-                throw ApiException.unauthorized(MessageKey.AUTH_APPLE_INVALID_TOKEN);
-
-            byte[] headerBytes = java.util.Base64.getUrlDecoder().decode(parts[0]);
-            var headerMap = JSON_MAPPER.readValue(headerBytes, java.util.Map.class);
-            String kid = (String) headerMap.get("kid");
-            // P6-#16: no kid in the header -> cannot locate the public key; invalid token (credential problem) -> 401.
-            if (kid == null)
-                throw ApiException.unauthorized(MessageKey.AUTH_APPLE_INVALID_TOKEN);
-
-            var matchingKey = keys.stream().filter(k -> kid.equals(k.get("kid"))).findFirst()
-                    .orElseThrow(() -> ApiException.unauthorized(MessageKey.AUTH_APPLE_KEY_NOT_FOUND));
-
-            String n = (String) matchingKey.get("n");
-            String e = (String) matchingKey.get("e");
-            byte[] nBytes = java.util.Base64.getUrlDecoder().decode(n);
-            byte[] eBytes = java.util.Base64.getUrlDecoder().decode(e);
-            var keyFactory = java.security.KeyFactory.getInstance("RSA");
-            var rsaKey = keyFactory.generatePublic(
-                    new java.security.spec.RSAPublicKeySpec(new java.math.BigInteger(1, nBytes),
-                            new java.math.BigInteger(1, eBytes)));
-
-            var sig = java.security.Signature.getInstance("SHA256withRSA");
-            sig.initVerify(rsaKey);
-            sig.update((parts[0] + "." + parts[1]).getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            boolean valid = sig.verify(java.util.Base64.getUrlDecoder().decode(parts[2]));
-            if (!valid)
-                throw ApiException.unauthorized(MessageKey.AUTH_APPLE_INVALID_SIGNATURE);
-
-            byte[] payloadBytes = java.util.Base64.getUrlDecoder().decode(parts[1]);
-            var payload = JSON_MAPPER.readValue(payloadBytes, java.util.Map.class);
+            var payload = verifyRs256(idToken, keys, appleJwksUrl, "Apple",
+                    () -> ApiException.unauthorized(MessageKey.AUTH_APPLE_INVALID_TOKEN),
+                    () -> ApiException.unauthorized(MessageKey.AUTH_APPLE_KEY_NOT_FOUND),
+                    () -> ApiException.unauthorized(MessageKey.AUTH_APPLE_INVALID_SIGNATURE));
 
             if (!"https://appleid.apple.com".equals(payload.get("iss"))) {
                 throw ApiException.unauthorized(MessageKey.AUTH_APPLE_INVALID_ISSUER);
@@ -486,8 +479,7 @@ public class AuthService {
             if (!appleClientId.equals(payload.get("aud"))) {
                 throw ApiException.unauthorized(MessageKey.AUTH_APPLE_INVALID_AUDIENCE);
             }
-            Number exp = (Number) payload.get("exp");
-            if (exp == null || exp.longValue() * 1000 < System.currentTimeMillis()) {
+            if (isExpired(payload.get("exp"))) {
                 throw ApiException.unauthorized(MessageKey.AUTH_APPLE_TOKEN_EXPIRED);
             }
 
@@ -521,47 +513,109 @@ public class AuthService {
     }
 
     /**
-     * Fetches and caches Apple's public key list (JWKS).
+     * Verifies an RS256 JWT against the given JWKS and returns its payload; claims (iss / aud / exp) are left to the caller.
+     * {@code invalidToken} covers a malformed token, a header without kid or with an alg other than RS256 (P6-#16: credential problem -> 401).
+     * A kid missing from {@code keys} triggers one refetch of {@code jwksUrl} before giving up with {@code keyNotFound}.
+     */
+    @SuppressWarnings("unchecked")
+    private java.util.Map<String, Object> verifyRs256(String idToken, List<java.util.Map<String, Object>> keys,
+            String jwksUrl, String provider,
+            java.util.function.Supplier<ApiException> invalidToken, java.util.function.Supplier<ApiException> keyNotFound,
+            java.util.function.Supplier<ApiException> invalidSignature) throws Exception {
+        String[] parts = idToken.split("\\.");
+        if (parts.length != 3)
+            throw invalidToken.get();
+
+        byte[] headerBytes = java.util.Base64.getUrlDecoder().decode(parts[0]);
+        var headerMap = JSON_MAPPER.readValue(headerBytes, java.util.Map.class);
+        // Only RS256 is accepted, whatever the header claims (no "none", no HMAC with the public key)
+        if (!"RS256".equals(headerMap.get("alg")))
+            throw invalidToken.get();
+        String kid = (String) headerMap.get("kid");
+        if (kid == null)
+            throw invalidToken.get();
+
+        var matchingKey = findKey(keys, kid);
+        if (matchingKey == null) {
+            // The provider may have rotated its keys since the cache was filled: refetch once and retry
+            matchingKey = findKey(fetchJwks(jwksUrl, provider, true), kid);
+        }
+        if (matchingKey == null)
+            throw keyNotFound.get();
+
+        String n = (String) matchingKey.get("n");
+        String e = (String) matchingKey.get("e");
+        byte[] nBytes = java.util.Base64.getUrlDecoder().decode(n);
+        byte[] eBytes = java.util.Base64.getUrlDecoder().decode(e);
+        var keyFactory = java.security.KeyFactory.getInstance("RSA");
+        var rsaKey = keyFactory.generatePublic(
+                new java.security.spec.RSAPublicKeySpec(new java.math.BigInteger(1, nBytes),
+                        new java.math.BigInteger(1, eBytes)));
+
+        var sig = java.security.Signature.getInstance("SHA256withRSA");
+        sig.initVerify(rsaKey);
+        sig.update((parts[0] + "." + parts[1]).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        boolean valid = sig.verify(java.util.Base64.getUrlDecoder().decode(parts[2]));
+        if (!valid)
+            throw invalidSignature.get();
+
+        byte[] payloadBytes = java.util.Base64.getUrlDecoder().decode(parts[1]);
+        return JSON_MAPPER.readValue(payloadBytes, java.util.Map.class);
+    }
+
+    private static java.util.Map<String, Object> findKey(List<java.util.Map<String, Object>> keys, String kid) {
+        return keys.stream().filter(k -> kid.equals(k.get("kid"))).findFirst().orElse(null);
+    }
+
+    /** True when exp is missing or more than {@link #ID_TOKEN_CLOCK_SKEW} in the past. */
+    private static boolean isExpired(Object exp) {
+        return !(exp instanceof Number n)
+                || Instant.ofEpochSecond(n.longValue()).plus(ID_TOKEN_CLOCK_SKEW).isBefore(Instant.now());
+    }
+
+    /**
+     * Fetches and caches a provider's public key list (JWKS).
      *
      * <p>P6-#16 / P6-#21:</p>
      * <ul>
-     *   <li><b>Cache</b>: returns directly on a fresh hit (10-minute TTL), so each Apple login does not hit the JWKS endpoint.</li>
-     *   <li><b>External failure classification</b>: 5xx / connection failures talking to the Apple JWKS endpoint (all
+     *   <li><b>Cache</b>: returns directly on a fresh hit (10-minute TTL, per URL), so each login does not hit the JWKS endpoint.</li>
+     *   <li><b>External failure classification</b>: 5xx / connection failures talking to the JWKS endpoint (all
      *       {@link RestClientException} subclasses, including {@code HttpServerErrorException}, {@code ResourceAccessException})
      *       -> throw 503 {@link MessageKey#COMMON_SERVICE_UNAVAILABLE}, <b>not</b> misreported as a 401 login failure.</li>
      *   <li><b>Null guard</b>: a null response body, or null or empty {@code keys} -> treated as an abnormal upstream response -> 503.</li>
      * </ul>
      *
+     * @param refresh bypass a fresh cache (kid miss); still served from cache within {@link #JWKS_REFETCH_COOLDOWN}
      * @return the parsed, non-empty public key list
      */
     @SuppressWarnings("unchecked")
-    private List<java.util.Map<String, Object>> fetchAppleJwks() {
-        AppleJwksCache cached = appleJwksCache;
-        if (cached != null && cached.isFresh()) {
+    private List<java.util.Map<String, Object>> fetchJwks(String url, String provider, boolean refresh) {
+        JwksCache cached = jwksCache.get(url);
+        if (cached != null && cached.isYoungerThan(refresh ? JWKS_REFETCH_COOLDOWN : JWKS_CACHE_TTL)) {
             return cached.keys();
         }
 
         java.util.Map<String, Object> jwks;
         try {
-            jwks = restClient.get().uri(appleJwksUrl).retrieve().body(java.util.Map.class);
+            jwks = restClient.get().uri(url).retrieve().body(java.util.Map.class);
         } catch (RestClientException ex) {
-            // Apple JWKS endpoint 5xx / connection timeout / DNS failure -> upstream/external service failure, retryable (503), not a credential problem
-            log.warn("Failed to fetch Apple JWKS (external service): {}", ex.getMessage());
+            // JWKS endpoint 5xx / connection timeout / DNS failure -> upstream/external service failure, retryable (503), not a credential problem
+            log.warn("Failed to fetch {} JWKS (external service): {}", provider, ex.getMessage());
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
         }
 
         if (jwks == null || jwks.get("keys") == null) {
-            log.warn("Abnormal Apple JWKS response: body or keys is null");
+            log.warn("Abnormal {} JWKS response: body or keys is null", provider);
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
         }
 
         List<java.util.Map<String, Object>> keys = (List<java.util.Map<String, Object>>) jwks.get("keys");
         if (keys.isEmpty()) {
-            log.warn("Abnormal Apple JWKS response: keys is empty");
+            log.warn("Abnormal {} JWKS response: keys is empty", provider);
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
         }
 
-        appleJwksCache = new AppleJwksCache(keys, Instant.now());
+        jwksCache.put(url, new JwksCache(keys, Instant.now()));
         return keys;
     }
 

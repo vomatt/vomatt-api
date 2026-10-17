@@ -2,6 +2,7 @@ package com.vomatt.common.util;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
@@ -47,7 +48,8 @@ public final class ClientIpResolver {
         }
         try {
             InetAddress addr = InetAddress.getByName(remoteAddr);
-            if (addr.isLoopbackAddress() || addr.isSiteLocalAddress()) {
+            // isSiteLocalAddress is IPv4-only here: for IPv6 it means the deprecated fec0::/10, which is not trusted
+            if (addr.isLoopbackAddress() || (addr instanceof Inet4Address && addr.isSiteLocalAddress())) {
                 return true;
             }
             byte[] b = addr.getAddress();

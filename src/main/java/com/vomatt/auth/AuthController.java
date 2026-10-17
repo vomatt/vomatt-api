@@ -226,7 +226,8 @@ public class AuthController {
                     {"success": false, "data": null, "message": "This account has been banned and cannot sign in", "errorCode": "auth.account_banned", "error": "This account has been banned and cannot sign in"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503",
             description = "Google's key endpoint is unreachable; safe to retry (`common.service_unavailable`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF)))
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
+                    {"success": false, "data": null, "message": "Service temporarily unavailable, please try again later", "errorCode": "common.service_unavailable", "error": "Service temporarily unavailable, please try again later"}""")))
     @Operation(summary = "Sign in with Google",
             description = """
                     **Auth**: public
@@ -291,7 +292,8 @@ public class AuthController {
                     {"success": false, "data": null, "message": "This account has been banned and cannot sign in", "errorCode": "auth.account_banned", "error": "This account has been banned and cannot sign in"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503",
             description = "Apple's key endpoint is unreachable; safe to retry (`common.service_unavailable`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF)))
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
+                    {"success": false, "data": null, "message": "Service temporarily unavailable, please try again later", "errorCode": "common.service_unavailable", "error": "Service temporarily unavailable, please try again later"}""")))
     @Operation(summary = "Sign in with Apple",
             description = """
                     **Auth**: public

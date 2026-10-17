@@ -9,7 +9,7 @@ import java.util.Map;
  * Redis operations interface.
  *
  * Error handling strategy:
- * - Reads + idempotent writes (get, hGet, hGetAll, hasKey, set, hSet, expire): swallow-and-log; cache-aside can fail soft.
+ * - Reads + idempotent writes (get, hGet, hGetAll, hasKey, set, expire): swallow-and-log; cache-aside can fail soft.
  * - Correctness-critical (setIfAbsent, incrementAndExpire, delete, hDelete, hasKeyOrThrow): throw RedisOperationException.
  */
 public interface RedisService {
@@ -51,16 +51,6 @@ public interface RedisService {
 
     // ── Hash ─────────────────────────────────────────────────────────
 
-    /** Writes a hash field; sets the TTL if the key does not exist, otherwise leaves the TTL unchanged. */
-    void hSet(String cacheName, String key, String field, Object value, Duration ttl);
-
-    /**
-     * Same as {@link #hSet}, but throws RedisOperationException on write failure (no swallowing).
-     * Used for correctness-critical index writes (the refresh token user->token index), where a silent failure would make
-     * revokeAllForUser incomplete and leave stolen sessions alive.
-     */
-    void hSetOrThrow(String cacheName, String key, String field, Object value, Duration ttl);
-
     <T> T hGet(String cacheName, String key, String field, Class<T> clazz);
 
     /** Deletes a hash field; throws RedisOperationException on Redis failure. */
@@ -94,7 +84,7 @@ public interface RedisService {
      * P1-#17: atomically performs several correctness-critical writes in a single MULTI/EXEC transaction, collapsing several round-trips into one.
      *
      * <p>The batch is applied atomically (never partially); a connection-level failure throws {@link RedisOperationException} for the whole batch (fail-fast),
-     * semantically like calling {@code setOrThrow}/{@code hSetOrThrow} one by one, but stronger (atomic). Fail-soft writes (such as the grace cache)
+     * semantically like calling {@code setOrThrow} for each write, but stronger (atomic). Fail-soft writes (such as the grace cache)
      * should not go in this transaction; the caller must write them separately with {@link #set}.</p>
      */
     void execInTransaction(java.util.List<RedisWrite> writes);

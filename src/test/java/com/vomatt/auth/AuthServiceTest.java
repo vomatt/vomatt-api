@@ -614,11 +614,7 @@ class AuthServiceTest {
     @Test
     void shouldAcceptGoogleTokenWhenAudienceIsAnyConfiguredClient() throws Exception {
         ReflectionTestUtils.setField(authService, "googleClientId", "web-id, client-id");
-        User carol = User.builder().id(UUID.randomUUID()).email("carol@example.com").displayName("Carol")
-                .roles(new String[] { "user" }).build();
-        when(userRepository.findByEmail("carol@example.com")).thenReturn(Optional.of(carol));
-        when(jwtUtil.generateToken(anyString(), anyString(), any())).thenReturn("mock-token");
-        when(refreshTokenService.generate(anyString(), anyString(), any())).thenReturn("mock-refresh-token");
+        stubGoogleUser();
 
         assertThat(authService.googleLogin(signedGoogleToken(googlePayload("carol@example.com", true))).token())
                 .isEqualTo("mock-token");
@@ -637,7 +633,7 @@ class AuthServiceTest {
     void shouldRejectGoogleTokenWhenExpired() throws Exception {
         ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
         var claims = googlePayload("carol@example.com", true);
-        claims.put("exp", Instant.now().minusSeconds(60).getEpochSecond());
+        claims.put("exp", Instant.now().minusSeconds(120).getEpochSecond());
 
         assertGoogleRejected(signedGoogleToken(claims), MessageKey.AUTH_GOOGLE_NO_EMAIL);
     }
@@ -650,6 +646,67 @@ class AuthServiceTest {
         stubJwksFetch(jwksOf((java.security.interfaces.RSAPublicKey) rsaKeyPair().getPublic()), null);
 
         assertGoogleRejected(idToken, MessageKey.AUTH_GOOGLE_NO_EMAIL);
+    }
+
+    @Test
+    void shouldRefetchJwksWhenKidMissingFromCachedKeys() throws Exception {
+        ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
+        stubGoogleUser();
+        String idToken = signedGoogleToken(googlePayload("carol@example.com", true));
+        // Cached JWKS (5 minutes old, still within the TTL) predates the key rotation and lacks kid k1
+        seedJwksCache("https://www.googleapis.com/oauth2/v3/certs",
+                java.util.List.of(java.util.Map.of("kid", "rotated-out", "n", "AQAB", "e", "AQAB")), Instant.now().minusSeconds(300));
+
+        assertThat(authService.googleLogin(idToken).token()).isEqualTo("mock-token");
+        verify(restClient, org.mockito.Mockito.times(1)).get();
+    }
+
+    @Test
+    void shouldNotRefetchJwksWhenKidMissingWithinCooldown() throws Exception {
+        ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
+        String idToken = signGoogleToken(googlePayload("carol@example.com", true), rsaKeyPair());
+        seedJwksCache("https://www.googleapis.com/oauth2/v3/certs",
+                java.util.List.of(java.util.Map.of("kid", "rotated-out", "n", "AQAB", "e", "AQAB")), Instant.now());
+
+        assertGoogleRejected(idToken, MessageKey.AUTH_GOOGLE_NO_EMAIL);
+        verify(restClient, never()).get();
+    }
+
+    @Test
+    void shouldAcceptGoogleTokenWhenExpiredWithinClockSkew() throws Exception {
+        ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
+        stubGoogleUser();
+        var claims = googlePayload("carol@example.com", true);
+        claims.put("exp", Instant.now().minusSeconds(30).getEpochSecond());
+
+        assertThat(authService.googleLogin(signedGoogleToken(claims)).token()).isEqualTo("mock-token");
+    }
+
+    @Test
+    void shouldRejectAppleTokenWhenAlgIsNotRs256() {
+        stubJwksFetch(java.util.Map.of("keys", java.util.List.of(java.util.Map.of("kid", "k1", "n", "AQAB", "e", "AQAB"))), null);
+        String idToken = base64Url("{\"alg\":\"none\",\"kid\":\"k1\"}") + "."
+                + base64Url("{\"iss\":\"https://appleid.apple.com\"}") + ".c2ln";
+
+        assertThatThrownBy(() -> authService.appleLogin(idToken, null))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_APPLE_INVALID_TOKEN));
+    }
+
+    private void stubGoogleUser() {
+        User carol = User.builder().id(UUID.randomUUID()).email("carol@example.com").displayName("Carol")
+                .roles(new String[] { "user" }).build();
+        when(userRepository.findByEmail("carol@example.com")).thenReturn(Optional.of(carol));
+        when(jwtUtil.generateToken(anyString(), anyString(), any())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), anyString(), any())).thenReturn("mock-refresh-token");
+    }
+
+    @SuppressWarnings("unchecked")
+    private void seedJwksCache(String url, java.util.List<java.util.Map<String, Object>> keys, Instant fetchedAt) throws Exception {
+        var ctor = Class.forName("com.vomatt.auth.AuthService$JwksCache").getDeclaredConstructors()[0];
+        ctor.setAccessible(true);
+        ((java.util.Map<String, Object>) ReflectionTestUtils.getField(authService, "jwksCache"))
+                .put(url, ctor.newInstance(keys, fetchedAt));
     }
 
     @Test

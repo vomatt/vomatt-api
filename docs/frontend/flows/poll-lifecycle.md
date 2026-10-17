@@ -42,7 +42,7 @@ sequenceDiagram
 | 3. Cancel (optional) | `PUT /api/votes/{voteId}/deactivate` | When Scheduled, Close = Cancelled (treated as Ended, `endTime` earlier than `startTime`, no Ended Notification) |
 | 4. View | `GET /api/votes/{voteId}` | Public; includes `myOptionId` when signed in. Readable in Scheduled / Open / Ended |
 | 5. Check whether I voted | `GET /api/votes/{voteId}/my-vote-status` | Or just read the Poll's `myOptionId` (saves a call) |
-| 6. Vote / change vote | `POST /api/votes/{voteId}/vote` | Body `{"optionIds":["..."]}`, **exactly one ID**. Replaces an existing Ballot; choosing the same option is a no-op. Open only |
+| 6. Vote / change vote | `POST /api/votes/{voteId}/vote` | Body `{"optionIds":["..."], "anonymous": true}`, **exactly one ID**; `anonymous` is optional (see [Anonymous Ballots](#anonymous-ballots)). Replaces an existing Ballot; choosing the same option only updates `anonymous` (counts and Turnout unchanged). Open only |
 | 7. Retract | `DELETE /api/votes/{voteId}/vote` | Retracts the whole Ballot; idempotent (returns 200 even with no Ballot). Open only. `DELETE .../vote/{optionId}` is kept for backward compatibility; use the former |
 | 8. End early (optional) | `PUT /api/votes/{voteId}/deactivate` | Owner only; Open -> Ended immediately; no change if already Ended. The response is only a `SimpleResultResponse`, so `GET` the Poll again for the new state |
 | 9. View results | `GET /api/votes/{voteId}/results` | Public, Ended only; before that returns 403 `vote.results.sealed`. `percentage` is Support (0-100, not rounded) |
@@ -61,6 +61,7 @@ A Poll has no `status` field; the status is derived from times and `votingActive
 
 - `active=false` only means "the owner Closed it early"; on a natural end `active` is still `true`. Use `startTime` / `endTime` / `votingActive` to determine status, not `active`.
 - `myOptionId`: `null` when not signed in, when there is no Ballot, or for a just-created Poll (the create response).
+- `myBallotAnonymous`: whether your Ballot is Anonymous; `null` whenever `myOptionId` is `null`.
 - `unread`: only has a value in "My Polls -> `status=ended`"; it is `null` on every other endpoint (see [discovery](discovery.md)).
 - When the Scheduled or Open countdown ends on the frontend, re-`GET /api/votes/{voteId}` instead of assuming the status has switched.
 
@@ -73,6 +74,12 @@ A Poll has no `status` field; the status is derived from times and `votingActive
 | `SIGNED_IN` | Allowed | Allowed | 401 |
 
 Before the Poll is Ended, every level returns 403 `vote.results.sealed`. Participants can see this level from the Poll's `voterVisibility` before voting; show it to the user before they vote.
+
+### Anonymous Ballots
+
+- An Anonymous Ballot is never listed in `/voters`, at any Voter Visibility level, so the list can be shorter than `participantCount`. Turnout, the Invitee list's `hasBallot` and your own `myOptionId` still count it.
+- An Ended Poll holding 1 or 2 Anonymous Ballots, not counting the caller's own, returns 403 `vote.voters.hidden` for the whole list (otherwise the owner could work out who they are from the Invitee list). With none, or 3 or more, the list is returned without them.
+- `anonymous` omitted or `null` keeps the flag of your current Ballot (also when changing option); a first Ballot, or one cast after a Retraction, uses the account default `anonymousBallotByDefault` (see [profile](profile.md)). Send `anonymous` explicitly when the user toggles it.
 
 ### Ballot replacement and Retraction
 
@@ -93,11 +100,12 @@ Before the Poll is Ended, every level returns 403 `vote.results.sealed`. Partici
 | `vote.not_editable` | 400 | The Poll being edited is already Open or Ended | Hide the edit entry |
 | `vote.forbidden` | 403 | A non-owner edits / Closes | Hide the edit / Close entry |
 | `vote.results.sealed` | 403 | `/results` or `/voters` requested before the Poll is Ended | Show only Turnout |
-| `vote.voters.hidden` | 403 | Voter Visibility does not allow the current user | Do not show the voter list |
+| `vote.voters.hidden` | 403 | Voter Visibility does not allow the current user, or the Poll holds 1 or 2 Anonymous Ballots besides yours | Do not show the voter list |
+| `common.conflict` | 409 | The Poll stayed busy with other changes for 3 seconds (vote, retract, edit, Close, delete, Invitee changes); nothing was recorded | Retry the request |
 | `common.rate_limited` | 429 | More than 30 Ballot writes by this account within 60 seconds (no `Retry-After`), or the per-IP limit | Disable the vote button and retry after about a minute |
 | `vote.options.min` / `vote.options.max` | 400 | Fewer than 2 or more than 10 options | Form hint |
 | `vote.end_time.past` | 400 | `endTime` is in the past | Form hint |
 | `vote.end_time.before_start` | 400 | `endTime` is not later than `startTime` | Form hint |
 | `vote.duration.exceeded` | 400 | Start to end exceeds 365 days | Form hint |
 | `tag.ids.invalid` | 400 | `tagIds` contains a nonexistent tag | Reload the tag list |
-| `common.validation_failed` | 400 | Field length / required (only the first field error is returned) | Highlight that field |
+| `common.validation_failed` | 400 | Field length / required, including each option's `text` (only the first field error is returned) | Highlight that field |

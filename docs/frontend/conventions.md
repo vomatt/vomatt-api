@@ -27,7 +27,8 @@ The value of `errorCode` is `MessageKey.code()` (`vote.not_found`), not the enum
 | 401 | `common.unauthorized` (no token), `auth.token.expired`, `auth.token.invalid` | `expired` -> get a new token with the refresh token and retry the original request; `invalid` / `unauthorized` -> clear the signed-in state and go to the login page |
 | 403 | `common.forbidden` | Signed in but lacking permission; show a no-permission message. Do not refresh, do not log out |
 | 404 | Each domain's `*.not_found` | Show a not-found message |
-| 409 | Each domain's conflict codes | Show the message matching the `errorCode` (e.g. Poll already ended) |
+| 405 / 415 | `common.bad_request` | Wrong HTTP method / unsupported `Content-Type`; a frontend bug, not a user error |
+| 409 | `common.conflict`, each domain's conflict codes | `common.conflict` (Poll busy, or a uniqueness clash such as a username taken at the same moment): retry once. Others: show the message matching the `errorCode` |
 | 429 | `common.rate_limited` | Read the `Retry-After` header (seconds) and do not resend before it expires; the UI shows "try again later" |
 | 500 | `common.internal_error` | Generic error message; do not retry automatically |
 | 503 | `common.service_unavailable` | Transient failure (e.g. Redis); may retry (exponential backoff recommended) |

@@ -14,6 +14,7 @@ Domain terms follow [CONTEXT.md](../../CONTEXT.md). API paths and DTOs still use
 | **Turnout** | Number of Participants; visible at any time | Returned with the Poll | `VoteResponse` |
 | **Support** | Share of Participants who chose an option; visible only after the Poll ends | `GET /api/votes/{voteId}/results` | `VoteResultResponse` |
 | **Voter Visibility** | Who can see each person's choice after the Poll ends (nobody / owner only / any signed-in user) | Set when creating the Poll; read via `/voters` | `CreateVoteRequest`, `VoterResponse` |
+| **Anonymous Ballot** | A Ballot left out of the voter list whatever the Voter Visibility; it still counts in Turnout. The account sets the default | `POST /api/votes/{voteId}/vote` (`anonymous`), `PATCH /api/users/me` (`anonymousBallotByDefault`) | `VoteRequest`, `VoteResponse` (`myBallotAnonymous`), `UpdateProfileRequest` |
 | **Ended Notification** | Notification sent to the owner and Participants after a Poll ends | `GET /api/notifications/unread-count`, `POST /api/notifications/{voteId}/read` | `UnreadCountResponse` |
 | **Comment / Reply** | Comments under a Poll and their one level of replies | `/api/votes/{voteId}/comments`, `.../{commentId}/replies`, `.../{commentId}/like` | `CommentDto`, `CreateCommentRequest`, `UpdateCommentRequest` |
 | **Feed** | Public home page: Open Polls, most recently started first | `GET /api/votes` | `VoteResponse` (`CursorResponse`) |

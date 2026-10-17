@@ -57,20 +57,22 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     List<User> findByUsernameIgnoreCase(@Param("username") String username);
 
     /**
-     * Fetch the User profile and stats in one query (avoids N+1). totalPolls counts only Polls that have opened (Open, Ended),
-     * consistent with the Poll list on the public page: excludes Scheduled, Deleted, non-Public, and those cancelled before opening.
+     * Fetch the User profile and stats in one query (avoids N+1). Each stat is a scalar subquery, so the two counts
+     * never multiply into a polls x ballots join.
+     * totalPolls counts only Polls that have opened (Open, Ended), consistent with the Poll list on the public page:
+     * excludes Scheduled, Deleted, non-Public, and those cancelled before opening.
+     * totalVotes counts Ballots only on Public, non-Deleted Polls, so a public profile does not reveal participation
+     * in Unlisted or Invite-only Polls.
      */
     @Query("SELECT u.id AS id, u.username AS username, u.displayName AS displayName, u.bio AS bio, u.avatarUrl AS avatarUrl, " +
            "u.createdAt AS createdAt, u.email AS email, u.firstName AS firstName, " +
            "u.lastName AS lastName, u.location AS location, u.points AS points, " +
            "u.membershipLevel AS membershipLevel, u.active AS active, " +
-           "COUNT(DISTINCT v.id) AS totalPolls, COUNT(DISTINCT uv.id) AS totalVotes " +
+           "(SELECT COUNT(v) FROM Vote v WHERE v.creator.id = u.id AND v.startTime <= CURRENT_TIMESTAMP " +
+           "AND v.endTime > v.startTime AND v.deletedAt IS NULL AND v.audience = com.vomatt.entity.Audience.PUBLIC) AS totalPolls, " +
+           "(SELECT COUNT(uv) FROM UserVote uv WHERE uv.user.id = u.id AND uv.vote.deletedAt IS NULL " +
+           "AND uv.vote.audience = com.vomatt.entity.Audience.PUBLIC) AS totalVotes " +
            "FROM User u " +
-           "LEFT JOIN Vote v ON v.creator.id = u.id AND v.startTime <= CURRENT_TIMESTAMP AND v.endTime > v.startTime AND v.deletedAt IS NULL " +
-           "AND v.audience = com.vomatt.entity.Audience.PUBLIC " +
-           "LEFT JOIN UserVote uv ON uv.user.id = u.id AND uv.vote.deletedAt IS NULL " +
-           "WHERE u.username = :username " +
-           "GROUP BY u.id, u.username, u.displayName, u.bio, u.avatarUrl, u.createdAt, " +
-           "u.email, u.firstName, u.lastName, u.location, u.points, u.membershipLevel, u.active")
+           "WHERE u.username = :username")
     Optional<UserProfileProjection> findProfileByUsername(@Param("username") String username);
 }

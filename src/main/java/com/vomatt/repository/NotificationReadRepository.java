@@ -42,7 +42,9 @@ public class NotificationReadRepository {
 
     private final EntityManager em;
 
-    /** The badge shows "99+" past this, so counting stops here instead of walking every Poll the user ever joined. */
+    // The badge shows "99+" past this, so counting stops once this many unread rows are found.
+    // ponytail: bounds the many-unread case only; a user who reads most notifications still scans their whole
+    // history (MY_POLL_IDS is materialized). Add a time window or a stored counter if that shows up in slow queries
     public static final int UNREAD_COUNT_CAP = 100;
 
     /** Unread notifications, at most {@link #UNREAD_COUNT_CAP}. */

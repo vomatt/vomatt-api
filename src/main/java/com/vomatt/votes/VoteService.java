@@ -35,6 +35,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.vomatt.votes.dto.CreateVoteRequest;
 import com.vomatt.votes.dto.InviteeResponse;
 import com.vomatt.votes.dto.InviteesRequest;
+import com.vomatt.votes.dto.VoteCreatorResponse;
 import com.vomatt.votes.dto.VoteRequest;
 import com.vomatt.votes.dto.VoteResponse;
 import com.vomatt.votes.dto.VoteResultResponse;
@@ -213,6 +214,19 @@ public class VoteService {
     @Transactional(readOnly = true)
     public VoteResponse getVote(String voteId, String userId) {
         return convertToVoteResponse(UUID.fromString(voteId), userId);
+    }
+
+    /**
+     * The owner of an Invite-only Poll, for an Invitation link opened by someone who cannot reach the Poll yet.
+     * Deliberately skips the access lookup; any other Poll (Deleted, Public, Unlisted, unknown) is {@code vote.not_found}.
+     */
+    @Transactional(readOnly = true)
+    public VoteCreatorResponse getInviteOnlyCreator(String voteId) {
+        User creator = voteRepository.findById(UUID.fromString(voteId))
+            .filter(v -> v.getDeletedAt() == null && v.getAudience() == Audience.INVITE_ONLY)
+            .map(Vote::getCreator)
+            .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
+        return new VoteCreatorResponse(creator.getUsername(), creator.getAvatarUrl());
     }
 
     /**
@@ -732,6 +746,7 @@ public class VoteService {
     /**
      * The single access lookup: every path that reads or acts on one Poll goes through here (or
      * {@link #requireAccessible}) and gets {@code vote.not_found} for a Poll the viewer may not reach.
+     * The one exception is {@link #getInviteOnlyCreator}, which reveals only an Invite-only Poll's owner.
      *
      * @param viewerId caller, or null when signed out
      */

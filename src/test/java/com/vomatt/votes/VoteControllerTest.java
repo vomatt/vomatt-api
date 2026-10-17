@@ -10,6 +10,7 @@ import com.vomatt.common.security.UserPrincipal;
 import com.vomatt.votes.dto.CreateVoteRequest;
 import com.vomatt.votes.dto.InviteeResponse;
 import com.vomatt.votes.dto.InviteesRequest;
+import com.vomatt.votes.dto.VoteCreatorResponse;
 import com.vomatt.votes.dto.VoteResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -193,6 +194,41 @@ class VoteControllerTest {
             mockMvc.perform(get("/api/votes/{voteId}", "not-a-uuid"))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.errorCode").value(MessageKey.COMMON_BAD_REQUEST.code()));
+        }
+    }
+
+    @Nested
+    @DisplayName("GET /api/votes/{voteId}/creator")
+    class GetInviteOnlyCreatorTests {
+
+        private final String voteId = UUID.randomUUID().toString();
+
+        @Test
+        @DisplayName("should be public for a UUID Poll ID only")
+        void shouldBePublicWhenPathIsUuid() {
+            assertThat(isPublic("GET", "/api/votes/" + voteId + "/creator")).isTrue();
+            assertThat(isPublic("GET", "/api/votes/my/creator")).isFalse();
+        }
+
+        @Test
+        @DisplayName("should return 200 with the owner when the Poll is Invite-only")
+        void shouldReturn200WhenPollIsInviteOnly() throws Exception {
+            when(voteService.getInviteOnlyCreator(voteId)).thenReturn(new VoteCreatorResponse("alice", "bot:boba"));
+
+            mockMvc.perform(get("/api/votes/{voteId}/creator", voteId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.username").value("alice"))
+                    .andExpect(jsonPath("$.data.avatarUrl").value("bot:boba"));
+        }
+
+        @Test
+        @DisplayName("should return 404 when the Poll is not Invite-only")
+        void shouldReturn404WhenPollIsNotInviteOnly() throws Exception {
+            when(voteService.getInviteOnlyCreator(voteId)).thenThrow(ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
+
+            mockMvc.perform(get("/api/votes/{voteId}/creator", voteId))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.errorCode").value(MessageKey.VOTE_NOT_FOUND.code()));
         }
     }
 

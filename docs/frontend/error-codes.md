@@ -28,7 +28,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.token.expired` | 401 | 登入已過期，請重新登入 | Session expired, please log in again | See [auth-flow.md](auth-flow.md) | JwtAuthFilter |
 | `auth.invalid_otp` | 401 | 驗證碼錯誤 | Invalid verification code | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.otp.invalid_or_expired` | 401 | 驗證碼錯誤或已過期 | Verification code is invalid or has expired | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.otp.too_many_attempts` | 401 | 驗證次數過多，請重新發送驗證碼 | Too many attempts, please request a new verification code | See [auth-flow.md](auth-flow.md) | AuthService |
+| `auth.otp.too_many_attempts` | 401 | 驗證次數過多，請稍後再試 | Too many attempts, please try again later | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.otp.resend_cooldown` | 400 | 請等 {0} 秒後再重新發送 | Please wait {0} seconds before resending | Show message so the user can fix the input | AuthService |
 | `auth.admin.forbidden` | 403 | 此帳號無管理員權限 | This account does not have admin privileges | Show a permission-denied notice | AuthService |
 | `auth.identifier.required` | 400 | 請提供 email 或手機號碼 | Please provide an email or phone number | Show message so the user can fix the input | AuthService |

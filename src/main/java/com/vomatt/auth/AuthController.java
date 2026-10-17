@@ -15,11 +15,13 @@ import com.vomatt.common.annotation.PublicApiResponse;
 import com.vomatt.common.config.OpenAPIConfig;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.SimpleResultResponse;
+import com.vomatt.common.util.ClientIpResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -95,10 +97,10 @@ public class AuthController {
                     - 400 `auth.identifier.required`: `email` is missing or blank
                     - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
                     - 400 `auth.email.send_failed`: the email provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
-                    - 401 `auth.otp.too_many_attempts`: the identifier is locked for 15 minutes after 5 wrong codes
+                    - 401 `auth.otp.too_many_attempts`: this email is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected
                     - 403 `auth.admin.forbidden`: `checkRole` is "true" and the account is not an admin""")
-    public ResponseEntity<ApiResponse<SimpleResultResponse>> sendOtp(@Valid @RequestBody SendOtpRequest req) {
-        authService.sendOtp(req.email(), null, null, Boolean.parseBoolean(req.checkRole()));
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> sendOtp(@Valid @RequestBody SendOtpRequest req, HttpServletRequest httpRequest) {
+        authService.sendOtp(req.email(), null, null, Boolean.parseBoolean(req.checkRole()), ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 
@@ -123,16 +125,20 @@ public class AuthController {
                     **Behavior**: consumes the OTP and returns an access token and refresh token. Creates the user if the email is new (signup), \
                     otherwise signs the existing user in. If `checkRole` is "true", the account must already exist and be an admin, and this is checked before the OTP is consumed
                     **Side effects**: the OTP is consumed on success; a new user (with a random bot avatar) is created and a welcome email sent on signup; `lastLoginAt` is updated. \
-                    The 5th wrong code deletes the OTP and locks the identifier for 15 minutes; while locked, sending or verifying an OTP is refused
+                    Wrong codes are counted per email and client IP; resending does not reset the count. \
+                    The 3rd wrong code locks this email for the caller's IP for 5 minutes, doubling on each further lockout (10, 20, 40 minutes...) up to 24 hours; \
+                    the doubling is forgotten 24 hours after the last lock ends, and a successful sign-in from that IP resets it. \
+                    While locked, sending or verifying an OTP from that IP is refused; other IPs are not affected and the OTP stays valid
                     **Errors**:
                     - 400 `auth.identifier.required`: `email` is missing or blank
                     - 401 `auth.otp.invalid_or_expired`: no OTP exists for this email (never sent, expired, or already used)
                     - 401 `auth.invalid_otp`: the code is wrong
-                    - 401 `auth.otp.too_many_attempts`: 5th wrong code, or the identifier is locked (even a correct code is refused for 15 minutes)
+                    - 401 `auth.otp.too_many_attempts`: 3rd wrong code, or this identifier is locked for the caller's IP (even a correct code is refused until the lock ends)
                     - 403 `auth.admin.forbidden`: `checkRole` is "true" and the account is not an existing admin
                     - 403 `auth.account_banned`: the user is suspended (`active=false`)""")
-    public ResponseEntity<ApiResponse<AuthResponse>> verifyOtp(@Valid @RequestBody VerifyOtpRequest req) {
-        AuthResponse response = authService.verifyOtp(req.email(), null, req.code(), Boolean.parseBoolean(req.checkRole()));
+    public ResponseEntity<ApiResponse<AuthResponse>> verifyOtp(@Valid @RequestBody VerifyOtpRequest req, HttpServletRequest httpRequest) {
+        AuthResponse response = authService.verifyOtp(req.email(), null, req.code(), Boolean.parseBoolean(req.checkRole()),
+                ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
@@ -173,9 +179,9 @@ public class AuthController {
                     - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
                     - 400 `auth.phone.not_registered`: `type` is "login" and the number is not registered
                     - 400 `auth.sms.send_failed`: the SMS provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
-                    - 401 `auth.otp.too_many_attempts`: the identifier is locked for 15 minutes after 5 wrong codes""")
-    public ResponseEntity<ApiResponse<SimpleResultResponse>> phoneSendOtp(@Valid @RequestBody PhoneSendOtpRequest req) {
-        authService.sendOtp(null, req.phone(), req.type(), false);
+                    - 401 `auth.otp.too_many_attempts`: this number is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected""")
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> phoneSendOtp(@Valid @RequestBody PhoneSendOtpRequest req, HttpServletRequest httpRequest) {
+        authService.sendOtp(null, req.phone(), req.type(), false, ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 
@@ -198,15 +204,18 @@ public class AuthController {
                     **Auth**: public
                     **Precondition**: an OTP was sent to this number via `POST /api/auth/phone/send-otp` and has not expired
                     **Behavior**: normalizes the number to E.164 like send-otp, so an OTP sent to `0912345678` verifies as `+886912345678`. Consumes the OTP and returns an access token and refresh token. Creates the user if the number is new, otherwise signs the existing user in
-                    **Side effects**: the OTP is consumed on success; a new user (with a random bot avatar) is created if needed; `lastLoginAt` is updated. The 5th wrong code deletes the OTP and locks the identifier for 15 minutes; while locked, sending or verifying an OTP is refused
+                    **Side effects**: the OTP is consumed on success; a new user (with a random bot avatar) is created if needed; `lastLoginAt` is updated. Wrong codes are counted per number and client IP; resending does not reset the count. \
+                    The 3rd wrong code locks this number for the caller's IP for 5 minutes, doubling on each further lockout (10, 20, 40 minutes...) up to 24 hours; \
+                    the doubling is forgotten 24 hours after the last lock ends, and a successful sign-in from that IP resets it. \
+                    While locked, sending or verifying an OTP from that IP is refused; other IPs are not affected and the OTP stays valid
                     **Errors**:
                     - 400 `auth.phone.invalid`: the number is not in a supported format (see send-otp)
                     - 401 `auth.otp.invalid_or_expired`: no OTP exists for this number (never sent, expired, or already used)
                     - 401 `auth.invalid_otp`: the code is wrong
-                    - 401 `auth.otp.too_many_attempts`: 5th wrong code, or the identifier is locked (even a correct code is refused for 15 minutes)
+                    - 401 `auth.otp.too_many_attempts`: 3rd wrong code, or this identifier is locked for the caller's IP (even a correct code is refused until the lock ends)
                     - 403 `auth.account_banned`: the user is suspended (`active=false`)""")
-    public ResponseEntity<ApiResponse<AuthResponse>> phoneVerifyOtp(@Valid @RequestBody PhoneVerifyOtpRequest req) {
-        AuthResponse response = authService.verifyOtp(null, req.phone(), req.code(), false);
+    public ResponseEntity<ApiResponse<AuthResponse>> phoneVerifyOtp(@Valid @RequestBody PhoneVerifyOtpRequest req, HttpServletRequest httpRequest) {
+        AuthResponse response = authService.verifyOtp(null, req.phone(), req.code(), false, ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 

@@ -103,7 +103,7 @@ Keys not found on any error path (mostly success-response `message` values, e.g.
 | key | zh-TW message | en message | Used in |
 |-----|-----------|---------|----------|
 | `common.not_found` | 找不到指定資源 | The requested resource was not found | GlobalExceptionHandler |
-| `common.conflict` | 資源衝突，請重試 | Resource conflict, please try again |  |
+| `common.conflict` | 資源衝突，請重試 | Resource conflict, please try again | GlobalExceptionHandler |
 | `common.admin_only` | 此功能限管理員使用 | This feature is for administrators only |  |
 | `common.file_required` | 請選擇要上傳的檔案 | Please select a file to upload |  |
 | `common.file_read_failed` | 檔案讀取失敗 | Failed to read file |  |

@@ -4,6 +4,7 @@ Contract changes that affect the frontend. 💥 BREAKING means frontend code mus
 
 ## 2026-10-17
 
+- Error envelopes for malformed requests: an unreadable or invalid JSON body returns 400 `common.bad_request`, a wrong HTTP method 405 `common.bad_request`, an unsupported `Content-Type` 415 `common.bad_request`, and a database uniqueness clash (e.g. a username taken between check and save) 409 `common.conflict`. These used to return 500 `common.internal_error`-style responses.
 - Email / phone OTP: after 5 attempts on one code (wrong or right) the identifier is locked for 15 minutes; `send-otp`, `phone/send-otp` and both `verify-otp` calls return 401 `auth.otp.too_many_attempts` until then. When the OTP email or SMS fails to send, the resend cooldown is released so the user can retry at once, and `auth.email.send_failed` / `auth.sms.send_failed` no longer include the provider's error text.
 - Apple sign-in returns 400 `auth.apple.not_configured` when the server has no `APPLE_CLIENT_ID`; previously any Apple token was accepted without an audience check.
 

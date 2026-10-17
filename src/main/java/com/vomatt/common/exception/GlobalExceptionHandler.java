@@ -6,9 +6,13 @@ import com.vomatt.common.response.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -116,6 +120,36 @@ public class GlobalExceptionHandler {
         String message = messageService.resolve(MessageKey.COMMON_NOT_FOUND);
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiResponse.error(message, MessageKey.COMMON_NOT_FOUND.code()));
+    }
+
+    /** Malformed or unreadable request body (bad JSON, wrong field type) is a client error, not a 500. */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNotReadable(HttpMessageNotReadableException ex) {
+        log.warn("Unreadable request body: {}", ex.getMessage());
+        return error(HttpStatus.BAD_REQUEST, MessageKey.COMMON_BAD_REQUEST);
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
+        log.warn("Method not supported: {}", ex.getMessage());
+        return error(HttpStatus.METHOD_NOT_ALLOWED, MessageKey.COMMON_BAD_REQUEST);
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException ex) {
+        log.warn("Media type not supported: {}", ex.getMessage());
+        return error(HttpStatus.UNSUPPORTED_MEDIA_TYPE, MessageKey.COMMON_BAD_REQUEST);
+    }
+
+    /** A constraint the service did not pre-check (e.g. a concurrent duplicate insert) is a conflict, not a 500. */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataIntegrity(DataIntegrityViolationException ex) {
+        log.warn("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());
+        return error(HttpStatus.CONFLICT, MessageKey.COMMON_CONFLICT);
+    }
+
+    private ResponseEntity<ApiResponse<Void>> error(HttpStatus status, MessageKey key) {
+        return ResponseEntity.status(status).body(ApiResponse.error(messageService.resolve(key), key.code()));
     }
 
     @ExceptionHandler(Exception.class)

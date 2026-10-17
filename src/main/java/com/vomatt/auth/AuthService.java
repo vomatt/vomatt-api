@@ -243,8 +243,14 @@ public class AuthService {
 
     private static final int MAX_OTP_ATTEMPTS = 3;
 
-    /** Guesses one OTP allows across all IPs; the guess that uses the last one voids the OTP, so more IPs buy no more guesses. */
+    /** Guesses one OTP allows across all IPs, so more IPs buy no more guesses; past it the OTP no longer verifies. */
     private static final int MAX_OTP_GUESSES = 10;
+
+    /**
+     * Resend cooldown once an OTP's guesses are used up, so guessing across many IPs is held to about the old
+     * per-identifier rate (10 guesses per 15 minutes). Anyone can impose it on a victim, like the old lockout could.
+     */
+    private static final Duration OTP_EXHAUSTED_COOLDOWN = Duration.ofMinutes(15);
 
     /** Namespace suffix for the per-OTP guess counter (all IPs), keyed by identifier + OTP creation time so each OTP starts at zero. */
     private static final String OTP_GUESS_SUFFIX = ":guesses";
@@ -295,9 +301,8 @@ public class AuthService {
         }
         long guesses = redisService.incrementAndExpire(namespace + OTP_GUESS_SUFFIX,
                 key + ":" + rec.createdAt().toEpochMilli(), counterTtl);
+        // The counter belongs to this OTP only, so refusing here never touches an OTP resent in the meantime
         if (guesses > MAX_OTP_GUESSES) {
-            // A concurrent guess already used the OTP's last guess and voided it
-            redisService.delete(namespace, key);
             throw ApiException.unauthorized(MessageKey.AUTH_OTP_INVALID_OR_EXPIRED);
         }
 
@@ -307,9 +312,9 @@ public class AuthService {
                 rec.code().getBytes(StandardCharsets.UTF_8),
                 code.getBytes(StandardCharsets.UTF_8));
         if (!codeMatches) {
-            // The OTP's last guess was wrong: void it, so the user has to request a new one
+            // The OTP's last guess was wrong: it is dead, and the next one can be requested only after the longer cooldown
             if (guesses == MAX_OTP_GUESSES) {
-                redisService.delete(namespace, key);
+                redisService.set(namespace + OTP_COOLDOWN_SUFFIX, key, availableAt(OTP_EXHAUSTED_COOLDOWN), OTP_EXHAUSTED_COOLDOWN);
             }
             // The last allowed attempt was wrong: lock now rather than on the next request.
             // Only this request escalates, so concurrent guesses cannot double the lockout twice.
@@ -319,7 +324,10 @@ public class AuthService {
             throw ApiException.unauthorized(MessageKey.AUTH_INVALID_OTP);
         }
 
-        redisService.delete(namespace, key);
+        // Atomic GETDEL: of concurrent requests carrying the right code, only one consumes the OTP
+        if (redisService.getAndDelete(namespace, key, OtpRecord.class) == null) {
+            throw ApiException.unauthorized(MessageKey.AUTH_OTP_INVALID_OR_EXPIRED);
+        }
         redisService.delete(failNs, attemptKey);
         redisService.delete(namespace + OTP_LEVEL_SUFFIX, attemptKey);
         return rec;
@@ -327,8 +335,8 @@ public class AuthService {
 
     /**
      * Locks this identifier + IP for 5 minutes, doubling with each lockout in a row, then rejects. The OTP itself is kept,
-     * so a guesser on one IP cannot void the code the real user is about to enter from another; the counter is cleared
-     * so the next lock window starts with fresh attempts.
+     * so one IP's lockout does not void the code the real user is about to enter from another (only the shared
+     * {@link #MAX_OTP_GUESSES} budget does); the counter is cleared so the next lock window starts with fresh attempts.
      */
     private void lockOut(String namespace, String attemptKey) {
         String levelNs = namespace + OTP_LEVEL_SUFFIX;

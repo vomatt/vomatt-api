@@ -1077,11 +1077,15 @@ class VoteServiceTest {
         }
 
         @Test
-        void shouldTakePollLockUnderScopedTimeoutWhenLocking() {
+        void shouldKeepLockTimeoutForTransactionWhenLockingPoll() {
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
 
             assertThat(voteService.lockVote(voteId)).contains(vote);
-            verify(lockTimeout).within(any());
+            // Cap stays for the rest of the transaction (Ballot, Close, Delete); only the last-admin guard resets it
+            InOrder order = inOrder(lockTimeout, voteRepository);
+            order.verify(lockTimeout).apply();
+            order.verify(voteRepository).findByIdForUpdate(voteId);
+            verify(lockTimeout, never()).within(any());
         }
 
         @Test

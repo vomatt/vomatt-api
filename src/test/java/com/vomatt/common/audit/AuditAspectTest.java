@@ -29,6 +29,10 @@ class AuditAspectTest {
     void annotated() {
     }
 
+    @Auditable(action = "SUSPEND", resourceType = "USER", detailsIndex = 0)
+    void withDetails() {
+    }
+
     @BeforeEach
     void setUp() throws Exception {
         auditable = getClass().getDeclaredMethod("annotated").getAnnotation(Auditable.class);
@@ -66,5 +70,17 @@ class AuditAspectTest {
 
         verify(auditService, org.mockito.Mockito.times(2))
                 .logFailedAction(any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void shouldStorePlainReasonAndSortedRolesWhenRequestDefinesDetails() throws Exception {
+        Auditable withDetails = getClass().getDeclaredMethod("withDetails").getAnnotation(Auditable.class);
+        when(joinPoint.getArgs()).thenReturn(new Object[] { new com.vomatt.admin.dto.SuspendUserRequest("spam") });
+        aspect.logFailedAction(joinPoint, withDetails, new IllegalStateException("boom"));
+        when(joinPoint.getArgs()).thenReturn(new Object[] { new com.vomatt.admin.dto.UpdateRolesRequest(java.util.List.of("user", "admin", "user")) });
+        aspect.logFailedAction(joinPoint, withDetails, new IllegalStateException("boom"));
+
+        verify(auditService).logFailedAction(any(), any(), any(), any(), any(), any(), any(), org.mockito.ArgumentMatchers.eq("spam"));
+        verify(auditService).logFailedAction(any(), any(), any(), any(), any(), any(), any(), org.mockito.ArgumentMatchers.eq("admin,user"));
     }
 }

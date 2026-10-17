@@ -46,7 +46,7 @@ public class AuditAspect {
                     request.getHeader("User-Agent"),
                     request.getRequestURI(),
                     request.getMethod(),
-                    argString(joinPoint.getArgs(), auditable.detailsIndex())
+                    details(joinPoint.getArgs(), auditable.detailsIndex())
                 );
             }
         } catch (Exception e) {
@@ -76,7 +76,7 @@ public class AuditAspect {
                     resourceId,
                     exception.getMessage(),
                     ClientIpResolver.resolve(request),
-                    argString(joinPoint.getArgs(), auditable.detailsIndex())
+                    details(joinPoint.getArgs(), auditable.detailsIndex())
                 );
             }
         } catch (Exception e) {
@@ -105,4 +105,11 @@ public class AuditAspect {
         return null;
     }
     
+    private String details(Object[] args, int index) {
+        if (index >= 0 && index < args.length && args[index] instanceof AuditDetails details) {
+            return details.auditDetails();
+        }
+        return argString(args, index);
+    }
+
 }

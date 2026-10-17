@@ -1448,8 +1448,8 @@
             "type" : "string"
           },
           "details" : {
-            "description" : "Extra context, e.g. the suspend reason or new roles; null when none",
-            "example" : "SuspendUserRequest[reason=Repeated spam in comments]",
+            "description" : "Extra context: the suspend reason (as given) or the new roles (sorted, comma-separated, e.g. `admin,user`); null when none",
+            "example" : "Repeated spam in comments",
             "nullable" : true,
             "type" : "string"
           },
@@ -3695,7 +3695,7 @@
                         "content" : [ {
                           "action" : "SUSPEND",
                           "createdAt" : "2026-10-16T12:00:00+08:00",
-                          "details" : "SuspendUserRequest[reason=Repeated spam in comments]",
+                          "details" : "Repeated spam in comments",
                           "errorMessage" : null,
                           "httpMethod" : "PATCH",
                           "id" : "0199f4c0-1a2b-7c3d-8e4f-5a6b7c8d9e0f",

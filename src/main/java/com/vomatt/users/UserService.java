@@ -57,13 +57,28 @@ public class UserService {
         User user = findUserById(userId);
         requireAnotherActiveAdmin(user);
         // After commit: a sign-in or refresh before then still sees the account, and a rollback keeps its tokens
-        AfterCommit.run(() -> refreshTokenService.revokeAllForUser(userId));
+        revokeTokensAfterCommit(userId);
         // user_votes rows cascade with the user; release them from stored option counts and Turnout first.
         // Poll rows before option rows, the same lock order as a Ballot, so a concurrent Ballot cannot deadlock it
         voteRepository.decrementTurnoutForUserBallots(user.getId());
         voteOptionRepository.decrementForUserBallots(user.getId());
         userRepository.delete(user);
         log.info("User {} deleted by {}", userId, principal.userId());
+    }
+
+    /**
+     * Revokes every refresh token of the user once the transaction commits: a sign-in or refresh before then still sees
+     * the old account state, and a rollback keeps the tokens. The change is already committed when this runs, so a Redis
+     * failure is logged instead of turning a done suspend / role change / delete into a 500.
+     */
+    public void revokeTokensAfterCommit(String userId) {
+        AfterCommit.run(() -> {
+            try {
+                refreshTokenService.revokeAllForUser(userId);
+            } catch (RuntimeException e) {
+                log.warn("Refresh token revocation failed after commit for userId={}: {}", userId, e.getMessage());
+            }
+        });
     }
 
     /**

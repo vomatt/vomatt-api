@@ -60,10 +60,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 log.debug("Invalid JWT token: {}", ex.getMessage());
             }
         }
-        // Admin roles outlive a demotion or suspension in the token, so every authenticated /api/admin/** call (reads
-        // included) re-checks the account in one query, whatever the token's role claims say
-        // Matched on the decoded path like the security rules, so an encoded /api/%61dmin/... cannot skip the check
-        boolean adminCall = principal != null && ADMIN_PATHS.matches(request);
+        // Admin roles outlive a demotion or suspension in the token, so every /api/admin/** call (reads included) with a
+        // token granting ROLE_ADMIN (same upper-casing as the authorities above) re-checks the account in one query;
+        // other tokens are refused by the security rule. Matched on the decoded path like the security rules, so an
+        // encoded /api/%61dmin/... cannot skip the check
+        boolean adminCall = principal != null && ADMIN_PATHS.matches(request)
+                && principal.roles().stream().anyMatch(r -> r.toUpperCase().equals("ADMIN"));
         if (adminCall && !userRepository.isActiveAdmin(UUID.fromString(principal.userId()))) {
             // Second query only on refusal: suspended gets the same code as other writes, demoted the plain 403
             UUID userId = UUID.fromString(principal.userId());

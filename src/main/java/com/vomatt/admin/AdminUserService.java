@@ -16,8 +16,6 @@ import com.vomatt.common.constant.UserRole;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.PageResponse;
-import com.vomatt.common.security.RefreshTokenService;
-import com.vomatt.common.util.AfterCommit;
 import com.vomatt.entity.User;
 import com.vomatt.repository.AdminQueryRepository;
 import com.vomatt.repository.UserRepository;
@@ -45,7 +43,6 @@ public class AdminUserService {
     private final VoteRepository voteRepository;
     private final UserVoteRepository userVoteRepository;
     private final VoteCommentRepository voteCommentRepository;
-    private final RefreshTokenService refreshTokenService;
     private final UserService userService;
     private final AdminMapper adminMapper;
 
@@ -79,8 +76,7 @@ public class AdminUserService {
         }
         userService.requireAnotherActiveAdmin(user);
         user.setActive(false);
-        // After commit: a sign-in or refresh in between would otherwise still see the account active
-        AfterCommit.run(() -> refreshTokenService.revokeAllForUser(userId.toString()));
+        userService.revokeTokensAfterCommit(userId.toString());
         log.info("User {} suspended by admin {}", userId, actorId);
         return detail(user);
     }
@@ -105,7 +101,7 @@ public class AdminUserService {
             userService.requireAnotherActiveAdmin(user);
         }
         user.setRoles(roles.stream().distinct().toArray(String[]::new));
-        AfterCommit.run(() -> refreshTokenService.revokeAllForUser(userId.toString()));
+        userService.revokeTokensAfterCommit(userId.toString());
         log.info("User {} roles set to {} by admin {}", userId, roles, actorId);
         return detail(user);
     }

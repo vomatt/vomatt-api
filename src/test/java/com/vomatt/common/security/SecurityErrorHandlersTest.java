@@ -199,6 +199,17 @@ class SecurityErrorHandlersTest {
     }
 
     @Test
+    void shouldSkipAdminCheckWhenTokenHasNoAdminRole() throws Exception {
+        FilterChain chain = mock(FilterChain.class);
+
+        // The security rule refuses it (no ROLE_ADMIN), so no DB check is needed
+        filterAs(UUID.randomUUID(), "GET", "/api/admin/users", chain);
+
+        verify(chain).doFilter(any(), any());
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
     void shouldReturnAccountBannedWhenSuspendedAdminCallsAdmin() throws Exception {
         UUID userId = UUID.randomUUID();
         when(userRepository.existsByIdAndActiveFalse(userId)).thenReturn(true);

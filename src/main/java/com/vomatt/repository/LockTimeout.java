@@ -8,9 +8,9 @@ import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 
 /**
- * The row-lock wait limit for one lock statement. Lock waits inside {@link #within} fail after 3 s (SQLState 55P03,
- * PessimisticLockingFailureException), so a waiter gives up instead of holding a pooled connection. Hibernate ignores a
- * positive jakarta.persistence.lock.timeout hint on Postgres (no FOR UPDATE WAIT n), so it is set per transaction.
+ * The 3 s row-lock wait limit (SQLState 55P03, PessimisticLockingFailureException, which GlobalExceptionHandler maps to
+ * 409 {@code common.conflict}), so a waiter gives up instead of holding a pooled connection. Hibernate ignores a positive
+ * jakarta.persistence.lock.timeout hint on Postgres (no FOR UPDATE WAIT n), so it is set per transaction.
  */
 @Component
 @RequiredArgsConstructor
@@ -19,9 +19,9 @@ public class LockTimeout {
     private final EntityManager em;
 
     /**
-     * Runs {@code lock} (one row-lock statement) under the 3 s limit, then restores the server default so later
-     * statements in the transaction wait as usual. On a lock timeout the exception propagates (GlobalExceptionHandler
-     * maps it to 409 {@code common.conflict}); the transaction is aborted then, so nothing is reset.
+     * Runs {@code lock} under the 3 s limit, then restores the server default so the caller's later, longer statements
+     * wait as usual (the last-admin guard, followed by account deletion). On a lock timeout the exception propagates and
+     * the transaction is aborted, so nothing is reset.
      */
     public <T> T within(Supplier<T> lock) {
         apply();
@@ -30,7 +30,8 @@ public class LockTimeout {
         return result;
     }
 
-    private void apply() {
+    /** Every lock wait for the rest of the transaction is capped at 3 s (the Poll-row lock: Ballot, Close, Edit, Delete). */
+    public void apply() {
         em.createNativeQuery("SELECT set_config('lock_timeout', '3s', true)").getSingleResult();
     }
 

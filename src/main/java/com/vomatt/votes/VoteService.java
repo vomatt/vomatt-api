@@ -836,7 +836,8 @@ public class VoteService {
      * {@code common.conflict} instead of holding a pooled connection. Must be the first load of the Poll in the transaction.
      */
     public Optional<Vote> lockVote(UUID voteId) {
-        return lockTimeout.within(() -> voteRepository.findByIdForUpdate(voteId));
+        lockTimeout.apply();
+        return voteRepository.findByIdForUpdate(voteId);
     }
 
     /**

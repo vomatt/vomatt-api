@@ -58,7 +58,7 @@ class AdminUserServiceTest {
         // The real guard, so these tests cover the shared last-admin rule as admins reach it
         UserService userService = new UserService(userRepository, null, null, refreshTokenService, null, voteRepository, lockTimeout);
         service = new AdminUserService(adminQueryRepository, userRepository, voteRepository, userVoteRepository,
-                voteCommentRepository, refreshTokenService, userService, new AdminMapper());
+                voteCommentRepository, userService, new AdminMapper());
     }
 
     private User user(UUID id, String... roles) {

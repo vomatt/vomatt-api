@@ -162,6 +162,21 @@ class UserServiceTest {
     }
 
     @Test
+    void shouldNotThrowAfterCommitWhenTokenRevocationFails() {
+        UUID id = UUID.randomUUID();
+        org.mockito.Mockito.doThrow(new IllegalStateException("redis down")).when(refreshTokenService).revokeAllForUser(id.toString());
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            userService.revokeTokensAfterCommit(id.toString());
+
+            TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+            verify(refreshTokenService).revokeAllForUser(id.toString());
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
     void shouldSkipAdminLockWhenAccountIsNotActiveAdmin() {
         User suspendedAdmin = User.builder().id(UUID.randomUUID()).username("x").roles(new String[] { "admin" }).active(false).build();
 

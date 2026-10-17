@@ -90,7 +90,7 @@ public class AdminController {
                             "httpMethod": "PATCH",
                             "success": true,
                             "errorMessage": null,
-                            "details": "SuspendUserRequest[reason=Repeated spam in comments]",
+                            "details": "Repeated spam in comments",
                             "createdAt": "2026-10-16T12:00:00+08:00"
                           }
                         ],

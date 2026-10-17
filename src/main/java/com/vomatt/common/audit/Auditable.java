@@ -15,6 +15,6 @@ public @interface Auditable {
     
     int resourceIdIndex() default -1;
 
-    /** Index of the argument whose toString() is stored in details (e.g. a suspend reason); -1 for none. */
+    /** Index of the argument stored in details ({@link AuditDetails#auditDetails()}, else toString()); -1 for none. */
     int detailsIndex() default -1;
 }

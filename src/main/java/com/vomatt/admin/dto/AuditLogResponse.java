@@ -18,7 +18,7 @@ public record AuditLogResponse(
         @Schema(description = "HTTP method; null for failed actions", example = "PATCH", nullable = true) String httpMethod,
         @Schema(description = "Whether the action succeeded", example = "true") boolean success,
         @Schema(description = "Error message of a failed action; null on success", nullable = true) String errorMessage,
-        @Schema(description = "Extra context, e.g. the suspend reason or new roles; null when none", example = "SuspendUserRequest[reason=Repeated spam in comments]", nullable = true) String details,
+        @Schema(description = "Extra context: the suspend reason (as given) or the new roles (sorted, comma-separated, e.g. `admin,user`); null when none", example = "Repeated spam in comments", nullable = true) String details,
         @Schema(description = "When the action happened", example = "2026-10-16T12:00:00+08:00") OffsetDateTime createdAt
 ) {
 }

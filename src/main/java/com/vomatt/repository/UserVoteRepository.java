@@ -24,7 +24,7 @@ public interface UserVoteRepository extends JpaRepository<UserVote, UUID> {
     Optional<UserVote> findByUserIdAndVoteIdAndOptionId(UUID userId, UUID voteId, UUID optionId);
 
     /** The user's Selection in each of a page of Polls. */
-    @Query("SELECT uv.vote.id AS voteId, uv.option.id AS optionId FROM UserVote uv "
+    @Query("SELECT uv.vote.id AS voteId, uv.option.id AS optionId, uv.anonymous AS anonymous FROM UserVote uv "
             + "WHERE uv.user.id = :userId AND uv.vote.id IN :voteIds")
     List<BallotSelection> findSelections(@Param("userId") UUID userId, @Param("voteIds") Collection<UUID> voteIds);
 
@@ -39,6 +39,6 @@ public interface UserVoteRepository extends JpaRepository<UserVote, UUID> {
                                  @Param("afterId") UUID afterId, Limit limit);
 
     /** Anonymous Ballots in a Poll; the voter list's k-anonymity gate. */
-    long countByVoteIdAndAnonymousTrue(UUID voteId);
+    long countByVoteIdAndAnonymousTrueAndUserIdNot(UUID voteId, UUID userId);
 
 }

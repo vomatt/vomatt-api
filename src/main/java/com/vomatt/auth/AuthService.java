@@ -139,7 +139,7 @@ public class AuthService {
         String otpType = isExisting ? "login" : "signup";
 
         acquireResendCooldown(OTP_EMAIL_NS, normalizedEmail);
-        redisService.setOrThrow(OTP_EMAIL_NS, normalizedEmail, new OtpRecord(code, otpType, Instant.now(), 0), Duration.ofSeconds(otpTtlSeconds));
+        storeOtp(OTP_EMAIL_NS, normalizedEmail, new OtpRecord(code, otpType, Instant.now(), 0));
 
         try {
             if ("signup".equals(otpType)) {
@@ -163,7 +163,7 @@ public class AuthService {
         }
 
         acquireResendCooldown(OTP_PHONE_NS, phone);
-        redisService.setOrThrow(OTP_PHONE_NS, phone, new OtpRecord(code, otpType, Instant.now(), 0), Duration.ofSeconds(otpTtlSeconds));
+        storeOtp(OTP_PHONE_NS, phone, new OtpRecord(code, otpType, Instant.now(), 0));
 
         try {
             smsService.sendOtp(phone, code);
@@ -260,6 +260,7 @@ public class AuthService {
         String failNs = namespace + OTP_FAIL_SUFFIX;
         long remainingSeconds = otpTtlSeconds - Duration.between(rec.createdAt(), Instant.now()).getSeconds();
         long attempts = redisService.incrementAndExpire(failNs, key, Duration.ofSeconds(Math.max(remainingSeconds, 1)));
+        // Past the limit: a concurrent guess already used the last attempt, so even a correct code is refused
         if (attempts > MAX_OTP_ATTEMPTS) {
             lockOut(namespace, key);
         }
@@ -270,7 +271,8 @@ public class AuthService {
                 rec.code().getBytes(StandardCharsets.UTF_8),
                 code.getBytes(StandardCharsets.UTF_8));
         if (!codeMatches) {
-            if (attempts >= MAX_OTP_ATTEMPTS) {
+            // The last allowed attempt was wrong: lock now rather than on the next request
+            if (attempts == MAX_OTP_ATTEMPTS) {
                 lockOut(namespace, key);
             }
             throw ApiException.unauthorized(MessageKey.AUTH_INVALID_OTP);
@@ -286,14 +288,15 @@ public class AuthService {
      * invalidates the OTP and counter, then rejects.
      */
     private void lockOut(String namespace, String key) {
-        redisService.set(namespace + OTP_LOCK_SUFFIX, key, "1", OTP_LOCK_TTL);
+        redisService.setOrThrow(namespace + OTP_LOCK_SUFFIX, key, "1", OTP_LOCK_TTL);
         redisService.delete(namespace, key);
         redisService.delete(namespace + OTP_FAIL_SUFFIX, key);
         throw ApiException.unauthorized(MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS);
     }
 
     private void rejectIfLocked(String namespace, String key) {
-        if (redisService.hasKey(namespace + OTP_LOCK_SUFFIX, key)) {
+        // Fails closed: a Redis error must not let a locked identifier guess again
+        if (redisService.hasKeyOrThrow(namespace + OTP_LOCK_SUFFIX, key)) {
             throw ApiException.unauthorized(MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS);
         }
     }
@@ -309,6 +312,16 @@ public class AuthService {
         long elapsed = sentAt == null ? 0 : Instant.now().getEpochSecond() - Long.parseLong(sentAt);
         long remaining = Math.max(otpResendCooldownSeconds - elapsed, 1);
         throw ApiException.badRequest(MessageKey.AUTH_OTP_RESEND_COOLDOWN, remaining);
+    }
+
+    /** Stores the OTP; if that fails, releases the cooldown just claimed so the user can retry at once. */
+    private void storeOtp(String namespace, String key, OtpRecord record) {
+        try {
+            redisService.setOrThrow(namespace, key, record, Duration.ofSeconds(otpTtlSeconds));
+        } catch (RuntimeException ex) {
+            redisService.delete(namespace + OTP_COOLDOWN_SUFFIX, key);
+            throw ex;
+        }
     }
 
     /** Drops an OTP whose delivery failed, plus its cooldown, so the user is not blocked by a message that never arrived. */

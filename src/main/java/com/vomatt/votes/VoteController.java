@@ -97,8 +97,8 @@ public class VoteController {
                 "inviteeCount": null,
                 "unread": null,
             """;
-    private static final String POLL_MY_OPTION = "    \"myOptionId\": \"0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813\"\n} , \"message\": null, \"errorCode\": null, \"error\": null }";
-    private static final String POLL_NO_OPTION = "    \"myOptionId\": null\n} , \"message\": null, \"errorCode\": null, \"error\": null }";
+    private static final String POLL_MY_OPTION = "    \"myOptionId\": \"0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813\",\n    \"myBallotAnonymous\": false\n} , \"message\": null, \"errorCode\": null, \"error\": null }";
+    private static final String POLL_NO_OPTION = "    \"myOptionId\": null,\n    \"myBallotAnonymous\": null\n} , \"message\": null, \"errorCode\": null, \"error\": null }";
 
     /** Open Poll, results Sealed, caller chose Java. */
     private static final String EX_POLL_OPEN = POLL_1 + POLL_COUNTS_OPEN + POLL_OPTIONS_SEALED + POLL_2 + POLL_MY_OPTION;
@@ -201,6 +201,7 @@ public class VoteController {
             - 400 `tag.ids.invalid`: one of `tagIds` does not exist
             - 400 `common.validation_failed`: a field breaks its size / required rule (first failing field only)
             - 404 `group.not_found`: one of `groupIds` does not exist or belongs to someone else
+            - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was changed, try again
             """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = @ExampleObject(name = "Reschedule", value = """
@@ -481,13 +482,13 @@ public class VoteController {
             **Auth**: required
             **Precondition**: the Poll has Ended, and its Voter Visibility allows the caller: NOBODY allows no one (not even the owner), OWNER allows only the owner, SIGNED_IN allows anyone who can see the Poll (for INVITE_ONLY: the owner and Invitees)
             **Behavior**: cursor-paged list of who chose which option, oldest Ballot first. Anonymous Ballots are left out, so the list can be shorter than `participantCount`. \
-            To keep them anonymous, the whole list is hidden (403 `vote.voters.hidden`) while the Poll holds 1 or 2 Anonymous Ballots; with none, or with 3 or more, it is shown. \
+            To keep them anonymous, the whole list is hidden (403 `vote.voters.hidden`) while the Poll holds 1 or 2 Anonymous Ballots other than the caller's own; with none, or with 3 or more, it is shown. \
             `nextCursor` null means the last page; `limit` is clamped to 1-50 (default 20).
             **Side effects**: none
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
             - 403 `vote.results.sealed`: the Poll is still Scheduled or Open
-            - 403 `vote.voters.hidden`: Voter Visibility does not allow the caller, or the Poll holds 1 or 2 Anonymous Ballots
+            - 403 `vote.voters.hidden`: Voter Visibility does not allow the caller, or the Poll holds 1 or 2 Anonymous Ballots other than the caller's own
             - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list or another ordering of this list
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of Participants",
@@ -499,7 +500,7 @@ public class VoteController {
                         "nextCursor": null
                       }, "message": null, "errorCode": null, "error": null }
                     """)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Poll not Ended (`vote.results.sealed`), or Voter Visibility does not allow the caller or the Poll holds 1 or 2 Anonymous Ballots (`vote.voters.hidden`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Poll not Ended (`vote.results.sealed`), or Voter Visibility does not allow the caller or the Poll holds 1 or 2 Anonymous Ballots other than the caller's own (`vote.voters.hidden`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.voters.hidden", value = ERR_MESSAGE + "Voters of this Poll are hidden" + ERR_CODE + "vote.voters.hidden" + ERR_ERROR + "Voters of this Poll are hidden" + ERR_END)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller (`vote.not_found`)",
@@ -559,6 +560,7 @@ public class VoteController {
             - 400 `vote.delete.window_passed`: the Poll is Open or Ended and the delete window (default 20 minutes, configurable) has passed
             - 403 `vote.forbidden`: the caller is not the owner
             - 404 `vote.not_found`: Poll does not exist or is already Deleted
+            - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was changed, try again
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Poll deleted",
             content = @Content(examples = @ExampleObject(name = "Deleted", value = """
@@ -596,6 +598,7 @@ public class VoteController {
             - 400 `vote.close.scheduled`: the Poll is Scheduled; use `DELETE /api/votes/{voteId}` instead
             - 403 `vote.forbidden`: the caller is not the owner
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
+            - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was changed, try again
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Poll closed (or already Ended)",
             content = @Content(examples = @ExampleObject(name = "Closed", value = """
@@ -682,6 +685,7 @@ public class VoteController {
             - 403 `vote.forbidden`: the caller is not the owner
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
             - 404 `group.not_found`: one of `groupIds` does not exist or belongs to someone else
+            - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was changed, try again
             """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = {@ExampleObject(name = "Invite carol and dave", value = """
@@ -726,6 +730,7 @@ public class VoteController {
             - 400 `vote.ended`: the Poll has Ended
             - 403 `vote.forbidden`: the caller is not the owner
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
+            - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was changed, try again
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Invitees after the removal",
             content = @Content(examples = @ExampleObject(name = "Invitees", value = EX_INVITEES)))
@@ -765,6 +770,7 @@ public class VoteController {
             - 400 `vote.ended`: the Poll has Ended
             - 403 `vote.forbidden`: the caller is not the owner
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
+            - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was changed, try again
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Invitees after the removal",
             content = @Content(examples = @ExampleObject(name = "Invitees", value = EX_INVITEES)))

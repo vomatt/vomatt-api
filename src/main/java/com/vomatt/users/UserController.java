@@ -61,7 +61,7 @@ public class UserController {
             Unlike the public profile, nothing is masked; `visibilitySettings` reports what other users see \
             on `GET /api/users/{username}` (unset fields use their defaults: `displayName` and `bio` public, the rest hidden). \
             `totalPolls` counts Polls the user created that have opened (Open and Ended; not Scheduled or Cancelled before opening), \
-            `totalVotes` counts Polls the user holds a Ballot in. \
+            `totalVotes` counts Public, non-Deleted Polls the user holds a Ballot in. \
             `anonymousBallotByDefault` is whether Ballots are Anonymous when a Ballot does not say otherwise (false until set).
             **Side effects**: none
             **Errors**:
@@ -109,7 +109,7 @@ public class UserController {
     @Operation(summary = "Get user public profile", description = """
             **Auth**: public (the response is the same whether or not the caller is signed in)
             **Precondition**: none
-            **Behavior**: returns the public view of a user. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` are always present \
+            **Behavior**: returns the public view of a user. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` (Public, non-Deleted Polls only) are always present \
             (`avatarUrl` is `null` when never set). \
             Every optional field is `null` unless the owner made it visible: `displayName` and `bio` are visible by default, \
             `email`, `firstName`, `lastName`, `location`, `points` and `membershipLevel` are hidden by default. \

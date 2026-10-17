@@ -22,6 +22,13 @@ public interface UserPreferenceRepository extends JpaRepository<UserPreference, 
      */
     Optional<UserPreference> findByUserIdAndKey(UUID userId, String key);
 
+    /** The account default for whether new Ballots are Anonymous; false when never set. */
+    default boolean anonymousBallotByDefault(UUID userId) {
+        return findByUserIdAndKey(userId, UserPreference.ANONYMOUS_BALLOT_KEY)
+            .map(pref -> Boolean.parseBoolean(pref.getValue()))
+            .orElse(false);
+    }
+
     /**
      * Fetch one preference for many users at once
      */

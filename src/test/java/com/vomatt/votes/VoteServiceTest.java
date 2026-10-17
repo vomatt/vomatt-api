@@ -695,7 +695,7 @@ class VoteServiceTest {
         @DisplayName("should show voters when the Poll holds no Anonymous Ballot")
         void shouldShowVotersWhenNoAnonymousBallot() {
             endedWith(com.vomatt.entity.VoterVisibility.OWNER);
-            when(userVoteRepository.countByVoteIdAndAnonymousTrue(voteId)).thenReturn(0L);
+            when(userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn(0L);
             when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of());
 
             assertThat(voteService.getVoters(voteId.toString(), userId.toString(), null, null).items()).isEmpty();
@@ -705,7 +705,7 @@ class VoteServiceTest {
         @DisplayName("should hide voters when the Poll holds fewer than K Anonymous Ballots")
         void shouldHideVotersWhenAnonymousBallotsBelowK() {
             endedWith(com.vomatt.entity.VoterVisibility.OWNER);
-            when(userVoteRepository.countByVoteIdAndAnonymousTrue(voteId)).thenReturn(1L);
+            when(userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn(1L);
 
             assertHidden(userId.toString());
             verify(userVoteRepository, never()).findVoterPage(any(), any(), any(), any());
@@ -715,7 +715,7 @@ class VoteServiceTest {
         @DisplayName("should show voters when the Poll holds K Anonymous Ballots")
         void shouldShowVotersWhenAnonymousBallotsReachK() {
             endedWith(com.vomatt.entity.VoterVisibility.OWNER);
-            when(userVoteRepository.countByVoteIdAndAnonymousTrue(voteId)).thenReturn((long) VoteService.ANONYMOUS_BALLOT_K);
+            when(userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn((long) VoteService.ANONYMOUS_BALLOT_K);
             when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of());
 
             assertThat(voteService.getVoters(voteId.toString(), userId.toString(), null, null).items()).isEmpty();

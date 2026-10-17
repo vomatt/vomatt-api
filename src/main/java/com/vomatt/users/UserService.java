@@ -107,9 +107,7 @@ public class UserService {
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
 
         Map<String, Boolean> visibility = loadVisibilitySettings(UUID.fromString(userId), false);
-        boolean anonymousBallotByDefault = preferenceRepository.findByUserIdAndKey(user.getId(), UserPreference.ANONYMOUS_BALLOT_KEY)
-                .map(pref -> Boolean.parseBoolean(pref.getValue()))
-                .orElse(false);
+        boolean anonymousBallotByDefault = preferenceRepository.anonymousBallotByDefault(user.getId());
         return userMapper.toMyProfileResponse(
                 user,
                 projection.getTotalPolls().intValue(),

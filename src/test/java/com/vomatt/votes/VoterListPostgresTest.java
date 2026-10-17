@@ -110,6 +110,25 @@ class VoterListPostgresTest extends PostgresRepositoryTest {
                 .extracting(VoterResponse::username).containsExactly("vl-anon-named");
     }
 
+    @Test
+    @DisplayName("should keep the voter list hidden when the owner's own Anonymous Ballot would reach K")
+    void shouldHideVotersWhenOnlyTheCallersAnonymousBallotReachesK() {
+        User owner = persistUser("vl-self-owner");
+        OffsetDateTime now = OffsetDateTime.now();
+        Vote poll = persistPoll(owner, now.minusDays(2), now.minusDays(1), "A", "B");
+        VoteOption option = poll.getOptions().iterator().next();
+        persistAnonymousBallot(owner, poll, option);
+        for (int i = 1; i < VoteService.ANONYMOUS_BALLOT_K; i++) {
+            persistAnonymousBallot(persistUser("vl-self-hidden-" + i), poll, option);
+        }
+        em.flush();
+        em.clear();
+
+        assertThatThrownBy(() -> voteService.getVoters(poll.getId().toString(), owner.getId().toString(), null, null))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_VOTERS_HIDDEN));
+    }
+
     private void persistAnonymousBallot(User user, Vote poll, VoteOption option) {
         UserVote ballot = new UserVote(user, poll, option, null);
         ballot.setAnonymous(true);

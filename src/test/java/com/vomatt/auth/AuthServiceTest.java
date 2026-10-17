@@ -141,6 +141,8 @@ class AuthServiceTest {
         // When the OTP write fails, must not send an email with an OTP that cannot be looked up
         verify(emailService, org.mockito.Mockito.never()).sendVerificationEmail(anyString(), anyString());
         verify(emailService, org.mockito.Mockito.never()).sendPreSignupEmail(anyString(), anyString());
+        // The cooldown claimed for this send is released, so the user can retry at once
+        verify(redisService).delete("otp:email:cooldown", "user@example.com");
     }
 
     @Test
@@ -160,7 +162,7 @@ class AuthServiceTest {
 
     @Test
     void shouldRejectSendOtpWhenIdentifierIsLockedOut() {
-        when(redisService.hasKey("otp:email:lock", "user@example.com")).thenReturn(true);
+        when(redisService.hasKeyOrThrow("otp:email:lock", "user@example.com")).thenReturn(true);
 
         assertThatThrownBy(() -> authService.sendOtp("user@example.com", null, null, false))
                 .isInstanceOf(ApiException.class)
@@ -170,7 +172,7 @@ class AuthServiceTest {
 
     @Test
     void shouldRejectPhoneSendOtpWhenIdentifierIsLockedOut() {
-        when(redisService.hasKey("otp:phone:lock", "+886912345678")).thenReturn(true);
+        when(redisService.hasKeyOrThrow("otp:phone:lock", "+886912345678")).thenReturn(true);
 
         assertThatThrownBy(() -> authService.sendOtp(null, "+886912345678", "signup", false))
                 .isInstanceOf(ApiException.class)
@@ -249,7 +251,7 @@ class AuthServiceTest {
         // On reaching the limit, delete both the OTP and the counter and write a lock that outlives them
         verify(redisService).delete("otp:email", "user@example.com");
         verify(redisService).delete("otp:email:fail", "user@example.com");
-        verify(redisService).set("otp:email:lock", "user@example.com", "1", Duration.ofMinutes(15));
+        verify(redisService).setOrThrow("otp:email:lock", "user@example.com", "1", Duration.ofMinutes(15));
     }
 
     @Test
@@ -263,13 +265,13 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.verifyOtp("user@example.com", null, "123456", false))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS));
-        verify(redisService).set("otp:email:lock", "user@example.com", "1", Duration.ofMinutes(15));
+        verify(redisService).setOrThrow("otp:email:lock", "user@example.com", "1", Duration.ofMinutes(15));
         verify(userRepository, never()).findByEmail(anyString());
     }
 
     @Test
     void shouldRejectVerifyWhenIdentifierIsLockedOut() {
-        when(redisService.hasKey("otp:email:lock", "user@example.com")).thenReturn(true);
+        when(redisService.hasKeyOrThrow("otp:email:lock", "user@example.com")).thenReturn(true);
 
         assertThatThrownBy(() -> authService.verifyOtp("user@example.com", null, "123456", false))
                 .isInstanceOf(ApiException.class)

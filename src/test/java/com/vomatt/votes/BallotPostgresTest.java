@@ -193,6 +193,15 @@ class BallotPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should return myBallotAnonymous on the Ballot and Poll responses")
+    void shouldReturnMyBallotAnonymousWhenBallotIsAnonymous() {
+        assertThat(cast(voter, optionA, true).getMyBallotAnonymous()).isTrue();
+        assertThat(voteService.getVote(poll.getId().toString(), voter.getId().toString()).getMyBallotAnonymous()).isTrue();
+
+        assertThat(voteService.retract(poll.getId().toString(), voter.getId().toString()).getMyBallotAnonymous()).isNull();
+    }
+
+    @Test
     @DisplayName("should keep a single Ballot with consistent counts when same user votes concurrently")
     void shouldKeepSingleBallotWhenSameUserCastsConcurrently() throws Exception {
         List<Callable<Object>> calls = new ArrayList<>();

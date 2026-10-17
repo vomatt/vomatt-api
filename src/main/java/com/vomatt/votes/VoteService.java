@@ -47,7 +47,6 @@ import com.vomatt.entity.Invitee;
 import com.vomatt.entity.User;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.entity.Tag;
-import com.vomatt.entity.UserPreference;
 import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
@@ -330,7 +329,7 @@ public class VoteService {
         Optional<UserVote> previous = userVoteRepository.findByUserIdAndVoteId(userUuid, voteUuid);
         // An omitted flag keeps the current Ballot's, so a client that does not resend it never unmasks the user
         boolean anonymous = request.getAnonymous() != null ? request.getAnonymous()
-            : previous.map(UserVote::isAnonymous).orElseGet(() -> anonymousByDefault(userUuid));
+            : previous.map(UserVote::isAnonymous).orElseGet(() -> preferenceRepository.anonymousBallotByDefault(userUuid));
         boolean unchanged = previous.filter(b -> b.getOption().getId().equals(optionUuid)).isPresent();
         if (unchanged) {
             previous.get().setAnonymous(anonymous);
@@ -407,7 +406,7 @@ public class VoteService {
 
     /**
      * Who chose what in an Ended Poll, as allowed by its Voter Visibility; oldest Ballot first.
-     * Hidden while the Poll holds 1 to {@link #ANONYMOUS_BALLOT_K}-1 Anonymous Ballots.
+     * Hidden while the Poll holds 1 to {@link #ANONYMOUS_BALLOT_K}-1 Anonymous Ballots other than the caller's.
      */
     @Transactional(readOnly = true)
     public CursorResponse<VoterResponse> getVoters(String voteId, String userId, String cursor, Integer limit) {
@@ -424,8 +423,10 @@ public class VoteService {
         if (!allowed) {
             throw ApiException.forbidden(MessageKey.VOTE_VOTERS_HIDDEN);
         }
-        // Ballots are frozen once Ended, so this count cannot change between pages
-        long anonymousBallots = userVoteRepository.countByVoteIdAndAnonymousTrue(vote.getId());
+        // The caller's own Anonymous Ballot does not count: they know its option, so it hides no one else's.
+        // ponytail: Ballots of other accounts the caller controls (invited sock puppets) still count; no count-based gate can tell them apart.
+        // An account deletion can drop Ballots between pages; the gate is re-checked on every page, so it only ever hides more.
+        long anonymousBallots = userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(vote.getId(), UUID.fromString(userId));
         if (anonymousBallots > 0 && anonymousBallots < ANONYMOUS_BALLOT_K) {
             throw ApiException.forbidden(MessageKey.VOTE_VOTERS_HIDDEN);
         }
@@ -673,12 +674,6 @@ public class VoteService {
         }
     }
 
-    private boolean anonymousByDefault(UUID userId) {
-        return preferenceRepository.findByUserIdAndKey(userId, UserPreference.ANONYMOUS_BALLOT_KEY)
-            .map(pref -> Boolean.parseBoolean(pref.getValue()))
-            .orElse(false);
-    }
-
     // Runs before any row lock so throttled requests never touch the Poll; fails open like RateLimitFilter's write path
     private void checkBallotRateLimit(String userId) {
         VoteConfigurationProperties.BallotRateLimit limit = voteConfig.getBallotRateLimit();
@@ -770,6 +765,9 @@ public class VoteService {
     private VoteResponse ballotResponse(UUID voteId, String userId, UUID myOptionId) {
         VoteResponse response = convertToVoteResponse(voteId, userId);
         response.setMyOptionId(myOptionId == null ? null : myOptionId.toString());
+        if (myOptionId == null) {
+            response.setMyBallotAnonymous(null);
+        }
         return response;
     }
 
@@ -782,17 +780,18 @@ public class VoteService {
         OffsetDateTime now = OffsetDateTime.now();
         Map<UUID, Long> commentCounts = voteCommentRepository.countVisibleByVoteIds(ids).stream()
             .collect(Collectors.toMap(IdCount::getId, IdCount::getCount));
-        Map<UUID, UUID> selections = userId == null ? Map.of()
+        Map<UUID, BallotSelection> selections = userId == null ? Map.of()
             : userVoteRepository.findSelections(UUID.fromString(userId), ids).stream()
-                .collect(Collectors.toMap(BallotSelection::getVoteId, BallotSelection::getOptionId, (a, b) -> a));
+                .collect(Collectors.toMap(BallotSelection::getVoteId, Function.identity(), (a, b) -> a));
         List<UUID> inviteOnlyIds = votes.stream().filter(v -> v.getAudience() == Audience.INVITE_ONLY).map(Vote::getId).toList();
         Map<UUID, Long> inviteeCounts = inviteOnlyIds.isEmpty() ? Map.of()
             : inviteeRepository.countByVoteIds(inviteOnlyIds).stream()
                 .collect(Collectors.toMap(IdCount::getId, IdCount::getCount));
         return votes.stream().map(vote -> {
             VoteResponse response = voteMapper.toResponse(vote, sortedOptions(vote));
-            UUID myOptionId = selections.get(vote.getId());
-            response.setMyOptionId(myOptionId == null ? null : myOptionId.toString());
+            BallotSelection mine = selections.get(vote.getId());
+            response.setMyOptionId(mine == null ? null : mine.getOptionId().toString());
+            response.setMyBallotAnonymous(mine == null ? null : mine.isAnonymous());
             response.setCommentCount(commentCounts.getOrDefault(vote.getId(), 0L));
             if (vote.getAudience() == Audience.INVITE_ONLY) {
                 response.setInviteeCount(inviteeCounts.getOrDefault(vote.getId(), 0L));

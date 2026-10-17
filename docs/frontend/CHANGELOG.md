@@ -4,6 +4,7 @@ Contract changes that affect the frontend. 💥 BREAKING means frontend code mus
 
 ## 2026-10-17
 
+- Poll invitation emails now link to `<site-url>/poll/{voteId}` (was `/votes/{voteId}`), so the frontend serves a Poll page at `/poll/{uuid}`. Deployments that set `EMAIL_POLL_PATH` keep their own value. The invitation email no longer ends with a signature.
 - `GET /api/notifications/unread-count` stops counting at 100: `count` is at most `100`, which means 100 or more unread (show it as "99+"). Below 100 the number is unchanged.
 - `GET /api/users/search` treats `%` and `_` in `username` as literal characters; `_` used to match any single character. Matching is otherwise unchanged (case-insensitive contains, any length).
 - 💥 BREAKING The access token (`token`) now lives 15 minutes by default instead of 1 hour (`JWT_EXPIRATION_SECONDS` default 900), so a revoked role or a suspension takes effect sooner. Do not cache the token for a fixed hour: on 401, call `POST /api/auth/refresh` and retry, as described in [auth-flow.md](auth-flow.md).

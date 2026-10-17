@@ -43,6 +43,12 @@ sequenceDiagram
 | 2 | `POST /api/auth/send-otp` | OTP is valid for 180 seconds by default; resending to the same email has a cooldown (default 180 seconds) |
 | 3 | `POST /api/auth/verify-otp` | Success consumes the OTP; a new email automatically creates an account |
 
+Wrong codes are limited per email (or phone, §3) **and client IP**:
+
+- The 3rd wrong code locks that email for that IP for 5 minutes. Each further lockout doubles it: 10, 20, 40 minutes... up to 24 hours. The doubling is forgotten 24 hours after the last lock ends, and a successful sign-in from that IP resets it.
+- Resending an OTP does not reset the count of wrong codes.
+- While locked, `send-otp` and `verify-otp` from that IP return 401 `auth.otp.too_many_attempts`, even for a correct code. Other IPs are not affected, and the OTP already sent stays valid. The response does not say how long the lock lasts.
+
 Emails are trimmed and lower-cased. A Gmail address (`gmail.com` / `googlemail.com`) also loses its dots and `+tag` and moves to `gmail.com`, so `A.B+news@GoogleMail.com` and `ab@gmail.com` are one account. `user.email` comes back in this canonical form.
 
 ## 3. Phone OTP login / signup
@@ -60,6 +66,7 @@ sequenceDiagram
 
 - Omitting `type` is the same as `login`; the phone number must then already be registered, otherwise 400 `auth.phone.not_registered`. For new numbers, send `type: "signup"`.
 - `verify-otp` has no `type`: if the number does not exist an account is created; if it exists the user is logged in.
+- Wrong codes lock the number per client IP with the same rules as email (§2).
 - Numbers are stored as E.164 with Taiwan as the default region: a Taiwan mobile number `09xxxxxxxx` or `+` country code and number are accepted, spaces, `-`, `(` and `)` are ignored. `0912345678` and `+886912345678` are the same number, and `user.phoneNumber` comes back as `+886912345678`. Any other format gets 400 `auth.phone.invalid`.
 
 ## 4. Google / LINE / Apple sign-in
@@ -125,7 +132,7 @@ Rotation rules (`RefreshTokenService`):
 
 1. Every refresh **consumes** the refresh token passed in and returns a new access token and a new refresh token.
 2. **Grace window (default 10 seconds)**: if the same old refresh token is sent again within the window (e.g. two tabs or two requests refreshing at the same time), it gets **exactly the same new token pair**, without failing and without being treated as an attack.
-3. **Reuse detection**: if an old token that was already consumed is sent after the grace window (possibly a leaked token), the backend **revokes all refresh tokens on all of that user's devices** and returns 401 `auth.suspicious_login`. On receiving it, the frontend must clear local tokens, force logout, redirect to the login page, and show a message like "For your security, all devices have been signed out. Please log in again."
+3. **Reuse detection**: if an old token that was already consumed is sent after the grace window (possibly a leaked token, or a very late retry), the backend revokes **only the session that token rotated into** (the latest refresh token of that sign-in) and returns 401 `auth.suspicious_login`. The user's other devices stay signed in. On receiving it, the frontend must clear local tokens, force logout, redirect to the login page, and show a message like "For your security, this session has been signed out. Please log in again."
 4. Refresh reloads the user's latest roles, so role changes take effect after the next refresh (at most one access token lifetime).
 5. If the user does not exist or is suspended, refresh returns 401 `auth.refresh_token.invalid` and revokes all of that user's refresh tokens.
 
@@ -187,17 +194,17 @@ UI: on `auth.account_banned`, at login or on any write, show "This account has b
 |-----------|------|----------|---------|
 | `auth.identifier.required` | 400 | Neither email nor phone provided | Prompt the user to fill it in |
 | `auth.otp.resend_cooldown` | 400 | Resent during the cooldown; `message` includes the remaining seconds | Allow resend only after the countdown |
-| `auth.email.send_failed` / `auth.sms.send_failed` | 400 | Failed to send the email / SMS; the resend cooldown is released | Let the user resend right away |
+| `auth.email.send_failed` / `auth.sms.send_failed` | 400 | Failed to send the email / SMS; the OTP is dropped and a resend is allowed after 30 seconds | Allow resend after a 30-second countdown |
 | `auth.phone.not_registered` | 400 | `type=login` but the number is not registered | Go to the signup flow (`type=signup`) |
 | `auth.phone.invalid` | 400 | The number is neither `09xxxxxxxx` nor `+` country code and number | Show the accepted formats next to the field |
 | `auth.otp.invalid_or_expired` | 401 | No valid OTP (expired, already used, or never sent) | Guide the user to resend |
 | `auth.invalid_otp` | 401 | Wrong code | Ask the user to re-enter |
-| `auth.otp.too_many_attempts` | 401 | 5 wrong codes; the email / phone is locked for 15 minutes, and `send-otp`, `phone/send-otp` and both `verify-otp` return this until then | Tell the user to try again in 15 minutes; disable resend |
+| `auth.otp.too_many_attempts` | 401 | 3 wrong codes from this IP; the email / phone is locked for this IP for 5 minutes, doubling on each further lockout up to 24 hours, and `send-otp`, `phone/send-otp` and both `verify-otp` return this until then | Tell the user to try again later (no exact time is returned); disable resend |
 | `auth.admin.forbidden` | 403 | `checkRole` but not an admin | Show no permission |
 | `auth.account_banned` | 403 | Account is suspended (at login, or on a write with a still-valid access token) | Show that the account is suspended |
 | `auth.email_not_verified` | 401 | The OAuth provider's email is not verified | Suggest another login method |
 | `auth.google.*` / `auth.line.*` / `auth.apple.*` | 400 / 401 | Provider credential is invalid or the backend is not configured | Suggest another method or retry later |
 | `common.service_unavailable` | 503 | Apple key endpoint is down | Retry (exponential backoff) |
 | `auth.refresh_token.invalid` | 401 | Refresh token is invalid, expired, or the user is suspended | Clear tokens, redirect to login |
-| `auth.suspicious_login` | 401 | Refresh token reuse detected; all sessions have been terminated | Clear tokens, redirect to login and show a security notice |
+| `auth.suspicious_login` | 401 | Refresh token reuse detected; that session has been signed out (other devices are unaffected) | Clear tokens, redirect to login and show a security notice |
 | `common.rate_limited` | 429 | Rate limit exceeded | Count down using `Retry-After` |

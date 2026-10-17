@@ -27,13 +27,13 @@ public class RefreshTokenService {
     private final UserRepository userRepository;
 
     private static final String NAMESPACE = "refresh";
-    // Consumed (rotated) tokens, used for reuse detection; TTL is the 60-second detection window
+    // Consumed (rotated) tokens, used for reuse detection; kept as long as the refresh token itself could have lived,
+    // so a stolen token replayed at any point in its lifetime still trips the detector
     private static final String CONSUMED_NS = "refresh:consumed";
     // User -> active token index, used to revoke all
     private static final String USER_IDX_NS = "refresh:idx";
     // In-flight race grace cache: the same oldToken returns the same pair within the TTL, so a cross-instance race does not trigger a reuse alert
     private static final String GRACE_NS = "refresh:grace";
-    private static final Duration CONSUMED_TTL = Duration.ofSeconds(60);
     private static final int SHA_PREFIX_LEN = 8;
 
     @Value("${jwt.refresh-expiration-days:30}")
@@ -122,7 +122,7 @@ public class RefreshTokenService {
         // are correctness-critical and used to take one round-trip each. They are now applied atomically in a single MULTI/EXEC: one round-trip,
         // fully atomic (no intermediate "partially written then threw" state), and a connection failure throws for the whole batch (fail-fast, no weaker than the old per-write throwing).
         redisService.execInTransaction(List.of(
-                RedisService.RedisWrite.set(CONSUMED_NS, oldToken, freshData.userId(), CONSUMED_TTL),
+                RedisService.RedisWrite.set(CONSUMED_NS, oldToken, freshData.userId(), refreshTtl),
                 RedisService.RedisWrite.set(NAMESPACE, newRefreshToken, freshData, refreshTtl),
                 RedisService.RedisWrite.hput(USER_IDX_NS, freshData.userId(), newRefreshToken, "1"),
                 RedisService.RedisWrite.expire(USER_IDX_NS, freshData.userId(), refreshTtl),

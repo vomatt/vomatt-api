@@ -74,6 +74,9 @@ class AuthServiceTest {
         ReflectionTestUtils.setField(authService, "otpTtlSeconds", 180L);
         ReflectionTestUtils.setField(authService, "otpResendCooldownSeconds", 180L);
         ReflectionTestUtils.setField(authService, "appleJwksUrl", "https://appleid.apple.com/auth/keys");
+        ReflectionTestUtils.setField(authService, "appleClientId", "com.vomatt.app");
+        // Resend cooldown slot is free unless a test says otherwise
+        lenient().when(redisService.setIfAbsent(anyString(), anyString(), any(), any(Duration.class))).thenReturn(true);
         // Runs the find-or-create callback as if a transaction were open
         lenient().when(transactionTemplate.execute(any()))
                 .thenAnswer(inv -> inv.<TransactionCallback<?>>getArgument(0).doInTransaction(null));
@@ -93,7 +96,8 @@ class AuthServiceTest {
                 org.mockito.Mockito.mock(org.springframework.web.client.RestClient.ResponseSpec.class);
 
         org.mockito.Mockito.when(restClient.get()).thenReturn(uriSpec);
-        org.mockito.Mockito.when(uriSpec.uri(anyString())).thenReturn(headersSpec);
+        lenient().when(uriSpec.uri(anyString())).thenReturn(headersSpec);
+        lenient().when(uriSpec.uri(any(java.net.URI.class))).thenReturn(headersSpec);
         org.mockito.Mockito.when(headersSpec.retrieve()).thenReturn(responseSpec);
         if (retrieveError != null) {
             org.mockito.Mockito.when(responseSpec.body(eq(java.util.Map.class))).thenThrow(retrieveError);
@@ -106,7 +110,6 @@ class AuthServiceTest {
 
     @Test
     void sendOtp_whenEmailNotExist_shouldStoreOtpInRedisAndSendSignupMail() {
-        when(redisService.get(eq("otp:email"), eq("new@example.com"), eq(OtpRecord.class))).thenReturn(null);
         when(userRepository.existsByEmail("new@example.com")).thenReturn(false);
         doNothing().when(emailService).sendPreSignupEmail(anyString(), anyString());
 
@@ -118,7 +121,6 @@ class AuthServiceTest {
 
     @Test
     void sendOtp_whenEmailExists_shouldStoreOtpInRedisAndSendLoginMail() {
-        when(redisService.get(eq("otp:email"), eq("user@example.com"), eq(OtpRecord.class))).thenReturn(null);
         when(userRepository.existsByEmail("user@example.com")).thenReturn(true);
         doNothing().when(emailService).sendVerificationEmail(anyString(), anyString());
 
@@ -130,7 +132,6 @@ class AuthServiceTest {
 
     @Test
     void sendOtp_whenOtpStoreFails_shouldThrowAndNotSendEmail() {
-        when(redisService.get(eq("otp:email"), eq("user@example.com"), eq(OtpRecord.class))).thenReturn(null);
         when(userRepository.existsByEmail("user@example.com")).thenReturn(true);
         org.mockito.Mockito.doThrow(new com.vomatt.common.redis.RedisOperationException("redis down", null))
                 .when(redisService).setOrThrow(eq("otp:email"), eq("user@example.com"), any(OtpRecord.class), any(Duration.class));
@@ -144,26 +145,66 @@ class AuthServiceTest {
 
     @Test
     void sendOtp_whenWithinCooldown_shouldThrowWithRemainingSeconds() {
-        OtpRecord recentOtp = new OtpRecord("123456", "login", Instant.now().minusSeconds(30), 0);
-        when(redisService.get(eq("otp:email"), eq("user@example.com"), eq(OtpRecord.class))).thenReturn(recentOtp);
+        when(redisService.setIfAbsent(eq("otp:email:cooldown"), eq("user@example.com"), any(), any(Duration.class)))
+                .thenReturn(false);
+        when(redisService.get("otp:email:cooldown", "user@example.com", String.class))
+                .thenReturn(Long.toString(Instant.now().minusSeconds(30).getEpochSecond()));
 
         assertThatThrownBy(() -> authService.sendOtp("user@example.com", null, null, false))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> {
                     assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_RESEND_COOLDOWN);
                 });
+        verify(redisService, never()).setOrThrow(eq("otp:email"), anyString(), any(), any(Duration.class));
     }
 
     @Test
-    void sendOtp_whenCooldownExpired_shouldResend() {
-        OtpRecord expiredOtp = new OtpRecord("123456", "login", Instant.now().minusSeconds(200), 0);
-        when(redisService.get(eq("otp:email"), eq("user@example.com"), eq(OtpRecord.class))).thenReturn(expiredOtp);
+    void shouldRejectSendOtpWhenIdentifierIsLockedOut() {
+        when(redisService.hasKey("otp:email:lock", "user@example.com")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.sendOtp("user@example.com", null, null, false))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS));
+        verify(redisService, never()).setOrThrow(anyString(), anyString(), any(), any(Duration.class));
+    }
+
+    @Test
+    void shouldRejectPhoneSendOtpWhenIdentifierIsLockedOut() {
+        when(redisService.hasKey("otp:phone:lock", "+886912345678")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.sendOtp(null, "+886912345678", "signup", false))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS));
+        verify(smsService, never()).sendOtp(anyString(), anyString());
+    }
+
+    @Test
+    void shouldDeleteOtpAndCooldownWithoutLeakingCauseWhenEmailSendFails() {
         when(userRepository.existsByEmail("user@example.com")).thenReturn(true);
-        doNothing().when(emailService).sendVerificationEmail(anyString(), anyString());
+        org.mockito.Mockito.doThrow(new RuntimeException("smtp.internal:25 refused"))
+                .when(emailService).sendVerificationEmail(anyString(), anyString());
 
-        authService.sendOtp("user@example.com", null, null, false);
+        assertThatThrownBy(() -> authService.sendOtp("user@example.com", null, null, false))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> {
+                    ApiException api = (ApiException) ex;
+                    assertThat(api.getMessageKey()).isEqualTo(MessageKey.AUTH_EMAIL_SEND_FAILED);
+                    assertThat(api.getMessageArgs()).isNullOrEmpty();
+                });
+        verify(redisService).delete("otp:email", "user@example.com");
+        verify(redisService).delete("otp:email:cooldown", "user@example.com");
+    }
 
-        verify(redisService).setOrThrow(eq("otp:email"), eq("user@example.com"), any(OtpRecord.class), eq(Duration.ofSeconds(180)));
+    @Test
+    void shouldDeleteOtpAndCooldownWhenSmsSendFails() {
+        org.mockito.Mockito.doThrow(new RuntimeException("twilio 500"))
+                .when(smsService).sendOtp(anyString(), anyString());
+
+        assertThatThrownBy(() -> authService.sendOtp(null, "+886912345678", "signup", false))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_SMS_SEND_FAILED));
+        verify(redisService).delete("otp:phone", "+886912345678");
+        verify(redisService).delete("otp:phone:cooldown", "+886912345678");
     }
 
     // ── verifyOtp ────────────────────────────────────────────────────
@@ -205,9 +246,35 @@ class AuthServiceTest {
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS));
 
-        // On reaching the limit, delete both the OTP and the counter so all further attempts fail
+        // On reaching the limit, delete both the OTP and the counter and write a lock that outlives them
         verify(redisService).delete("otp:email", "user@example.com");
         verify(redisService).delete("otp:email:fail", "user@example.com");
+        verify(redisService).set("otp:email:lock", "user@example.com", "1", Duration.ofMinutes(15));
+    }
+
+    @Test
+    void shouldRejectCorrectCodeWhenAttemptsAlreadyExceeded() {
+        // Counter is checked before comparing: even the correct code is rejected once the limit is passed
+        OtpRecord otpRecord = new OtpRecord("123456", "login", Instant.now(), 0);
+        when(redisService.get(eq("otp:email"), eq("user@example.com"), eq(OtpRecord.class))).thenReturn(otpRecord);
+        when(redisService.incrementAndExpire(eq("otp:email:fail"), eq("user@example.com"), any(Duration.class)))
+                .thenReturn(6L);
+
+        assertThatThrownBy(() -> authService.verifyOtp("user@example.com", null, "123456", false))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS));
+        verify(redisService).set("otp:email:lock", "user@example.com", "1", Duration.ofMinutes(15));
+        verify(userRepository, never()).findByEmail(anyString());
+    }
+
+    @Test
+    void shouldRejectVerifyWhenIdentifierIsLockedOut() {
+        when(redisService.hasKey("otp:email:lock", "user@example.com")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.verifyOtp("user@example.com", null, "123456", false))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS));
+        verify(redisService, never()).get(eq("otp:email"), anyString(), eq(OtpRecord.class));
     }
 
     @Test
@@ -554,7 +621,6 @@ class AuthServiceTest {
                 .displayName("Phone User").roles(new String[] { "user" }).build();
         when(userRepository.existsByPhoneNumber("+886912345678")).thenReturn(true);
         when(userRepository.findByPhoneNumber("+886912345678")).thenReturn(Optional.of(existing));
-        when(redisService.get(eq("otp:phone"), eq("+886912345678"), eq(OtpRecord.class))).thenReturn(null);
 
         authService.sendOtp(null, "0912345678", "login", false);
 
@@ -705,6 +771,41 @@ class AuthServiceTest {
 
         // JWKS fetched only once (second call hits the cache)
         verify(restClient, org.mockito.Mockito.times(1)).get();
+    }
+
+    @Test
+    void shouldThrowNotConfiguredWhenAppleClientIdIsBlank() {
+        ReflectionTestUtils.setField(authService, "appleClientId", "");
+
+        assertThatThrownBy(() -> authService.appleLogin("a.b.c", null))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_APPLE_NOT_CONFIGURED));
+        verify(restClient, never()).get();
+    }
+
+    @Test
+    void shouldRejectAppleTokenWhenExpIsMissing() throws Exception {
+        java.security.KeyPairGenerator gen = java.security.KeyPairGenerator.getInstance("RSA");
+        gen.initialize(2048);
+        java.security.KeyPair kp = gen.generateKeyPair();
+        var pub = (java.security.interfaces.RSAPublicKey) kp.getPublic();
+        java.util.Base64.Encoder enc = java.util.Base64.getUrlEncoder().withoutPadding();
+        stubJwksFetch(java.util.Map.of("keys", java.util.List.of(java.util.Map.of(
+                "kid", "k1",
+                "n", enc.encodeToString(pub.getModulus().toByteArray()),
+                "e", enc.encodeToString(pub.getPublicExponent().toByteArray())))), null);
+
+        String signingInput = base64Url("{\"alg\":\"RS256\",\"kid\":\"k1\"}") + "."
+                + base64Url("{\"iss\":\"https://appleid.apple.com\",\"aud\":\"com.vomatt.app\",\"email\":\"a@b.com\",\"email_verified\":\"true\"}");
+        java.security.Signature sig = java.security.Signature.getInstance("SHA256withRSA");
+        sig.initSign(kp.getPrivate());
+        sig.update(signingInput.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        String idToken = signingInput + "." + enc.encodeToString(sig.sign());
+
+        assertThatThrownBy(() -> authService.appleLogin(idToken, null))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_APPLE_TOKEN_EXPIRED));
+        verify(userRepository, never()).findByEmail(anyString());
     }
 
     private static String base64Url(String json) {

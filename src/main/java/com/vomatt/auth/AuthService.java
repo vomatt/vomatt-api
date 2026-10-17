@@ -26,6 +26,7 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -132,11 +133,12 @@ public class AuthService {
     }
 
     private void sendEmailOtp(String normalizedEmail, String code) {
-        checkResendCooldown(OTP_EMAIL_NS, normalizedEmail);
+        rejectIfLocked(OTP_EMAIL_NS, normalizedEmail);
 
         boolean isExisting = userRepository.existsByEmail(normalizedEmail);
         String otpType = isExisting ? "login" : "signup";
 
+        acquireResendCooldown(OTP_EMAIL_NS, normalizedEmail);
         redisService.setOrThrow(OTP_EMAIL_NS, normalizedEmail, new OtpRecord(code, otpType, Instant.now(), 0), Duration.ofSeconds(otpTtlSeconds));
 
         try {
@@ -146,23 +148,29 @@ public class AuthService {
                 emailService.sendVerificationEmail(normalizedEmail, code);
             }
         } catch (Exception ex) {
-            throw ApiException.badRequest(MessageKey.AUTH_EMAIL_SEND_FAILED, ex.getMessage());
+            // The code never reached the user: drop it and the cooldown so an immediate retry is possible
+            releaseUndeliveredOtp(OTP_EMAIL_NS, normalizedEmail);
+            log.warn("Failed to send OTP email: {}", ex.getMessage());
+            throw ApiException.badRequest(MessageKey.AUTH_EMAIL_SEND_FAILED);
         }
     }
 
     private void sendPhoneOtp(String phone, String otpType, String code) {
-        checkResendCooldown(OTP_PHONE_NS, phone);
+        rejectIfLocked(OTP_PHONE_NS, phone);
 
         if ("login".equals(otpType) && !userRepository.existsByPhoneNumber(phone)) {
             throw ApiException.badRequest(MessageKey.AUTH_PHONE_NOT_REGISTERED);
         }
 
+        acquireResendCooldown(OTP_PHONE_NS, phone);
         redisService.setOrThrow(OTP_PHONE_NS, phone, new OtpRecord(code, otpType, Instant.now(), 0), Duration.ofSeconds(otpTtlSeconds));
 
         try {
             smsService.sendOtp(phone, code);
         } catch (Exception ex) {
-            throw ApiException.badRequest(MessageKey.AUTH_SMS_SEND_FAILED, ex.getMessage());
+            releaseUndeliveredOtp(OTP_PHONE_NS, phone);
+            log.warn("Failed to send OTP SMS: {}", ex.getMessage());
+            throw ApiException.badRequest(MessageKey.AUTH_SMS_SEND_FAILED);
         }
     }
 
@@ -230,11 +238,30 @@ public class AuthService {
     /** Namespace suffix for the failure counter; same key as the OTP, atomic INCR (P1-#7). */
     private static final String OTP_FAIL_SUFFIX = ":fail";
 
+    /** Namespace suffix for the lockout marker; independent of the OTP so it survives OTP deletion and resends. */
+    private static final String OTP_LOCK_SUFFIX = ":lock";
+
+    /** Namespace suffix for the resend cooldown marker (SET NX), holding the send time in epoch seconds. */
+    private static final String OTP_COOLDOWN_SUFFIX = ":cooldown";
+
+    private static final Duration OTP_LOCK_TTL = Duration.ofMinutes(15);
+
     private OtpRecord consumeOtp(String namespace, String key, String code) {
+        rejectIfLocked(namespace, key);
+
         OtpRecord rec = redisService.get(namespace, key, OtpRecord.class);
 
         if (rec == null) {
             throw ApiException.unauthorized(MessageKey.AUTH_OTP_INVALID_OR_EXPIRED);
+        }
+
+        // Every attempt is counted with an atomic INCR BEFORE the code is compared, so concurrent guesses cannot
+        // all slip past the limit (P1-#7). TTL matches the OTP's remaining lifetime (at least 1 second).
+        String failNs = namespace + OTP_FAIL_SUFFIX;
+        long remainingSeconds = otpTtlSeconds - Duration.between(rec.createdAt(), Instant.now()).getSeconds();
+        long attempts = redisService.incrementAndExpire(failNs, key, Duration.ofSeconds(Math.max(remainingSeconds, 1)));
+        if (attempts > MAX_OTP_ATTEMPTS) {
+            lockOut(namespace, key);
         }
 
         // P5-#19: constant-time comparison so a short-circuit does not leak the OTP prefix via a timing side-channel.
@@ -243,33 +270,51 @@ public class AuthService {
                 rec.code().getBytes(StandardCharsets.UTF_8),
                 code.getBytes(StandardCharsets.UTF_8));
         if (!codeMatches) {
-            // P1-#7: failures are counted with a separate atomic INCR counter, so concurrent "get -> compare -> set" cannot overwrite each other and bypass the limit.
-            // TTL matches the OTP's remaining lifetime (at least 1 second), so the counter expires with the OTP.
-            String failNs = namespace + OTP_FAIL_SUFFIX;
-            long remainingSeconds = otpTtlSeconds - Duration.between(rec.createdAt(), Instant.now()).getSeconds();
-            long fails = redisService.incrementAndExpire(failNs, key, Duration.ofSeconds(Math.max(remainingSeconds, 1)));
-            if (fails >= MAX_OTP_ATTEMPTS) {
-                // Limit reached: delete the OTP and counter so all later attempts fail (including the correct code)
-                redisService.delete(namespace, key);
-                redisService.delete(failNs, key);
-                throw ApiException.unauthorized(MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS);
+            if (attempts >= MAX_OTP_ATTEMPTS) {
+                lockOut(namespace, key);
             }
             throw ApiException.unauthorized(MessageKey.AUTH_INVALID_OTP);
         }
 
         redisService.delete(namespace, key);
-        redisService.delete(namespace + OTP_FAIL_SUFFIX, key);
+        redisService.delete(failNs, key);
         return rec;
     }
 
-    private void checkResendCooldown(String namespace, String key) {
-        OtpRecord existing = redisService.get(namespace, key, OtpRecord.class);
-        if (existing == null) return;
+    /**
+     * Writes the lockout marker (15 minutes, outlives the OTP so a resend does not grant fresh guesses),
+     * invalidates the OTP and counter, then rejects.
+     */
+    private void lockOut(String namespace, String key) {
+        redisService.set(namespace + OTP_LOCK_SUFFIX, key, "1", OTP_LOCK_TTL);
+        redisService.delete(namespace, key);
+        redisService.delete(namespace + OTP_FAIL_SUFFIX, key);
+        throw ApiException.unauthorized(MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS);
+    }
 
-        long remaining = otpResendCooldownSeconds - Duration.between(existing.createdAt(), Instant.now()).getSeconds();
-        if (remaining > 0) {
-            throw ApiException.badRequest(MessageKey.AUTH_OTP_RESEND_COOLDOWN, remaining);
+    private void rejectIfLocked(String namespace, String key) {
+        if (redisService.hasKey(namespace + OTP_LOCK_SUFFIX, key)) {
+            throw ApiException.unauthorized(MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS);
         }
+    }
+
+    /** Atomically claims the resend slot (SET NX + TTL), so concurrent sends cannot both pass the cooldown. */
+    private void acquireResendCooldown(String namespace, String key) {
+        String cooldownNs = namespace + OTP_COOLDOWN_SUFFIX;
+        String now = Long.toString(Instant.now().getEpochSecond());
+        if (redisService.setIfAbsent(cooldownNs, key, now, Duration.ofSeconds(otpResendCooldownSeconds))) {
+            return;
+        }
+        String sentAt = redisService.get(cooldownNs, key, String.class);
+        long elapsed = sentAt == null ? 0 : Instant.now().getEpochSecond() - Long.parseLong(sentAt);
+        long remaining = Math.max(otpResendCooldownSeconds - elapsed, 1);
+        throw ApiException.badRequest(MessageKey.AUTH_OTP_RESEND_COOLDOWN, remaining);
+    }
+
+    /** Drops an OTP whose delivery failed, plus its cooldown, so the user is not blocked by a message that never arrived. */
+    private void releaseUndeliveredOtp(String namespace, String key) {
+        redisService.delete(namespace, key);
+        redisService.delete(namespace + OTP_COOLDOWN_SUFFIX, key);
     }
 
     public boolean checkEmailExists(String email) {
@@ -284,7 +329,9 @@ public class AuthService {
             throw ApiException.badRequest(MessageKey.AUTH_GOOGLE_NOT_CONFIGURED);
         }
 
-        var response = restClient.get().uri(googleTokenInfoUrl + "?id_token=" + idToken).retrieve()
+        var response = restClient.get()
+                .uri(UriComponentsBuilder.fromUriString(googleTokenInfoUrl).queryParam("id_token", idToken).encode().build().toUri())
+                .retrieve()
                 .body(java.util.Map.class);
 
         if (response == null || response.get("email") == null) {
@@ -378,6 +425,10 @@ public class AuthService {
 
     @SuppressWarnings("unchecked")
     public AuthResponse appleLogin(String idToken, String fullName) {
+        // Without a configured client id the audience cannot be checked, so a token minted for any app would pass
+        if (appleClientId == null || appleClientId.isBlank()) {
+            throw ApiException.badRequest(MessageKey.AUTH_APPLE_NOT_CONFIGURED);
+        }
         // P6-#16: JWKS fetching (external call + null guard + 5xx/connection failure classification) stays outside the try,
         // so a 503 external error from an Apple/network failure is not swallowed by the broad catch below and misreported as a 401 login failure.
         List<java.util.Map<String, Object>> keys = fetchAppleJwks();
@@ -419,11 +470,11 @@ public class AuthService {
             if (!"https://appleid.apple.com".equals(payload.get("iss"))) {
                 throw ApiException.unauthorized(MessageKey.AUTH_APPLE_INVALID_ISSUER);
             }
-            if (appleClientId != null && !appleClientId.isBlank() && !appleClientId.equals(payload.get("aud"))) {
+            if (!appleClientId.equals(payload.get("aud"))) {
                 throw ApiException.unauthorized(MessageKey.AUTH_APPLE_INVALID_AUDIENCE);
             }
             Number exp = (Number) payload.get("exp");
-            if (exp != null && exp.longValue() * 1000 < System.currentTimeMillis()) {
+            if (exp == null || exp.longValue() * 1000 < System.currentTimeMillis()) {
                 throw ApiException.unauthorized(MessageKey.AUTH_APPLE_TOKEN_EXPIRED);
             }
 

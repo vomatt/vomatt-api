@@ -2,6 +2,11 @@
 
 Contract changes that affect the frontend. 💥 BREAKING means frontend code must change. See [openapi.json](openapi.json) for the contract snapshot and [error-codes.md](error-codes.md) for error codes.
 
+## 2026-10-17
+
+- Email / phone OTP: after 5 attempts on one code (wrong or right) the identifier is locked for 15 minutes; `send-otp`, `phone/send-otp` and both `verify-otp` calls return 401 `auth.otp.too_many_attempts` until then. When the OTP email or SMS fails to send, the resend cooldown is released so the user can retry at once, and `auth.email.send_failed` / `auth.sms.send_failed` no longer include the provider's error text.
+- Apple sign-in returns 400 `auth.apple.not_configured` when the server has no `APPLE_CLIENT_ID`; previously any Apple token was accepted without an audience check.
+
 ## 2026-10-15
 
 - Avatars everywhere: every response that names another user now also carries that user's avatar, in the same format as `user.avatarUrl` (`bot:<kind>`; older accounts may hold an image URL; null if never set). Avatars are always public. New fields, all nullable: `creatorAvatarUrl` on every Poll (`VoteResponse`: `GET /api/votes`, `GET /api/votes/{voteId}`, `GET /api/votes/my`, `GET /api/users/{username}/votes`, `POST` / `PUT` Poll and Ballot responses) and on `GET /api/votes/{voteId}/results`; `avatarUrl` on each `GET /api/votes/{voteId}/voters` item; `authorAvatarUrl` on Comments and Replies (null on a deleted placeholder, like `author`); `avatarUrl` on Invitees (`GET` / `POST` / `DELETE` `/api/votes/{voteId}/invitees`) and Group members (`/api/groups/{groupId}/members`), always null for one added by email.

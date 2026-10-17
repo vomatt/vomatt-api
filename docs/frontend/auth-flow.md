@@ -187,12 +187,12 @@ UI: on `auth.account_banned`, at login or on any write, show "This account has b
 |-----------|------|----------|---------|
 | `auth.identifier.required` | 400 | Neither email nor phone provided | Prompt the user to fill it in |
 | `auth.otp.resend_cooldown` | 400 | Resent during the cooldown; `message` includes the remaining seconds | Allow resend only after the countdown |
-| `auth.email.send_failed` / `auth.sms.send_failed` | 400 | Failed to send the email / SMS | Ask the user to retry later |
+| `auth.email.send_failed` / `auth.sms.send_failed` | 400 | Failed to send the email / SMS; the resend cooldown is released | Let the user resend right away |
 | `auth.phone.not_registered` | 400 | `type=login` but the number is not registered | Go to the signup flow (`type=signup`) |
 | `auth.phone.invalid` | 400 | The number is neither `09xxxxxxxx` nor `+` country code and number | Show the accepted formats next to the field |
 | `auth.otp.invalid_or_expired` | 401 | No valid OTP (expired, already used, or never sent) | Guide the user to resend |
 | `auth.invalid_otp` | 401 | Wrong code | Ask the user to re-enter |
-| `auth.otp.too_many_attempts` | 401 | 5 wrong attempts in a row; the OTP has been invalidated | Require a resend |
+| `auth.otp.too_many_attempts` | 401 | 5 wrong codes; the email / phone is locked for 15 minutes, and `send-otp`, `phone/send-otp` and both `verify-otp` return this until then | Tell the user to try again in 15 minutes; disable resend |
 | `auth.admin.forbidden` | 403 | `checkRole` but not an admin | Show no permission |
 | `auth.account_banned` | 403 | Account is suspended (at login, or on a write with a still-valid access token) | Show that the account is suspended |
 | `auth.email_not_verified` | 401 | The OAuth provider's email is not verified | Suggest another login method |

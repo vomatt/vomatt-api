@@ -77,7 +77,7 @@ class LookupServiceTest {
     class ListForAdminTests {
 
         @Test
-        void shouldPassTypeAndInactiveFlagToOneQueryWithoutCache() {
+        void shouldQueryOnceWithoutCacheWhenListingForAdmin() {
             Lookup active = buildLookup("CITY", "TPE", true, false);
             when(lookupRepository.findForAdmin("CITY", false)).thenReturn(List.of(active));
             when(lookupMapper.toDto(active)).thenReturn(buildDto("CITY", "TPE"));

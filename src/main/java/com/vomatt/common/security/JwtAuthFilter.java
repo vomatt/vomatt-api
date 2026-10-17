@@ -22,6 +22,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -49,7 +50,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             try {
                 principal = jwtUtil.parseToken(token);
                 var authorities = principal.roles().stream()
-                        .map(r -> new SimpleGrantedAuthority("ROLE_" + r.toUpperCase()))
+                        .map(r -> new SimpleGrantedAuthority("ROLE_" + r.toUpperCase(Locale.ROOT)))
                         .collect(Collectors.toList());
                 var auth = new UsernamePasswordAuthenticationToken(principal, null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(auth);
@@ -65,7 +66,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         // other tokens are refused by the security rule. Matched on the decoded path like the security rules, so an
         // encoded /api/%61dmin/... cannot skip the check
         boolean adminCall = principal != null && ADMIN_PATHS.matches(request)
-                && principal.roles().stream().anyMatch(r -> r.toUpperCase().equals("ADMIN"));
+                && principal.roles().stream().anyMatch(r -> r.toUpperCase(Locale.ROOT).equals("ADMIN"));
         if (adminCall && !userRepository.isActiveAdmin(UUID.fromString(principal.userId()))) {
             // Second query only on refusal: suspended gets the same code as other writes, demoted the plain 403
             UUID userId = UUID.fromString(principal.userId());

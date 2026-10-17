@@ -168,7 +168,8 @@ public class AdminUserController {
                     - 400 `common.validation_failed`: `reason` is longer than 500 characters
                     - 403 `admin.self_action_forbidden`: the caller tried to suspend themself
                     - 404 `user.not_found`: no account with this ID
-                    - 409 `admin.last_admin`: the account is the only active admin""")
+                    - 409 `admin.last_admin`: the account is the only active admin
+                    - 409 `common.conflict`: another admin change holds the admin rows; retry""")
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(mediaType = "application/json",
             examples = @ExampleObject(name = "Suspend", value = """
                     {
@@ -243,7 +244,8 @@ public class AdminUserController {
                     - 400 `common.validation_failed`: `roles` is empty or holds an unknown role
                     - 403 `admin.self_action_forbidden`: the caller tried to drop their own admin role
                     - 404 `user.not_found`: no account with this ID
-                    - 409 `admin.last_admin`: the change would demote the only active admin""")
+                    - 409 `admin.last_admin`: the change would demote the only active admin
+                    - 409 `common.conflict`: another admin change holds the admin rows; retry""")
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(mediaType = "application/json",
             examples = @ExampleObject(name = "Roles", value = """
                     {

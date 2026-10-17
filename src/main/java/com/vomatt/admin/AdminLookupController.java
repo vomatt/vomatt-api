@@ -1,6 +1,9 @@
 package com.vomatt.admin;
 
+import java.util.List;
+
 import com.vomatt.common.response.ApiResponse;
+import com.vomatt.common.util.TextUtil;
 import com.vomatt.common.response.SimpleResultResponse;
 import com.vomatt.common.annotation.CommonApiResponses;
 import com.vomatt.common.config.OpenAPIConfig;
@@ -20,12 +23,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -36,6 +41,46 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminLookupController {
 
     private final LookupService lookupService;
+
+    @GetMapping
+    @CommonApiResponses
+    @Operation(summary = "List Dictionary Items",
+            description = """
+                    **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
+                    **Precondition**: caller holds role ADMIN
+                    **Behavior**: lists the items of `type` (every type when omitted), ordered by type then `seq`. Unlike the public listing, `includeInactive` (default true) also returns deactivated items so they can be re-activated. Not cached, not paged
+                    **Side effects**: none
+                    **Errors**:
+                    - 400 `common.type_mismatch`: `includeInactive` is not a boolean""")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Dictionary items",
+            content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Lookups", value = """
+                    {
+                      "success": true,
+                      "data": [
+                        {
+                          "id": "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f71",
+                          "lookupType": "vote_duration",
+                          "lookupKey": "24h",
+                          "lookupValue": { "label": "24 hours", "hours": 24 },
+                          "seq": 1,
+                          "parentType": null,
+                          "parentKey": null,
+                          "isActive": false,
+                          "description": "Poll duration presets",
+                          "frontendUsing": true
+                        }
+                      ],
+                      "message": null,
+                      "errorCode": null,
+                      "error": null
+                    }""")))
+    public ResponseEntity<ApiResponse<List<LookupDto>>> listLookups(
+            @Parameter(description = "Dictionary type; omit for every type", example = "vote_duration")
+            @RequestParam(required = false) String type,
+            @Parameter(description = "Include deactivated items (default true)", example = "true")
+            @RequestParam(defaultValue = "true") boolean includeInactive) {
+        return ResponseEntity.ok(ApiResponse.ok(lookupService.listForAdmin(TextUtil.blankToNull(type), includeInactive)));
+    }
 
     @PostMapping
     @CommonApiResponses

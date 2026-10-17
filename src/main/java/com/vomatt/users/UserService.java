@@ -2,7 +2,6 @@ package com.vomatt.users;
 
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
-import com.vomatt.common.constant.UserRole;
 import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.security.UserPrincipal;
 import com.vomatt.users.dto.MyProfileResponse;
@@ -18,6 +17,8 @@ import com.vomatt.common.response.CursorResponse;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.VoteRepository;
+import com.vomatt.repository.LockTimeout;
+import com.vomatt.common.util.AfterCommit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Limit;
@@ -41,22 +42,60 @@ public class UserService {
     private final RefreshTokenService refreshTokenService;
     private final VoteOptionRepository voteOptionRepository;
     private final VoteRepository voteRepository;
+    private final LockTimeout lockTimeout;
 
-    /** The user themself or an ADMIN can delete the account; deletion also revokes all of the user's refresh tokens. */
+    /**
+     * The user themself or an active admin can delete the account; deletion also revokes all of the user's refresh tokens.
+     * Admin rights are read from the database, not the token, so a demoted or suspended admin cannot use a stale token.
+     */
     @Transactional
     public void deleteUser(String userId, UserPrincipal principal) {
-        if (!principal.userId().equals(userId) && !principal.roles().contains(UserRole.ADMIN)) {
+        if (!principal.userId().equals(userId) && !userRepository.isActiveAdmin(UUID.fromString(principal.userId()))) {
             log.warn("User {} attempted to delete user {} without permission", principal.userId(), userId);
             throw ApiException.forbidden(MessageKey.USER_DELETE_FORBIDDEN);
         }
         User user = findUserById(userId);
-        refreshTokenService.revokeAllForUser(userId);
+        requireAnotherActiveAdmin(user);
+        // After commit: a sign-in or refresh before then still sees the account, and a rollback keeps its tokens
+        revokeTokensAfterCommit(userId);
         // user_votes rows cascade with the user; release them from stored option counts and Turnout first.
         // Poll rows before option rows, the same lock order as a Ballot, so a concurrent Ballot cannot deadlock it
         voteRepository.decrementTurnoutForUserBallots(user.getId());
         voteOptionRepository.decrementForUserBallots(user.getId());
         userRepository.delete(user);
         log.info("User {} deleted by {}", userId, principal.userId());
+    }
+
+    /**
+     * Revokes every refresh token of the user once the transaction commits: a sign-in or refresh before then still sees
+     * the old account state, and a rollback keeps the tokens. The change is already committed when this runs, so a Redis
+     * failure is logged instead of turning a done suspend / role change / delete into a 500.
+     */
+    public void revokeTokensAfterCommit(String userId) {
+        AfterCommit.run(() -> {
+            try {
+                refreshTokenService.revokeAllForUser(userId);
+            } catch (RuntimeException e) {
+                log.warn("Refresh token revocation failed after commit for userId={}: {}", userId, e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * The one last-admin guard, run before an account stops being an active admin (delete, suspend, demote): at least one
+     * other active admin must remain. Locks the active admin rows first, so two admins removing each other concurrently
+     * cannot both pass. A no-op when the account is not an active admin.
+     */
+    @Transactional
+    public void requireAnotherActiveAdmin(User user) {
+        if (!user.isActive() || !user.isAdmin()) {
+            return;
+        }
+        // Bounded wait: a waiter past 3 s gets 409 common.conflict instead of holding a pooled connection
+        List<UUID> activeAdmins = lockTimeout.within(userRepository::lockActiveAdminIds);
+        if (activeAdmins.stream().allMatch(user.getId()::equals)) {
+            throw ApiException.conflict(MessageKey.ADMIN_LAST_ADMIN);
+        }
     }
 
     @Transactional(readOnly = true)

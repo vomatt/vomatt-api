@@ -19,12 +19,15 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.security.UserPrincipal;
 import com.vomatt.common.response.CursorResponse;
@@ -48,6 +51,7 @@ class UserServiceTest {
     @Mock RefreshTokenService refreshTokenService;
     @Mock VoteOptionRepository voteOptionRepository;
     @Mock VoteRepository voteRepository;
+    @Spy com.vomatt.repository.LockTimeout lockTimeout = new com.vomatt.repository.LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @InjectMocks UserService userService;
 
     @Test
@@ -63,6 +67,123 @@ class UserServiceTest {
         order.verify(voteRepository).decrementTurnoutForUserBallots(id);
         order.verify(voteOptionRepository).decrementForUserBallots(id);
         order.verify(userRepository).delete(user);
+    }
+
+    @Test
+    void shouldRefuseWhenDeletingLastActiveAdmin() {
+        UUID id = UUID.randomUUID();
+        User admin = User.builder().id(id).username("root").roles(new String[] { "user", "admin" }).build();
+        when(userRepository.findById(id)).thenReturn(Optional.of(admin));
+        when(userRepository.lockActiveAdminIds()).thenReturn(List.of(id));
+
+        assertThatThrownBy(() -> userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), "r@test.local", List.of("admin"))))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.ADMIN_LAST_ADMIN));
+        verify(userRepository, never()).delete(any());
+        verify(refreshTokenService, never()).revokeAllForUser(any());
+    }
+
+    @Test
+    void shouldDeleteAdminWhenAnotherActiveAdminRemains() {
+        UUID id = UUID.randomUUID();
+        User admin = User.builder().id(id).username("root").roles(new String[] { "admin" }).build();
+        when(userRepository.findById(id)).thenReturn(Optional.of(admin));
+        when(userRepository.lockActiveAdminIds()).thenReturn(List.of(id, UUID.randomUUID()));
+
+        userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), "r@test.local", List.of("admin")));
+
+        verify(userRepository).delete(admin);
+    }
+
+    @Test
+    void shouldRefuseWhenDemotedAdminDeletesOtherUserWithStaleToken() {
+        UUID callerId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        when(userRepository.isActiveAdmin(callerId)).thenReturn(false);
+
+        assertThatThrownBy(() -> userService.deleteUser(targetId.toString(),
+                new UserPrincipal(callerId.toString(), "c@test.local", List.of("user", "admin"))))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_DELETE_FORBIDDEN));
+        verify(userRepository, never()).delete(any());
+    }
+
+    @Test
+    void shouldDeleteOtherUserWhenCallerIsActiveAdminInDatabase() {
+        UUID callerId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        User target = User.builder().id(targetId).username("t").build();
+        when(userRepository.isActiveAdmin(callerId)).thenReturn(true);
+        when(userRepository.findById(targetId)).thenReturn(Optional.of(target));
+
+        userService.deleteUser(targetId.toString(), new UserPrincipal(callerId.toString(), "c@test.local", List.of("admin")));
+
+        verify(userRepository).delete(target);
+    }
+
+    @Test
+    void shouldLetLockTimeoutThroughWhenAdminRowsStayLocked() {
+        User admin = User.builder().id(UUID.randomUUID()).username("a").roles(new String[] { "admin" }).build();
+        when(userRepository.lockActiveAdminIds())
+                .thenThrow(new org.springframework.dao.PessimisticLockingFailureException("busy"));
+
+        // GlobalExceptionHandler maps it to 409 common.conflict
+        assertThatThrownBy(() -> userService.requireAnotherActiveAdmin(admin))
+                .isInstanceOf(org.springframework.dao.PessimisticLockingFailureException.class);
+    }
+
+    @Test
+    void shouldLockAdminRowsUnderScopedTimeoutWhenGuarding() {
+        UUID id = UUID.randomUUID();
+        User admin = User.builder().id(id).username("a").roles(new String[] { "admin" }).build();
+        when(userRepository.lockActiveAdminIds()).thenReturn(List.of(id, UUID.randomUUID()));
+
+        userService.requireAnotherActiveAdmin(admin);
+
+        verify(lockTimeout).within(any());
+        verify(userRepository).lockActiveAdminIds();
+    }
+
+    @Test
+    void shouldRevokeTokensOnlyAfterCommitWhenDeletingUser() {
+        UUID id = UUID.randomUUID();
+        User user = User.builder().id(id).username("u").build();
+        when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), "u@test.local", List.of("user")));
+
+            verify(refreshTokenService, never()).revokeAllForUser(any());
+            TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+            verify(refreshTokenService).revokeAllForUser(id.toString());
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void shouldNotThrowAfterCommitWhenTokenRevocationFails() {
+        UUID id = UUID.randomUUID();
+        org.mockito.Mockito.doThrow(new IllegalStateException("redis down")).when(refreshTokenService).revokeAllForUser(id.toString());
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            userService.revokeTokensAfterCommit(id.toString());
+
+            TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+            verify(refreshTokenService).revokeAllForUser(id.toString());
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void shouldSkipAdminLockWhenAccountIsNotActiveAdmin() {
+        User suspendedAdmin = User.builder().id(UUID.randomUUID()).username("x").roles(new String[] { "admin" }).active(false).build();
+
+        userService.requireAnotherActiveAdmin(suspendedAdmin);
+        userService.requireAnotherActiveAdmin(User.builder().id(UUID.randomUUID()).username("y").build());
+
+        verify(userRepository, never()).lockActiveAdminIds();
     }
 
     @Test

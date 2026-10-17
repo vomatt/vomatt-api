@@ -45,6 +45,12 @@ public class LookupService {
         return result;
     }
 
+    /** Admin listing: one type (or every type when null), inactive items included on request; never cached. */
+    @Transactional(readOnly = true)
+    public List<LookupDto> listForAdmin(String lookupType, boolean includeInactive) {
+        return lookupRepository.findForAdmin(lookupType, includeInactive).stream().map(lookupMapper::toDto).toList();
+    }
+
     @Transactional(readOnly = true)
     public LookupDto getByTypeAndKey(String lookupType, String lookupKey) {
         return lookupRepository.findByLookupTypeAndLookupKey(lookupType, lookupKey)

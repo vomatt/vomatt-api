@@ -1,6 +1,8 @@
 package com.vomatt.votes;
 
 import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.util.AfterCommit;
+import com.vomatt.common.util.TextUtil;
 import com.vomatt.common.email.EmailService;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.i18n.MessageKey;
@@ -28,8 +30,6 @@ import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.vomatt.votes.dto.CreateVoteRequest;
@@ -59,6 +59,7 @@ import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.BallotSelection;
 import com.vomatt.repository.IdCount;
 import com.vomatt.repository.InviteeRepository;
+import com.vomatt.repository.LockTimeout;
 import com.vomatt.repository.NotificationReadRepository;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.repository.VoteListRepository;
@@ -90,6 +91,7 @@ public class VoteService {
     private final GroupService groupService;
     private final UserPreferenceRepository preferenceRepository;
     private final TransactionTemplate transactionTemplate;
+    private final LockTimeout lockTimeout;
 
     private static final String INVITATION_COUNTER_NS = "email:invitation";
     private static final String BALLOT_RATE_LIMIT_NS = "rate:limit:ballot";
@@ -237,12 +239,8 @@ public class VoteService {
     public CursorResponse<VoteResponse> listVotes(VoteListOrder order, String tag, String q, String cursor,
                                                   Integer limit, String userId) {
         int size = CursorResponse.limit(limit);
-        String tagSlug = tag == null || tag.isBlank() ? null : tag;
-        String query = q == null || q.isBlank() ? null : q.strip();
-        // one-character queries cannot use the bigram index (ADR 0001)
-        if (query != null && query.codePointCount(0, query.length()) < 2) {
-            throw ApiException.badRequest(MessageKey.VOTE_SEARCH_QUERY_TOO_SHORT);
-        }
+        String tagSlug = TextUtil.blankToNull(tag);
+        String query = searchQuery(q);
         Cursor.Scope scope = switch (order) {
             case NEWEST -> Cursor.Scope.FEED_NEWEST;
             case CLOSING -> Cursor.Scope.FEED_CLOSING;
@@ -267,10 +265,10 @@ public class VoteService {
      */
     @Transactional(readOnly = true)
     public CursorResponse<VoteResponse> getMyPolls(String userId, String status, String cursor, Integer limit) {
-        boolean ended = switch (status == null ? "open" : status) {
-            case "open" -> false;
-            case "ended" -> true;
-            default -> throw ApiException.badRequest(MessageKey.COMMON_INVALID_STATUS, status);
+        boolean ended = switch (status == null ? VoteStatus.OPEN : VoteStatus.parse(status)) {
+            case OPEN -> false;
+            case ENDED -> true;
+            case SCHEDULED -> throw ApiException.badRequest(MessageKey.COMMON_INVALID_STATUS, status);
         };
         int size = CursorResponse.limit(limit);
         UUID userUuid = UUID.fromString(userId);
@@ -490,13 +488,37 @@ public class VoteService {
         if (!vote.canDeleteAt(now, voteConfig.getDeleteWindow())) {
             throw ApiException.badRequest(MessageKey.VOTE_DELETE_WINDOW_PASSED, voteConfig.getDeleteWindow().toMinutes());
         }
+        softDelete(vote, now);
+        log.info("Vote {} deleted by creator {}", voteId, userId);
+    }
+
+    /**
+     * The one soft delete (owner and admin): the row and its Ballots are kept and its tags stop counting it. A Poll
+     * already Deleted is left as is. Callers check their own rules and hold the Poll-row lock.
+     */
+    public void softDelete(Vote vote, OffsetDateTime now) {
+        if (vote.getDeletedAt() != null) {
+            return;
+        }
         vote.setDeletedAt(now);
         voteRepository.save(vote);
         Set<UUID> tagIds = countedTagIds(vote);
         if (!tagIds.isEmpty()) {
             tagRepository.decrementUsageCount(tagIds);
         }
-        log.info("Vote {} deleted by creator {}", voteId, userId);
+    }
+
+    /** Inverse of {@link #softDelete}: the Poll is visible again and its tags count it again; a live Poll is left as is. */
+    public void restore(Vote vote) {
+        if (vote.getDeletedAt() == null) {
+            return;
+        }
+        vote.setDeletedAt(null);
+        voteRepository.save(vote);
+        Set<UUID> tagIds = countedTagIds(vote);
+        if (!tagIds.isEmpty()) {
+            tagRepository.incrementUsageCount(tagIds);
+        }
     }
 
     /** Invitees of a Poll with whether each holds a Ballot (owner only), earliest invited first. */
@@ -664,17 +686,7 @@ public class VoteService {
         String inviterName = owner.getDisplayName() != null ? owner.getDisplayName() : owner.getUsername();
         String title = vote.getTitle();
         Locale locale = LocaleContextHolder.getLocale();
-        Runnable send = () -> emailService.sendInvitationEmails(recipients, inviterName, title, voteId, locale);
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            send.run();
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                send.run();
-            }
-        });
+        AfterCommit.run(() -> emailService.sendInvitationEmails(recipients, inviterName, title, voteId, locale));
     }
 
     /**
@@ -791,8 +803,13 @@ public class VoteService {
         return response;
     }
 
-    // Fixed queries per page: options / tags / creators via batch fetching, Selections and comment counts one query each
-    private List<VoteResponse> toResponses(List<Vote> votes, String userId) {
+    /**
+     * The one Poll-to-response path (Sealed via {@link VoteMapper}). Fixed queries per page: options / tags / creators via
+     * batch fetching, Selections and comment counts one query each.
+     *
+     * @param userId viewer, or null for none (no Selection, no {@code deletable}), as for admin views
+     */
+    public List<VoteResponse> toResponses(List<Vote> votes, String userId) {
         if (votes.isEmpty()) {
             return List.of();
         }
@@ -830,16 +847,18 @@ public class VoteService {
     }
 
     /**
-     * Ballots can change only while Open; frozen once Ended. Takes the exclusive Poll-row lock and checks the status
-     * under it, so a Close or Edit cannot slip in between. The lock also serializes one user's Ballot changes in the Poll.
+     * Every Poll-row lock goes through here (owner and admin paths): a waiter past the lock timeout gets 409
+     * {@code common.conflict} instead of holding a pooled connection. Must be the first load of the Poll in the transaction.
      */
-    // Every Poll-row lock goes through here: a waiter past the lock timeout gets PessimisticLockingFailureException,
-    // which GlobalExceptionHandler maps to 409, instead of holding a pooled connection
-    private Optional<Vote> lockVote(UUID voteId) {
-        voteRepository.setLockTimeout();
+    public Optional<Vote> lockVote(UUID voteId) {
+        lockTimeout.apply();
         return voteRepository.findByIdForUpdate(voteId);
     }
 
+    /**
+     * Ballots can change only while Open; frozen once Ended. Takes the exclusive Poll-row lock and checks the status
+     * under it, so a Close or Edit cannot slip in between. The lock also serializes one user's Ballot changes in the Poll.
+     */
     private Vote lockOpenVote(UUID voteId, String userId) {
         Vote vote = requireAccessible(lockVote(voteId), userId);
         switch (vote.getStatus()) {
@@ -863,6 +882,18 @@ public class VoteService {
         UUID voteId = ballot.getVote().getId();
         voteOptionRepository.adjustVoteCount(deleteBallot(ballot), -1);
         voteRepository.adjustTurnout(voteId, -1);
+    }
+
+    /**
+     * Poll search text ({@code q}) for the bigram index: stripped, null when blank, 400
+     * {@code vote.search.query_too_short} for one character, which has no bigrams (ADR 0001).
+     */
+    public static String searchQuery(String q) {
+        String query = TextUtil.blankToNull(q);
+        if (query != null && query.codePointCount(0, query.length()) < 2) {
+            throw ApiException.badRequest(MessageKey.VOTE_SEARCH_QUERY_TOO_SHORT);
+        }
+        return query;
     }
 
     // Popular tag counts include only Public Polls

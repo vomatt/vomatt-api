@@ -14,4 +14,7 @@ public @interface Auditable {
     String resourceType();
     
     int resourceIdIndex() default -1;
+
+    /** Index of the argument stored in details ({@link AuditDetails#auditDetails()}, else toString()); -1 for none. */
+    int detailsIndex() default -1;
 }

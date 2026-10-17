@@ -77,6 +77,8 @@ class VoteServiceTest {
     @Mock GroupService groupService;
     @Mock com.vomatt.repository.UserPreferenceRepository preferenceRepository;
     @Mock TransactionTemplate transactionTemplate;
+    // Real helper over a stubbed EntityManager, so lockVote still runs the Poll-row lock it wraps
+    @Spy com.vomatt.repository.LockTimeout lockTimeout = new com.vomatt.repository.LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @Spy VoteMapper voteMapper = new VoteMapper();
 
     @InjectMocks
@@ -481,6 +483,7 @@ class VoteServiceTest {
             VoteRequest request = new VoteRequest();
             request.setOptionIds(List.of(UUID.randomUUID().toString()));
 
+            // GlobalExceptionHandler maps it to 409 common.conflict
             assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1"))
                     .isInstanceOf(PessimisticLockingFailureException.class);
         }
@@ -1070,6 +1073,62 @@ class VoteServiceTest {
             assertThat(vote.getDeletedAt()).isNotNull();
             verify(voteRepository).save(vote);
             verify(tagRepository).decrementUsageCount(Set.of(tag.getId()));
+        }
+
+        @Test
+        void shouldLeaveDeletedPollAndTagsAloneWhenSoftDeletedAgain() {
+            OffsetDateTime deletedAt = OffsetDateTime.now().minusHours(1);
+            vote.setDeletedAt(deletedAt);
+            vote.addTag(setId(new Tag(), UUID.randomUUID()));
+
+            voteService.softDelete(vote, OffsetDateTime.now());
+
+            assertThat(vote.getDeletedAt()).isEqualTo(deletedAt);
+            verify(tagRepository, never()).decrementUsageCount(any());
+        }
+
+        @Test
+        void shouldNotTouchTagsWhenSoftDeletingNonPublicPoll() {
+            vote.setAudience(Audience.INVITE_ONLY);
+            vote.addTag(setId(new Tag(), UUID.randomUUID()));
+
+            voteService.softDelete(vote, OffsetDateTime.now());
+
+            assertThat(vote.getDeletedAt()).isNotNull();
+            verify(tagRepository, never()).decrementUsageCount(any());
+        }
+
+        @Test
+        void shouldClearDeletedAtAndRecountTagsWhenRestoring() {
+            vote.setDeletedAt(OffsetDateTime.now().minusHours(1));
+            Tag tag = setId(new Tag(), UUID.randomUUID());
+            vote.addTag(tag);
+
+            voteService.restore(vote);
+
+            assertThat(vote.getDeletedAt()).isNull();
+            verify(tagRepository).incrementUsageCount(Set.of(tag.getId()));
+        }
+
+        @Test
+        void shouldLeaveTagsAloneWhenRestoringLivePoll() {
+            vote.addTag(setId(new Tag(), UUID.randomUUID()));
+
+            voteService.restore(vote);
+
+            verify(tagRepository, never()).incrementUsageCount(any());
+        }
+
+        @Test
+        void shouldKeepLockTimeoutForTransactionWhenLockingPoll() {
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+
+            assertThat(voteService.lockVote(voteId)).contains(vote);
+            // Cap stays for the rest of the transaction (Ballot, Close, Delete); only the last-admin guard resets it
+            InOrder order = inOrder(lockTimeout, voteRepository);
+            order.verify(lockTimeout).apply();
+            order.verify(voteRepository).findByIdForUpdate(voteId);
+            verify(lockTimeout, never()).within(any());
         }
 
         @Test

@@ -43,7 +43,7 @@ public class AuditService {
     
     @Async
     public void logAction(String userId, String username, String action, String resourceType, String resourceId, 
-                         String ipAddress, String userAgent, String requestUri, String httpMethod) {
+                         String ipAddress, String userAgent, String requestUri, String httpMethod, String details) {
         if (!auditEnabled) {
             return;
         }
@@ -54,6 +54,7 @@ public class AuditService {
             auditLog.setUserAgent(userAgent);
             auditLog.setRequestUri(requestUri);
             auditLog.setHttpMethod(httpMethod);
+            auditLog.setDetails(details);
             save(auditLog);
             
             log.debug("Detailed audit log created: user={}, action={}, resource={}/{}, from={}", 
@@ -65,7 +66,7 @@ public class AuditService {
     
     @Async
     public void logFailedAction(String userId, String username, String action, String resourceType, 
-                               String resourceId, String errorMessage, String ipAddress) {
+                               String resourceId, String errorMessage, String ipAddress, String details) {
         if (!auditEnabled) {
             return;
         }
@@ -75,6 +76,7 @@ public class AuditService {
             auditLog.setSuccess(false);
             auditLog.setErrorMessage(errorMessage);
             auditLog.setIpAddress(ipAddress);
+            auditLog.setDetails(details);
             save(auditLog);
             
             log.warn("Failed action logged: user={}, action={}, error={}", username, action, errorMessage);

@@ -25,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.transaction.annotation.Propagation;
@@ -209,9 +210,9 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
 
         Future<VoteResponse> caster = pool.submit(this::cast);
         try {
+            // GlobalExceptionHandler maps it to 409 common.conflict
             assertThatThrownBy(() -> caster.get(10, TimeUnit.SECONDS))
-                    .isInstanceOf(ExecutionException.class)
-                    .cause().isInstanceOf(PessimisticLockingFailureException.class);
+                    .isInstanceOf(ExecutionException.class).cause().isInstanceOf(PessimisticLockingFailureException.class);
         } finally {
             release.countDown();
         }

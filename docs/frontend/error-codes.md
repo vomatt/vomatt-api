@@ -15,13 +15,13 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `common.internal_error` | 500 | 伺服器錯誤，請稍後再試 | Internal server error, please try again later | Show a generic error notice | GlobalExceptionHandler |
 | `common.service_unavailable` | 503 | 服務暫時無法使用，請稍後再試 | Service temporarily unavailable, please try again later | Show service temporarily unavailable, retry later | AuthService, GlobalExceptionHandler |
 | `common.unauthorized` | 401 | 未授權的請求 | Unauthorized request | See [auth-flow.md](auth-flow.md) | JwtAuthenticationEntryPoint |
-| `common.forbidden` | 403 | 沒有權限執行此操作 | You do not have permission to perform this action | Show a permission-denied notice | GlobalExceptionHandler, JwtAccessDeniedHandler |
+| `common.forbidden` | 403 | 沒有權限執行此操作 | You do not have permission to perform this action | Show a permission-denied notice | GlobalExceptionHandler, JwtAccessDeniedHandler, JwtAuthFilter |
 | `common.rate_limited` | 429 | 請求過於頻繁，請稍後再試 | Too many requests, please try again later | Retry after the `Retry-After` seconds | RateLimitFilter, VoteService |
 | `common.conflict` | 409 | 資源衝突，請重試 | Resource conflict, please try again | Show message (resource state conflict) | GlobalExceptionHandler |
-| `common.validation_failed` | 400 | 輸入資料驗證失敗 | Validation failed | Show message so the user can fix the input | GlobalExceptionHandler |
+| `common.validation_failed` | 400 | 輸入資料驗證失敗 | Validation failed | Show message so the user can fix the input | AdminUserService, GlobalExceptionHandler |
 | `common.missing_param` | 400 | 缺少必要參數：{0} | Missing required parameter: {0} | Show message so the user can fix the input | GlobalExceptionHandler, UserController |
 | `common.type_mismatch` | 400 | 參數格式錯誤：{0} | Invalid parameter format: {0} | Show message so the user can fix the input | GlobalExceptionHandler |
-| `common.invalid_status` | 400 | 無效的狀態：{0} | Invalid status: {0} | Show message so the user can fix the input | VoteListOrder, VoteService |
+| `common.invalid_status` | 400 | 無效的狀態：{0} | Invalid status: {0} | Show message so the user can fix the input | AdminUserService, VoteListOrder, VoteService, VoteStatus |
 | `common.invalid_sort` | 400 | 無效的排序：{0} | Invalid sort: {0} | Show message so the user can fix the input | VoteListOrder |
 | `common.cursor_invalid` | 400 | 分頁 cursor 無效 | Invalid pagination cursor | Show message so the user can fix the input | Cursor |
 | `auth.token.invalid` | 401 | Token 無效 | Invalid token | See [auth-flow.md](auth-flow.md) | JwtAuthFilter |
@@ -55,10 +55,10 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.apple.not_configured` | 400 | Apple 登入尚未設定 | Apple Sign In is not configured | Show message so the user can fix the input | AuthService |
 | `auth.email_not_verified` | 401 | 此 OAuth 帳號的 email 尚未驗證，無法登入或合併既有帳號 | This OAuth account's email is not verified; cannot sign in or merge an existing account | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.account_banned` | 403 | 此帳號已被停權，無法登入 | This account has been banned and cannot sign in | Show a permission-denied notice | AuthService, JwtAuthFilter |
-| `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | GroupService, UserService, VoteCommentService, VoteService |
+| `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | AdminUserService, GroupService, UserService, VoteCommentService, VoteService |
 | `user.username.taken` | 409 | 使用者名稱已被使用 | Username already taken | Show message (resource state conflict) | UserService |
 | `user.delete.forbidden` | 403 | 只能刪除自己的帳號 | You can only delete your own account | Show a permission-denied notice | UserService |
-| `vote.not_found` | 404 | 找不到投票 | Vote not found | Show resource not found | VoteService |
+| `vote.not_found` | 404 | 找不到投票 | Vote not found | Show resource not found | AdminVoteService, VoteService |
 | `vote.option.not_found` | 404 | 找不到投票選項 | Vote option not found | Show resource not found | VoteService |
 | `vote.option.not_in_vote` | 400 | 選項不屬於此投票 | Option does not belong to this vote | Show message so the user can fix the input | VoteService |
 | `vote.not_allowed` | 400 | 投票尚未開始或已結束 | Voting period has ended or not started | Show message so the user can fix the input | ApiException, VoteService |
@@ -81,7 +81,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `vote.options.min` | 400 | 至少需要 {0} 個選項 | Minimum {0} options required | Show message so the user can fix the input | VoteService |
 | `vote.options.max` | 400 | 最多只能有 {0} 個選項 | Maximum {0} options allowed | Show message so the user can fix the input | VoteService |
 | `vote.duration.exceeded` | 400 | 投票期間不可超過 {0} 天 | Vote duration cannot exceed {0} days | Show message so the user can fix the input | VoteService |
-| `comment.not_found` | 404 | 找不到留言 | Comment not found | Show resource not found | VoteCommentService |
+| `comment.not_found` | 404 | 找不到留言 | Comment not found | Show resource not found | AdminCommentService, VoteCommentService |
 | `comment.forbidden` | 403 | 只能修改或刪除自己的留言 | You can only modify your own comments | Show a permission-denied notice | VoteCommentService |
 | `comment.parent.invalid` | 400 | 要回覆的留言不存在或不屬於此投票 | The comment being replied to does not exist in this poll | Show message so the user can fix the input | VoteCommentService |
 | `notification.not_found` | 404 | 找不到此通知 | Notification not found | Show resource not found | NotificationService |
@@ -96,6 +96,8 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `tag.ids.invalid` | 400 | 部分標籤 ID 不存在 | Some tag IDs do not exist | Show message so the user can fix the input | VoteService |
 | `lookup.not_found` | 404 | 找不到字典資料 | Lookup not found | Show resource not found | LookupService |
 | `lookup.exists` | 409 | 字典資料已存在：{0}/{1} | Dictionary item already exists: {0}/{1} | Show message (resource state conflict) | LookupService |
+| `admin.self_action_forbidden` | 403 | 不能停權自己或移除自己的管理員角色 | You cannot suspend yourself or remove your own admin role | Show a permission-denied notice | AdminUserService |
+| `admin.last_admin` | 409 | 不能移除最後一位管理員 | Cannot remove the last active admin | Show message (resource state conflict) | UserService |
 
 ## Success messages and others
 

@@ -43,6 +43,21 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     boolean existsByIdAndActiveFalse(UUID id);
 
     /**
+     * Locks every active admin row and returns their ids, so concurrent admin removals serialize: a waiter re-reads the
+     * rows once the first commits and no longer sees an admin it suspended or demoted. FOR NO KEY UPDATE, not FOR UPDATE:
+     * it does not conflict with the KEY SHARE lock that foreign-key inserts (Ballots, Comments, Polls) take on the user
+     * row, so the admins' own writes neither block nor deadlock against it. Rows are locked in id order, so two guards
+     * never deadlock on each other. Run it through {@link LockTimeout#within}.
+     */
+    @Query(value = "SELECT id FROM vomatt.users WHERE active = true AND 'admin' = ANY(roles) ORDER BY id FOR NO KEY UPDATE", nativeQuery = true)
+    List<UUID> lockActiveAdminIds();
+
+    /** Whether the account is active and still holds the admin role; checked per request on /api/admin/**. */
+    @Query(value = "SELECT EXISTS (SELECT 1 FROM vomatt.users WHERE id = :id AND active = true AND 'admin' = ANY(roles))",
+           nativeQuery = true)
+    boolean isActiveAdmin(@Param("id") UUID id);
+
+    /**
      * Keyset page of username search (case-insensitive contains), ordered by username; null cursor for the first page.
      * The bigram GIN index finds candidates and LIKE confirms the contiguous match, as in Poll search (ADR 0001).
      */

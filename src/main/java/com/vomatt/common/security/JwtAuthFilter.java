@@ -13,11 +13,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -29,6 +34,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     public static final String AUTH_ERROR_ATTR = JwtAuthFilter.class.getName() + ".authError";
 
     private static final Set<String> READ_METHODS = Set.of("GET", "HEAD", "OPTIONS");
+    private static final RequestMatcher ADMIN_PATHS = new OrRequestMatcher(Arrays.stream(SecurityEndpoints.AUTHENTICATED_ADMIN)
+            .map(PathPatternRequestMatcher.withDefaults()::matcher).map(RequestMatcher.class::cast).toList());
 
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
@@ -43,7 +50,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             try {
                 principal = jwtUtil.parseToken(token);
                 var authorities = principal.roles().stream()
-                        .map(r -> new SimpleGrantedAuthority("ROLE_" + r.toUpperCase()))
+                        .map(r -> new SimpleGrantedAuthority("ROLE_" + r.toUpperCase(Locale.ROOT)))
                         .collect(Collectors.toList());
                 var auth = new UsernamePasswordAuthenticationToken(principal, null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(auth);
@@ -54,9 +61,22 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 log.debug("Invalid JWT token: {}", ex.getMessage());
             }
         }
+        // Admin roles outlive a demotion or suspension in the token, so every /api/admin/** call (reads included) with a
+        // token granting ROLE_ADMIN (same upper-casing as the authorities above) re-checks the account in one query;
+        // other tokens are refused by the security rule. Matched on the decoded path like the security rules, so an
+        // encoded /api/%61dmin/... cannot skip the check
+        boolean adminCall = principal != null && ADMIN_PATHS.matches(request)
+                && principal.roles().stream().anyMatch(r -> r.toUpperCase(Locale.ROOT).equals("ADMIN"));
+        if (adminCall && !userRepository.isActiveAdmin(UUID.fromString(principal.userId()))) {
+            // Second query only on refusal: suspended gets the same code as other writes, demoted the plain 403
+            UUID userId = UUID.fromString(principal.userId());
+            errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN,
+                    userRepository.existsByIdAndActiveFalse(userId) ? MessageKey.AUTH_ACCOUNT_BANNED : MessageKey.COMMON_FORBIDDEN);
+            return;
+        }
         // Access tokens outlive a suspension, so writes re-check users.active; reads skip the DB hit.
         // /api/auth/** keeps its own handling (login and refresh already reject suspended users).
-        if (principal != null && !READ_METHODS.contains(request.getMethod())
+        if (!adminCall && principal != null && !READ_METHODS.contains(request.getMethod())
                 && !request.getRequestURI().startsWith("/api/auth/")
                 && userRepository.existsByIdAndActiveFalse(UUID.fromString(principal.userId()))) {
             errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN, MessageKey.AUTH_ACCOUNT_BANNED);

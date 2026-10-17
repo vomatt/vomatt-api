@@ -78,4 +78,10 @@ class UserTest {
                 .isInstanceOfSatisfying(ApiException.class,
                         ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.AUTH_PHONE_INVALID));
     }
+
+    @Test
+    void shouldBeAdminOnlyWhenRolesHoldAdmin() {
+        assertThat(User.builder().roles(new String[] { "user", "admin" }).build().isAdmin()).isTrue();
+        assertThat(User.builder().roles(new String[] { "user", "moderator" }).build().isAdmin()).isFalse();
+    }
 }

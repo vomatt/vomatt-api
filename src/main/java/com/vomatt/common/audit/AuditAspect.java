@@ -34,7 +34,7 @@ public class AuditAspect {
             HttpServletRequest request = getCurrentRequest();
             
             if (request != null && userInfo[0] != null) {
-                String resourceId = extractResourceId(joinPoint.getArgs(), auditable.resourceIdIndex());
+                String resourceId = argString(joinPoint.getArgs(), auditable.resourceIdIndex());
                 
                 auditService.logAction(
                     userInfo[0], // userId
@@ -45,7 +45,8 @@ public class AuditAspect {
                     ClientIpResolver.resolve(request),
                     request.getHeader("User-Agent"),
                     request.getRequestURI(),
-                    request.getMethod()
+                    request.getMethod(),
+                    details(joinPoint.getArgs(), auditable.detailsIndex())
                 );
             }
         } catch (Exception e) {
@@ -65,7 +66,7 @@ public class AuditAspect {
             HttpServletRequest request = getCurrentRequest();
             
             if (request != null) {
-                String resourceId = extractResourceId(joinPoint.getArgs(), auditable.resourceIdIndex());
+                String resourceId = argString(joinPoint.getArgs(), auditable.resourceIdIndex());
                 
                 auditService.logFailedAction(
                     userInfo[0], // userId (might be null for unauthenticated requests)
@@ -74,7 +75,8 @@ public class AuditAspect {
                     auditable.resourceType(),
                     resourceId,
                     exception.getMessage(),
-                    ClientIpResolver.resolve(request)
+                    ClientIpResolver.resolve(request),
+                    details(joinPoint.getArgs(), auditable.detailsIndex())
                 );
             }
         } catch (Exception e) {
@@ -96,11 +98,18 @@ public class AuditAspect {
         return requestAttributes != null ? requestAttributes.getRequest() : null;
     }
     
-    private String extractResourceId(Object[] args, int index) {
+    private String argString(Object[] args, int index) {
         if (index >= 0 && index < args.length && args[index] != null) {
             return args[index].toString();
         }
         return null;
     }
     
+    private String details(Object[] args, int index) {
+        if (index >= 0 && index < args.length && args[index] instanceof AuditDetails details) {
+            return details.auditDetails();
+        }
+        return argString(args, index);
+    }
+
 }

@@ -7,4 +7,7 @@ public final class UserRole {
     public static final String USER      = "user";
     public static final String MODERATOR = "moderator";
     public static final String ADMIN     = "admin";
+
+    /** Every assignable role; the one list for role validation. */
+    public static final String PATTERN   = "user|moderator|admin";
 }

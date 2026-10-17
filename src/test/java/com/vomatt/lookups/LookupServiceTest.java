@@ -70,6 +70,30 @@ class LookupServiceTest {
         assertThat(apiEx.getMessageKey()).isEqualTo(key);
     }
 
+    // ─── listForAdmin ─────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("listForAdmin")
+    class ListForAdminTests {
+
+        @Test
+        void shouldQueryOnceWithoutCacheWhenListingForAdmin() {
+            Lookup active = buildLookup("CITY", "TPE", true, false);
+            when(lookupRepository.findForAdmin("CITY", false)).thenReturn(List.of(active));
+            when(lookupMapper.toDto(active)).thenReturn(buildDto("CITY", "TPE"));
+
+            assertThat(lookupService.listForAdmin("CITY", false)).hasSize(1);
+            verifyNoInteractions(redisService);
+        }
+
+        @Test
+        void shouldListEveryTypeWhenTypeOmitted() {
+            when(lookupRepository.findForAdmin(null, true)).thenReturn(List.of());
+
+            assertThat(lookupService.listForAdmin(null, true)).isEmpty();
+        }
+    }
+
     // ─── getActiveByType ──────────────────────────────────────────────────────
 
     @Nested

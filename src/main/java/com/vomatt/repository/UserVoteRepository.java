@@ -21,6 +21,8 @@ public interface UserVoteRepository extends JpaRepository<UserVote, UUID> {
 
     boolean existsByUserIdAndVoteId(UUID userId, UUID voteId);
 
+    long countByUserId(UUID userId);
+
     Optional<UserVote> findByUserIdAndVoteIdAndOptionId(UUID userId, UUID voteId, UUID optionId);
 
     /** The user's Selection in each of a page of Polls. */

@@ -224,14 +224,16 @@ public class UserController {
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Delete user account", description = """
-            **Auth**: required (own account; an admin may delete any account)
-            **Precondition**: `userId` is the caller's own id, or the caller has the admin role
+            **Auth**: required (own account; an active admin may delete any account)
+            **Precondition**: `userId` is the caller's own id, or the caller is an active admin in the database
             **Behavior**: permanently deletes the account. The user's Ballots are removed and released from the stored option counts \
             (this is a Retraction of every Ballot the user held).
-            **Side effects**: all refresh tokens of the user are revoked, so the client must discard its tokens and sign out; \
+            **Side effects**: once the deletion commits, all refresh tokens of the user are revoked, so the client must discard its tokens and sign out; \
             the deletion is written to the audit log
             **Errors**:
-            - 403 `user.delete.forbidden`: deleting another user's account without the admin role
+            - 403 `user.delete.forbidden`: deleting another user's account without being an active admin (checked against the database, not the token)
+            - 409 `admin.last_admin`: the account is the only active admin
+            - 409 `common.conflict`: another admin change is in progress; retry
             - 404 `user.not_found`: no account with this id
             - 400 `common.bad_request`: `userId` is not a valid id (admin callers only; other callers get 403 first)""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> deleteUser(

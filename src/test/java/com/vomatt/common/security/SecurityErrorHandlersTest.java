@@ -163,6 +163,94 @@ class SecurityErrorHandlersTest {
         verify(userRepository).existsByIdAndActiveFalse(userId);
     }
 
+    private MockHttpServletResponse filterAsAdmin(UUID userId, String method, String uri, FilterChain chain) throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest(method, uri);
+        request.addHeader("Authorization", "Bearer " + jwtUtil.generateToken(userId.toString(), "a@b.c", List.of("user", "admin")));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        jwtAuthFilter.doFilter(request, response, chain);
+        SecurityContextHolder.clearContext();
+        return response;
+    }
+
+    @Test
+    void shouldReturn403WhenTokenAdminNoLongerAdminInDatabase() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.isActiveAdmin(userId)).thenReturn(false);
+        FilterChain chain = mock(FilterChain.class);
+
+        MockHttpServletResponse response = filterAsAdmin(userId, "GET", "/api/admin/users", chain);
+
+        assertThat(response.getStatus()).isEqualTo(403);
+        assertThat(response.getContentAsString()).contains("\"errorCode\":\"" + MessageKey.COMMON_FORBIDDEN.code() + "\"");
+        verifyNoInteractions(chain);
+    }
+
+    @Test
+    void shouldReturn403WhenDemotedAdminUsesEncodedAdminPath() throws Exception {
+        UUID userId = UUID.randomUUID();
+        FilterChain chain = mock(FilterChain.class);
+
+        // %61 decodes to "a": the security rules and MVC see /api/admin/users
+        MockHttpServletResponse response = filterAsAdmin(userId, "GET", "/api/%61dmin/users", chain);
+
+        assertThat(response.getStatus()).isEqualTo(403);
+        verify(userRepository).isActiveAdmin(userId);
+        verifyNoInteractions(chain);
+    }
+
+    @Test
+    void shouldSkipAdminCheckWhenTokenHasNoAdminRole() throws Exception {
+        FilterChain chain = mock(FilterChain.class);
+
+        // The security rule refuses it (no ROLE_ADMIN), so no DB check is needed
+        filterAs(UUID.randomUUID(), "GET", "/api/admin/users", chain);
+
+        verify(chain).doFilter(any(), any());
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void shouldReturnAccountBannedWhenSuspendedAdminCallsAdmin() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.existsByIdAndActiveFalse(userId)).thenReturn(true);
+        FilterChain chain = mock(FilterChain.class);
+
+        MockHttpServletResponse response = filterAsAdmin(userId, "GET", "/api/admin/users", chain);
+
+        assertThat(response.getStatus()).isEqualTo(403);
+        assertThat(response.getContentAsString()).contains("\"errorCode\":\"" + MessageKey.AUTH_ACCOUNT_BANNED.code() + "\"");
+    }
+
+    @Test
+    void shouldCheckAdminOnceWhenActiveAdminWrites() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.isActiveAdmin(userId)).thenReturn(true);
+        FilterChain chain = mock(FilterChain.class);
+
+        MockHttpServletResponse response = filterAsAdmin(userId, "DELETE", "/api/admin/votes/" + UUID.randomUUID(), chain);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        verify(chain).doFilter(any(), any());
+        verify(userRepository, never()).existsByIdAndActiveFalse(any());
+    }
+
+    @Test
+    void shouldCheckDatabaseWhenTokenClaimsDifferentRoleCase() throws Exception {
+        UUID userId = UUID.randomUUID();
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/admin/users");
+        // "ADMIN" still maps to ROLE_ADMIN, so it must go through the database check too
+        request.addHeader("Authorization", "Bearer " + jwtUtil.generateToken(userId.toString(), "a@b.c", List.of("ADMIN")));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        jwtAuthFilter.doFilter(request, response, chain);
+        SecurityContextHolder.clearContext();
+
+        assertThat(response.getStatus()).isEqualTo(403);
+        verify(userRepository).isActiveAdmin(userId);
+        verifyNoInteractions(chain);
+    }
+
     @Test
     void shouldSkipActiveCheckWhenAuthEndpoint() throws Exception {
         FilterChain chain = mock(FilterChain.class);

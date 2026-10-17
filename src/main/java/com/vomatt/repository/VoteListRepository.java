@@ -35,6 +35,14 @@ public class VoteListRepository {
              UNION
              SELECT i.vote_id FROM vomatt.vote_invitees i WHERE i.user_id = :userId)""";
 
+    /**
+     * Poll search on title and description, for a query aliasing votes as {@code v}; bind {@code :q} to the search text
+     * and {@code :pattern} to {@link LikePattern#containsPattern}. The bigram GIN index finds candidates (ADR 0001) and
+     * LIKE confirms the contiguous match.
+     */
+    static final String SEARCH_CONDITION = " AND v.search_bigrams @> vomatt.text_bigrams(:q)"
+            + " AND lower(COALESCE(v.title, '') || ' ' || COALESCE(v.description, '')) LIKE :pattern ESCAPE '\\'";
+
     private final EntityManager em;
 
     /**
@@ -61,9 +69,7 @@ public class VoteListRepository {
                .append(" WHERE vt.vote_id = v.id AND t.slug = :tag)");
         }
         if (query != null) {
-            // bigram GIN index finds candidates (ADR 0001); LIKE confirms the contiguous match
-            sql.append(" AND v.search_bigrams @> vomatt.text_bigrams(:q)")
-               .append(" AND lower(COALESCE(v.title, '') || ' ' || COALESCE(v.description, '')) LIKE :pattern ESCAPE '\\'");
+            sql.append(SEARCH_CONDITION);
         }
         if (after != null) {
             sql.append(" AND (").append(String.join(", ", sortColumns)).append(", v.id) ").append(descending ? "<" : ">")

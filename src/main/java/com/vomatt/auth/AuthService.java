@@ -2,7 +2,6 @@ package com.vomatt.auth;
 
 import com.vomatt.auth.dto.AuthResponse;
 import com.vomatt.common.constant.ReservedUsernames;
-import com.vomatt.common.constant.UserRole;
 import com.vomatt.common.email.EmailService;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.redis.RedisService;
@@ -127,7 +126,7 @@ public class AuthService {
             String normalizedEmail = User.normalizeEmail(email);
             if (checkRole) {
                 userRepository.findByEmail(normalizedEmail)
-                        .filter(u -> List.of(u.getRoles()).contains(UserRole.ADMIN))
+                        .filter(User::isAdmin)
                         .orElseThrow(() -> ApiException.forbidden(MessageKey.AUTH_ADMIN_FORBIDDEN));
             }
             sendEmailOtp(normalizedEmail, code, clientIp);
@@ -209,14 +208,14 @@ public class AuthService {
      */
     private void requireExistingAdminByEmail(String normalizedEmail) {
         userRepository.findByEmail(normalizedEmail)
-                .filter(u -> List.of(u.getRoles()).contains(UserRole.ADMIN))
+                .filter(User::isAdmin)
                 .orElseThrow(() -> ApiException.forbidden(MessageKey.AUTH_ADMIN_FORBIDDEN));
     }
 
     /** P5-#13: phone variant of the existing ADMIN account check; same semantics as {@link #requireExistingAdminByEmail}. */
     private void requireExistingAdminByPhone(String normalizedPhone) {
         userRepository.findByPhoneNumber(normalizedPhone)
-                .filter(u -> List.of(u.getRoles()).contains(UserRole.ADMIN))
+                .filter(User::isAdmin)
                 .orElseThrow(() -> ApiException.forbidden(MessageKey.AUTH_ADMIN_FORBIDDEN));
     }
 

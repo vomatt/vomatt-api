@@ -46,6 +46,11 @@ public final class ClientIpResolver {
         }
     }
 
+    private static final java.util.regex.Pattern IPV4 =
+            java.util.regex.Pattern.compile("((25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.){3}(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)");
+    // Hex digits, colons and dots only (embedded IPv4 allowed): InetAddress then parses it as a literal, never via DNS
+    private static final java.util.regex.Pattern IPV6_CHARS = java.util.regex.Pattern.compile("[0-9a-fA-F:.]*:[0-9a-fA-F:.]*");
+
     private static volatile List<Cidr> trustedProxies = parse(DEFAULT_TRUSTED_PROXIES);
 
     private ClientIpResolver() {}
@@ -105,9 +110,12 @@ public final class ClientIpResolver {
         }).toList();
     }
 
-    /** Parses an IP literal; returns null for anything else, so a hostname never triggers a DNS lookup. */
+    /**
+     * Parses an IP literal; returns null for anything else. Pre-filtered so InetAddress never falls back to a DNS
+     * lookup (it would for "999.1.1.1" or "zz:1") and never accepts shorthand like "1.2.3".
+     */
     private static byte[] literalAddress(String ip) {
-        if (ip == null || ip.isBlank() || (!ip.contains(":") && !ip.matches("[0-9.]+"))) {
+        if (ip == null || !(IPV4.matcher(ip).matches() || IPV6_CHARS.matcher(ip).matches())) {
             return null;
         }
         try {

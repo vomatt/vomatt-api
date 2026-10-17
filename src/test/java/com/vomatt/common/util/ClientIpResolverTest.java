@@ -53,6 +53,10 @@ class ClientIpResolverTest {
         assertThat(ClientIpResolver.isTrustedProxy("2001:db8::1")).isFalse();
         assertThat(ClientIpResolver.isTrustedProxy("fec0::1")).isFalse();
         assertThat(ClientIpResolver.isTrustedProxy("evil.example.com")).isFalse();
+        // Not literals: must be rejected without a DNS lookup, and shorthand must not be expanded
+        for (String bad : new String[] {"zz:1", "g::1", "999.1.1.1", "10.1", "10.0.0.256"}) {
+            assertThat(ClientIpResolver.isTrustedProxy(bad)).as(bad).isFalse();
+        }
         assertThat(ClientIpResolver.isTrustedProxy("100.128.0.1")).isFalse();
         assertThat(ClientIpResolver.isTrustedProxy("100.63.255.255")).isFalse();
     }

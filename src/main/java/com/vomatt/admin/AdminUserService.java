@@ -56,7 +56,11 @@ public class AdminUserService {
             case "suspended" -> false;
             default -> throw ApiException.badRequest(MessageKey.COMMON_INVALID_STATUS, status);
         };
-        return PageResponse.from(adminQueryRepository.findUsers(blankToNull(q), active, blankToNull(role),
+        String roleFilter = blankToNull(role);
+        if (roleFilter != null && !roleFilter.matches(UserRole.PATTERN)) {
+            throw ApiException.badRequest(MessageKey.COMMON_VALIDATION_FAILED);
+        }
+        return PageResponse.from(adminQueryRepository.findUsers(blankToNull(q), active, roleFilter,
                 PageResponse.pageable(page, limit)), adminMapper::toUserResponse);
     }
 

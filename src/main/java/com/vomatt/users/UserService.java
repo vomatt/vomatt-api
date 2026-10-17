@@ -20,6 +20,7 @@ import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.VoteRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,10 +43,13 @@ public class UserService {
     private final VoteOptionRepository voteOptionRepository;
     private final VoteRepository voteRepository;
 
-    /** The user themself or an ADMIN can delete the account; deletion also revokes all of the user's refresh tokens. */
+    /**
+     * The user themself or an active admin can delete the account; deletion also revokes all of the user's refresh tokens.
+     * Admin rights are read from the database, not the token, so a demoted or suspended admin cannot use a stale token.
+     */
     @Transactional
     public void deleteUser(String userId, UserPrincipal principal) {
-        if (!principal.userId().equals(userId) && !principal.roles().contains(UserRole.ADMIN)) {
+        if (!principal.userId().equals(userId) && !userRepository.isActiveAdmin(UUID.fromString(principal.userId()))) {
             log.warn("User {} attempted to delete user {} without permission", principal.userId(), userId);
             throw ApiException.forbidden(MessageKey.USER_DELETE_FORBIDDEN);
         }
@@ -70,7 +74,15 @@ public class UserService {
         if (!user.isActive() || !Arrays.asList(user.getRoles()).contains(UserRole.ADMIN)) {
             return;
         }
-        if (userRepository.lockActiveAdminIds().stream().allMatch(user.getId()::equals)) {
+        List<UUID> activeAdmins;
+        try {
+            // Same 3 s lock_timeout as the Poll-row lock: a waiter gives up with 409 instead of holding a pooled connection
+            voteRepository.setLockTimeout();
+            activeAdmins = userRepository.lockActiveAdminIds();
+        } catch (PessimisticLockingFailureException e) {
+            throw ApiException.conflict(MessageKey.COMMON_CONFLICT);
+        }
+        if (activeAdmins.stream().allMatch(user.getId()::equals)) {
             throw ApiException.conflict(MessageKey.ADMIN_LAST_ADMIN);
         }
     }

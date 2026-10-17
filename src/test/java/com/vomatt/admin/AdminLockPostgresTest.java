@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -80,6 +81,27 @@ class AdminLockPostgresTest extends PostgresRepositoryTest {
 
         assertThat(first.get(5, TimeUnit.SECONDS)).contains(alice.getId(), bob.getId());
         assertThat(second.get(5, TimeUnit.SECONDS)).contains(alice.getId()).doesNotContain(bob.getId());
+    }
+
+    @Test
+    void shouldNotBlockAdminForeignKeyInsertWhenAdminRowsLocked() throws Exception {
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Future<List<UUID>> guard = pool.submit(() -> tx.execute(s -> {
+            List<UUID> admins = userRepository.lockActiveAdminIds();
+            locked.countDown();
+            await(release);
+            return admins;
+        }));
+        assertThat(locked.await(5, TimeUnit.SECONDS)).isTrue();
+
+        // An admin creating a Poll takes KEY SHARE on their users row, which FOR NO KEY UPDATE does not block
+        Future<?> insert = pool.submit(() -> tx.executeWithoutResult(s ->
+                persistPoll(em.find(User.class, alice.getId()), OffsetDateTime.now(), OffsetDateTime.now().plusDays(1), "A", "B")));
+        insert.get(2, TimeUnit.SECONDS);
+
+        release.countDown();
+        guard.get(5, TimeUnit.SECONDS);
     }
 
     private static void await(CountDownLatch latch) {

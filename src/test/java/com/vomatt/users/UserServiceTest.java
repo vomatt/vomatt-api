@@ -93,6 +93,46 @@ class UserServiceTest {
     }
 
     @Test
+    void shouldRefuseWhenDemotedAdminDeletesOtherUserWithStaleToken() {
+        UUID callerId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        when(userRepository.isActiveAdmin(callerId)).thenReturn(false);
+
+        assertThatThrownBy(() -> userService.deleteUser(targetId.toString(),
+                new UserPrincipal(callerId.toString(), "c@test.local", List.of("user", "admin"))))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_DELETE_FORBIDDEN));
+        verify(userRepository, never()).delete(any());
+    }
+
+    @Test
+    void shouldDeleteOtherUserWhenCallerIsActiveAdminInDatabase() {
+        UUID callerId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        User target = User.builder().id(targetId).username("t").build();
+        when(userRepository.isActiveAdmin(callerId)).thenReturn(true);
+        when(userRepository.findById(targetId)).thenReturn(Optional.of(target));
+
+        userService.deleteUser(targetId.toString(), new UserPrincipal(callerId.toString(), "c@test.local", List.of("admin")));
+
+        verify(userRepository).delete(target);
+    }
+
+    @Test
+    void shouldReturn409WhenAdminRowsStayLocked() {
+        User admin = User.builder().id(UUID.randomUUID()).username("a").roles(new String[] { "admin" }).build();
+        when(userRepository.lockActiveAdminIds())
+                .thenThrow(new org.springframework.dao.PessimisticLockingFailureException("busy"));
+
+        assertThatThrownBy(() -> userService.requireAnotherActiveAdmin(admin))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.COMMON_CONFLICT));
+        InOrder order = inOrder(voteRepository, userRepository);
+        order.verify(voteRepository).setLockTimeout();
+        order.verify(userRepository).lockActiveAdminIds();
+    }
+
+    @Test
     void shouldSkipAdminLockWhenAccountIsNotActiveAdmin() {
         User suspendedAdmin = User.builder().id(UUID.randomUUID()).username("x").roles(new String[] { "admin" }).active(false).build();
 

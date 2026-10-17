@@ -4,11 +4,9 @@ import static com.vomatt.admin.AdminService.blankToNull;
 
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
-import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,7 +19,6 @@ import com.vomatt.entity.Audience;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteStatus;
 import com.vomatt.repository.AdminQueryRepository;
-import com.vomatt.repository.TagRepository;
 import com.vomatt.repository.VoteRepository;
 import com.vomatt.votes.VoteService;
 import com.vomatt.votes.dto.VoteResponse;
@@ -42,14 +39,14 @@ public class AdminVoteService {
 
     private final AdminQueryRepository adminQueryRepository;
     private final VoteRepository voteRepository;
-    private final TagRepository tagRepository;
     private final VoteService voteService;
 
     /** @param status scheduled, open, ended, or null for any */
     @Transactional(readOnly = true)
     public PageResponse<AdminVoteResponse> listVotes(String q, String status, UUID creatorId, Audience audience,
                                                      Boolean deleted, Integer page, Integer limit) {
-        VoteStatus voteStatus = blankToNull(status) == null ? null : VoteStatus.parse(status);
+        String statusFilter = blankToNull(status);
+        VoteStatus voteStatus = statusFilter == null ? null : VoteStatus.parse(statusFilter);
         Page<Vote> votes = adminQueryRepository.findVotes(VoteService.searchQuery(q), voteStatus, creatorId, audience, deleted,
                 OffsetDateTime.now(), PageResponse.pageable(page, limit));
         return PageResponse.of(toResponses(votes.getContent()), votes.getTotalElements(), votes.getNumber() + 1,
@@ -76,41 +73,20 @@ public class AdminVoteService {
 
     /** Delete regardless of the owner's delete window; idempotent. Tags stop counting the Poll, as on the owner's Delete. */
     public void deleteVote(UUID voteId, String actorId) {
-        Vote vote = lockVote(voteId);
-        if (vote.getDeletedAt() != null) {
-            return;
-        }
-        vote.setDeletedAt(OffsetDateTime.now());
-        Set<UUID> tagIds = VoteService.countedTagIds(vote);
-        if (!tagIds.isEmpty()) {
-            tagRepository.decrementUsageCount(tagIds);
-        }
+        voteService.softDelete(lockVote(voteId), OffsetDateTime.now());
         log.info("Vote {} deleted by admin {}", voteId, actorId);
     }
 
     /** Undo a Delete; idempotent. Tags count the Poll again. */
     public AdminVoteResponse restoreVote(UUID voteId, String actorId) {
         Vote vote = lockVote(voteId);
-        if (vote.getDeletedAt() != null) {
-            vote.setDeletedAt(null);
-            Set<UUID> tagIds = VoteService.countedTagIds(vote);
-            if (!tagIds.isEmpty()) {
-                tagRepository.incrementUsageCount(tagIds);
-            }
-            log.info("Vote {} restored by admin {}", voteId, actorId);
-        }
+        voteService.restore(vote);
+        log.info("Vote {} restored by admin {}", voteId, actorId);
         return toResponse(vote);
     }
 
-    // Same lock as the owner's Close / Delete: a waiter past the lock timeout gets 409
     private Vote lockVote(UUID voteId) {
-        try {
-            voteRepository.setLockTimeout();
-            return voteRepository.findByIdForUpdate(voteId)
-                    .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
-        } catch (PessimisticLockingFailureException e) {
-            throw ApiException.conflict(MessageKey.COMMON_CONFLICT);
-        }
+        return voteService.lockVote(voteId).orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
     }
 
     private AdminVoteResponse toResponse(Vote vote) {

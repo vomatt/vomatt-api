@@ -5281,7 +5281,7 @@
     },
     "/api/admin/users" : {
       "get" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: offset page of every account, suspended included, newest first. `q` matches (case-insensitive contains) username, email, phone number or display name; `status` is `active` or `suspended`; `role` is `user`, `moderator` or `admin`. All filters are optional and combine with AND. `page` is 1-based (default 1), `limit` 1-50 (default 20)\n**Side effects**: none\n**Errors**:\n- 400 `common.invalid_status`: `status` is neither `active` nor `suspended`",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: offset page of every account, suspended included, newest first. `q` matches (case-insensitive contains) username, email, phone number or display name; `status` is `active` or `suspended`; `role` is `user`, `moderator` or `admin`. All filters are optional and combine with AND. `page` is 1-based (default 1), `limit` 1-50 (default 20)\n**Side effects**: none\n**Errors**:\n- 400 `common.invalid_status`: `status` is neither `active` nor `suspended`\n- 400 `common.validation_failed`: `role` is not `user`, `moderator` or `admin`",
         "operationId" : "listUsers",
         "parameters" : [ {
           "description" : "Text matched against username, email, phone number and display name",
@@ -10000,7 +10000,7 @@
     },
     "/api/users/{userId}" : {
       "delete" : {
-        "description" : "**Auth**: required (own account; an admin may delete any account)\n**Precondition**: `userId` is the caller's own id, or the caller has the admin role\n**Behavior**: permanently deletes the account. The user's Ballots are removed and released from the stored option counts (this is a Retraction of every Ballot the user held).\n**Side effects**: all refresh tokens of the user are revoked, so the client must discard its tokens and sign out; the deletion is written to the audit log\n**Errors**:\n- 403 `user.delete.forbidden`: deleting another user's account without the admin role\n- 409 `admin.last_admin`: the account is the only active admin\n- 404 `user.not_found`: no account with this id\n- 400 `common.bad_request`: `userId` is not a valid id (admin callers only; other callers get 403 first)",
+        "description" : "**Auth**: required (own account; an active admin may delete any account)\n**Precondition**: `userId` is the caller's own id, or the caller is an active admin in the database\n**Behavior**: permanently deletes the account. The user's Ballots are removed and released from the stored option counts (this is a Retraction of every Ballot the user held).\n**Side effects**: all refresh tokens of the user are revoked, so the client must discard its tokens and sign out; the deletion is written to the audit log\n**Errors**:\n- 403 `user.delete.forbidden`: deleting another user's account without being an active admin (checked against the database, not the token)\n- 409 `admin.last_admin`: the account is the only active admin\n- 409 `common.conflict`: another admin change is in progress; retry\n- 404 `user.not_found`: no account with this id\n- 400 `common.bad_request`: `userId` is not a valid id (admin callers only; other callers get 403 first)",
         "operationId" : "deleteUser",
         "parameters" : [ {
           "description" : "Id of the account to delete",

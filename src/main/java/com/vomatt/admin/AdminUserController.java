@@ -92,7 +92,8 @@ public class AdminUserController {
                     **Behavior**: offset page of every account, suspended included, newest first. `q` matches (case-insensitive contains) username, email, phone number or display name; `status` is `active` or `suspended`; `role` is `user`, `moderator` or `admin`. All filters are optional and combine with AND. `page` is 1-based (default 1), `limit` 1-50 (default 20)
                     **Side effects**: none
                     **Errors**:
-                    - 400 `common.invalid_status`: `status` is neither `active` nor `suspended`""")
+                    - 400 `common.invalid_status`: `status` is neither `active` nor `suspended`
+                    - 400 `common.validation_failed`: `role` is not `user`, `moderator` or `admin`""")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of users",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Users", value = """
                     {

@@ -199,13 +199,20 @@ class SecurityErrorHandlersTest {
     }
 
     @Test
-    void shouldSkipAdminCheckWhenTokenHasNoAdminRole() throws Exception {
+    void shouldCheckDatabaseWhenTokenClaimsDifferentRoleCase() throws Exception {
+        UUID userId = UUID.randomUUID();
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/admin/users");
+        // "ADMIN" still maps to ROLE_ADMIN, so it must go through the database check too
+        request.addHeader("Authorization", "Bearer " + jwtUtil.generateToken(userId.toString(), "a@b.c", List.of("ADMIN")));
+        MockHttpServletResponse response = new MockHttpServletResponse();
         FilterChain chain = mock(FilterChain.class);
 
-        filterAs(UUID.randomUUID(), "GET", "/api/admin/users", chain);
+        jwtAuthFilter.doFilter(request, response, chain);
+        SecurityContextHolder.clearContext();
 
-        verify(chain).doFilter(any(), any());
-        verifyNoInteractions(userRepository);
+        assertThat(response.getStatus()).isEqualTo(403);
+        verify(userRepository).isActiveAdmin(userId);
+        verifyNoInteractions(chain);
     }
 
     @Test

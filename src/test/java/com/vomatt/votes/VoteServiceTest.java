@@ -1030,6 +1030,59 @@ class VoteServiceTest {
         }
 
         @Test
+        void shouldLeaveDeletedPollAndTagsAloneWhenSoftDeletedAgain() {
+            OffsetDateTime deletedAt = OffsetDateTime.now().minusHours(1);
+            vote.setDeletedAt(deletedAt);
+            vote.addTag(setId(new Tag(), UUID.randomUUID()));
+
+            voteService.softDelete(vote, OffsetDateTime.now());
+
+            assertThat(vote.getDeletedAt()).isEqualTo(deletedAt);
+            verify(tagRepository, never()).decrementUsageCount(any());
+        }
+
+        @Test
+        void shouldNotTouchTagsWhenSoftDeletingNonPublicPoll() {
+            vote.setAudience(Audience.INVITE_ONLY);
+            vote.addTag(setId(new Tag(), UUID.randomUUID()));
+
+            voteService.softDelete(vote, OffsetDateTime.now());
+
+            assertThat(vote.getDeletedAt()).isNotNull();
+            verify(tagRepository, never()).decrementUsageCount(any());
+        }
+
+        @Test
+        void shouldClearDeletedAtAndRecountTagsWhenRestoring() {
+            vote.setDeletedAt(OffsetDateTime.now().minusHours(1));
+            Tag tag = setId(new Tag(), UUID.randomUUID());
+            vote.addTag(tag);
+
+            voteService.restore(vote);
+
+            assertThat(vote.getDeletedAt()).isNull();
+            verify(tagRepository).incrementUsageCount(Set.of(tag.getId()));
+        }
+
+        @Test
+        void shouldLeaveTagsAloneWhenRestoringLivePoll() {
+            vote.addTag(setId(new Tag(), UUID.randomUUID()));
+
+            voteService.restore(vote);
+
+            verify(tagRepository, never()).incrementUsageCount(any());
+        }
+
+        @Test
+        void shouldReturn409WhenPollLockTimesOut() {
+            when(voteRepository.findByIdForUpdate(voteId))
+                    .thenThrow(new org.springframework.dao.PessimisticLockingFailureException("busy"));
+
+            assertThatThrownBy(() -> voteService.lockVote(voteId))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.CONFLICT, MessageKey.COMMON_CONFLICT));
+        }
+
+        @Test
         @DisplayName("should return 404 VOTE_NOT_FOUND on every single-Poll path once Deleted")
         void shouldHideDeletedPollWhenLookedUp() {
             vote.setDeletedAt(OffsetDateTime.now());

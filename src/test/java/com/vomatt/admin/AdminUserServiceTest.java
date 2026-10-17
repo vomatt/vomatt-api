@@ -174,6 +174,11 @@ class AdminUserServiceTest {
     }
 
     @Test
+    void shouldRejectRoleFilterWhenUnknown() {
+        assertApiError(() -> service.listUsers(null, null, "superuser", null, null), HttpStatus.BAD_REQUEST, MessageKey.COMMON_VALIDATION_FAILED);
+    }
+
+    @Test
     void shouldRejectStatusWhenNotActiveOrSuspended() {
         assertApiError(() -> service.listUsers(null, "banned", null, null, null), HttpStatus.BAD_REQUEST, MessageKey.COMMON_INVALID_STATUS);
     }

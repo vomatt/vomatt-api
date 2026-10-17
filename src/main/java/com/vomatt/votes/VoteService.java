@@ -473,13 +473,37 @@ public class VoteService {
         if (!vote.canDeleteAt(now, voteConfig.getDeleteWindow())) {
             throw ApiException.badRequest(MessageKey.VOTE_DELETE_WINDOW_PASSED, voteConfig.getDeleteWindow().toMinutes());
         }
+        softDelete(vote, now);
+        log.info("Vote {} deleted by creator {}", voteId, userId);
+    }
+
+    /**
+     * The one soft delete (owner and admin): the row and its Ballots are kept and its tags stop counting it. A Poll
+     * already Deleted is left as is. Callers check their own rules and hold the Poll-row lock.
+     */
+    public void softDelete(Vote vote, OffsetDateTime now) {
+        if (vote.getDeletedAt() != null) {
+            return;
+        }
         vote.setDeletedAt(now);
         voteRepository.save(vote);
         Set<UUID> tagIds = countedTagIds(vote);
         if (!tagIds.isEmpty()) {
             tagRepository.decrementUsageCount(tagIds);
         }
-        log.info("Vote {} deleted by creator {}", voteId, userId);
+    }
+
+    /** Inverse of {@link #softDelete}: the Poll is visible again and its tags count it again; a live Poll is left as is. */
+    public void restore(Vote vote) {
+        if (vote.getDeletedAt() == null) {
+            return;
+        }
+        vote.setDeletedAt(null);
+        voteRepository.save(vote);
+        Set<UUID> tagIds = countedTagIds(vote);
+        if (!tagIds.isEmpty()) {
+            tagRepository.incrementUsageCount(tagIds);
+        }
     }
 
     /** Invitees of a Poll with whether each holds a Ballot (owner only), earliest invited first. */
@@ -820,8 +844,11 @@ public class VoteService {
      * Ballots can change only while Open; frozen once Ended. Takes the exclusive Poll-row lock and checks the status
      * under it, so a Close or Edit cannot slip in between. The lock also serializes one user's Ballot changes in the Poll.
      */
-    // Every Poll-row lock goes through here: a waiter past the lock timeout gets 409 instead of holding a pooled connection
-    private Optional<Vote> lockVote(UUID voteId) {
+    /**
+     * Every Poll-row lock goes through here (owner and admin paths): a waiter past the lock timeout gets 409 instead of
+     * holding a pooled connection. Must be the first load of the Poll in the transaction.
+     */
+    public Optional<Vote> lockVote(UUID voteId) {
         try {
             voteRepository.setLockTimeout();
             return voteRepository.findByIdForUpdate(voteId);
@@ -867,8 +894,8 @@ public class VoteService {
         return query;
     }
 
-    /** Tags whose usage count includes the Poll: popular tag counts include only Public Polls. */
-    public static Set<UUID> countedTagIds(Vote vote) {
+    // Popular tag counts include only Public Polls
+    private static Set<UUID> countedTagIds(Vote vote) {
         return vote.getAudience() != Audience.PUBLIC ? Set.of()
             : vote.getTags().stream().map(Tag::getId).collect(Collectors.toSet());
     }

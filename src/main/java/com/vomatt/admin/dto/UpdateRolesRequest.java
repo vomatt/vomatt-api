@@ -2,6 +2,8 @@ package com.vomatt.admin.dto;
 
 import java.util.List;
 
+import com.vomatt.common.constant.UserRole;
+
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotEmpty;
@@ -14,6 +16,6 @@ public record UpdateRolesRequest(
         @NotEmpty
         @ArraySchema(arraySchema = @Schema(description = "Roles replacing the current ones; duplicates are ignored", example = "[\"user\", \"moderator\"]"),
                 schema = @Schema(allowableValues = {"user", "moderator", "admin"}))
-        List<@NotNull @Pattern(regexp = "user|moderator|admin") String> roles
+        List<@NotNull @Pattern(regexp = UserRole.PATTERN) String> roles
 ) {
 }

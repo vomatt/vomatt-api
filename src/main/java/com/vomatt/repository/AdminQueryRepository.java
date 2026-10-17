@@ -70,9 +70,7 @@ public class AdminQueryRepository {
         StringBuilder sql = new StringBuilder("FROM vomatt.votes v WHERE true");
         Map<String, Object> params = new HashMap<>();
         if (q != null) {
-            // bigram GIN index finds candidates (ADR 0001); LIKE confirms the contiguous match
-            sql.append(" AND v.search_bigrams @> vomatt.text_bigrams(:q)")
-               .append(" AND lower(COALESCE(v.title, '') || ' ' || COALESCE(v.description, '')) LIKE :pattern ESCAPE '\\'");
+            sql.append(VoteListRepository.SEARCH_CONDITION);
             params.put("q", q);
             params.put("pattern", LikePattern.containsPattern(q));
         }

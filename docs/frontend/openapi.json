@@ -1982,7 +1982,7 @@
         "nullable" : true,
         "properties" : {
           "count" : {
-            "description" : "Unread Invitations to Scheduled or Open INVITE_ONLY Polls plus unread Ended Notifications of Polls the caller owns, holds a Ballot in or is an Invitee of",
+            "description" : "Unread Invitations to Scheduled or Open INVITE_ONLY Polls plus unread Ended Notifications of Polls the caller owns, holds a Ballot in or is an Invitee of; capped at 100 (100 means 100 or more)",
             "example" : 3,
             "format" : "int64",
             "type" : "integer"
@@ -6276,7 +6276,7 @@
     },
     "/api/notifications/unread-count" : {
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: counts the caller's unread notifications. Notifications are not stored; each Poll gives the caller at most one at a time, and Deleted Polls give none:\n- Invitation: an INVITE_ONLY Poll the caller is an Invitee of, while it is Scheduled or Open\n- Ended Notification: once the Poll has Ended (end time passed or Closed early), when the caller owns it, holds a Ballot in it or is an Invitee of it (with or without a Ballot), and it was not Cancelled while Scheduled. A Participant who made a Retraction and is not an Invitee no longer counts.\nA notification counts until the caller marks it read; reading the Invitation does not read the later Ended Notification. Poll this endpoint (for example on app focus and about once a minute) to drive a badge; there is no push.\n**Side effects**: none\n**Errors**: none specific to this endpoint",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: counts the caller's unread notifications. Notifications are not stored; each Poll gives the caller at most one at a time, and Deleted Polls give none:\n- Invitation: an INVITE_ONLY Poll the caller is an Invitee of, while it is Scheduled or Open\n- Ended Notification: once the Poll has Ended (end time passed or Closed early), when the caller owns it, holds a Ballot in it or is an Invitee of it (with or without a Ballot), and it was not Cancelled while Scheduled. A Participant who made a Retraction and is not an Invitee no longer counts.\nA notification counts until the caller marks it read; reading the Invitation does not read the later Ended Notification. The count stops at 100: `100` means 100 or more (show it as \"99+\"). Poll this endpoint (for example on app focus and about once a minute) to drive a badge; there is no push.\n**Side effects**: none\n**Errors**: none specific to this endpoint",
         "operationId" : "unreadCount",
         "responses" : {
           "200" : {

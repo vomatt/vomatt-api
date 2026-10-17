@@ -42,8 +42,13 @@ public class NotificationReadRepository {
 
     private final EntityManager em;
 
+    /** The badge shows "99+" past this, so counting stops here instead of walking every Poll the user ever joined. */
+    public static final int UNREAD_COUNT_CAP = 100;
+
+    /** Unread notifications, at most {@link #UNREAD_COUNT_CAP}. */
     public long countUnread(UUID userId, OffsetDateTime now) {
-        Number count = (Number) em.createNativeQuery("SELECT COUNT(*) " + NOTIFIED_POLLS + UNREAD)
+        Number count = (Number) em.createNativeQuery("SELECT COUNT(*) FROM (SELECT 1 " + NOTIFIED_POLLS + UNREAD
+                        + " LIMIT " + UNREAD_COUNT_CAP + ") capped")
                 .setParameter("userId", userId)
                 .setParameter("now", now)
                 .getSingleResult();

@@ -6,8 +6,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.domain.Limit;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -36,18 +34,23 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     boolean existsByIdAndActiveFalse(UUID id);
 
     /**
-     * Search users by username containing the search term (case-insensitive)
+     * Keyset page of username search (case-insensitive contains), ordered by username; null cursor for the first page.
+     * The bigram GIN index finds candidates and LIKE confirms the contiguous match, as in Poll search (ADR 0001).
      */
-    @Query("SELECT u FROM User u WHERE LOWER(u.username) LIKE LOWER(CONCAT('%', :username, '%')) AND u.active = true")
-    Page<User> searchByUsername(@Param("username") String username, Pageable pageable);
+    default List<User> searchByUsernameAfter(String username, String afterUsername, Limit limit) {
+        return searchByUsernameAfter(username, "%" + VoteListRepository.escapeLike(username.toLowerCase()) + "%",
+                afterUsername, limit);
+    }
 
-    /** Keyset page of username search, ordered by username; null cursor for the first page. */
-    @Query("""
-            SELECT u FROM User u
-            WHERE LOWER(u.username) LIKE LOWER(CONCAT('%', :username, '%')) AND u.active = true
-              AND (CAST(:afterUsername AS String) IS NULL OR u.username > :afterUsername)
-            ORDER BY u.username""")
-    List<User> searchByUsernameAfter(@Param("username") String username,
+    // ponytail: a 1-character term has no bigrams, so @> '{}' matches every row and LIKE alone filters (full scan);
+    // require 2+ characters if that ever shows up in slow queries
+    @Query(value = """
+            SELECT u.* FROM vomatt.users u
+            WHERE u.username_bigrams @> vomatt.text_bigrams(:username)
+              AND lower(u.username) LIKE :pattern ESCAPE '\\' AND u.active = true
+              AND (CAST(:afterUsername AS text) IS NULL OR u.username > CAST(:afterUsername AS text))
+            ORDER BY u.username""", nativeQuery = true)
+    List<User> searchByUsernameAfter(@Param("username") String username, @Param("pattern") String pattern,
                                      @Param("afterUsername") String afterUsername, Limit limit);
 
     /**

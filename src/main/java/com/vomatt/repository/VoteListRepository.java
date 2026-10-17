@@ -144,7 +144,7 @@ public class VoteListRepository {
     }
 
     // % and _ in the user's query are literal characters, not wildcards
-    static String escapeLike(String text) {
+    public static String escapeLike(String text) {
         return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 }

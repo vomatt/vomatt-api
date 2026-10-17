@@ -1,6 +1,8 @@
 package com.vomatt.common.audit;
 
 import java.time.OffsetDateTime;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -18,6 +20,8 @@ public class AuditService {
     private final AuditLogRepository auditLogRepository;
     @Value("${app.audit.enabled:true}")
     private boolean auditEnabled;
+    // @Async runs on unbounded virtual threads; cap concurrent audit writes so they cannot drain the request connection pool
+    private final Semaphore writePermits = new Semaphore(2);
     
     @Async
     public void logAction(String userId, String username, String action, String resourceType, String resourceId) {
@@ -27,7 +31,7 @@ public class AuditService {
         
         try {
             AuditLog auditLog = new AuditLog(userId, username, action, resourceType, resourceId);
-            auditLogRepository.save(auditLog);
+            save(auditLog);
             
             log.debug("Audit log created: user={}, action={}, resource={}/{}", 
                      username, action, resourceType, resourceId);
@@ -49,7 +53,7 @@ public class AuditService {
             auditLog.setUserAgent(userAgent);
             auditLog.setRequestUri(requestUri);
             auditLog.setHttpMethod(httpMethod);
-            auditLogRepository.save(auditLog);
+            save(auditLog);
             
             log.debug("Detailed audit log created: user={}, action={}, resource={}/{}, from={}", 
                      username, action, resourceType, resourceId, ipAddress);
@@ -70,7 +74,7 @@ public class AuditService {
             auditLog.setSuccess(false);
             auditLog.setErrorMessage(errorMessage);
             auditLog.setIpAddress(ipAddress);
-            auditLogRepository.save(auditLog);
+            save(auditLog);
             
             log.warn("Failed action logged: user={}, action={}, error={}", username, action, errorMessage);
         } catch (Exception e) {
@@ -78,6 +82,20 @@ public class AuditService {
         }
     }
     
+    // Runs on the async thread, so waiting here never blocks a request; under sustained overload the entry is dropped
+    private void save(AuditLog auditLog) throws InterruptedException {
+        if (!writePermits.tryAcquire(2, TimeUnit.SECONDS)) {
+            log.warn("Audit log dropped (writers busy): action={}, resource={}/{}",
+                     auditLog.getAction(), auditLog.getResourceType(), auditLog.getResourceId());
+            return;
+        }
+        try {
+            auditLogRepository.save(auditLog);
+        } finally {
+            writePermits.release();
+        }
+    }
+
     public long getFailedActionsCount() {
         return auditLogRepository.countFailedActionsLast24Hours(OffsetDateTime.now().minusHours(24));
     }

@@ -83,6 +83,27 @@ class CursorListsPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should match a username fragment case-insensitively and literally through the bigram index")
+    void shouldMatchUsernameFragmentWhenSearchingByBigrams() {
+        String marker = "ub" + System.nanoTime();
+        persistUser(marker + "_Ab");
+        persistUser(marker + "xab");
+        em.flush();
+
+        assertThat(userRepository.searchByUsernameAfter(marker.toUpperCase() + "_aB", null, Limit.of(10)))
+                .extracting(User::getUsername).containsExactly(marker + "_Ab");
+        // One character has no bigrams: LIKE alone still filters
+        assertThat(userRepository.searchByUsernameAfter("_", null, Limit.of(1000)))
+                .extracting(User::getUsername).contains(marker + "_Ab").doesNotContain(marker + "xab");
+
+        em.createNativeQuery("SET LOCAL enable_seqscan = off").executeUpdate();
+        String plan = em.createNativeQuery(
+                "EXPLAIN SELECT 1 FROM vomatt.users u WHERE u.username_bigrams @> vomatt.text_bigrams('" + marker + "')")
+                .getResultList().toString();
+        assertThat(plan).contains("idx_users_username_bigrams");
+    }
+
+    @Test
     @DisplayName("should paginate popular tags by usage count with no duplicates or gaps on ties")
     void shouldPagePopularTagsWithTies() {
         List<UUID> ids = new ArrayList<>();

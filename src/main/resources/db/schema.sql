@@ -299,6 +299,10 @@ ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS voter_visibility VARCHAR(20) N
 ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS search_bigrams TEXT[] GENERATED ALWAYS AS
     (vomatt.text_bigrams(COALESCE(title, '') || ' ' || COALESCE(description, ''))) STORED;
 CREATE INDEX IF NOT EXISTS idx_votes_search_bigrams ON vomatt.votes USING GIN (search_bigrams);
+-- Same bigram search for usernames (user search); not mapped to the entity
+ALTER TABLE vomatt.users ADD COLUMN IF NOT EXISTS username_bigrams TEXT[] GENERATED ALWAYS AS
+    (vomatt.text_bigrams(username)) STORED;
+CREATE INDEX IF NOT EXISTS idx_users_username_bigrams ON vomatt.users USING GIN (username_bigrams);
 -- Delete (soft): a Deleted Poll is hidden from everyone, owner included; the row and its Ballots are kept
 ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 -- Audience: PUBLIC (default) / UNLISTED / INVITE_ONLY; replaces the never-used is_public, which old databases keep unmapped

@@ -224,19 +224,23 @@ public class AuthController {
             description = "Account suspended (`auth.account_banned`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
                     {"success": false, "data": null, "message": "This account has been banned and cannot sign in", "errorCode": "auth.account_banned", "error": "This account has been banned and cannot sign in"}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503",
+            description = "Google's key endpoint is unreachable; safe to retry (`common.service_unavailable`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF)))
     @Operation(summary = "Sign in with Google",
             description = """
                     **Auth**: public
                     **Precondition**: the client obtained a Google ID token (Google Sign-In)
-                    **Behavior**: validates the ID token with Google and checks its audience. Signs in the user with that email, creating the user if new. \
+                    **Behavior**: verifies the ID token signature against Google's public keys, then its issuer, audience and expiry. Signs in the user with that email, creating the user if new. \
                     An existing account with the same email is reused only when Google reports the email as verified
                     **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated
                     **Errors**:
                     - 400 `auth.google.not_configured`: Google login is not configured on the server
-                    - 401 `auth.google.no_email`: the token is invalid or carries no email
+                    - 401 `auth.google.no_email`: the token is invalid (malformed, bad signature, wrong issuer, expired) or carries no email
                     - 401 `auth.google.invalid_audience`: the token was issued for a different client ID
                     - 401 `auth.email_not_verified`: Google reports the email as unverified
-                    - 403 `auth.account_banned`: the user is suspended (`active=false`)""")
+                    - 403 `auth.account_banned`: the user is suspended (`active=false`)
+                    - 503 `common.service_unavailable`: Google's key endpoint is unreachable""")
     public ResponseEntity<ApiResponse<AuthResponse>> googleLogin(@Valid @RequestBody GoogleAuthRequest req) {
         return ResponseEntity.ok(ApiResponse.ok(authService.googleLogin(req.idToken())));
     }

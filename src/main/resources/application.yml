@@ -139,7 +139,7 @@ otp:
 
 jwt:
   secret: ${JWT_SECRET}
-  expiration-seconds: ${JWT_EXPIRATION_SECONDS:3600}
+  expiration-seconds: ${JWT_EXPIRATION_SECONDS:900}
   refresh-expiration-days: ${JWT_REFRESH_EXPIRATION_DAYS:30}
   # Rotating the same oldToken again within N seconds returns the same pair, so cross-instance races are not flagged as reuse
   refresh-grace-seconds: ${JWT_REFRESH_GRACE_SECONDS:10}
@@ -156,7 +156,7 @@ apple:
 
 oauth:
   google:
-    token-info-url: ${GOOGLE_TOKEN_INFO_URL:https://oauth2.googleapis.com/tokeninfo}
+    jwks-url: ${GOOGLE_JWKS_URL:https://www.googleapis.com/oauth2/v3/certs}
   line:
     token-url: ${LINE_TOKEN_URL:https://api.line.me/oauth2/v2.1/token}
     verify-url: ${LINE_VERIFY_URL:https://api.line.me/oauth2/v2.1/verify}

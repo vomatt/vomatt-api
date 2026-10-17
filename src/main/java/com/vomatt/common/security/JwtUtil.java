@@ -2,6 +2,7 @@ package com.vomatt.common.security;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtParser;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.MalformedJwtException;
 import io.jsonwebtoken.UnsupportedJwtException;
@@ -21,6 +22,8 @@ import java.util.List;
 public class JwtUtil {
 
     private final SecretKey key;
+    // JwtParser is immutable and thread-safe; build it once instead of per request
+    private final JwtParser parser;
     private final long expirationSeconds;
 
     // HS256 needs a key of >= 256 bits (32 bytes); matches the JWT_SECRET >= 32 characters rule
@@ -36,6 +39,7 @@ public class JwtUtil {
                             + secretBytes.length + " bytes. Set a long enough JWT_SECRET (>= 32 characters).");
         }
         this.key = Keys.hmacShaKeyFor(secretBytes);
+        this.parser = Jwts.parser().verifyWith(key).build();
         this.expirationSeconds = expirationSeconds;
     }
 
@@ -47,7 +51,7 @@ public class JwtUtil {
 
     @SuppressWarnings("unchecked")
     public UserPrincipal parseToken(String token) {
-        Claims claims = Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
+        Claims claims = parser.parseSignedClaims(token).getPayload();
 
         return new UserPrincipal(claims.getSubject(), claims.get("email", String.class),
                 (List<String>) claims.get("roles"));
@@ -55,7 +59,7 @@ public class JwtUtil {
 
     public boolean validateJwtToken(String authToken) {
         try {
-            Jwts.parser().verifyWith(key).build().parseSignedClaims(authToken);
+            parser.parseSignedClaims(authToken);
             return true;
         } catch (SignatureException e) {
             log.error("Invalid JWT signature: {}", e.getMessage());

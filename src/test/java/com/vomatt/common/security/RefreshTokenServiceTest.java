@@ -391,12 +391,19 @@ class RefreshTokenServiceTest {
     // ── generate / revoke / revokeAllForUser unchanged ────────────────
 
     @Test
-    void generate_storesTokenAndUserIndex() {
+    @SuppressWarnings("unchecked")
+    void shouldRenewUserIndexTtlWhenGeneratingToken() {
         String token = service.generate("user-5", "gen@example.com", List.of("user"));
 
         assertThat(token).isNotBlank();
-        verify(redisService).setOrThrow(eq(NAMESPACE), eq(token), any(RefreshTokenService.RefreshTokenData.class), eq(Duration.ofDays(30)));
-        verify(redisService).hSetOrThrow(eq(USER_IDX_NS), eq("user-5"), eq(token), eq("1"), eq(Duration.ofDays(30)));
+        ArgumentCaptor<List<RedisService.RedisWrite>> writes = ArgumentCaptor.forClass(List.class);
+        verify(redisService).execInTransaction(writes.capture());
+        assertThat(writes.getValue()).containsExactly(
+                RedisService.RedisWrite.set(NAMESPACE, token,
+                        new RefreshTokenService.RefreshTokenData("user-5", "gen@example.com", List.of("user")), Duration.ofDays(30)),
+                RedisService.RedisWrite.hput(USER_IDX_NS, "user-5", token, "1"),
+                // The index TTL is renewed on every issue, not only when the index is first created
+                RedisService.RedisWrite.expire(USER_IDX_NS, "user-5", Duration.ofDays(30)));
     }
 
     // ── Correctness-critical write failures must throw (P5-#3 / P5-#8) ─────────────────────────
@@ -404,7 +411,7 @@ class RefreshTokenServiceTest {
     @Test
     void generate_whenUserIndexWriteFails_propagatesException() {
         doThrow(new RedisOperationException("redis down", null))
-                .when(redisService).hSetOrThrow(eq(USER_IDX_NS), anyString(), anyString(), any(), any());
+                .when(redisService).execInTransaction(any());
 
         assertThatThrownBy(() -> service.generate("user-9", "g@example.com", List.of("user")))
                 .isInstanceOf(RedisOperationException.class);

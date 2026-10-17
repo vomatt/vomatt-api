@@ -33,6 +33,7 @@ class ClientIpResolverTest {
     void shouldNotTrustAddressesOutsidePrivateRanges() {
         assertThat(ClientIpResolver.isTrustedProxy("172.32.0.1")).isFalse();
         assertThat(ClientIpResolver.isTrustedProxy("2001:db8::1")).isFalse();
+        assertThat(ClientIpResolver.isTrustedProxy("fec0::1")).isFalse();
         assertThat(ClientIpResolver.isTrustedProxy("evil.example.com")).isFalse();
     }
 }

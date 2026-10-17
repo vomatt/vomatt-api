@@ -53,8 +53,12 @@ public class RefreshTokenService {
         String token = UUID.randomUUID().toString();
         RefreshTokenData data = new RefreshTokenData(userId, email, roles);
         Duration ttl = Duration.ofDays(refreshExpirationDays);
-        redisService.setOrThrow(NAMESPACE, token, data, ttl);
-        redisService.hSetOrThrow(USER_IDX_NS, userId, token, "1", ttl);
+        // Renew the index TTL on every issue (as rotate does), so the index never expires before a token it lists
+        redisService.execInTransaction(List.of(
+                RedisService.RedisWrite.set(NAMESPACE, token, data, ttl),
+                RedisService.RedisWrite.hput(USER_IDX_NS, userId, token, "1"),
+                RedisService.RedisWrite.expire(USER_IDX_NS, userId, ttl)
+        ));
         log.debug("Refresh token generated for userId={}", userId);
         return token;
     }

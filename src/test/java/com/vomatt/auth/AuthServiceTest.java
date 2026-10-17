@@ -75,6 +75,7 @@ class AuthServiceTest {
         ReflectionTestUtils.setField(authService, "otpResendCooldownSeconds", 180L);
         ReflectionTestUtils.setField(authService, "appleJwksUrl", "https://appleid.apple.com/auth/keys");
         ReflectionTestUtils.setField(authService, "appleClientId", "com.vomatt.app");
+        ReflectionTestUtils.setField(authService, "googleJwksUrl", "https://www.googleapis.com/oauth2/v3/certs");
         // Resend cooldown slot is free unless a test says otherwise
         lenient().when(redisService.setIfAbsent(anyString(), anyString(), any(), any(Duration.class))).thenReturn(true);
         // Runs the find-or-create callback as if a transaction were open
@@ -556,51 +557,159 @@ class AuthServiceTest {
     }
 
     @Test
-    void shouldBindEmailInviteesWhenGoogleEmailVerified() {
+    void shouldBindEmailInviteesWhenGoogleEmailVerified() throws Exception {
         ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
-        ReflectionTestUtils.setField(authService, "googleTokenInfoUrl", "https://oauth2.googleapis.com/tokeninfo");
-        stubJwksFetch(java.util.Map.of("email", "Carol@Example.com", "aud", "client-id", "email_verified", "true"), null);
+        String idToken = signedGoogleToken(googlePayload("Carol@Example.com", true));
         User carol = User.builder().id(UUID.randomUUID()).email("carol@example.com").displayName("Carol")
                 .roles(new String[] { "user" }).build();
         when(userRepository.findByEmail("carol@example.com")).thenReturn(Optional.of(carol));
         when(jwtUtil.generateToken(anyString(), anyString(), any())).thenReturn("mock-token");
         when(refreshTokenService.generate(anyString(), anyString(), any())).thenReturn("mock-refresh-token");
 
-        authService.googleLogin("id-token");
+        authService.googleLogin(idToken);
 
         verify(voteService).bindEmailInvitees(carol);
         verify(groupService).bindEmailMembers(carol);
     }
 
     @Test
-    void shouldNotCopyGooglePictureWhenSigningIn() {
+    void shouldNotCopyGooglePictureWhenSigningIn() throws Exception {
         ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
-        ReflectionTestUtils.setField(authService, "googleTokenInfoUrl", "https://oauth2.googleapis.com/tokeninfo");
-        stubJwksFetch(java.util.Map.of("email", "carol@example.com", "aud", "client-id", "email_verified", "true",
-                "picture", "https://lh3.googleusercontent.com/carol.jpg"), null);
+        var claims = googlePayload("carol@example.com", true);
+        claims.put("picture", "https://lh3.googleusercontent.com/carol.jpg");
+        String idToken = signedGoogleToken(claims);
         User carol = User.builder().id(UUID.randomUUID()).email("carol@example.com").displayName("Carol")
                 .roles(new String[] { "user" }).build();
         when(userRepository.findByEmail("carol@example.com")).thenReturn(Optional.of(carol));
         when(jwtUtil.generateToken(anyString(), anyString(), any())).thenReturn("mock-token");
         when(refreshTokenService.generate(anyString(), anyString(), any())).thenReturn("mock-refresh-token");
 
-        authService.googleLogin("id-token");
+        authService.googleLogin(idToken);
 
         assertThat(carol.getAvatarUrl()).isNull();
     }
 
     @Test
-    void shouldNotBindEmailInviteesWhenGoogleEmailUnverified() {
+    void shouldNotBindEmailInviteesWhenGoogleEmailUnverified() throws Exception {
         ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
-        ReflectionTestUtils.setField(authService, "googleTokenInfoUrl", "https://oauth2.googleapis.com/tokeninfo");
-        stubJwksFetch(java.util.Map.of("email", "carol@example.com", "aud", "client-id", "email_verified", "false"), null);
+        String idToken = signedGoogleToken(googlePayload("carol@example.com", false));
 
-        assertThatThrownBy(() -> authService.googleLogin("id-token"))
+        assertThatThrownBy(() -> authService.googleLogin(idToken))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_EMAIL_NOT_VERIFIED));
 
         verify(voteService, never()).bindEmailInvitees(any());
         verify(groupService, never()).bindEmailMembers(any());
+    }
+
+    @Test
+    void shouldRejectGoogleTokenWhenAudienceIsAnotherClient() throws Exception {
+        ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
+        var claims = googlePayload("carol@example.com", true);
+        claims.put("aud", "other-client");
+
+        assertGoogleRejected(signedGoogleToken(claims), MessageKey.AUTH_GOOGLE_INVALID_AUDIENCE);
+    }
+
+    @Test
+    void shouldAcceptGoogleTokenWhenAudienceIsAnyConfiguredClient() throws Exception {
+        ReflectionTestUtils.setField(authService, "googleClientId", "web-id, client-id");
+        User carol = User.builder().id(UUID.randomUUID()).email("carol@example.com").displayName("Carol")
+                .roles(new String[] { "user" }).build();
+        when(userRepository.findByEmail("carol@example.com")).thenReturn(Optional.of(carol));
+        when(jwtUtil.generateToken(anyString(), anyString(), any())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), anyString(), any())).thenReturn("mock-refresh-token");
+
+        assertThat(authService.googleLogin(signedGoogleToken(googlePayload("carol@example.com", true))).token())
+                .isEqualTo("mock-token");
+    }
+
+    @Test
+    void shouldRejectGoogleTokenWhenIssuerIsNotGoogle() throws Exception {
+        ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
+        var claims = googlePayload("carol@example.com", true);
+        claims.put("iss", "https://evil.example.com");
+
+        assertGoogleRejected(signedGoogleToken(claims), MessageKey.AUTH_GOOGLE_NO_EMAIL);
+    }
+
+    @Test
+    void shouldRejectGoogleTokenWhenExpired() throws Exception {
+        ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
+        var claims = googlePayload("carol@example.com", true);
+        claims.put("exp", Instant.now().minusSeconds(60).getEpochSecond());
+
+        assertGoogleRejected(signedGoogleToken(claims), MessageKey.AUTH_GOOGLE_NO_EMAIL);
+    }
+
+    @Test
+    void shouldRejectGoogleTokenWhenSignedByUnknownKey() throws Exception {
+        ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
+        // Same kid, but the JWKS holds a different public key -> signature check fails
+        String idToken = signGoogleToken(googlePayload("carol@example.com", true), rsaKeyPair());
+        stubJwksFetch(jwksOf((java.security.interfaces.RSAPublicKey) rsaKeyPair().getPublic()), null);
+
+        assertGoogleRejected(idToken, MessageKey.AUTH_GOOGLE_NO_EMAIL);
+    }
+
+    @Test
+    void shouldThrowServiceUnavailableWhenGoogleJwksUnreachable() {
+        ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
+        stubJwksFetch(null, new org.springframework.web.client.ResourceAccessException("timeout"));
+
+        assertThatThrownBy(() -> authService.googleLogin("a.b.c"))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.COMMON_SERVICE_UNAVAILABLE));
+    }
+
+    private void assertGoogleRejected(String idToken, MessageKey expected) {
+        assertThatThrownBy(() -> authService.googleLogin(idToken))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> {
+                    assertThat(((ApiException) ex).getStatus()).isEqualTo(org.springframework.http.HttpStatus.UNAUTHORIZED);
+                    assertThat(((ApiException) ex).getMessageKey()).isEqualTo(expected);
+                });
+        verify(userRepository, never()).findByEmail(anyString());
+    }
+
+    private static java.util.Map<String, Object> googlePayload(String email, boolean emailVerified) {
+        java.util.Map<String, Object> claims = new java.util.HashMap<>();
+        claims.put("iss", "https://accounts.google.com");
+        claims.put("aud", "client-id");
+        claims.put("exp", Instant.now().plusSeconds(3600).getEpochSecond());
+        claims.put("email", email);
+        claims.put("email_verified", emailVerified);
+        return claims;
+    }
+
+    /** Signs the claims with a fresh RSA key and stubs the Google JWKS fetch to serve its public key. */
+    private String signedGoogleToken(java.util.Map<String, Object> claims) throws Exception {
+        java.security.KeyPair kp = rsaKeyPair();
+        stubJwksFetch(jwksOf((java.security.interfaces.RSAPublicKey) kp.getPublic()), null);
+        return signGoogleToken(claims, kp);
+    }
+
+    private static String signGoogleToken(java.util.Map<String, Object> claims, java.security.KeyPair kp) throws Exception {
+        String signingInput = base64Url("{\"alg\":\"RS256\",\"kid\":\"k1\"}") + "."
+                + base64Url(tools.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(claims));
+        java.security.Signature sig = java.security.Signature.getInstance("SHA256withRSA");
+        sig.initSign(kp.getPrivate());
+        sig.update(signingInput.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return signingInput + "." + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(sig.sign());
+    }
+
+    private static java.security.KeyPair rsaKeyPair() throws Exception {
+        java.security.KeyPairGenerator gen = java.security.KeyPairGenerator.getInstance("RSA");
+        gen.initialize(2048);
+        return gen.generateKeyPair();
+    }
+
+    private static java.util.Map<String, Object> jwksOf(java.security.interfaces.RSAPublicKey pub) {
+        java.util.Base64.Encoder enc = java.util.Base64.getUrlEncoder().withoutPadding();
+        return java.util.Map.of("keys", java.util.List.of(java.util.Map.of(
+                "kid", "k1",
+                "n", enc.encodeToString(pub.getModulus().toByteArray()),
+                "e", enc.encodeToString(pub.getPublicExponent().toByteArray()))));
     }
 
     @Test

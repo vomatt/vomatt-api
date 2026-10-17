@@ -8,7 +8,7 @@ All `/api/auth/**` endpoints are public (no `Authorization`) and are rate limite
 
 | Token | Default lifetime | Setting | Notes |
 |-------|----------|------|------|
-| access token (`token`) | 1 hour | `JWT_EXPIRATION_SECONDS` (default 3600) | JWT, stateless; send as `Authorization: Bearer <token>` to protected endpoints |
+| access token (`token`) | 15 minutes | `JWT_EXPIRATION_SECONDS` (default 900) | JWT, stateless; send as `Authorization: Bearer <token>` to protected endpoints |
 | refresh token (`refreshToken`) | 30 days | `JWT_REFRESH_EXPIRATION_DAYS` (default 30) | Opaque string (UUID) stored in server-side Redis; **single use**, every refresh issues a new pair |
 | refresh grace window | 10 seconds | `JWT_REFRESH_GRACE_SECONDS` (default 10) | See §6 |
 

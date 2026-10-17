@@ -119,7 +119,7 @@ public class AuthService {
     @Value("${otp.resend-cooldown-seconds:180}")
     private long otpResendCooldownSeconds;
 
-    public void sendOtp(String email, String phone, String type, boolean checkRole) {
+    public void sendOtp(String email, String phone, String type, boolean checkRole, String clientIp) {
         String otpType = (type != null) ? type : "login";
         String code = generateOtpCode();
 
@@ -130,22 +130,23 @@ public class AuthService {
                         .filter(u -> List.of(u.getRoles()).contains(UserRole.ADMIN))
                         .orElseThrow(() -> ApiException.forbidden(MessageKey.AUTH_ADMIN_FORBIDDEN));
             }
-            sendEmailOtp(normalizedEmail, code);
+            sendEmailOtp(normalizedEmail, code, clientIp);
         } else if (phone != null && !phone.isBlank()) {
-            sendPhoneOtp(User.normalizePhone(phone), otpType, code);
+            sendPhoneOtp(User.normalizePhone(phone), otpType, code, clientIp);
         } else {
             throw ApiException.badRequest(MessageKey.AUTH_IDENTIFIER_REQUIRED);
         }
     }
 
-    private void sendEmailOtp(String normalizedEmail, String code) {
-        rejectIfLocked(OTP_EMAIL_NS, normalizedEmail);
+    private void sendEmailOtp(String normalizedEmail, String code, String clientIp) {
+        String attemptKey = attemptKey(normalizedEmail, clientIp);
+        rejectIfLocked(OTP_EMAIL_NS, attemptKey);
 
         boolean isExisting = userRepository.existsByEmail(normalizedEmail);
         String otpType = isExisting ? "login" : "signup";
 
         acquireResendCooldown(OTP_EMAIL_NS, normalizedEmail);
-        storeOtp(OTP_EMAIL_NS, normalizedEmail, new OtpRecord(code, otpType, Instant.now(), 0));
+        storeOtp(OTP_EMAIL_NS, normalizedEmail, attemptKey, new OtpRecord(code, otpType, Instant.now(), 0));
 
         try {
             if ("signup".equals(otpType)) {
@@ -154,22 +155,23 @@ public class AuthService {
                 emailService.sendVerificationEmail(normalizedEmail, code);
             }
         } catch (Exception ex) {
-            // The code never reached the user: drop it and the cooldown so an immediate retry is possible
+            // The code never reached the user: drop it and shorten the cooldown so a retry is possible soon
             releaseUndeliveredOtp(OTP_EMAIL_NS, normalizedEmail);
             log.warn("Failed to send OTP email: {}", ex.getMessage());
             throw ApiException.badRequest(MessageKey.AUTH_EMAIL_SEND_FAILED);
         }
     }
 
-    private void sendPhoneOtp(String phone, String otpType, String code) {
-        rejectIfLocked(OTP_PHONE_NS, phone);
+    private void sendPhoneOtp(String phone, String otpType, String code, String clientIp) {
+        String attemptKey = attemptKey(phone, clientIp);
+        rejectIfLocked(OTP_PHONE_NS, attemptKey);
 
         if ("login".equals(otpType) && !userRepository.existsByPhoneNumber(phone)) {
             throw ApiException.badRequest(MessageKey.AUTH_PHONE_NOT_REGISTERED);
         }
 
         acquireResendCooldown(OTP_PHONE_NS, phone);
-        storeOtp(OTP_PHONE_NS, phone, new OtpRecord(code, otpType, Instant.now(), 0));
+        storeOtp(OTP_PHONE_NS, phone, attemptKey, new OtpRecord(code, otpType, Instant.now(), 0));
 
         try {
             smsService.sendOtp(phone, code);
@@ -180,7 +182,7 @@ public class AuthService {
         }
     }
 
-    public AuthResponse verifyOtp(String email, String phone, String code, boolean checkRole) {
+    public AuthResponse verifyOtp(String email, String phone, String code, boolean checkRole, String clientIp) {
         if (email != null && !email.isBlank()) {
             String normalizedEmail = User.normalizeEmail(email);
             // P5-#13: the admin login role check must run before "consume OTP / create account / send welcome email".
@@ -188,14 +190,14 @@ public class AuthService {
             if (checkRole) {
                 requireExistingAdminByEmail(normalizedEmail);
             }
-            return verifyEmailOtp(normalizedEmail, code);
+            return verifyEmailOtp(normalizedEmail, code, clientIp);
         } else if (phone != null && !phone.isBlank()) {
             String normalizedPhone = User.normalizePhone(phone);
             // P5-#13: the phone path must also check the role before consuming the OTP (both paths covered).
             if (checkRole) {
                 requireExistingAdminByPhone(normalizedPhone);
             }
-            return verifyPhoneOtp(normalizedPhone, code);
+            return verifyPhoneOtp(normalizedPhone, code, clientIp);
         } else {
             throw ApiException.badRequest(MessageKey.AUTH_IDENTIFIER_REQUIRED);
         }
@@ -218,8 +220,8 @@ public class AuthService {
                 .orElseThrow(() -> ApiException.forbidden(MessageKey.AUTH_ADMIN_FORBIDDEN));
     }
 
-    private AuthResponse verifyEmailOtp(String normalizedEmail, String code) {
-        OtpRecord otp = consumeOtp(OTP_EMAIL_NS, normalizedEmail, code);
+    private AuthResponse verifyEmailOtp(String normalizedEmail, String code, String clientIp) {
+        OtpRecord otp = consumeOtp(OTP_EMAIL_NS, normalizedEmail, code, clientIp);
 
         String defaultName = "signup".equals(otp.type()) ? normalizedEmail.split("@")[0] : "";
         // The user proved ownership of the email via OTP -> treat as verified
@@ -233,27 +235,53 @@ public class AuthService {
         return response;
     }
 
-    private AuthResponse verifyPhoneOtp(String phone, String code) {
-        consumeOtp(OTP_PHONE_NS, phone, code);
+    private AuthResponse verifyPhoneOtp(String phone, String code, String clientIp) {
+        consumeOtp(OTP_PHONE_NS, phone, code, clientIp);
         User user = findOrCreateUserByPhone(phone);
         return buildAuthResponse(user);
     }
 
-    private static final int MAX_OTP_ATTEMPTS = 5;
+    private static final int MAX_OTP_ATTEMPTS = 3;
 
-    /** Namespace suffix for the failure counter; same key as the OTP, atomic INCR (P1-#7). */
+    /** Guesses one OTP allows across all IPs, so more IPs buy no more guesses; past it the OTP no longer verifies. */
+    private static final int MAX_OTP_GUESSES = 10;
+
+    /**
+     * Resend cooldown once an OTP's guesses are used up, so guessing across many IPs is held to about the old
+     * per-identifier rate (10 guesses per 15 minutes). Anyone can impose it on a victim, like the old lockout could.
+     */
+    private static final Duration OTP_EXHAUSTED_COOLDOWN = Duration.ofMinutes(15);
+
+    /** Namespace suffix for the per-OTP guess counter (all IPs), keyed by identifier + OTP creation time so each OTP starts at zero. */
+    private static final String OTP_GUESS_SUFFIX = ":guesses";
+
+    /**
+     * Namespace suffix for the failure counter, atomic INCR (P1-#7). The counter, lock and level keys are all keyed by
+     * {@link #attemptKey} (identifier + client IP), so guessing from one IP never locks the identifier out elsewhere.
+     */
     private static final String OTP_FAIL_SUFFIX = ":fail";
 
     /** Namespace suffix for the lockout marker; independent of the OTP so it survives OTP deletion and resends. */
     private static final String OTP_LOCK_SUFFIX = ":lock";
 
-    /** Namespace suffix for the resend cooldown marker (SET NX), holding the send time in epoch seconds. */
+    /** Namespace suffix for the lockout level: how many lockouts in a row, so each one doubles. */
+    private static final String OTP_LEVEL_SUFFIX = ":level";
+
+    /** Namespace suffix for the resend cooldown marker (SET NX), holding the epoch second a resend is allowed again. */
     private static final String OTP_COOLDOWN_SUFFIX = ":cooldown";
 
-    private static final Duration OTP_LOCK_TTL = Duration.ofMinutes(15);
+    private static final Duration OTP_LOCK_BASE = Duration.ofMinutes(5);
+    // ponytail: lockout capped at 24h (5 min doubling reaches it at the 10th lockout); a longer ban needs an admin action
+    private static final Duration OTP_LOCK_MAX = Duration.ofHours(24);
+    /** How long the lockout level outlives the lock it set, so the next lockout within that window doubles again. */
+    private static final Duration OTP_LEVEL_TTL = Duration.ofHours(24);
 
-    private OtpRecord consumeOtp(String namespace, String key, String code) {
-        rejectIfLocked(namespace, key);
+    /** Cooldown kept after a failed delivery, so a script cannot hammer the paid SMS / email provider. */
+    private static final Duration OTP_FAILED_SEND_COOLDOWN = Duration.ofSeconds(30);
+
+    private OtpRecord consumeOtp(String namespace, String key, String code, String clientIp) {
+        String attemptKey = attemptKey(key, clientIp);
+        rejectIfLocked(namespace, attemptKey);
 
         OtpRecord rec = redisService.get(namespace, key, OtpRecord.class);
 
@@ -262,13 +290,20 @@ public class AuthService {
         }
 
         // Every attempt is counted with an atomic INCR BEFORE the code is compared, so concurrent guesses cannot
-        // all slip past the limit (P1-#7). TTL matches the OTP's remaining lifetime (at least 1 second).
+        // all slip past the limit (P1-#7). TTL matches the OTP's remaining lifetime (at least 1 second); a resend extends it.
         String failNs = namespace + OTP_FAIL_SUFFIX;
         long remainingSeconds = otpTtlSeconds - Duration.between(rec.createdAt(), Instant.now()).getSeconds();
-        long attempts = redisService.incrementAndExpire(failNs, key, Duration.ofSeconds(Math.max(remainingSeconds, 1)));
-        // Past the limit: a concurrent guess already used the last attempt, so even a correct code is refused
+        Duration counterTtl = Duration.ofSeconds(Math.max(remainingSeconds, 1));
+        long attempts = redisService.incrementAndExpire(failNs, attemptKey, counterTtl);
+        // Past the limit: a concurrent guess already used the last attempt (and locks out), so even a correct code is refused
         if (attempts > MAX_OTP_ATTEMPTS) {
-            lockOut(namespace, key);
+            throw ApiException.unauthorized(MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS);
+        }
+        long guesses = redisService.incrementAndExpire(namespace + OTP_GUESS_SUFFIX,
+                key + ":" + rec.createdAt().toEpochMilli(), counterTtl);
+        // The counter belongs to this OTP only, so refusing here never touches an OTP resent in the meantime
+        if (guesses > MAX_OTP_GUESSES) {
+            throw ApiException.unauthorized(MessageKey.AUTH_OTP_INVALID_OR_EXPIRED);
         }
 
         // P5-#19: constant-time comparison so a short-circuit does not leak the OTP prefix via a timing side-channel.
@@ -277,63 +312,117 @@ public class AuthService {
                 rec.code().getBytes(StandardCharsets.UTF_8),
                 code.getBytes(StandardCharsets.UTF_8));
         if (!codeMatches) {
-            // The last allowed attempt was wrong: lock now rather than on the next request
+            // The OTP's last guess was wrong: it is dead, and the next one can be requested only after the longer cooldown
+            if (guesses == MAX_OTP_GUESSES) {
+                redisService.set(namespace + OTP_COOLDOWN_SUFFIX, key, availableAt(OTP_EXHAUSTED_COOLDOWN), OTP_EXHAUSTED_COOLDOWN);
+            }
+            // The last allowed attempt was wrong: lock now rather than on the next request.
+            // Only this request escalates, so concurrent guesses cannot double the lockout twice.
             if (attempts == MAX_OTP_ATTEMPTS) {
-                lockOut(namespace, key);
+                lockOut(namespace, attemptKey);
             }
             throw ApiException.unauthorized(MessageKey.AUTH_INVALID_OTP);
         }
 
-        redisService.delete(namespace, key);
-        redisService.delete(failNs, key);
+        // Atomic GETDEL: of concurrent requests carrying the right code, only one consumes the OTP
+        OtpRecord consumed = redisService.getAndDelete(namespace, key, OtpRecord.class);
+        if (consumed == null) {
+            throw ApiException.unauthorized(MessageKey.AUTH_OTP_INVALID_OR_EXPIRED);
+        }
+        if (!consumed.createdAt().equals(rec.createdAt())) {
+            // A resend replaced the OTP after it was read: the old code must not sign in, and the new OTP goes back
+            long left = otpTtlSeconds - Duration.between(consumed.createdAt(), Instant.now()).getSeconds();
+            if (left > 0) {
+                redisService.set(namespace, key, consumed, Duration.ofSeconds(left));
+            }
+            throw ApiException.unauthorized(MessageKey.AUTH_OTP_INVALID_OR_EXPIRED);
+        }
+        redisService.delete(failNs, attemptKey);
+        redisService.delete(namespace + OTP_LEVEL_SUFFIX, attemptKey);
         return rec;
     }
 
     /**
-     * Writes the lockout marker (15 minutes, outlives the OTP so a resend does not grant fresh guesses),
-     * invalidates the OTP and counter, then rejects.
+     * Locks this identifier + IP for 5 minutes, doubling with each lockout in a row, then rejects. The OTP itself is kept,
+     * so one IP's lockout does not void the code the real user is about to enter from another (only the shared
+     * {@link #MAX_OTP_GUESSES} budget does). The counter is kept, so requests already in flight see it past the limit
+     * and cannot escalate again; it outlives the OTP by at most its TTL, which is shorter than any lock, and a locked
+     * pair cannot resend to extend it, so the next lock window starts with fresh attempts.
      */
-    private void lockOut(String namespace, String key) {
-        redisService.setOrThrow(namespace + OTP_LOCK_SUFFIX, key, "1", OTP_LOCK_TTL);
-        redisService.delete(namespace, key);
-        redisService.delete(namespace + OTP_FAIL_SUFFIX, key);
+    private void lockOut(String namespace, String attemptKey) {
+        String levelNs = namespace + OTP_LEVEL_SUFFIX;
+        long level = redisService.incrementAndExpire(levelNs, attemptKey, OTP_LOCK_BASE.plus(OTP_LEVEL_TTL));
+        Duration lock = lockDuration(level);
+        redisService.setOrThrow(namespace + OTP_LOCK_SUFFIX, attemptKey, "1", lock);
+        redisService.expire(levelNs, attemptKey, lock.plus(OTP_LEVEL_TTL));
         throw ApiException.unauthorized(MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS);
     }
 
-    private void rejectIfLocked(String namespace, String key) {
+    /** 5 min for the first lockout, doubling each time: 5, 10, 20, 40 min... up to {@link #OTP_LOCK_MAX}. */
+    static Duration lockDuration(long level) {
+        // Clamp the exponent first: 5 min x 2^9 already exceeds 24h, and a larger shift would overflow
+        Duration lock = OTP_LOCK_BASE.multipliedBy(1L << Math.clamp(level - 1, 0, 9));
+        return lock.compareTo(OTP_LOCK_MAX) > 0 ? OTP_LOCK_MAX : lock;
+    }
+
+    private void rejectIfLocked(String namespace, String attemptKey) {
         // Fails closed: a Redis error must not let a locked identifier guess again
-        if (redisService.hasKeyOrThrow(namespace + OTP_LOCK_SUFFIX, key)) {
+        if (redisService.hasKeyOrThrow(namespace + OTP_LOCK_SUFFIX, attemptKey)) {
             throw ApiException.unauthorized(MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS);
+        }
+    }
+
+    /** Redis key for one identifier guessing from one client IP; hashed so neither part can break the key format. */
+    static String attemptKey(String identifier, String clientIp) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest((identifier + "\n" + clientIp).getBytes(StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 not available", e);
         }
     }
 
     /** Atomically claims the resend slot (SET NX + TTL), so concurrent sends cannot both pass the cooldown. */
     private void acquireResendCooldown(String namespace, String key) {
         String cooldownNs = namespace + OTP_COOLDOWN_SUFFIX;
-        String now = Long.toString(Instant.now().getEpochSecond());
-        if (redisService.setIfAbsent(cooldownNs, key, now, Duration.ofSeconds(otpResendCooldownSeconds))) {
+        Duration cooldown = Duration.ofSeconds(otpResendCooldownSeconds);
+        if (redisService.setIfAbsent(cooldownNs, key, availableAt(cooldown), cooldown)) {
             return;
         }
-        String sentAt = redisService.get(cooldownNs, key, String.class);
-        long elapsed = sentAt == null ? 0 : Instant.now().getEpochSecond() - Long.parseLong(sentAt);
-        long remaining = Math.max(otpResendCooldownSeconds - elapsed, 1);
+        String availableAt = redisService.get(cooldownNs, key, String.class);
+        long remaining = availableAt == null ? otpResendCooldownSeconds : Long.parseLong(availableAt) - Instant.now().getEpochSecond();
+        remaining = Math.max(remaining, 1);
         throw ApiException.badRequest(MessageKey.AUTH_OTP_RESEND_COOLDOWN, remaining);
     }
 
-    /** Stores the OTP; if that fails, releases the cooldown just claimed so the user can retry at once. */
-    private void storeOtp(String namespace, String key, OtpRecord record) {
+    /**
+     * Stores the OTP and, in the same transaction, extends this identifier + IP's failure counter to outlive it, so a
+     * resend never grants fresh guesses (the counter is not reset). If that fails, releases the cooldown just claimed.
+     */
+    private void storeOtp(String namespace, String key, String attemptKey, OtpRecord record) {
+        Duration ttl = Duration.ofSeconds(otpTtlSeconds);
         try {
-            redisService.setOrThrow(namespace, key, record, Duration.ofSeconds(otpTtlSeconds));
+            redisService.execInTransaction(List.of(
+                    RedisService.RedisWrite.set(namespace, key, record, ttl),
+                    RedisService.RedisWrite.expire(namespace + OTP_FAIL_SUFFIX, attemptKey, ttl)));
         } catch (RuntimeException ex) {
             redisService.delete(namespace + OTP_COOLDOWN_SUFFIX, key);
             throw ex;
         }
     }
 
-    /** Drops an OTP whose delivery failed, plus its cooldown, so the user is not blocked by a message that never arrived. */
+    /**
+     * Drops an OTP whose delivery failed and shortens its cooldown to {@link #OTP_FAILED_SEND_COOLDOWN}, so the user can
+     * retry soon but a failing provider is not hit on every request. Fail-soft: a Redis error must not mask the send failure.
+     */
     private void releaseUndeliveredOtp(String namespace, String key) {
         redisService.delete(namespace, key);
-        redisService.delete(namespace + OTP_COOLDOWN_SUFFIX, key);
+        redisService.set(namespace + OTP_COOLDOWN_SUFFIX, key, availableAt(OTP_FAILED_SEND_COOLDOWN), OTP_FAILED_SEND_COOLDOWN);
+    }
+
+    private static String availableAt(Duration cooldown) {
+        return Long.toString(Instant.now().plus(cooldown).getEpochSecond());
     }
 
     public boolean checkEmailExists(String email) {

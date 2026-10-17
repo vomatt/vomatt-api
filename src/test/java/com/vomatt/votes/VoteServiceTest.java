@@ -431,15 +431,15 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("should throw 409 COMMON_CONFLICT when the Poll-row lock times out")
-        void shouldThrowConflictWhenPollLockTimesOut() {
+        @DisplayName("should let the lock timeout propagate (GlobalExceptionHandler maps it to 409) when the Poll-row lock times out")
+        void shouldPropagateLockFailureWhenPollLockTimesOut() {
             when(voteRepository.findByIdForUpdate(voteId)).thenThrow(new PessimisticLockingFailureException("lock timeout"));
 
             VoteRequest request = new VoteRequest();
             request.setOptionIds(List.of(UUID.randomUUID().toString()));
 
             assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1"))
-                    .satisfies(ex -> assertApiException(ex, HttpStatus.CONFLICT, MessageKey.COMMON_CONFLICT));
+                    .isInstanceOf(PessimisticLockingFailureException.class);
         }
 
         @Test

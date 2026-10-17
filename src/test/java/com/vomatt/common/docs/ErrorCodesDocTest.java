@@ -61,6 +61,7 @@ class ErrorCodesDocTest {
             Map.entry("AUTH_TOKEN_INVALID", Set.of(401)),
             Map.entry("COMMON_FORBIDDEN", Set.of(403)),
             Map.entry("COMMON_RATE_LIMITED", Set.of(429)),
+            Map.entry("COMMON_CONFLICT", Set.of(409)),
             Map.entry("COMMON_SERVICE_UNAVAILABLE", Set.of(503)),
             Map.entry("COMMON_INTERNAL_ERROR", Set.of(500)));
 

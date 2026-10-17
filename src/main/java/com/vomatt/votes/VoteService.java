@@ -24,7 +24,6 @@ import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.i18n.LocaleContextHolder;
-import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -819,14 +818,11 @@ public class VoteService {
      * Ballots can change only while Open; frozen once Ended. Takes the exclusive Poll-row lock and checks the status
      * under it, so a Close or Edit cannot slip in between. The lock also serializes one user's Ballot changes in the Poll.
      */
-    // Every Poll-row lock goes through here: a waiter past the lock timeout gets 409 instead of holding a pooled connection
+    // Every Poll-row lock goes through here: a waiter past the lock timeout gets PessimisticLockingFailureException,
+    // which GlobalExceptionHandler maps to 409, instead of holding a pooled connection
     private Optional<Vote> lockVote(UUID voteId) {
-        try {
-            voteRepository.setLockTimeout();
-            return voteRepository.findByIdForUpdate(voteId);
-        } catch (PessimisticLockingFailureException e) {
-            throw ApiException.conflict(MessageKey.COMMON_CONFLICT);
-        }
+        voteRepository.setLockTimeout();
+        return voteRepository.findByIdForUpdate(voteId);
     }
 
     private Vote lockOpenVote(UUID voteId, String userId) {

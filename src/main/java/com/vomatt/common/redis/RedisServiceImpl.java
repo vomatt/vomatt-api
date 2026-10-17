@@ -315,4 +315,14 @@ public class RedisServiceImpl implements RedisService {
             return false;
         }
     }
+
+    @Override
+    public boolean hasKeyOrThrow(String cacheName, String key) {
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
+        try {
+            return Boolean.TRUE.equals(redisTemplate.hasKey(cacheKey));
+        } catch (Exception e) {
+            throw new RedisOperationException("Redis EXISTS failed, key=" + cacheKey, e);
+        }
+    }
 }

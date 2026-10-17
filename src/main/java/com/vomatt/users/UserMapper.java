@@ -28,7 +28,7 @@ public class UserMapper {
      * Convert User entity to profile response (including all fields)
      */
     public MyProfileResponse toMyProfileResponse(User user, int totalPolls, int totalVotes,
-                                                  Map<String, Boolean> visibilitySettings) {
+                                                  Map<String, Boolean> visibilitySettings, boolean anonymousBallotByDefault) {
         return new MyProfileResponse(
                 user.getId().toString(),
                 user.getUsername(),
@@ -47,7 +47,8 @@ public class UserMapper {
                 user.getCreatedAt(),
                 totalPolls,
                 totalVotes,
-                visibilitySettings
+                visibilitySettings,
+                anonymousBallotByDefault
         );
     }
 

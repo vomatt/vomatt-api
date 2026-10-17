@@ -25,6 +25,9 @@ import lombok.ToString;
 @ToString(exclude = "user")
 public class UserPreference extends AuditableEntity {
 
+    /** "true" when the user's Ballots are Anonymous unless a Ballot says otherwise; unset means false. */
+    public static final String ANONYMOUS_BALLOT_KEY = "ballot.anonymousByDefault";
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;

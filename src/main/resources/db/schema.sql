@@ -91,6 +91,8 @@ CREATE TABLE IF NOT EXISTS vomatt.user_votes (
     vote_id    UUID        NOT NULL REFERENCES vomatt.votes (id)        ON DELETE CASCADE,
     option_id  UUID        NOT NULL REFERENCES vomatt.vote_options (id) ON DELETE CASCADE,
     ip_address VARCHAR(45),
+    -- Anonymous Ballot: left out of the voter list whatever the Poll's Voter Visibility
+    anonymous  BOOLEAN     NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- Polls are single-choice: one Ballot row per user per Poll
@@ -258,6 +260,8 @@ CREATE INDEX IF NOT EXISTS idx_votes_end_id                ON vomatt.votes (end_
 CREATE INDEX IF NOT EXISTS idx_vote_options_vote_order     ON vomatt.vote_options (vote_id, display_order);
 CREATE INDEX IF NOT EXISTS idx_user_votes_vote_option      ON vomatt.user_votes (vote_id, option_id);
 CREATE INDEX IF NOT EXISTS idx_user_votes_vote_created     ON vomatt.user_votes (vote_id, created_at, id);
+-- Option FK: ON DELETE CASCADE from vote_options would otherwise seq-scan user_votes
+CREATE INDEX IF NOT EXISTS idx_user_votes_option           ON vomatt.user_votes (option_id);
 CREATE INDEX IF NOT EXISTS idx_vote_invitees_user_id       ON vomatt.vote_invitees (user_id);
 CREATE INDEX IF NOT EXISTS idx_groups_owner_id             ON vomatt.groups (owner_id);
 CREATE INDEX IF NOT EXISTS idx_group_members_user_id       ON vomatt.group_members (user_id);
@@ -265,10 +269,14 @@ CREATE INDEX IF NOT EXISTS idx_group_members_user_id       ON vomatt.group_membe
 CREATE UNIQUE INDEX IF NOT EXISTS uk_group_members_group_email ON vomatt.group_members (group_id, email) WHERE email IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_group_members_email         ON vomatt.group_members (email) WHERE email IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_user_rankings_vote_id       ON vomatt.user_rankings (vote_id);
+-- Option FK: ON DELETE CASCADE from vote_options would otherwise seq-scan user_rankings
+CREATE INDEX IF NOT EXISTS idx_user_rankings_option        ON vomatt.user_rankings (option_id);
 CREATE INDEX IF NOT EXISTS idx_user_ratings_vote_id        ON vomatt.user_ratings (vote_id);
 CREATE INDEX IF NOT EXISTS idx_vote_comments_vote_created  ON vomatt.vote_comments (vote_id, created_at) WHERE is_deleted = FALSE;
 CREATE INDEX IF NOT EXISTS idx_vote_comments_user_id       ON vomatt.vote_comments (user_id);
 CREATE INDEX IF NOT EXISTS idx_comment_likes_user_id       ON vomatt.comment_likes (user_id);
+-- Poll FK: the primary key (user_id, vote_id) cannot serve ON DELETE CASCADE from votes
+CREATE INDEX IF NOT EXISTS idx_notification_reads_vote     ON vomatt.notification_reads (vote_id);
 CREATE INDEX IF NOT EXISTS idx_tags_usage_count            ON vomatt.tags (usage_count DESC);
 CREATE INDEX IF NOT EXISTS idx_vote_tags_tag_id            ON vomatt.vote_tags (tag_id);
 CREATE INDEX IF NOT EXISTS idx_lookup_type_active          ON vomatt.lookup (lookup_type, is_active);
@@ -308,9 +316,16 @@ FROM (SELECT v2.id, COUNT(uv.id) AS actual
       GROUP BY v2.id) c
 WHERE c.id = v.id AND v.turnout <> c.actual;
 CREATE INDEX IF NOT EXISTS idx_votes_turnout_start_id ON vomatt.votes (turnout DESC, start_time DESC, id DESC);
+-- Anonymous Ballot: hidden from the voter list; existing Ballots stay named
+ALTER TABLE vomatt.user_votes ADD COLUMN IF NOT EXISTS anonymous BOOLEAN NOT NULL DEFAULT FALSE;
 -- Comment replies (one level): parent_id only points to top-level comments
 ALTER TABLE vomatt.vote_comments ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES vomatt.vote_comments (id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS idx_vote_comments_parent ON vomatt.vote_comments (parent_id, created_at, id);
+-- Top-level Comment page (VoteCommentRepository.findPageByVoteId): keeps deleted placeholders, so the partial
+-- is_deleted index does not apply. Partial on parent_id IS NULL because IS NULL on a middle key column does not let
+-- the planner skip the sort for ORDER BY created_at DESC, id DESC
+CREATE INDEX IF NOT EXISTS idx_vote_comments_vote_parent_created ON vomatt.vote_comments (vote_id, created_at DESC, id DESC)
+    WHERE parent_id IS NULL;
 -- Email Invitees: user_id becomes optional, at least one of user_id / email is set, one row per Poll + email.
 -- The email index serves binding at sign-up / sign-in
 ALTER TABLE vomatt.vote_invitees ALTER COLUMN user_id DROP NOT NULL;

@@ -87,8 +87,12 @@ The number of Participants in a Poll. Visible at all times, including while Seal
 _Avoid_: Total votes, vote count
 
 **Voter Visibility**:
-The owner's choice, fixed once the Poll is Open, of who may see which option each Participant chose once the Poll has Ended: nobody, the owner only (default), or anyone who can see the Poll. Participants see this level before casting a Ballot.
+The owner's choice, fixed once the Poll is Open, of who may see which option each Participant chose once the Poll has Ended: nobody, the owner only (default), or anyone who can see the Poll. Anonymous Ballots stay out of it at every level. Participants see this level before casting a Ballot.
 _Avoid_: Anonymous poll (as a yes/no)
+
+**Anonymous Ballot**:
+A Ballot its Participant chose to keep out of the voter list, whatever the Poll's Voter Visibility allows. It hides which option the user chose, not that they hold a Ballot: Turnout and the Invitees without a Ballot still count them. A user's account sets whether Ballots are Anonymous by default; each Ballot can say otherwise. A changed or recast Ballot stays as Anonymous as it was unless it says otherwise, and recasting the same option can change it while the Poll is Open. A Retraction removes the Ballot, so a Ballot cast after it starts again from the account default. To keep Anonymous Ballots anonymous, the voter list of a Poll holding 1 or 2 of them, not counting the viewer's own, is hidden altogether; with 3 or more it is shown without them, which still reveals their choice if they all chose the same option. The gate cannot tell when several of those Ballots belong to accounts one person controls.
+_Avoid_: Anonymous poll, hidden vote
 
 **Support**:
 The fraction of a Poll's Participants whose Ballot chose a given option. Only visible once the Poll has Ended.

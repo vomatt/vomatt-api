@@ -95,6 +95,7 @@ public class AuthController {
                     - 400 `auth.identifier.required`: `email` is missing or blank
                     - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
                     - 400 `auth.email.send_failed`: the email provider rejected the message
+                    - 401 `auth.otp.too_many_attempts`: the identifier is locked for 15 minutes after 5 wrong codes
                     - 403 `auth.admin.forbidden`: `checkRole` is "true" and the account is not an admin""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> sendOtp(@Valid @RequestBody SendOtpRequest req) {
         authService.sendOtp(req.email(), null, null, Boolean.parseBoolean(req.checkRole()));
@@ -122,12 +123,12 @@ public class AuthController {
                     **Behavior**: consumes the OTP and returns an access token and refresh token. Creates the user if the email is new (signup), \
                     otherwise signs the existing user in. If `checkRole` is "true", the account must already exist and be an admin, and this is checked before the OTP is consumed
                     **Side effects**: the OTP is consumed on success; a new user (with a random bot avatar) is created and a welcome email sent on signup; `lastLoginAt` is updated. \
-                    After 5 wrong codes the OTP is deleted and a new one must be requested
+                    The 5th wrong code deletes the OTP and locks the identifier for 15 minutes; while locked, sending or verifying an OTP is refused
                     **Errors**:
                     - 400 `auth.identifier.required`: `email` is missing or blank
                     - 401 `auth.otp.invalid_or_expired`: no OTP exists for this email (never sent, expired, or already used)
                     - 401 `auth.invalid_otp`: the code is wrong
-                    - 401 `auth.otp.too_many_attempts`: 5th wrong code; the OTP is discarded
+                    - 401 `auth.otp.too_many_attempts`: 5th wrong code, or the identifier is locked (even a correct code is refused for 15 minutes)
                     - 403 `auth.admin.forbidden`: `checkRole` is "true" and the account is not an existing admin
                     - 403 `auth.account_banned`: the user is suspended (`active=false`)""")
     public ResponseEntity<ApiResponse<AuthResponse>> verifyOtp(@Valid @RequestBody VerifyOtpRequest req) {
@@ -171,7 +172,8 @@ public class AuthController {
                     - 400 `auth.phone.invalid`: the number is neither a Taiwan mobile number (`09` + 8 digits) nor `+` country code and number (8-15 digits)
                     - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
                     - 400 `auth.phone.not_registered`: `type` is "login" and the number is not registered
-                    - 400 `auth.sms.send_failed`: the SMS provider rejected the message""")
+                    - 400 `auth.sms.send_failed`: the SMS provider rejected the message
+                    - 401 `auth.otp.too_many_attempts`: the identifier is locked for 15 minutes after 5 wrong codes""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> phoneSendOtp(@Valid @RequestBody PhoneSendOtpRequest req) {
         authService.sendOtp(null, req.phone(), req.type(), false);
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
@@ -196,12 +198,12 @@ public class AuthController {
                     **Auth**: public
                     **Precondition**: an OTP was sent to this number via `POST /api/auth/phone/send-otp` and has not expired
                     **Behavior**: normalizes the number to E.164 like send-otp, so an OTP sent to `0912345678` verifies as `+886912345678`. Consumes the OTP and returns an access token and refresh token. Creates the user if the number is new, otherwise signs the existing user in
-                    **Side effects**: the OTP is consumed on success; a new user (with a random bot avatar) is created if needed; `lastLoginAt` is updated. After 5 wrong codes the OTP is deleted and a new one must be requested
+                    **Side effects**: the OTP is consumed on success; a new user (with a random bot avatar) is created if needed; `lastLoginAt` is updated. The 5th wrong code deletes the OTP and locks the identifier for 15 minutes; while locked, sending or verifying an OTP is refused
                     **Errors**:
                     - 400 `auth.phone.invalid`: the number is not in a supported format (see send-otp)
                     - 401 `auth.otp.invalid_or_expired`: no OTP exists for this number (never sent, expired, or already used)
                     - 401 `auth.invalid_otp`: the code is wrong
-                    - 401 `auth.otp.too_many_attempts`: 5th wrong code; the OTP is discarded
+                    - 401 `auth.otp.too_many_attempts`: 5th wrong code, or the identifier is locked (even a correct code is refused for 15 minutes)
                     - 403 `auth.account_banned`: the user is suspended (`active=false`)""")
     public ResponseEntity<ApiResponse<AuthResponse>> phoneVerifyOtp(@Valid @RequestBody PhoneVerifyOtpRequest req) {
         AuthResponse response = authService.verifyOtp(null, req.phone(), req.code(), false);
@@ -294,6 +296,7 @@ public class AuthController {
                     `fullName` is used only when a new user is created. An existing account with the same email is reused only when Apple reports the email as verified
                     **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated
                     **Errors**:
+                    - 400 `auth.apple.not_configured`: Apple login is not configured on the server
                     - 401 `auth.apple.invalid_token`: the token is malformed or has no key ID
                     - 401 `auth.apple.key_not_found`: no Apple public key matches the token
                     - 401 `auth.apple.invalid_signature`: the signature does not verify

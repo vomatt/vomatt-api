@@ -86,6 +86,27 @@ class UserServiceTest {
     }
 
     @Test
+    @DisplayName("should store anonymousBallotByDefault when given and leave it alone when null")
+    void shouldSaveAnonymousBallotDefaultWhenGiven() {
+        UUID id = UUID.randomUUID();
+        User user = User.builder().id(id).username("alice").build();
+        when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        UserProfileProjection profile = org.mockito.Mockito.mock(UserProfileProjection.class);
+        when(profile.getActive()).thenReturn(true);
+        when(profile.getId()).thenReturn(id);
+        when(userRepository.findProfileByUsername("alice")).thenReturn(Optional.of(profile));
+        UpdateProfileRequest request = new UpdateProfileRequest();
+
+        userService.updateMyProfile(id.toString(), request);
+        verify(preferenceRepository, never()).save(any());
+
+        request.setAnonymousBallotByDefault(true);
+        userService.updateMyProfile(id.toString(), request);
+        verify(preferenceRepository).save(org.mockito.ArgumentMatchers.argThat(pref ->
+                UserPreference.ANONYMOUS_BALLOT_KEY.equals(pref.getKey()) && "true".equals(pref.getValue()) && pref.getUser() == user));
+    }
+
+    @Test
     @DisplayName("should reject username already used by another account")
     void shouldThrowConflictWhenUsernameTaken() {
         UUID id = UUID.randomUUID();

@@ -24,22 +24,21 @@ public interface UserVoteRepository extends JpaRepository<UserVote, UUID> {
     Optional<UserVote> findByUserIdAndVoteIdAndOptionId(UUID userId, UUID voteId, UUID optionId);
 
     /** The user's Selection in each of a page of Polls. */
-    @Query("SELECT uv.vote.id AS voteId, uv.option.id AS optionId FROM UserVote uv "
+    @Query("SELECT uv.vote.id AS voteId, uv.option.id AS optionId, uv.anonymous AS anonymous FROM UserVote uv "
             + "WHERE uv.user.id = :userId AND uv.vote.id IN :voteIds")
     List<BallotSelection> findSelections(@Param("userId") UUID userId, @Param("voteIds") Collection<UUID> voteIds);
 
-    /** Keyset page of a Poll's Ballots, oldest first; pass null cursor values for the first page. */
+    /** Keyset page of a Poll's named Ballots (Anonymous Ballots left out), oldest first; pass null cursor values for the first page. */
     @Query("""
             SELECT uv FROM UserVote uv JOIN FETCH uv.user JOIN FETCH uv.option
-            WHERE uv.vote.id = :voteId
+            WHERE uv.vote.id = :voteId AND uv.anonymous = false
               AND (CAST(:afterTime AS OffsetDateTime) IS NULL OR uv.createdAt > :afterTime
                    OR (uv.createdAt = :afterTime AND uv.id > :afterId))
             ORDER BY uv.createdAt, uv.id""")
     List<UserVote> findVoterPage(@Param("voteId") UUID voteId, @Param("afterTime") OffsetDateTime afterTime,
                                  @Param("afterId") UUID afterId, Limit limit);
 
-    /** Serialises Ballot changes of one user in one Poll until the transaction ends. */
-    @Query(value = "SELECT 1 FROM pg_advisory_xact_lock(hashtext(:userId), hashtext(:voteId))", nativeQuery = true)
-    Integer lockBallot(@Param("userId") String userId, @Param("voteId") String voteId);
+    /** Anonymous Ballots in a Poll; the voter list's k-anonymity gate. */
+    long countByVoteIdAndAnonymousTrueAndUserIdNot(UUID voteId, UUID userId);
 
 }

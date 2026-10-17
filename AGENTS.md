@@ -2,7 +2,7 @@
 
 This file provides guidance to AI coding agents working with code in this repository.
 
-Vomatt polling community backend: Java 25 (virtual threads), Spring Boot 4.0.5 (Security 7, Jackson 3 `tools.jackson.*`, Hibernate 7), PostgreSQL (schema `vomatt`), Redis (Jedis). Respond in Traditional Chinese; write code comments in English.
+Vomatt polling community backend: Java 25 (virtual threads), Spring Boot 4.0.5 (Security 7, Jackson 3 `tools.jackson.*`, Hibernate 7), PostgreSQL (schema `vomatt`), Redis (Lettuce). Respond in Traditional Chinese; write code comments in English.
 
 ## Commands
 

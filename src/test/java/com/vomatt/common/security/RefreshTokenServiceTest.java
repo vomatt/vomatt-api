@@ -142,7 +142,7 @@ class RefreshTokenServiceTest {
         inOrder.verify(redisService).execInTransaction(writesCaptor.capture());
         List<RedisService.RedisWrite> writes = writesCaptor.getValue();
         assertThat(writes).containsExactly(
-                RedisService.RedisWrite.set(CONSUMED_NS, oldToken, userId, Duration.ofSeconds(60)),
+                RedisService.RedisWrite.set(CONSUMED_NS, oldToken, userId, Duration.ofDays(30)),
                 RedisService.RedisWrite.set(NAMESPACE, result.newRefreshToken(), result.data(), Duration.ofDays(30)),
                 RedisService.RedisWrite.hput(USER_IDX_NS, userId, result.newRefreshToken(), "1"),
                 RedisService.RedisWrite.expire(USER_IDX_NS, userId, Duration.ofDays(30)),

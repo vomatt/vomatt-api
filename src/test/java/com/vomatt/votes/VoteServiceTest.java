@@ -33,6 +33,13 @@ import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.slf4j.LoggerFactory;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -65,6 +72,8 @@ class VoteServiceTest {
     @Mock com.vomatt.common.email.EmailService emailService;
     @Mock com.vomatt.common.redis.RedisService redisService;
     @Mock GroupService groupService;
+    @Mock com.vomatt.repository.UserPreferenceRepository preferenceRepository;
+    @Mock TransactionTemplate transactionTemplate;
     @Spy VoteMapper voteMapper = new VoteMapper();
 
     @InjectMocks
@@ -92,6 +101,9 @@ class VoteServiceTest {
         lenient().when(voteConfig.getBallotRateLimit()).thenReturn(new VoteConfigurationProperties.BallotRateLimit());
         ReflectionTestUtils.setField(voteService, "invitationDailyLimit", 200);
         lenient().when(groupService.expand(any(), any())).thenReturn(new GroupService.Members(List.of(), List.of()));
+        // Runs the callback in place, as a real template does on the calling thread
+        lenient().when(transactionTemplate.execute(any()))
+                .thenAnswer(inv -> inv.<TransactionCallback<?>>getArgument(0).doInTransaction(null));
 
         option = new VoteOption();
         option.setVote(vote);
@@ -415,6 +427,47 @@ class VoteServiceTest {
 
             verify(userVoteRepository, never()).save(any());
         }
+
+        @Test
+        @DisplayName("should throw 409 COMMON_CONFLICT when the Poll-row lock times out")
+        void shouldThrowConflictWhenPollLockTimesOut() {
+            when(voteRepository.findByIdForUpdate(voteId)).thenThrow(new PessimisticLockingFailureException("lock timeout"));
+
+            VoteRequest request = new VoteRequest();
+            request.setOptionIds(List.of(UUID.randomUUID().toString()));
+
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1"))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.CONFLICT, MessageKey.COMMON_CONFLICT));
+        }
+
+        @Test
+        @DisplayName("should log the option only when the Ballot is not Anonymous")
+        void shouldOmitOptionFromLogWhenBallotIsAnonymous() {
+            vote.setStartTime(OffsetDateTime.now().minusHours(1));
+            vote.setEndTime(OffsetDateTime.now().plusDays(1));
+            UUID optionId = UUID.randomUUID();
+            setId(option, optionId);
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(voteOptionRepository.findById(optionId)).thenReturn(Optional.of(option));
+            when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+            stubConvertToVoteResponse(vote);
+            Logger serviceLogger = (Logger) LoggerFactory.getLogger(VoteService.class);
+            ListAppender<ILoggingEvent> logs = new ListAppender<>();
+            logs.start();
+            serviceLogger.addAppender(logs);
+            try {
+                VoteRequest request = new VoteRequest();
+                request.setOptionIds(List.of(optionId.toString()));
+                request.setAnonymous(true);
+                voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1");
+
+                assertThat(logs.list).extracting(ILoggingEvent::getFormattedMessage)
+                        .anySatisfy(m -> assertThat(m).contains("anonymous ballot"))
+                        .noneSatisfy(m -> assertThat(m).contains(optionId.toString()));
+            } finally {
+                serviceLogger.detachAppender(logs);
+            }
+        }
     }
 
     @Nested
@@ -636,6 +689,36 @@ class VoteServiceTest {
 
             assertThat(voteService.getVoters(voteId.toString(), UUID.randomUUID().toString(), null, null).nextCursor())
                     .isNull();
+        }
+
+        @Test
+        @DisplayName("should show voters when the Poll holds no Anonymous Ballot")
+        void shouldShowVotersWhenNoAnonymousBallot() {
+            endedWith(com.vomatt.entity.VoterVisibility.OWNER);
+            when(userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn(0L);
+            when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of());
+
+            assertThat(voteService.getVoters(voteId.toString(), userId.toString(), null, null).items()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("should hide voters when the Poll holds fewer than K Anonymous Ballots")
+        void shouldHideVotersWhenAnonymousBallotsBelowK() {
+            endedWith(com.vomatt.entity.VoterVisibility.OWNER);
+            when(userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn(1L);
+
+            assertHidden(userId.toString());
+            verify(userVoteRepository, never()).findVoterPage(any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("should show voters when the Poll holds K Anonymous Ballots")
+        void shouldShowVotersWhenAnonymousBallotsReachK() {
+            endedWith(com.vomatt.entity.VoterVisibility.OWNER);
+            when(userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn((long) VoteService.ANONYMOUS_BALLOT_K);
+            when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of());
+
+            assertThat(voteService.getVoters(voteId.toString(), userId.toString(), null, null).items()).isEmpty();
         }
 
         @Test

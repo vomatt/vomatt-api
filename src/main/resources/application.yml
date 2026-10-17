@@ -46,12 +46,14 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
-      timeout: 5000ms
-      jedis:
+      # Fail fast: Redis guards correctness paths (OTP, refresh tokens, rate limits), so a hung call must not stall requests
+      timeout: 1000ms
+      lettuce:
         pool:
           max-active: 10
           max-idle: 5
           min-idle: 1
+        shutdown-timeout: 100ms
 
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}

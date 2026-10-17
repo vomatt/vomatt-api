@@ -10,7 +10,6 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotNull;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -23,7 +22,6 @@ import lombok.ToString;
 @Getter
 @Setter
 @NoArgsConstructor
-@AllArgsConstructor
 @ToString(exclude = {"user", "vote", "option"})
 public class UserVote extends AuditableEntity {
 
@@ -44,4 +42,15 @@ public class UserVote extends AuditableEntity {
 
     @Column(name = "ip_address")
     private String ipAddress;
+
+    /** Anonymous Ballot: left out of the voter list whatever the Poll's Voter Visibility. */
+    @Column(name = "anonymous")
+    private boolean anonymous;
+
+    public UserVote(User user, Vote vote, VoteOption option, String ipAddress) {
+        this.user = user;
+        this.vote = vote;
+        this.option = option;
+        this.ipAddress = ipAddress;
+    }
 }

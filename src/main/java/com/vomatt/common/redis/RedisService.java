@@ -10,7 +10,7 @@ import java.util.Map;
  *
  * Error handling strategy:
  * - Reads + idempotent writes (get, hGet, hGetAll, hasKey, set, hSet, expire): swallow-and-log; cache-aside can fail soft.
- * - Correctness-critical (setIfAbsent, incrementAndExpire, delete, hDelete): throw RedisOperationException.
+ * - Correctness-critical (setIfAbsent, incrementAndExpire, delete, hDelete, hasKeyOrThrow): throw RedisOperationException.
  */
 public interface RedisService {
 
@@ -81,6 +81,9 @@ public interface RedisService {
     boolean expire(String cacheName, String key, Duration ttl);
 
     boolean hasKey(String cacheName, String key);
+
+    /** Same as {@link #hasKey}, but throws RedisOperationException on Redis failure, for checks that must fail closed (OTP lockout). */
+    boolean hasKeyOrThrow(String cacheName, String key);
 
     // ── Transaction (MULTI/EXEC) ─────────────────────────────────────
 

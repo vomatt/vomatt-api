@@ -197,6 +197,26 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should give up with common.conflict when the Poll-row lock stays held past the lock timeout")
+    void shouldRejectCastWithConflictWhenLockHeldPastTimeout() throws Exception {
+        OffsetDateTime now = OffsetDateTime.now();
+        createPoll(now.minusMinutes(1), now.plusDays(1));
+        CountDownLatch closed = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Future<VoteResponse> closer = holding(this::close, closed, release);
+        assertThat(closed.await(10, TimeUnit.SECONDS)).isTrue();
+
+        Future<VoteResponse> caster = pool.submit(this::cast);
+        try {
+            assertApiError(caster, MessageKey.COMMON_CONFLICT);
+        } finally {
+            release.countDown();
+        }
+        closer.get(10, TimeUnit.SECONDS);
+        assertThat(ballots()).isZero();
+    }
+
+    @Test
     @DisplayName("should make Delete wait for an in-flight Cast and then delete the Poll")
     void shouldDeleteAfterCastWhenCastHoldsPollFirst() throws Exception {
         OffsetDateTime now = OffsetDateTime.now();

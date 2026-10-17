@@ -4,12 +4,14 @@ import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
 import org.aspectj.lang.annotation.AfterThrowing;
 import org.aspectj.lang.annotation.Aspect;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.security.UserPrincipal;
 import com.vomatt.common.util.ClientIpResolver;
 
@@ -53,6 +55,11 @@ public class AuditAspect {
     
     @AfterThrowing(pointcut = "@annotation(auditable)", throwing = "exception")
     public void logFailedAction(JoinPoint joinPoint, Auditable auditable, Throwable exception) {
+        // Rate-limited calls are not audited, so a spammer cannot turn rejections into DB writes;
+        // other 4xx (401, 403, ...) stay audited as signs of probing
+        if (exception instanceof ApiException api && api.getStatus() == HttpStatus.TOO_MANY_REQUESTS) {
+            return;
+        }
         try {
             String[] userInfo = getCurrentUserInfo();
             HttpServletRequest request = getCurrentRequest();

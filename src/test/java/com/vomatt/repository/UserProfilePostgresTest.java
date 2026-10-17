@@ -10,8 +10,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import com.vomatt.entity.Audience;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserPreference;
+import com.vomatt.entity.UserVote;
+import com.vomatt.entity.Vote;
 
 @DisplayName("User profile projection (Postgres)")
 class UserProfilePostgresTest extends PostgresRepositoryTest {
@@ -37,6 +40,26 @@ class UserProfilePostgresTest extends PostgresRepositoryTest {
         assertThat(profile.getTotalPolls()).isEqualTo(2L);
         assertThat(profile.getActive()).isTrue();
         assertThat(profile.getAvatarUrl()).isEqualTo("bot:dog");
+    }
+
+    @Test
+    @DisplayName("should count only Ballots on Public Polls in totalVotes")
+    void shouldExcludeNonPublicBallotsWhenCountingTotalVotes() {
+        OffsetDateTime now = OffsetDateTime.now();
+        User owner = persistUser("po-" + System.nanoTime());
+        User voter = persistUser("pv-" + System.nanoTime());
+        Vote publicPoll = persistPoll(owner, now.minusHours(1), now.plusDays(1), "A", "B");
+        Vote unlisted = persistPoll(owner, now.minusHours(1), now.plusDays(1), "A", "B");
+        unlisted.setAudience(Audience.UNLISTED);
+        Vote inviteOnly = persistPoll(owner, now.minusHours(1), now.plusDays(1), "A", "B");
+        inviteOnly.setAudience(Audience.INVITE_ONLY);
+        for (Vote poll : List.of(publicPoll, unlisted, inviteOnly)) {
+            em.persist(new UserVote(voter, poll, poll.getOptions().iterator().next(), null));
+        }
+        em.flush();
+        em.clear();
+
+        assertThat(userRepository.findProfileByUsername(voter.getUsername()).orElseThrow().getTotalVotes()).isEqualTo(1L);
     }
 
     @Test

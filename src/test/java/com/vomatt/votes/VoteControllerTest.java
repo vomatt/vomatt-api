@@ -10,6 +10,7 @@ import com.vomatt.common.security.UserPrincipal;
 import com.vomatt.votes.dto.CreateVoteRequest;
 import com.vomatt.votes.dto.InviteeResponse;
 import com.vomatt.votes.dto.InviteesRequest;
+import com.vomatt.votes.dto.VoteCreatorResponse;
 import com.vomatt.votes.dto.VoteResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -193,6 +194,41 @@ class VoteControllerTest {
             mockMvc.perform(get("/api/votes/{voteId}", "not-a-uuid"))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.errorCode").value(MessageKey.COMMON_BAD_REQUEST.code()));
+        }
+    }
+
+    @Nested
+    @DisplayName("GET /api/votes/{voteId}/creator")
+    class GetInviteOnlyCreatorTests {
+
+        private final String voteId = UUID.randomUUID().toString();
+
+        @Test
+        @DisplayName("should be public for a UUID Poll ID only")
+        void shouldBePublicWhenPathIsUuid() {
+            assertThat(isPublic("GET", "/api/votes/" + voteId + "/creator")).isTrue();
+            assertThat(isPublic("GET", "/api/votes/my/creator")).isFalse();
+        }
+
+        @Test
+        @DisplayName("should return 200 with the owner when the Poll is Invite-only")
+        void shouldReturn200WhenPollIsInviteOnly() throws Exception {
+            when(voteService.getInviteOnlyCreator(voteId)).thenReturn(new VoteCreatorResponse("alice", "bot:boba"));
+
+            mockMvc.perform(get("/api/votes/{voteId}/creator", voteId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.username").value("alice"))
+                    .andExpect(jsonPath("$.data.avatarUrl").value("bot:boba"));
+        }
+
+        @Test
+        @DisplayName("should return 404 when the Poll is not Invite-only")
+        void shouldReturn404WhenPollIsNotInviteOnly() throws Exception {
+            when(voteService.getInviteOnlyCreator(voteId)).thenThrow(ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
+
+            mockMvc.perform(get("/api/votes/{voteId}/creator", voteId))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.errorCode").value(MessageKey.VOTE_NOT_FOUND.code()));
         }
     }
 
@@ -525,6 +561,25 @@ class VoteControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
+    }
+
+    // ─── POST /api/votes/{voteId}/vote ────────────────────────────────────────
+
+    @Test
+    @DisplayName("should record the peer address, not a spoofed X-Forwarded-For, when the peer is not a trusted proxy")
+    void shouldIgnoreSpoofedForwardedForWhenPeerIsUntrusted() throws Exception {
+        authenticate();
+        String voteId = UUID.randomUUID().toString();
+        when(voteService.vote(eq(voteId), any(), eq(USER_ID), any())).thenReturn(new VoteResponse());
+
+        mockMvc.perform(post("/api/votes/{voteId}/vote", voteId)
+                        .with(req -> { req.setRemoteAddr("203.0.113.7"); return req; })
+                        .header("X-Forwarded-For", "1.2.3.4")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"optionIds\": [\"" + UUID.randomUUID() + "\"]}"))
+                .andExpect(status().isOk());
+
+        verify(voteService).vote(eq(voteId), any(), eq(USER_ID), eq("203.0.113.7"));
     }
 
     // ─── DELETE /api/votes/{voteId}/vote ──────────────────────────────────────

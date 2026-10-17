@@ -5,6 +5,7 @@ import com.vomatt.common.security.JwtAuthFilter;
 import com.vomatt.common.security.JwtAuthenticationEntryPoint;
 import com.vomatt.common.security.JwtAccessDeniedHandler;
 import com.vomatt.common.security.SecurityEndpoints;
+import com.vomatt.common.util.ClientIpResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -42,6 +43,12 @@ public class SecurityConfig {
     // In production, set to the actual frontend domains (comma-separated); wildcards are not allowed with allowCredentials
     @Value("${app.security.cors-allowed-origins}")
     private List<String> corsAllowedOrigins;
+
+    // Peers allowed to set X-Forwarded-For (comma-separated CIDRs); blank keeps ClientIpResolver's default list
+    @Value("${app.security.trusted-proxies:}")
+    void setTrustedProxies(String cidrs) {
+        ClientIpResolver.setTrustedProxies(cidrs);
+    }
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {

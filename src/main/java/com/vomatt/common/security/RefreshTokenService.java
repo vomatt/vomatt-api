@@ -27,9 +27,11 @@ public class RefreshTokenService {
     private final UserRepository userRepository;
 
     private static final String NAMESPACE = "refresh";
-    // Consumed (rotated) tokens, used for reuse detection; kept as long as the refresh token itself could have lived,
-    // so a stolen token replayed at any point in its lifetime still trips the detector
+    // Consumed (rotated) token -> its session id, used for reuse detection; kept as long as the refresh token
+    // itself could have lived, so a stolen token replayed at any point in its lifetime still trips the detector
     private static final String CONSUMED_NS = "refresh:consumed";
+    // Sessions ended by reuse detection: their live token can no longer rotate
+    private static final String REVOKED_SESSION_NS = "refresh:revoked-session";
     // User -> active token index, used to revoke all
     private static final String USER_IDX_NS = "refresh:idx";
     // In-flight race grace cache: the same oldToken returns the same pair within the TTL, so a cross-instance race does not trigger a reuse alert
@@ -42,7 +44,8 @@ public class RefreshTokenService {
     @Value("${jwt.refresh-grace-seconds:10}")
     private long refreshGraceSeconds;
 
-    public record RefreshTokenData(String userId, String email, List<String> roles) {}
+    /** {@code sessionId} names one sign-in and is kept across rotations; null on tokens issued before it existed. */
+    public record RefreshTokenData(String userId, String email, List<String> roles, String sessionId) {}
 
     public record RotateResult(String newAccessToken, String newRefreshToken, RefreshTokenData data) {}
 
@@ -51,7 +54,7 @@ public class RefreshTokenService {
      */
     public String generate(String userId, String email, List<String> roles) {
         String token = UUID.randomUUID().toString();
-        RefreshTokenData data = new RefreshTokenData(userId, email, roles);
+        RefreshTokenData data = new RefreshTokenData(userId, email, roles, UUID.randomUUID().toString());
         Duration ttl = Duration.ofDays(refreshExpirationDays);
         // Renew the index TTL on every issue (as rotate does), so the index never expires before a token it lists
         redisService.execInTransaction(List.of(
@@ -69,7 +72,9 @@ public class RefreshTokenService {
      * Flow (order must not change):
      *   1. Grace cache hit -> return the already issued pair (no reuse alert, no namespace writes)
      *   2. Atomic GETDEL to take the old token data
-     *   3. data == null -> check CONSUMED_NS for reuse; on a hit, throw RefreshTokenReuseException and revoke all of the user's sessions
+     *   3. data == null -> check CONSUMED_NS for reuse; on a hit, mark the token's session revoked and throw
+     *      RefreshTokenReuseException (the user's other sessions are untouched)
+     *   3b. data's session is revoked -> return null (the session's live token cannot rotate any more)
      *   4. data != null -> generate a new pair, write grace -> consumed -> namespace -> userIdx
      *
      * Returns null if the token is invalid or expired (not reused).
@@ -86,12 +91,28 @@ public class RefreshTokenService {
         RefreshTokenData data = redisService.getAndDelete(NAMESPACE, oldToken, RefreshTokenData.class);
         if (data == null) {
             // Step 3: reuse detection
-            String consumedUserId = redisService.get(CONSUMED_NS, oldToken, String.class);
-            if (consumedUserId != null) {
-                log.warn("SECURITY_BREACH: Refresh token reuse detected, revoking all sessions for userId={}", consumedUserId);
-                revokeAllForUser(consumedUserId);
-                throw new RefreshTokenReuseException("Refresh token reuse detected for userId=" + consumedUserId);
+            String sessionId = redisService.get(CONSUMED_NS, oldToken, String.class);
+            if (sessionId != null) {
+                // Markers written before 2026-10-17 hold the userId instead of a session id: fall back to revoking all.
+                // Remove after 2026-11-16, when the last of them has expired with its refresh lifetime.
+                if (redisService.hasKey(USER_IDX_NS, sessionId)) {
+                    log.warn("SECURITY_BREACH: Refresh token reuse detected (legacy marker), revoking all sessions for userId={}", sessionId);
+                    revokeAllForUser(sessionId);
+                } else {
+                    // A flag rather than deleting the live token: it holds even if the session rotates at this very moment
+                    redisService.setOrThrow(REVOKED_SESSION_NS, sessionId, "1", Duration.ofDays(refreshExpirationDays));
+                    log.warn("SECURITY_BREACH: Refresh token reuse detected, revoked its session refreshToken_sha={}",
+                            sha256Prefix(oldToken, SHA_PREFIX_LEN));
+                }
+                throw new RefreshTokenReuseException("Refresh token reuse detected");
             }
+            return null;
+        }
+
+        // Step 3b: the session was ended by reuse detection; fails closed so a Redis error cannot revive it
+        if (data.sessionId() != null && redisService.hasKeyOrThrow(REVOKED_SESSION_NS, data.sessionId())) {
+            redisService.hDelete(USER_IDX_NS, data.userId(), oldToken);
+            log.warn("Refresh rotation rejected (session revoked after reuse) userId={}", data.userId());
             return null;
         }
 
@@ -109,7 +130,9 @@ public class RefreshTokenService {
 
         // Use the latest roles from the DB so later rotations keep using current permissions
         List<String> freshRoles = List.of(user.getRoles());
-        RefreshTokenData freshData = new RefreshTokenData(data.userId(), data.email(), freshRoles);
+        // Tokens issued before session ids existed start a session on their next rotation
+        String sessionId = data.sessionId() != null ? data.sessionId() : UUID.randomUUID().toString();
+        RefreshTokenData freshData = new RefreshTokenData(data.userId(), data.email(), freshRoles, sessionId);
 
         String newRefreshToken = UUID.randomUUID().toString();
         String newAccessToken = jwtUtil.generateToken(freshData.userId(), freshData.email(), freshRoles);
@@ -126,7 +149,7 @@ public class RefreshTokenService {
         // are correctness-critical and used to take one round-trip each. They are now applied atomically in a single MULTI/EXEC: one round-trip,
         // fully atomic (no intermediate "partially written then threw" state), and a connection failure throws for the whole batch (fail-fast, no weaker than the old per-write throwing).
         redisService.execInTransaction(List.of(
-                RedisService.RedisWrite.set(CONSUMED_NS, oldToken, freshData.userId(), refreshTtl),
+                RedisService.RedisWrite.set(CONSUMED_NS, oldToken, sessionId, refreshTtl),
                 RedisService.RedisWrite.set(NAMESPACE, newRefreshToken, freshData, refreshTtl),
                 RedisService.RedisWrite.hput(USER_IDX_NS, freshData.userId(), newRefreshToken, "1"),
                 RedisService.RedisWrite.expire(USER_IDX_NS, freshData.userId(), refreshTtl),

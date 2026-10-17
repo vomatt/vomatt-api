@@ -17,6 +17,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `common.unauthorized` | 401 | 未授權的請求 | Unauthorized request | See [auth-flow.md](auth-flow.md) | JwtAuthenticationEntryPoint |
 | `common.forbidden` | 403 | 沒有權限執行此操作 | You do not have permission to perform this action | Show a permission-denied notice | GlobalExceptionHandler, JwtAccessDeniedHandler, JwtAuthFilter |
 | `common.rate_limited` | 429 | 請求過於頻繁，請稍後再試 | Too many requests, please try again later | Retry after the `Retry-After` seconds | RateLimitFilter, VoteService |
+| `common.conflict` | 409 | 資源衝突，請重試 | Resource conflict, please try again | Show message (resource state conflict) | GlobalExceptionHandler |
 | `common.validation_failed` | 400 | 輸入資料驗證失敗 | Validation failed | Show message so the user can fix the input | AdminUserService, GlobalExceptionHandler |
 | `common.missing_param` | 400 | 缺少必要參數：{0} | Missing required parameter: {0} | Show message so the user can fix the input | GlobalExceptionHandler, UserController |
 | `common.type_mismatch` | 400 | 參數格式錯誤：{0} | Invalid parameter format: {0} | Show message so the user can fix the input | GlobalExceptionHandler |
@@ -27,7 +28,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.token.expired` | 401 | 登入已過期，請重新登入 | Session expired, please log in again | See [auth-flow.md](auth-flow.md) | JwtAuthFilter |
 | `auth.invalid_otp` | 401 | 驗證碼錯誤 | Invalid verification code | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.otp.invalid_or_expired` | 401 | 驗證碼錯誤或已過期 | Verification code is invalid or has expired | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.otp.too_many_attempts` | 401 | 驗證次數過多，請重新發送驗證碼 | Too many attempts, please request a new verification code | See [auth-flow.md](auth-flow.md) | AuthService |
+| `auth.otp.too_many_attempts` | 401 | 驗證次數過多，請稍後再試 | Too many attempts, please try again later | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.otp.resend_cooldown` | 400 | 請等 {0} 秒後再重新發送 | Please wait {0} seconds before resending | Show message so the user can fix the input | AuthService |
 | `auth.admin.forbidden` | 403 | 此帳號無管理員權限 | This account does not have admin privileges | Show a permission-denied notice | AuthService |
 | `auth.identifier.required` | 400 | 請提供 email 或手機號碼 | Please provide an email or phone number | Show message so the user can fix the input | AuthService |
@@ -36,7 +37,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.phone.invalid` | 400 | 手機號碼格式錯誤，請輸入 09 開頭的台灣手機號碼或含國碼的號碼（例如 +886912345678） | Invalid phone number. Use a Taiwan mobile number starting with 09 or a number with a country code (e.g. +886912345678) | Show message so the user can fix the input | User |
 | `auth.sms.send_failed` | 400 | 簡訊發送失敗：{0} | SMS delivery failed: {0} | Show message so the user can fix the input | AuthService |
 | `auth.refresh_token.invalid` | 401 | Refresh token 無效或已過期 | Refresh token is invalid or has expired | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.suspicious_login` | 401 | 安全性警告：偵測到異常登入，已強制登出所有裝置，請重新登入 | Security alert: suspicious login detected. All sessions have been terminated, please log in again | See [auth-flow.md](auth-flow.md) | AuthService |
+| `auth.suspicious_login` | 401 | 安全性警告：此登入階段被重複更新，已將其登出，請重新登入 | Security alert: this session was refreshed twice, so it has been signed out. Please log in again | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.google.not_configured` | 400 | Google OAuth 尚未設定 | Google OAuth is not configured | Show message so the user can fix the input | AuthService |
 | `auth.google.no_email` | 401 | Google 驗證失敗：無法取得用戶信箱 | Google verification failed: unable to retrieve email | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.google.invalid_audience` | 401 | Google 驗證失敗：audience 不正確 | Google verification failed: incorrect audience | See [auth-flow.md](auth-flow.md) | AuthService |
@@ -105,7 +106,6 @@ Keys not found on any error path (mostly success-response `message` values, e.g.
 | key | zh-TW message | en message | Used in |
 |-----|-----------|---------|----------|
 | `common.not_found` | 找不到指定資源 | The requested resource was not found | GlobalExceptionHandler |
-| `common.conflict` | 資源衝突，請重試 | Resource conflict, please try again | GlobalExceptionHandler |
 | `common.admin_only` | 此功能限管理員使用 | This feature is for administrators only |  |
 | `common.file_required` | 請選擇要上傳的檔案 | Please select a file to upload |  |
 | `common.file_read_failed` | 檔案讀取失敗 | Failed to read file |  |

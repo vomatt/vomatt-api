@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.vomatt.votes.dto.CreateVoteRequest;
 import com.vomatt.votes.dto.InviteeResponse;
 import com.vomatt.votes.dto.InviteesRequest;
+import com.vomatt.votes.dto.VoteCreatorResponse;
 import com.vomatt.votes.dto.VoteRequest;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.CursorResponse;
@@ -27,6 +28,7 @@ import com.vomatt.votes.dto.VoteResponse;
 import com.vomatt.votes.dto.VoteResultResponse;
 import com.vomatt.votes.dto.VoterResponse;
 import com.vomatt.common.security.UserPrincipal;
+import com.vomatt.common.util.ClientIpResolver;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import com.vomatt.votes.VoteService;
 import com.vomatt.common.audit.Auditable;
@@ -253,6 +255,28 @@ public class VoteController {
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
+    @GetMapping("/{voteId}/creator")
+    @PublicApiResponse
+    @Operation(summary = "Get the owner of an Invite-only Poll", description = """
+            **Auth**: public (login is ignored)
+            **Precondition**: the Poll is INVITE_ONLY and not Deleted
+            **Behavior**: returns only the owner's `username` and `avatarUrl`, so an Invitation link can show "<username> invited you" \
+            to a caller who cannot open the Poll yet (signed out, or signed in but not yet an Invitee). Reveals nothing else about the Poll.
+            **Side effects**: none
+            **Errors**:
+            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is PUBLIC / UNLISTED
+            """)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Owner of the Invite-only Poll",
+            content = @Content(examples = @ExampleObject(name = "Invite-only Poll owner", value = """
+                    { "success": true, "data": { "username": "alice", "avatarUrl": "bot:boba" },
+                      "message": null, "errorCode": null, "error": null }
+                    """)))
+    public ResponseEntity<ApiResponse<VoteCreatorResponse>> getInviteOnlyCreator(
+            @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
+            @PathVariable String voteId) {
+        return ResponseEntity.ok(ApiResponse.ok(voteService.getInviteOnlyCreator(voteId)));
+    }
+
     @GetMapping
     @PublicApiResponse
     @Operation(summary = "List Polls (Feed / Explore / Search / Top)", description = """
@@ -362,7 +386,7 @@ public class VoteController {
             @Valid @RequestBody VoteRequest request,
             @AuthenticationPrincipal UserPrincipal principal,
             HttpServletRequest httpRequest) {
-        String ipAddress = getClientIpAddress(httpRequest);
+        String ipAddress = ClientIpResolver.resolve(httpRequest);
         VoteResponse response = voteService.vote(voteId, request, principal.userId(), ipAddress);
         log.info("User {} voted on vote {}", principal.userId(), voteId);
         return ResponseEntity.ok(ApiResponse.ok(response));
@@ -790,17 +814,5 @@ public class VoteController {
             @RequestParam String email,
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(voteService.removeEmailInvitee(voteId, email, principal.userId())));
-    }
-
-    private String getClientIpAddress(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
-            return xForwardedFor.split(",")[0].trim();
-        }
-        String xRealIp = request.getHeader("X-Real-IP");
-        if (xRealIp != null && !xRealIp.isEmpty()) {
-            return xRealIp;
-        }
-        return request.getRemoteAddr();
     }
 }

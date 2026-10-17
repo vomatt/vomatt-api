@@ -42,7 +42,7 @@ public class EmailServiceImpl implements EmailService {
     @Value("${app.email.site-url:https://vomatt.com}")
     private String siteUrl;
 
-    @Value("${app.email.poll-path:/votes/{voteId}}")
+    @Value("${app.email.poll-path:/poll/{voteId}}")
     private String pollPath;
 
     @Value("${otp.ttl-seconds:180}")

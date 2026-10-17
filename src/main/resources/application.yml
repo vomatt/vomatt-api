@@ -113,12 +113,14 @@ app:
     # Frontend origin used for links in emails (logo, footer)
     site-url: ${EMAIL_SITE_URL:https://vomatt.com}
     # Frontend path of a Poll, appended to site-url in invitation emails; {voteId} is replaced
-    poll-path: ${EMAIL_POLL_PATH:/votes/{voteId}}
+    poll-path: ${EMAIL_POLL_PATH:/poll/{voteId}}
     # Invitation emails one owner may trigger per UTC day; over it the Invitees are still added, only the email is skipped
     invitation-daily-limit: ${EMAIL_INVITATION_DAILY_LIMIT:200}
   security:
     # Comma-separated; * is not allowed when allowCredentials=true
     cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+    # Comma-separated CIDRs allowed to set X-Forwarded-For; blank uses ClientIpResolver.DEFAULT_TRUSTED_PROXIES
+    trusted-proxies: ${TRUSTED_PROXIES:}
   vote:
     max-options-per-vote: ${VOTE_MAX_OPTIONS:10}
     min-options-per-vote: ${VOTE_MIN_OPTIONS:2}

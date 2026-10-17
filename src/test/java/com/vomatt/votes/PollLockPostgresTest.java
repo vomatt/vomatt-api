@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -198,7 +199,7 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("should give up with common.conflict when the Poll-row lock stays held past the lock timeout")
+    @DisplayName("should give up with a lock failure (409 via GlobalExceptionHandler) when the Poll-row lock stays held past the lock timeout")
     void shouldRejectCastWithConflictWhenLockHeldPastTimeout() throws Exception {
         OffsetDateTime now = OffsetDateTime.now();
         createPoll(now.minusMinutes(1), now.plusDays(1));

@@ -2,22 +2,57 @@ package com.vomatt.common.util;
 
 import jakarta.servlet.http.HttpServletRequest;
 
-import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * Shared utility for resolving the real client IP.
  *
  * <p>This service runs behind a platform proxy (Zeabur); {@code X-Forwarded-For} is appended by a trusted edge.
- * XFF is honored only when the direct peer ({@code remoteAddr}) is a trusted proxy (loopback or private range),
- * otherwise a client reaching the app directly could spoof its IP. When trusted, takes the <strong>rightmost</strong>
- * non-empty IP: the client can forge the left segments freely, but cannot control the rightmost one appended by the edge.
- * Falls back to {@code remoteAddr} when there is no XFF or the peer is untrusted.</p>
+ * XFF is honored only when the direct peer ({@code remoteAddr}) is inside a trusted proxy CIDR
+ * ({@code app.security.trusted-proxies}), otherwise a client reaching the app directly could spoof its IP. When trusted,
+ * takes the <strong>rightmost</strong> non-empty IP: the client can forge the left segments freely, but cannot control
+ * the rightmost one appended by the edge. Falls back to {@code remoteAddr} when there is no XFF or the peer is untrusted.</p>
  */
 public final class ClientIpResolver {
 
+    /**
+     * Loopback, RFC1918, IPv6 ULA (Docker and Zeabur internal networks) and CGNAT 100.64.0.0/10,
+     * which platform ingresses may connect from.
+     */
+    public static final String DEFAULT_TRUSTED_PROXIES =
+            "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fd00::/8,100.64.0.0/10";
+
+    private record Cidr(byte[] network, int prefix) {
+        boolean contains(byte[] addr) {
+            if (addr.length != network.length) {
+                return false;
+            }
+            int fullBytes = prefix / 8;
+            for (int i = 0; i < fullBytes; i++) {
+                if (addr[i] != network[i]) {
+                    return false;
+                }
+            }
+            int restBits = prefix % 8;
+            if (restBits == 0) {
+                return true;
+            }
+            int mask = 0xff << (8 - restBits);
+            return (addr[fullBytes] & mask) == (network[fullBytes] & mask);
+        }
+    }
+
+    private static volatile List<Cidr> trustedProxies = parse(DEFAULT_TRUSTED_PROXIES);
+
     private ClientIpResolver() {}
+
+    /** Replaces the trusted proxy list (comma-separated CIDRs); blank keeps the default. Throws on a malformed CIDR. */
+    public static void setTrustedProxies(String cidrs) {
+        trustedProxies = parse(cidrs == null || cidrs.isBlank() ? DEFAULT_TRUSTED_PROXIES : cidrs);
+    }
 
     public static String resolve(HttpServletRequest request) {
         String remoteAddr = request.getRemoteAddr();
@@ -34,28 +69,41 @@ public final class ClientIpResolver {
         return remoteAddr;
     }
 
-    /**
-     * Trusted proxies: loopback (127/8, ::1), RFC1918 (10/8, 172.16/12, 192.168/16) and IPv6 ULA (fd00::/8),
-     * which covers Docker and Zeabur internal networks.
-     */
     static boolean isTrustedProxy(String remoteAddr) {
-        if (remoteAddr == null || remoteAddr.isBlank()) {
-            return false;
-        }
-        // Only literal IPs are expected here; reject anything that looks like a hostname so no DNS lookup happens
-        if (!remoteAddr.contains(":") && !remoteAddr.matches("[0-9.]+")) {
-            return false;
+        byte[] addr = literalAddress(remoteAddr);
+        return addr != null && trustedProxies.stream().anyMatch(c -> c.contains(addr));
+    }
+
+    private static List<Cidr> parse(String cidrs) {
+        return Arrays.stream(cidrs.split(",")).map(String::trim).filter(c -> !c.isEmpty()).map(c -> {
+            String[] parts = c.split("/", 2);
+            byte[] network = literalAddress(parts[0]);
+            if (network == null) {
+                throw new IllegalArgumentException("Invalid trusted proxy CIDR: " + c);
+            }
+            int max = network.length * 8;
+            int prefix;
+            try {
+                prefix = parts.length == 2 ? Integer.parseInt(parts[1]) : max;
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("Invalid trusted proxy CIDR: " + c, e);
+            }
+            if (prefix < 0 || prefix > max) {
+                throw new IllegalArgumentException("Invalid trusted proxy CIDR: " + c);
+            }
+            return new Cidr(network, prefix);
+        }).toList();
+    }
+
+    /** Parses an IP literal; returns null for anything else, so a hostname never triggers a DNS lookup. */
+    private static byte[] literalAddress(String ip) {
+        if (ip == null || ip.isBlank() || (!ip.contains(":") && !ip.matches("[0-9.]+"))) {
+            return null;
         }
         try {
-            InetAddress addr = InetAddress.getByName(remoteAddr);
-            // isSiteLocalAddress is IPv4-only here: for IPv6 it means the deprecated fec0::/10, which is not trusted
-            if (addr.isLoopbackAddress() || (addr instanceof Inet4Address && addr.isSiteLocalAddress())) {
-                return true;
-            }
-            byte[] b = addr.getAddress();
-            return b.length == 16 && (b[0] & 0xff) == 0xfd;
+            return InetAddress.getByName(ip).getAddress();
         } catch (UnknownHostException e) {
-            return false;
+            return null;
         }
     }
 }

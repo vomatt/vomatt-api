@@ -27,6 +27,7 @@ import com.vomatt.votes.dto.VoteResponse;
 import com.vomatt.votes.dto.VoteResultResponse;
 import com.vomatt.votes.dto.VoterResponse;
 import com.vomatt.common.security.UserPrincipal;
+import com.vomatt.common.util.ClientIpResolver;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import com.vomatt.votes.VoteService;
 import com.vomatt.common.audit.Auditable;
@@ -362,7 +363,7 @@ public class VoteController {
             @Valid @RequestBody VoteRequest request,
             @AuthenticationPrincipal UserPrincipal principal,
             HttpServletRequest httpRequest) {
-        String ipAddress = getClientIpAddress(httpRequest);
+        String ipAddress = ClientIpResolver.resolve(httpRequest);
         VoteResponse response = voteService.vote(voteId, request, principal.userId(), ipAddress);
         log.info("User {} voted on vote {}", principal.userId(), voteId);
         return ResponseEntity.ok(ApiResponse.ok(response));
@@ -790,17 +791,5 @@ public class VoteController {
             @RequestParam String email,
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(voteService.removeEmailInvitee(voteId, email, principal.userId())));
-    }
-
-    private String getClientIpAddress(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
-            return xForwardedFor.split(",")[0].trim();
-        }
-        String xRealIp = request.getHeader("X-Real-IP");
-        if (xRealIp != null && !xRealIp.isEmpty()) {
-            return xRealIp;
-        }
-        return request.getRemoteAddr();
     }
 }

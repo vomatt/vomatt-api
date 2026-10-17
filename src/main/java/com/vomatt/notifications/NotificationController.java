@@ -47,6 +47,7 @@ public class NotificationController {
             in it or is an Invitee of it (with or without a Ballot), and it was not Cancelled while Scheduled. A Participant who made \
             a Retraction and is not an Invitee no longer counts.
             A notification counts until the caller marks it read; reading the Invitation does not read the later Ended Notification. \
+            The count stops at 100: `100` means 100 or more (show it as "99+"). \
             Poll this endpoint (for example on app focus and about once a minute) to drive a badge; there is no push.
             **Side effects**: none
             **Errors**: none specific to this endpoint""")

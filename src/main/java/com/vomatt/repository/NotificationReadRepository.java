@@ -42,8 +42,15 @@ public class NotificationReadRepository {
 
     private final EntityManager em;
 
+    // The badge shows "99+" past this, so counting stops once this many unread rows are found.
+    // ponytail: bounds the many-unread case only; a user who reads most notifications still scans their whole
+    // history (MY_POLL_IDS is materialized). Add a time window or a stored counter if that shows up in slow queries
+    public static final int UNREAD_COUNT_CAP = 100;
+
+    /** Unread notifications, at most {@link #UNREAD_COUNT_CAP}. */
     public long countUnread(UUID userId, OffsetDateTime now) {
-        Number count = (Number) em.createNativeQuery("SELECT COUNT(*) " + NOTIFIED_POLLS + UNREAD)
+        Number count = (Number) em.createNativeQuery("SELECT COUNT(*) FROM (SELECT 1 " + NOTIFIED_POLLS + UNREAD
+                        + " LIMIT " + UNREAD_COUNT_CAP + ") capped")
                 .setParameter("userId", userId)
                 .setParameter("now", now)
                 .getSingleResult();

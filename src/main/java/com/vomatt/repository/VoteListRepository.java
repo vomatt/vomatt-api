@@ -7,6 +7,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Repository;
 
 import com.vomatt.common.response.Cursor;
+import com.vomatt.common.util.LikePattern;
 import com.vomatt.entity.Vote;
 import com.vomatt.votes.VoteListOrder;
 
@@ -81,7 +82,7 @@ public class VoteListRepository {
         }
         if (query != null) {
             nativeQuery.setParameter("q", query)
-                    .setParameter("pattern", "%" + escapeLike(query.toLowerCase()) + "%");
+                    .setParameter("pattern", LikePattern.containsPattern(query));
         }
         if (after != null && order == VoteListOrder.TOP) {
             nativeQuery.setParameter("afterCount", after.countKey())
@@ -141,10 +142,5 @@ public class VoteListRepository {
             nativeQuery.setParameter("afterKey", after.timeKey()).setParameter("afterId", after.id());
         }
         return nativeQuery.getResultList();
-    }
-
-    // % and _ in the user's query are literal characters, not wildcards
-    static String escapeLike(String text) {
-        return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 }

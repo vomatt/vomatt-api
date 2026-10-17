@@ -19,6 +19,7 @@ import com.vomatt.entity.Invitee;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
+import com.vomatt.repository.NotificationReadRepository;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.votes.VoteService;
 import com.vomatt.votes.VoteServiceSlice;
@@ -88,6 +89,16 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
         assertThat(unread(owner)).isEqualTo(1);
         assertThat(unread(participant)).isEqualTo(1);
         assertThat(unread(bystander)).isZero();
+    }
+
+    @Test
+    @DisplayName("should stop counting at the cap when more notifications are unread")
+    void shouldCapUnreadCountWhenMoreThanCapUnread() {
+        for (int i = 0; i <= NotificationReadRepository.UNREAD_COUNT_CAP; i++) {
+            ballot(participant, poll(now.minusDays(2), now.minusHours(1)));
+        }
+
+        assertThat(unread(participant)).isEqualTo(NotificationReadRepository.UNREAD_COUNT_CAP);
     }
 
     @Test

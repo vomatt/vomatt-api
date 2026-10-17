@@ -8,6 +8,14 @@
 CREATE SCHEMA IF NOT EXISTS vomatt;
 
 -- =============================================================================
+-- SEARCH: character bigrams for Poll title + description and usernames (ADR 0001)
+-- The function body is deliberately a single SQL expression with no semicolons, so this file can be split on semicolons and executed
+-- =============================================================================
+CREATE OR REPLACE FUNCTION vomatt.text_bigrams(input TEXT) RETURNS TEXT[]
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    AS $$ SELECT COALESCE(array_agg(DISTINCT substr(lower(input), i, 2)), '{}') FROM generate_series(1, char_length(input) - 1) AS i $$;
+
+-- =============================================================================
 -- USERS: OTP / OAuth login, no passwords stored; roles stored as text[] (user / moderator / admin)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS vomatt.users (
@@ -27,6 +35,7 @@ CREATE TABLE IF NOT EXISTS vomatt.users (
     location         VARCHAR(100),
     display_name     VARCHAR(100),
     bio              TEXT,
+    username_bigrams TEXT[]       GENERATED ALWAYS AS (vomatt.text_bigrams(username)) STORED,
     created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
     CONSTRAINT chk_users_identifier CHECK (email IS NOT NULL OR phone_number IS NOT NULL)
@@ -41,14 +50,6 @@ CREATE TABLE IF NOT EXISTS vomatt.user_preferences (
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (user_id, preference_key)
 );
-
--- =============================================================================
--- SEARCH: character bigrams of Poll title + description (ADR 0001)
--- The function body is deliberately a single SQL expression with no semicolons, so this file can be split on semicolons and executed
--- =============================================================================
-CREATE OR REPLACE FUNCTION vomatt.text_bigrams(input TEXT) RETURNS TEXT[]
-    LANGUAGE sql IMMUTABLE PARALLEL SAFE
-    AS $$ SELECT COALESCE(array_agg(DISTINCT substr(lower(input), i, 2)), '{}') FROM generate_series(1, char_length(input) - 1) AS i $$;
 
 -- =============================================================================
 -- VOTES
@@ -299,6 +300,10 @@ ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS voter_visibility VARCHAR(20) N
 ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS search_bigrams TEXT[] GENERATED ALWAYS AS
     (vomatt.text_bigrams(COALESCE(title, '') || ' ' || COALESCE(description, ''))) STORED;
 CREATE INDEX IF NOT EXISTS idx_votes_search_bigrams ON vomatt.votes USING GIN (search_bigrams);
+-- Same bigram search for usernames (user search); not mapped to the entity
+ALTER TABLE vomatt.users ADD COLUMN IF NOT EXISTS username_bigrams TEXT[] GENERATED ALWAYS AS
+    (vomatt.text_bigrams(username)) STORED;
+CREATE INDEX IF NOT EXISTS idx_users_username_bigrams ON vomatt.users USING GIN (username_bigrams);
 -- Delete (soft): a Deleted Poll is hidden from everyone, owner included; the row and its Ballots are kept
 ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 -- Audience: PUBLIC (default) / UNLISTED / INVITE_ONLY; replaces the never-used is_public, which old databases keep unmapped

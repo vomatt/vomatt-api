@@ -11,12 +11,21 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import com.vomatt.common.util.LikePattern;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, UUID> {
+    /** SQL behind {@link #searchByUsernameRaw}; shared so tests can EXPLAIN the real query. */
+    String USERNAME_SEARCH = """
+            SELECT u.* FROM vomatt.users u
+            WHERE u.username_bigrams @> vomatt.text_bigrams(:username)
+              AND lower(u.username) LIKE :pattern ESCAPE '\\' AND u.active = true
+              AND (CAST(:afterUsername AS text) IS NULL OR u.username > CAST(:afterUsername AS text))
+            ORDER BY u.username""";
+
     Optional<User> findByUsername(String username);
 
     Optional<User> findByEmail(String email);
@@ -38,20 +47,14 @@ public interface UserRepository extends JpaRepository<User, UUID> {
      * The bigram GIN index finds candidates and LIKE confirms the contiguous match, as in Poll search (ADR 0001).
      */
     default List<User> searchByUsernameAfter(String username, String afterUsername, Limit limit) {
-        return searchByUsernameAfter(username, "%" + VoteListRepository.escapeLike(username.toLowerCase()) + "%",
-                afterUsername, limit);
+        return searchByUsernameRaw(username, LikePattern.containsPattern(username), afterUsername, limit);
     }
 
     // ponytail: a 1-character term has no bigrams, so @> '{}' matches every row and LIKE alone filters (full scan);
     // require 2+ characters if that ever shows up in slow queries
-    @Query(value = """
-            SELECT u.* FROM vomatt.users u
-            WHERE u.username_bigrams @> vomatt.text_bigrams(:username)
-              AND lower(u.username) LIKE :pattern ESCAPE '\\' AND u.active = true
-              AND (CAST(:afterUsername AS text) IS NULL OR u.username > CAST(:afterUsername AS text))
-            ORDER BY u.username""", nativeQuery = true)
-    List<User> searchByUsernameAfter(@Param("username") String username, @Param("pattern") String pattern,
-                                     @Param("afterUsername") String afterUsername, Limit limit);
+    @Query(value = USERNAME_SEARCH, nativeQuery = true)
+    List<User> searchByUsernameRaw(@Param("username") String username, @Param("pattern") String pattern,
+                                   @Param("afterUsername") String afterUsername, Limit limit);
 
     /**
      * Find users by exact username match

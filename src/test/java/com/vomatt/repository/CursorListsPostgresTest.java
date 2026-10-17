@@ -15,6 +15,7 @@ import org.springframework.data.domain.Limit;
 
 import com.vomatt.common.response.Cursor;
 import com.vomatt.common.response.CursorResponse;
+import com.vomatt.common.util.LikePattern;
 import com.vomatt.entity.Tag;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
@@ -96,9 +97,15 @@ class CursorListsPostgresTest extends PostgresRepositoryTest {
         assertThat(userRepository.searchByUsernameAfter("_", null, Limit.of(1000)))
                 .extracting(User::getUsername).contains(marker + "_Ab").doesNotContain(marker + "xab");
 
+        // The real first-page search SQL must be able to use the bigram index. On a few test rows the planner prefers
+        // walking users_username_key in ORDER BY order, so plain index scans are off too: this proves the GIN index
+        // serves the predicate, not that the planner prefers it
         em.createNativeQuery("SET LOCAL enable_seqscan = off").executeUpdate();
-        String plan = em.createNativeQuery(
-                "EXPLAIN SELECT 1 FROM vomatt.users u WHERE u.username_bigrams @> vomatt.text_bigrams('" + marker + "')")
+        em.createNativeQuery("SET LOCAL enable_indexscan = off").executeUpdate();
+        String plan = em.createNativeQuery("EXPLAIN " + UserRepository.USERNAME_SEARCH + " LIMIT 21")
+                .setParameter("username", marker)
+                .setParameter("pattern", LikePattern.containsPattern(marker))
+                .setParameter("afterUsername", null)
                 .getResultList().toString();
         assertThat(plan).contains("idx_users_username_bigrams");
     }

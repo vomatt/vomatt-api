@@ -1,5 +1,6 @@
 package com.vomatt.common.audit;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -29,6 +30,7 @@ class AuditServiceTest {
     @DisplayName("should drop the audit write when both writers stay busy")
     void shouldDropAuditWriteWhenWritersBusy() throws Exception {
         ReflectionTestUtils.setField(auditService, "auditEnabled", true);
+        auditService.permitWaitMillis = 10;
         CountDownLatch started = new CountDownLatch(2);
         CountDownLatch release = new CountDownLatch(1);
         when(auditLogRepository.save(any())).thenAnswer(inv -> {
@@ -38,7 +40,7 @@ class AuditServiceTest {
         });
         Thread first = Thread.ofVirtual().start(() -> auditService.logAction("u", "u", "A", "R", "1"));
         Thread second = Thread.ofVirtual().start(() -> auditService.logAction("u", "u", "A", "R", "2"));
-        started.await(5, TimeUnit.SECONDS);
+        assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
 
         auditService.logAction("u", "u", "A", "R", "3");  // waits out the permit timeout, then drops
 

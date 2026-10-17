@@ -8,6 +8,14 @@
 CREATE SCHEMA IF NOT EXISTS vomatt;
 
 -- =============================================================================
+-- SEARCH: character bigrams for Poll title + description and usernames (ADR 0001)
+-- The function body is deliberately a single SQL expression with no semicolons, so this file can be split on semicolons and executed
+-- =============================================================================
+CREATE OR REPLACE FUNCTION vomatt.text_bigrams(input TEXT) RETURNS TEXT[]
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    AS $$ SELECT COALESCE(array_agg(DISTINCT substr(lower(input), i, 2)), '{}') FROM generate_series(1, char_length(input) - 1) AS i $$;
+
+-- =============================================================================
 -- USERS: OTP / OAuth login, no passwords stored; roles stored as text[] (user / moderator / admin)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS vomatt.users (
@@ -27,6 +35,7 @@ CREATE TABLE IF NOT EXISTS vomatt.users (
     location         VARCHAR(100),
     display_name     VARCHAR(100),
     bio              TEXT,
+    username_bigrams TEXT[]       GENERATED ALWAYS AS (vomatt.text_bigrams(username)) STORED,
     created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
     CONSTRAINT chk_users_identifier CHECK (email IS NOT NULL OR phone_number IS NOT NULL)
@@ -41,14 +50,6 @@ CREATE TABLE IF NOT EXISTS vomatt.user_preferences (
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (user_id, preference_key)
 );
-
--- =============================================================================
--- SEARCH: character bigrams of Poll title + description (ADR 0001)
--- The function body is deliberately a single SQL expression with no semicolons, so this file can be split on semicolons and executed
--- =============================================================================
-CREATE OR REPLACE FUNCTION vomatt.text_bigrams(input TEXT) RETURNS TEXT[]
-    LANGUAGE sql IMMUTABLE PARALLEL SAFE
-    AS $$ SELECT COALESCE(array_agg(DISTINCT substr(lower(input), i, 2)), '{}') FROM generate_series(1, char_length(input) - 1) AS i $$;
 
 -- =============================================================================
 -- VOTES

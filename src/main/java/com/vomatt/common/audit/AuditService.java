@@ -22,6 +22,7 @@ public class AuditService {
     private boolean auditEnabled;
     // @Async runs on unbounded virtual threads; cap concurrent audit writes so they cannot drain the request connection pool
     private final Semaphore writePermits = new Semaphore(2);
+    long permitWaitMillis = 2000;
     
     @Async
     public void logAction(String userId, String username, String action, String resourceType, String resourceId) {
@@ -83,8 +84,15 @@ public class AuditService {
     }
     
     // Runs on the async thread, so waiting here never blocks a request; under sustained overload the entry is dropped
-    private void save(AuditLog auditLog) throws InterruptedException {
-        if (!writePermits.tryAcquire(2, TimeUnit.SECONDS)) {
+    private void save(AuditLog auditLog) {
+        boolean acquired;
+        try {
+            acquired = writePermits.tryAcquire(permitWaitMillis, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return;
+        }
+        if (!acquired) {
             log.warn("Audit log dropped (writers busy): action={}, resource={}/{}",
                      auditLog.getAction(), auditLog.getResourceType(), auditLog.getResourceId());
             return;

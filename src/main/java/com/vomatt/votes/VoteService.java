@@ -625,6 +625,7 @@ public class VoteService {
      * check and record cannot race), and at most {@code invitationDailyLimit} per owner per UTC day. Over the cap the
      * Invitee is kept and only the email is skipped. A fixed number of round trips per call however many addresses;
      * sent after commit, so a rolled-back request sends nothing, by one background task mailing them one at a time.
+     * Recorded as sent before mailing (at most once): a failed send or a crash mid-loop is not retried.
      */
     private void sendInvitations(Vote vote, List<String> emails) {
         if (emails.isEmpty()) {

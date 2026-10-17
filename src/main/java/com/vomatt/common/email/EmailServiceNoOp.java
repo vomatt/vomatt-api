@@ -34,7 +34,7 @@ public class EmailServiceNoOp implements EmailService {
     }
 
     @Override
-    public void sendInvitationEmails(List<String> to, String inviterName, String pollTitle, UUID pollId, Locale locale) {
-        logger.debug("Email service disabled: Skipping {} invitation email(s)", to.size());
+    public void sendInvitationEmails(List<String> recipients, String inviterName, String pollTitle, UUID pollId, Locale locale) {
+        logger.debug("Email service disabled: Skipping {} invitation email(s)", recipients.size());
     }
 }

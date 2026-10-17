@@ -420,6 +420,28 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should persist the auto-end together with Turnout and option counts when the last Invitee's Ballot lands")
+    void shouldPersistEndAndCountsWhenLastInviteeBallotEndsPoll() {
+        User last = track(tx.execute(s -> persistUser("last-" + UUID.randomUUID())));
+        createInviteOnlyPoll(voter, last);
+        UUID optionB = counts().keySet().stream().filter(id -> !id.equals(optionA)).findFirst().orElseThrow();
+        castAs(voter);
+        VoteRequest request = new VoteRequest();
+        request.setOptionIds(List.of(optionB.toString()));
+
+        VoteResponse ended = voteService.vote(poll.getId().toString(), request, last.getId().toString(), "127.0.0.1");
+
+        // The end is set on the locked Poll before the count updates clear the persistence context
+        assertThat(unsealed(ended)).isTrue();
+        assertThat(storedEndTime().toInstant()).isEqualTo(ended.getEndTime().toInstant().truncatedTo(ChronoUnit.MICROS));
+        assertThat(storedEndTime()).as("ended now, not at the Deadline a day away").isBefore(OffsetDateTime.now().plusMinutes(1));
+        assertThat(ballots()).isEqualTo(2);
+        assertThat(counts()).containsEntry(optionA, 1L).containsEntry(optionB, 1L);
+        assertThat(((Number) em.createNativeQuery("SELECT turnout FROM vomatt.votes WHERE id = :id")
+                .setParameter("id", poll.getId()).getSingleResult()).longValue()).isEqualTo(2);
+    }
+
+    @Test
     @DisplayName("should end the Poll exactly once and let no Ballot land after it when the last Ballots race")
     void shouldEndOnceWhenLastInviteeBallotsRace() throws Exception {
         User second = track(tx.execute(s -> persistUser("second-" + UUID.randomUUID())));

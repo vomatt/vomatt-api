@@ -242,12 +242,12 @@ public class RedisServiceImpl implements RedisService {
     // ── Counter ───────────────────────────────────────────────────────
 
     @Override
-    @SuppressWarnings("unchecked")
     public long incrementAndExpire(String cacheName, String key, Duration ttl) {
         return incrementAndExpire(cacheName, key, 1, ttl);
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public long incrementAndExpire(String cacheName, String key, long delta, Duration ttl) {
         String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {

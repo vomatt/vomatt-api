@@ -86,8 +86,8 @@ public class EmailServiceImpl implements EmailService {
     // Serial on purpose: one task per batch keeps a large invite from opening many SMTP sessions at once
     @Async
     @Override
-    public void sendInvitationEmails(List<String> to, String inviterName, String pollTitle, UUID pollId, Locale locale) {
-        to.forEach(address -> sendInvitationEmail(address, inviterName, pollTitle, pollId, locale));
+    public void sendInvitationEmails(List<String> recipients, String inviterName, String pollTitle, UUID pollId, Locale locale) {
+        recipients.forEach(address -> sendInvitationEmail(address, inviterName, pollTitle, pollId, locale));
     }
 
     private void sendInvitationEmail(String to, String inviterName, String pollTitle, UUID pollId, Locale locale) {

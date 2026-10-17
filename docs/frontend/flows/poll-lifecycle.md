@@ -87,6 +87,13 @@ Before the Poll is Ended, every level returns 403 `vote.results.sealed`. Partici
 - After a Retraction the user is no longer a Participant, Turnout goes down by 1, and they will not receive the Ended Notification.
 - After a Poll is Ended, Ballots are frozen: voting, changing, and retracting all return 400 `vote.ended`.
 
+### Opening an Invitation link
+
+`GET /api/votes/{voteId}` returns 404 `vote.not_found` for an Invite-only Poll to anyone but its owner and Invitees, including a signed-out user and a signed-in user not yet tied to their Invitee row. To show "<username> invited you" on that page, call `GET /api/votes/{voteId}/creator` (public, login ignored): it returns only the owner's `username` and `avatarUrl`. It returns 404 `vote.not_found` for an unknown, Deleted, Public or Unlisted Poll, so a 404 there means the link is not a live Invitation. On 200:
+
+- Signed out: prompt sign-in.
+- Signed in but `GET /api/votes/{voteId}` still returns 404: this account is not the invited one. An Invitation sent to an email address is tied to the account that verifies that address, so suggest signing in with, or verifying, the invited email.
+
 ## Common errors
 
 | errorCode | HTTP | When it happens | Suggested UI |

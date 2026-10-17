@@ -37,8 +37,8 @@ public final class SecurityEndpoints {
      */
     private static final String VOTE = "/api/votes/{voteId:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}";
 
-    /** GET-only public endpoints (Poll details, results after the Poll ends, comments and replies are readable without login) */
-    public static final String[] PUBLIC_GET = { "/api/tags", "/api/tags/**", "/api/votes", VOTE,
+    /** GET-only public endpoints (Poll details, an Invite-only Poll's owner, results after the Poll ends, comments and replies are readable without login) */
+    public static final String[] PUBLIC_GET = { "/api/tags", "/api/tags/**", "/api/votes", VOTE, VOTE + "/creator",
             VOTE + "/results", VOTE + "/comments", VOTE + "/comments/*/replies", "/api/users/{username}",
             "/api/users/{username}/votes" };
 

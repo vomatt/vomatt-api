@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.vomatt.votes.dto.CreateVoteRequest;
 import com.vomatt.votes.dto.InviteeResponse;
 import com.vomatt.votes.dto.InviteesRequest;
+import com.vomatt.votes.dto.VoteCreatorResponse;
 import com.vomatt.votes.dto.VoteRequest;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.CursorResponse;
@@ -252,6 +253,28 @@ public class VoteController {
             @AuthenticationPrincipal UserPrincipal principal) {
         VoteResponse response = voteService.getVote(voteId, principal != null ? principal.userId() : null);
         return ResponseEntity.ok(ApiResponse.ok(response));
+    }
+
+    @GetMapping("/{voteId}/creator")
+    @PublicApiResponse
+    @Operation(summary = "Get the owner of an Invite-only Poll", description = """
+            **Auth**: public (login is ignored)
+            **Precondition**: the Poll is INVITE_ONLY and not Deleted
+            **Behavior**: returns only the owner's `username` and `avatarUrl`, so an Invitation link can show "<username> invited you" \
+            to a caller who cannot open the Poll yet (signed out, or signed in but not yet an Invitee). Reveals nothing else about the Poll.
+            **Side effects**: none
+            **Errors**:
+            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is PUBLIC / UNLISTED
+            """)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Owner of the Invite-only Poll",
+            content = @Content(examples = @ExampleObject(name = "Invite-only Poll owner", value = """
+                    { "success": true, "data": { "username": "alice", "avatarUrl": "bot:boba" },
+                      "message": null, "errorCode": null, "error": null }
+                    """)))
+    public ResponseEntity<ApiResponse<VoteCreatorResponse>> getInviteOnlyCreator(
+            @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
+            @PathVariable String voteId) {
+        return ResponseEntity.ok(ApiResponse.ok(voteService.getInviteOnlyCreator(voteId)));
     }
 
     @GetMapping

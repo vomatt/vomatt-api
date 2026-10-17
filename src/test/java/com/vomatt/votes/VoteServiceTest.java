@@ -21,6 +21,7 @@ import com.vomatt.repository.VoteRepository;
 import com.vomatt.votes.dto.CreateVoteRequest;
 import com.vomatt.votes.dto.InviteesRequest;
 import com.vomatt.votes.dto.VoteRequest;
+import com.vomatt.votes.dto.VoteCreatorResponse;
 import com.vomatt.votes.dto.VoteResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -373,6 +374,48 @@ class VoteServiceTest {
 
             assertThat(result.getId()).isEqualTo(voteId.toString());
             assertThat(result.getTitle()).isEqualTo("Test Vote");
+        }
+    }
+
+    // ─── getInviteOnlyCreator ─────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("getInviteOnlyCreator")
+    class GetInviteOnlyCreatorTests {
+
+        @Test
+        @DisplayName("should return the owner without an access check when the Poll is Invite-only")
+        void shouldReturnOwnerWhenPollIsInviteOnly() {
+            vote.setAudience(Audience.INVITE_ONLY);
+            user.setAvatarUrl("bot:boba");
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+
+            VoteCreatorResponse result = voteService.getInviteOnlyCreator(voteId.toString());
+
+            assertThat(result.username()).isEqualTo("testuser");
+            assertThat(result.avatarUrl()).isEqualTo("bot:boba");
+            verifyNoInteractions(inviteeRepository);
+        }
+
+        @Test
+        @DisplayName("should throw 404 VOTE_NOT_FOUND when the Poll is Public, Unlisted, Deleted or unknown")
+        void shouldThrowWhenPollIsNotReachableInviteOnly() {
+            String id = voteId.toString();
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            for (Audience audience : List.of(Audience.PUBLIC, Audience.UNLISTED)) {
+                vote.setAudience(audience);
+                assertThatThrownBy(() -> voteService.getInviteOnlyCreator(id))
+                        .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
+            }
+
+            vote.setAudience(Audience.INVITE_ONLY);
+            vote.setDeletedAt(OffsetDateTime.now());
+            assertThatThrownBy(() -> voteService.getInviteOnlyCreator(id))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
+
+            when(voteRepository.findById(voteId)).thenReturn(Optional.empty());
+            assertThatThrownBy(() -> voteService.getInviteOnlyCreator(id))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
         }
     }
 

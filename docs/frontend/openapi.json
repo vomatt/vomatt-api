@@ -826,6 +826,38 @@
         },
         "type" : "object"
       },
+      "ApiResponseVoteCreatorResponse" : {
+        "description" : "Envelope of every API response, success or error",
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/VoteCreatorResponse"
+          },
+          "error" : {
+            "description" : "Legacy duplicate of `message` on errors; null on success. Use `message` instead",
+            "example" : "Poll not found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "errorCode" : {
+            "description" : "Stable machine-readable error code (lowercase, dot-separated); branch on this, not on `message`. Null on success",
+            "example" : "vote.not_found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "message" : {
+            "description" : "Localized text following Accept-Language. On success it is usually null, except operations that attach a toast-ready text; on error it is the error message",
+            "example" : "Operation completed",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "success" : {
+            "description" : "true on success, false on error",
+            "example" : true,
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseVoteResponse" : {
         "description" : "Envelope of every API response, success or error",
         "properties" : {
@@ -2384,6 +2416,24 @@
           }
         },
         "required" : [ "code" ],
+        "type" : "object"
+      },
+      "VoteCreatorResponse" : {
+        "description" : "Owner of an Invite-only Poll, shown on an Invitation link before the caller can reach the Poll",
+        "nullable" : true,
+        "properties" : {
+          "avatarUrl" : {
+            "description" : "Avatar as `bot:<kind>` (the bot cast). Older accounts may hold an image URL; null if never set",
+            "example" : "bot:boba",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "username" : {
+            "description" : "Username of the Poll owner",
+            "example" : "alice",
+            "type" : "string"
+          }
+        },
         "type" : "object"
       },
       "VoteOptionRequest" : {
@@ -9155,6 +9205,84 @@
         },
         "summary" : "List Replies of a Comment",
         "tags" : [ "Vote Comment" ]
+      }
+    },
+    "/api/votes/{voteId}/creator" : {
+      "get" : {
+        "description" : "**Auth**: public (login is ignored)\n**Precondition**: the Poll is INVITE_ONLY and not Deleted\n**Behavior**: returns only the owner's `username` and `avatarUrl`, so an Invitation link can show \"<username> invited you\" to a caller who cannot open the Poll yet (signed out, or signed in but not yet an Invitee). Reveals nothing else about the Poll.\n**Side effects**: none\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist, is Deleted, or is PUBLIC / UNLISTED\n",
+        "operationId" : "getInviteOnlyCreator",
+        "parameters" : [ {
+          "description" : "Poll ID",
+          "example" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05",
+          "in" : "path",
+          "name" : "voteId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "Invite-only Poll owner" : {
+                    "description" : "Invite-only Poll owner",
+                    "value" : {
+                      "data" : {
+                        "avatarUrl" : "bot:boba",
+                        "username" : "alice"
+                      },
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseVoteCreatorResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Resource not found (errorCode e.g. `vote.not_found`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Get the owner of an Invite-only Poll",
+        "tags" : [ "Vote" ]
       }
     },
     "/api/votes/{voteId}/deactivate" : {

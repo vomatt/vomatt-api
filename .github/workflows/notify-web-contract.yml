@@ -1,0 +1,24 @@
+# Tells vomatt-web that the API contract changed, so its sync workflow
+# can add the matching web features and open a PR.
+name: Notify vomatt-web of contract change
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/frontend/openapi.json
+  workflow_dispatch:
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send repository_dispatch to vomatt-web
+        env:
+          # Fine-grained PAT with "Contents: read and write" on vomatt/vomatt-web
+          GH_TOKEN: ${{ secrets.WEB_DISPATCH_TOKEN }}
+        run: |
+          gh api repos/vomatt/vomatt-web/dispatches \
+            -f event_type=api-contract-updated \
+            -f "client_payload[sha]=${{ github.sha }}" \
+            -f "client_payload[before]=${{ github.event.before || '' }}"

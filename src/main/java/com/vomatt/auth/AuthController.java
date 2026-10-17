@@ -346,8 +346,8 @@ public class AuthController {
                     **Behavior**: rotates the refresh token: the old one is spent and a new access token and refresh token are returned. \
                     The response `user` is null; keep the user info from login. Roles are re-read from the database, so a role change takes effect on refresh. \
                     A second call with the same old token within the grace window (default 10 s) returns the same new pair instead of failing, so concurrent refreshes are safe
-                    **Side effects**: the old refresh token is spent. If a spent token is presented again after the grace window, the refresh token it rotated into \
-                    (the latest token of that sign-in) is revoked too, so that session must sign in again; the user's other devices stay signed in. \
+                    **Side effects**: the old refresh token is spent. If a spent token is presented again after the grace window, that sign-in is ended: \
+                    its latest refresh token can no longer be refreshed (401 `auth.refresh_token.invalid`), so it must sign in again once its access token expires; the user's other devices stay signed in. \
                     If the user is missing or suspended, all their refresh tokens are revoked too
                     **Errors**:
                     - 401 `auth.refresh_token.invalid`: the token is unknown, expired, revoked, or its user is missing or suspended

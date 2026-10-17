@@ -13,11 +13,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -29,6 +33,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     public static final String AUTH_ERROR_ATTR = JwtAuthFilter.class.getName() + ".authError";
 
     private static final Set<String> READ_METHODS = Set.of("GET", "HEAD", "OPTIONS");
+    private static final RequestMatcher ADMIN_PATHS = new OrRequestMatcher(Arrays.stream(SecurityEndpoints.AUTHENTICATED_ADMIN)
+            .map(PathPatternRequestMatcher.withDefaults()::matcher).map(RequestMatcher.class::cast).toList());
 
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
@@ -56,9 +62,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
         // Admin roles outlive a demotion or suspension in the token, so every authenticated /api/admin/** call (reads
         // included) re-checks the account in one query, whatever the token's role claims say
-        boolean adminCall = principal != null && request.getRequestURI().startsWith("/api/admin/");
+        // Matched on the decoded path like the security rules, so an encoded /api/%61dmin/... cannot skip the check
+        boolean adminCall = principal != null && ADMIN_PATHS.matches(request);
         if (adminCall && !userRepository.isActiveAdmin(UUID.fromString(principal.userId()))) {
-            errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN, MessageKey.COMMON_FORBIDDEN);
+            // Second query only on refusal: suspended gets the same code as other writes, demoted the plain 403
+            UUID userId = UUID.fromString(principal.userId());
+            errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN,
+                    userRepository.existsByIdAndActiveFalse(userId) ? MessageKey.AUTH_ACCOUNT_BANNED : MessageKey.COMMON_FORBIDDEN);
             return;
         }
         // Access tokens outlive a suspension, so writes re-check users.active; reads skip the DB hit.

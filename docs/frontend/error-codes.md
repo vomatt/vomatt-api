@@ -17,7 +17,6 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `common.unauthorized` | 401 | 未授權的請求 | Unauthorized request | See [auth-flow.md](auth-flow.md) | JwtAuthenticationEntryPoint |
 | `common.forbidden` | 403 | 沒有權限執行此操作 | You do not have permission to perform this action | Show a permission-denied notice | GlobalExceptionHandler, JwtAccessDeniedHandler, JwtAuthFilter |
 | `common.rate_limited` | 429 | 請求過於頻繁，請稍後再試 | Too many requests, please try again later | Retry after the `Retry-After` seconds | RateLimitFilter, VoteService |
-| `common.conflict` | 409 | 資源衝突，請重試 | Resource conflict, please try again | Show message (resource state conflict) | GlobalExceptionHandler, UserService, VoteService |
 | `common.validation_failed` | 400 | 輸入資料驗證失敗 | Validation failed | Show message so the user can fix the input | AdminUserService, GlobalExceptionHandler |
 | `common.missing_param` | 400 | 缺少必要參數：{0} | Missing required parameter: {0} | Show message so the user can fix the input | GlobalExceptionHandler, UserController |
 | `common.type_mismatch` | 400 | 參數格式錯誤：{0} | Invalid parameter format: {0} | Show message so the user can fix the input | GlobalExceptionHandler |
@@ -106,6 +105,7 @@ Keys not found on any error path (mostly success-response `message` values, e.g.
 | key | zh-TW message | en message | Used in |
 |-----|-----------|---------|----------|
 | `common.not_found` | 找不到指定資源 | The requested resource was not found | GlobalExceptionHandler |
+| `common.conflict` | 資源衝突，請重試 | Resource conflict, please try again | GlobalExceptionHandler |
 | `common.admin_only` | 此功能限管理員使用 | This feature is for administrators only |  |
 | `common.file_required` | 請選擇要上傳的檔案 | Please select a file to upload |  |
 | `common.file_read_failed` | 檔案讀取失敗 | Failed to read file |  |

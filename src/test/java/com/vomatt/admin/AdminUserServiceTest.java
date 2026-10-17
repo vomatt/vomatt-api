@@ -46,7 +46,7 @@ class AdminUserServiceTest {
     @Mock UserVoteRepository userVoteRepository;
     @Mock VoteCommentRepository voteCommentRepository;
     @Mock RefreshTokenService refreshTokenService;
-    @Mock LockTimeout lockTimeout;
+    LockTimeout lockTimeout = new LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
 
     AdminUserService service;
 

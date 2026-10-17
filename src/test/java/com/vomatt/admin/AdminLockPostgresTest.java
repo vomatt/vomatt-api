@@ -109,15 +109,16 @@ class AdminLockPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    void shouldRestoreDefaultLockTimeoutWhenReset() {
-        String timeout = tx.execute(s -> {
-            lockTimeout.apply();
-            userRepository.lockActiveAdminIds();
-            lockTimeout.reset();
-            return (String) em.createNativeQuery("SHOW lock_timeout").getSingleResult();
+    void shouldBoundOnlyTheWrappedLockWhenWithin() {
+        List<String> timeouts = tx.execute(s -> {
+            String inside = lockTimeout.within(() -> {
+                userRepository.lockActiveAdminIds();
+                return (String) em.createNativeQuery("SHOW lock_timeout").getSingleResult();
+            });
+            return List.of(inside, (String) em.createNativeQuery("SHOW lock_timeout").getSingleResult());
         });
 
-        assertThat(timeout).isEqualTo("0");
+        assertThat(timeouts).containsExactly("3s", "0");
     }
 
     private static void await(CountDownLatch latch) {

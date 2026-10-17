@@ -162,7 +162,7 @@ public class AdminUserController {
                     **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
                     **Precondition**: the account exists, is not the caller, and is not the last active admin
                     **Behavior**: sets `active` to false and returns the account. Idempotent: suspending a suspended account succeeds. The body is optional; its `reason` is audit-only (kept in the audit log entry's `details`, not on the account), and the audit log is written asynchronously on a best-effort basis
-                    **Side effects**: once the suspension commits, every refresh token of the user is revoked, so they cannot refresh or sign in; their unexpired access token still reads but every write gets 403 `auth.account_banned`, and a suspended admin loses back-office access on the next request. Written to the audit log with the reason in `details`
+                    **Side effects**: once the suspension commits, every refresh token of the user is revoked, so they cannot refresh or sign in; their unexpired access token still reads but every write gets 403 `auth.account_banned`, and a suspended admin loses back-office access on the next request (403 `auth.account_banned`). Written to the audit log with the reason in `details`
                     **Errors**:
                     - 400 `common.type_mismatch`: `userId` is not a valid UUID
                     - 400 `common.validation_failed`: `reason` is longer than 500 characters

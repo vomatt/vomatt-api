@@ -77,29 +77,18 @@ class LookupServiceTest {
     class ListForAdminTests {
 
         @Test
-        void shouldIncludeInactiveItemsWithoutCacheWhenRequested() {
+        void shouldPassTypeAndInactiveFlagToOneQueryWithoutCache() {
             Lookup active = buildLookup("CITY", "TPE", true, false);
-            Lookup inactive = buildLookup("CITY", "KHH", false, false);
-            when(lookupRepository.findByLookupTypeOrderBySeqAsc("CITY")).thenReturn(List.of(active, inactive));
-            when(lookupRepository.findByLookupTypeAndIsActiveTrueOrderBySeqAsc("CITY")).thenReturn(List.of(active));
-            when(lookupMapper.toDto(any(Lookup.class))).thenReturn(buildDto("CITY", "TPE"));
+            when(lookupRepository.findForAdmin("CITY", false)).thenReturn(List.of(active));
+            when(lookupMapper.toDto(active)).thenReturn(buildDto("CITY", "TPE"));
 
-            assertThat(lookupService.listForAdmin("CITY", true)).hasSize(2);
             assertThat(lookupService.listForAdmin("CITY", false)).hasSize(1);
             verifyNoInteractions(redisService);
         }
 
         @Test
-        void shouldQueryActiveOnlyWhenInactiveExcludedForEveryType() {
-            when(lookupRepository.findByIsActiveTrueOrderByLookupTypeAscSeqAsc()).thenReturn(List.of());
-
-            assertThat(lookupService.listForAdmin(null, false)).isEmpty();
-            verify(lookupRepository, never()).findAllByOrderByLookupTypeAscSeqAsc();
-        }
-
-        @Test
         void shouldListEveryTypeWhenTypeOmitted() {
-            when(lookupRepository.findAllByOrderByLookupTypeAscSeqAsc()).thenReturn(List.of());
+            when(lookupRepository.findForAdmin(null, true)).thenReturn(List.of());
 
             assertThat(lookupService.listForAdmin(null, true)).isEmpty();
         }

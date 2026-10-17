@@ -3,6 +3,7 @@ package com.vomatt.admin;
 import java.util.List;
 
 import com.vomatt.common.response.ApiResponse;
+import com.vomatt.common.util.TextUtil;
 import com.vomatt.common.response.SimpleResultResponse;
 import com.vomatt.common.annotation.CommonApiResponses;
 import com.vomatt.common.config.OpenAPIConfig;
@@ -78,7 +79,7 @@ public class AdminLookupController {
             @RequestParam(required = false) String type,
             @Parameter(description = "Include deactivated items (default true)", example = "true")
             @RequestParam(defaultValue = "true") boolean includeInactive) {
-        return ResponseEntity.ok(ApiResponse.ok(lookupService.listForAdmin(AdminService.blankToNull(type), includeInactive)));
+        return ResponseEntity.ok(ApiResponse.ok(lookupService.listForAdmin(TextUtil.blankToNull(type), includeInactive)));
     }
 
     @PostMapping

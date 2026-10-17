@@ -1,6 +1,6 @@
 package com.vomatt.admin;
 
-import static com.vomatt.admin.AdminService.blankToNull;
+import static com.vomatt.common.util.TextUtil.blankToNull;
 
 import java.time.OffsetDateTime;
 import java.util.List;

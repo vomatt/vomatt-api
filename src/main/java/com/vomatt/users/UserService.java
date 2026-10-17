@@ -21,7 +21,6 @@ import com.vomatt.repository.LockTimeout;
 import com.vomatt.common.util.AfterCommit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -77,16 +76,8 @@ public class UserService {
         if (!user.isActive() || !user.isAdmin()) {
             return;
         }
-        List<UUID> activeAdmins;
-        try {
-            // Same 3 s lock_timeout as the Poll-row lock: a waiter gives up with 409 instead of holding a pooled connection
-            lockTimeout.apply();
-            activeAdmins = userRepository.lockActiveAdminIds();
-        } catch (PessimisticLockingFailureException e) {
-            throw ApiException.conflict(MessageKey.COMMON_CONFLICT);
-        }
-        // Only this lock is bounded; later statements of the caller (e.g. deleteUser's Poll-row updates) wait as usual
-        lockTimeout.reset();
+        // Bounded wait: a waiter past 3 s gets 409 common.conflict instead of holding a pooled connection
+        List<UUID> activeAdmins = lockTimeout.within(userRepository::lockActiveAdminIds);
         if (activeAdmins.stream().allMatch(user.getId()::equals)) {
             throw ApiException.conflict(MessageKey.ADMIN_LAST_ADMIN);
         }

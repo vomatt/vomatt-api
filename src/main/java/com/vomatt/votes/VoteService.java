@@ -2,6 +2,7 @@ package com.vomatt.votes;
 
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.util.AfterCommit;
+import com.vomatt.common.util.TextUtil;
 import com.vomatt.common.email.EmailService;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.i18n.MessageKey;
@@ -25,7 +26,6 @@ import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.i18n.LocaleContextHolder;
-import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -225,7 +225,7 @@ public class VoteService {
     public CursorResponse<VoteResponse> listVotes(VoteListOrder order, String tag, String q, String cursor,
                                                   Integer limit, String userId) {
         int size = CursorResponse.limit(limit);
-        String tagSlug = tag == null || tag.isBlank() ? null : tag;
+        String tagSlug = TextUtil.blankToNull(tag);
         String query = searchQuery(q);
         Cursor.Scope scope = switch (order) {
             case NEWEST -> Cursor.Scope.FEED_NEWEST;
@@ -832,22 +832,17 @@ public class VoteService {
     }
 
     /**
+     * Every Poll-row lock goes through here (owner and admin paths): a waiter past the lock timeout gets 409
+     * {@code common.conflict} instead of holding a pooled connection. Must be the first load of the Poll in the transaction.
+     */
+    public Optional<Vote> lockVote(UUID voteId) {
+        return lockTimeout.within(() -> voteRepository.findByIdForUpdate(voteId));
+    }
+
+    /**
      * Ballots can change only while Open; frozen once Ended. Takes the exclusive Poll-row lock and checks the status
      * under it, so a Close or Edit cannot slip in between. The lock also serializes one user's Ballot changes in the Poll.
      */
-    /**
-     * Every Poll-row lock goes through here (owner and admin paths): a waiter past the lock timeout gets 409 instead of
-     * holding a pooled connection. Must be the first load of the Poll in the transaction.
-     */
-    public Optional<Vote> lockVote(UUID voteId) {
-        try {
-            lockTimeout.apply();
-            return voteRepository.findByIdForUpdate(voteId);
-        } catch (PessimisticLockingFailureException e) {
-            throw ApiException.conflict(MessageKey.COMMON_CONFLICT);
-        }
-    }
-
     private Vote lockOpenVote(UUID voteId, String userId) {
         Vote vote = requireAccessible(lockVote(voteId), userId);
         switch (vote.getStatus()) {
@@ -878,7 +873,7 @@ public class VoteService {
      * {@code vote.search.query_too_short} for one character, which has no bigrams (ADR 0001).
      */
     public static String searchQuery(String q) {
-        String query = q == null || q.isBlank() ? null : q.strip();
+        String query = TextUtil.blankToNull(q);
         if (query != null && query.codePointCount(0, query.length()) < 2) {
             throw ApiException.badRequest(MessageKey.VOTE_SEARCH_QUERY_TOO_SHORT);
         }

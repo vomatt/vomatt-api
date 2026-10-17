@@ -186,6 +186,31 @@ class SecurityErrorHandlersTest {
     }
 
     @Test
+    void shouldReturn403WhenDemotedAdminUsesEncodedAdminPath() throws Exception {
+        UUID userId = UUID.randomUUID();
+        FilterChain chain = mock(FilterChain.class);
+
+        // %61 decodes to "a": the security rules and MVC see /api/admin/users
+        MockHttpServletResponse response = filterAsAdmin(userId, "GET", "/api/%61dmin/users", chain);
+
+        assertThat(response.getStatus()).isEqualTo(403);
+        verify(userRepository).isActiveAdmin(userId);
+        verifyNoInteractions(chain);
+    }
+
+    @Test
+    void shouldReturnAccountBannedWhenSuspendedAdminCallsAdmin() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.existsByIdAndActiveFalse(userId)).thenReturn(true);
+        FilterChain chain = mock(FilterChain.class);
+
+        MockHttpServletResponse response = filterAsAdmin(userId, "GET", "/api/admin/users", chain);
+
+        assertThat(response.getStatus()).isEqualTo(403);
+        assertThat(response.getContentAsString()).contains("\"errorCode\":\"" + MessageKey.AUTH_ACCOUNT_BANNED.code() + "\"");
+    }
+
+    @Test
     void shouldCheckAdminOnceWhenActiveAdminWrites() throws Exception {
         UUID userId = UUID.randomUUID();
         when(userRepository.isActiveAdmin(userId)).thenReturn(true);

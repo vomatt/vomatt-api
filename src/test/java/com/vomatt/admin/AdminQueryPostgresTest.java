@@ -9,10 +9,13 @@ import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
 import com.vomatt.entity.VoteStatus;
+import com.vomatt.entity.Lookup;
 import com.vomatt.repository.AdminQueryRepository;
+import com.vomatt.repository.LookupRepository;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.repository.UserRepository;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.node.StringNode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
@@ -31,6 +34,7 @@ class AdminQueryPostgresTest extends PostgresRepositoryTest {
 
     @Autowired AdminQueryRepository repository;
     @Autowired UserRepository userRepository;
+    @Autowired LookupRepository lookupRepository;
 
     final OffsetDateTime now = OffsetDateTime.now();
     final Pageable firstPage = PageResponse.pageable(null, null);
@@ -196,6 +200,29 @@ class AdminQueryPostgresTest extends PostgresRepositoryTest {
         assertThat(after.pollsEnded() - before.pollsEnded()).isEqualTo(1);
         assertThat(after.pollsDeleted() - before.pollsDeleted()).isEqualTo(1);
         assertThat(after.ballotsLast24Hours() - before.ballotsLast24Hours()).isEqualTo(1);
+    }
+
+    @Test
+    void shouldFilterByTypeAndActiveWhenAdminListsLookups() {
+        String type = unique("lt");
+        Lookup on = new Lookup();
+        on.setLookupType(type);
+        on.setLookupKey("b");
+        on.setSeq(2);
+        on.setLookupValue(StringNode.valueOf("on"));
+        Lookup off = new Lookup();
+        off.setLookupType(type);
+        off.setLookupKey("a");
+        off.setSeq(1);
+        off.setLookupValue(StringNode.valueOf("off"));
+        off.setIsActive(false);
+        em.persist(on);
+        em.persist(off);
+        em.flush();
+
+        assertThat(lookupRepository.findForAdmin(type, true)).extracting(Lookup::getLookupKey).containsExactly("a", "b");
+        assertThat(lookupRepository.findForAdmin(type, false)).extracting(Lookup::getLookupKey).containsExactly("b");
+        assertThat(lookupRepository.findForAdmin(null, true)).extracting(Lookup::getLookupKey).contains("a", "b");
     }
 
     @Test

@@ -76,7 +76,8 @@ class VoteServiceTest {
     @Mock GroupService groupService;
     @Mock com.vomatt.repository.UserPreferenceRepository preferenceRepository;
     @Mock TransactionTemplate transactionTemplate;
-    @Mock com.vomatt.repository.LockTimeout lockTimeout;
+    // Real helper over a stubbed EntityManager, so lockVote still runs the Poll-row lock it wraps
+    @Spy com.vomatt.repository.LockTimeout lockTimeout = new com.vomatt.repository.LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @Spy VoteMapper voteMapper = new VoteMapper();
 
     @InjectMocks
@@ -432,15 +433,16 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("should throw 409 COMMON_CONFLICT when the Poll-row lock times out")
+        @DisplayName("should let the lock timeout through for the 409 handler when the Poll-row lock times out")
         void shouldThrowConflictWhenPollLockTimesOut() {
             when(voteRepository.findByIdForUpdate(voteId)).thenThrow(new PessimisticLockingFailureException("lock timeout"));
 
             VoteRequest request = new VoteRequest();
             request.setOptionIds(List.of(UUID.randomUUID().toString()));
 
+            // GlobalExceptionHandler maps it to 409 common.conflict
             assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1"))
-                    .satisfies(ex -> assertApiException(ex, HttpStatus.CONFLICT, MessageKey.COMMON_CONFLICT));
+                    .isInstanceOf(PessimisticLockingFailureException.class);
         }
 
         @Test
@@ -1075,12 +1077,11 @@ class VoteServiceTest {
         }
 
         @Test
-        void shouldReturn409WhenPollLockTimesOut() {
-            when(voteRepository.findByIdForUpdate(voteId))
-                    .thenThrow(new org.springframework.dao.PessimisticLockingFailureException("busy"));
+        void shouldTakePollLockUnderScopedTimeoutWhenLocking() {
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
 
-            assertThatThrownBy(() -> voteService.lockVote(voteId))
-                    .satisfies(ex -> assertApiException(ex, HttpStatus.CONFLICT, MessageKey.COMMON_CONFLICT));
+            assertThat(voteService.lockVote(voteId)).contains(vote);
+            verify(lockTimeout).within(any());
         }
 
         @Test

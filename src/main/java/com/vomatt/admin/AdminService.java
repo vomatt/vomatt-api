@@ -1,5 +1,7 @@
 package com.vomatt.admin;
 
+import static com.vomatt.common.util.TextUtil.blankToNull;
+
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -31,9 +33,5 @@ public class AdminService {
         return PageResponse.from(adminQueryRepository.findAuditLogs(userId, blankToNull(action),
                 blankToNull(resourceType), resourceId, from, to, PageResponse.pageable(page, limit)),
                 adminMapper::toAuditLogResponse);
-    }
-
-    static String blankToNull(String value) {
-        return value == null || value.isBlank() ? null : value.strip();
     }
 }

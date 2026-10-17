@@ -51,7 +51,7 @@ class UserServiceTest {
     @Mock RefreshTokenService refreshTokenService;
     @Mock VoteOptionRepository voteOptionRepository;
     @Mock VoteRepository voteRepository;
-    @Mock com.vomatt.repository.LockTimeout lockTimeout;
+    @Spy com.vomatt.repository.LockTimeout lockTimeout = new com.vomatt.repository.LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @InjectMocks UserService userService;
 
     @Test
@@ -122,32 +122,26 @@ class UserServiceTest {
     }
 
     @Test
-    void shouldReturn409WhenAdminRowsStayLocked() {
+    void shouldLetLockTimeoutThroughWhenAdminRowsStayLocked() {
         User admin = User.builder().id(UUID.randomUUID()).username("a").roles(new String[] { "admin" }).build();
         when(userRepository.lockActiveAdminIds())
                 .thenThrow(new org.springframework.dao.PessimisticLockingFailureException("busy"));
 
+        // GlobalExceptionHandler maps it to 409 common.conflict
         assertThatThrownBy(() -> userService.requireAnotherActiveAdmin(admin))
-                .isInstanceOfSatisfying(ApiException.class,
-                        e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.COMMON_CONFLICT));
-        InOrder order = inOrder(lockTimeout, userRepository);
-        order.verify(lockTimeout).apply();
-        order.verify(userRepository).lockActiveAdminIds();
-        verify(lockTimeout, never()).reset();
+                .isInstanceOf(org.springframework.dao.PessimisticLockingFailureException.class);
     }
 
     @Test
-    void shouldResetLockTimeoutWhenAdminRowsLocked() {
+    void shouldLockAdminRowsUnderScopedTimeoutWhenGuarding() {
         UUID id = UUID.randomUUID();
         User admin = User.builder().id(id).username("a").roles(new String[] { "admin" }).build();
         when(userRepository.lockActiveAdminIds()).thenReturn(List.of(id, UUID.randomUUID()));
 
         userService.requireAnotherActiveAdmin(admin);
 
-        InOrder order = inOrder(lockTimeout, userRepository);
-        order.verify(lockTimeout).apply();
-        order.verify(userRepository).lockActiveAdminIds();
-        order.verify(lockTimeout).reset();
+        verify(lockTimeout).within(any());
+        verify(userRepository).lockActiveAdminIds();
     }
 
     @Test

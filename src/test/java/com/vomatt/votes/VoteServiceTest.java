@@ -33,6 +33,9 @@ import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -65,6 +68,7 @@ class VoteServiceTest {
     @Mock com.vomatt.common.email.EmailService emailService;
     @Mock com.vomatt.common.redis.RedisService redisService;
     @Mock GroupService groupService;
+    @Mock TransactionTemplate transactionTemplate;
     @Spy VoteMapper voteMapper = new VoteMapper();
 
     @InjectMocks
@@ -92,6 +96,9 @@ class VoteServiceTest {
         lenient().when(voteConfig.getBallotRateLimit()).thenReturn(new VoteConfigurationProperties.BallotRateLimit());
         ReflectionTestUtils.setField(voteService, "invitationDailyLimit", 200);
         lenient().when(groupService.expand(any(), any())).thenReturn(new GroupService.Members(List.of(), List.of()));
+        // Runs the callback in place, as a real template does on the calling thread
+        lenient().when(transactionTemplate.execute(any()))
+                .thenAnswer(inv -> inv.<TransactionCallback<?>>getArgument(0).doInTransaction(null));
 
         option = new VoteOption();
         option.setVote(vote);
@@ -415,6 +422,19 @@ class VoteServiceTest {
 
             verify(userVoteRepository, never()).save(any());
         }
+
+        @Test
+        @DisplayName("should throw 409 COMMON_CONFLICT when the Poll-row lock times out")
+        void shouldThrowConflictWhenPollLockTimesOut() {
+            when(voteRepository.findByIdForUpdate(voteId)).thenThrow(new PessimisticLockingFailureException("lock timeout"));
+
+            VoteRequest request = new VoteRequest();
+            request.setOptionIds(List.of(UUID.randomUUID().toString()));
+
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1"))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.CONFLICT, MessageKey.COMMON_CONFLICT));
+        }
+
     }
 
     @Nested
@@ -637,6 +657,9 @@ class VoteServiceTest {
             assertThat(voteService.getVoters(voteId.toString(), UUID.randomUUID().toString(), null, null).nextCursor())
                     .isNull();
         }
+
+
+
 
         @Test
         @DisplayName("should reject viewing voters when Poll has not ended")

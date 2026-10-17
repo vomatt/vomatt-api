@@ -24,11 +24,14 @@ import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.i18n.LocaleContextHolder;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.vomatt.votes.dto.CreateVoteRequest;
 import com.vomatt.votes.dto.InviteeResponse;
@@ -84,6 +87,7 @@ public class VoteService {
     private final EmailService emailService;
     private final RedisService redisService;
     private final GroupService groupService;
+    private final TransactionTemplate transactionTemplate;
 
     private static final String INVITATION_COUNTER_NS = "email:invitation";
     private static final String BALLOT_RATE_LIMIT_NS = "rate:limit:ballot";
@@ -133,7 +137,7 @@ public class VoteService {
      */
     public VoteResponse updateVote(String voteId, CreateVoteRequest request, String userId) {
         // Exclusive lock: a first Ballot at the opening moment either commits first (then this sees Open) or waits
-        Vote vote = requireOwned(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), userId);
+        Vote vote = requireOwned(lockVote(UUID.fromString(voteId)), userId);
         if (vote.getStatus() != VoteStatus.SCHEDULED) {
             throw ApiException.badRequest(MessageKey.VOTE_NOT_EDITABLE);
         }
@@ -284,9 +288,16 @@ public class VoteService {
     /**
      * Casts a Ballot: replaces the user's previous Ballot in this Poll within one transaction.
      * Casting the same option again changes nothing.
+     * The response is built after the locked write commits, so the Poll-row lock covers only the write.
      */
+    @Transactional(propagation = Propagation.SUPPORTS)
     public VoteResponse vote(String voteId, VoteRequest request, String userId, String ipAddress) {
         checkBallotRateLimit(userId);
+        UUID optionUuid = transactionTemplate.execute(s -> castBallot(voteId, request, userId, ipAddress));
+        return transactionTemplate.execute(s -> ballotResponse(UUID.fromString(voteId), userId, optionUuid));
+    }
+
+    private UUID castBallot(String voteId, VoteRequest request, String userId, String ipAddress) {
         UUID voteUuid = UUID.fromString(voteId);
         UUID userUuid = UUID.fromString(userId);
         Vote vote = lockOpenVote(voteUuid, userId);
@@ -300,10 +311,10 @@ public class VoteService {
         if (!option.getVote().getId().equals(voteUuid)) {
             throw ApiException.badRequest(MessageKey.VOTE_OPTION_NOT_IN_VOTE);
         }
+        // findById, not getReferenceById: an account deleted while its token is still valid gets 404, not an FK error
         User user = userRepository.findById(userUuid)
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
 
-        userVoteRepository.lockBallot(userId, voteId);
         Optional<UserVote> previous = userVoteRepository.findByUserIdAndVoteId(userUuid, voteUuid);
         boolean unchanged = previous.filter(b -> b.getOption().getId().equals(optionUuid)).isPresent();
         if (!unchanged) {
@@ -318,37 +329,38 @@ public class VoteService {
             // adjustVoteCount cleared the persistence context: re-load the (still locked) Poll as a managed entity
             voteRepository.findById(voteUuid).ifPresent(this::endIfAllInviteesVoted);
         }
-
-        return ballotResponse(voteUuid, userId, optionUuid);
+        return optionUuid;
     }
 
     /** Retraction: withdraws the user's whole Ballot; succeeds even when there is none. */
+    @Transactional(propagation = Propagation.SUPPORTS)
     public VoteResponse retract(String voteId, String userId) {
         checkBallotRateLimit(userId);
         UUID voteUuid = UUID.fromString(voteId);
-        lockOpenVote(voteUuid, userId);
-
-        userVoteRepository.lockBallot(userId, voteId);
-        userVoteRepository.findByUserIdAndVoteId(UUID.fromString(userId), voteUuid)
-            .ifPresent(this::releaseBallot);
-        log.info("User {} retracted ballot in vote {}", userId, voteId);
-
-        return ballotResponse(voteUuid, userId, null);
+        transactionTemplate.execute(s -> {
+            lockOpenVote(voteUuid, userId);
+            userVoteRepository.findByUserIdAndVoteId(UUID.fromString(userId), voteUuid)
+                .ifPresent(this::releaseBallot);
+            log.info("User {} retracted ballot in vote {}", userId, voteId);
+            return null;
+        });
+        return transactionTemplate.execute(s -> ballotResponse(voteUuid, userId, null));
     }
 
     /** Removes the user's Selection of one option (kept for API compatibility; same as a Retraction when it matches). */
+    @Transactional(propagation = Propagation.SUPPORTS)
     public VoteResponse removeVote(String voteId, String optionId, String userId) {
         checkBallotRateLimit(userId);
         UUID voteUuid = UUID.fromString(voteId);
         UUID userUuid = UUID.fromString(userId);
-        lockOpenVote(voteUuid, userId);
-
-        userVoteRepository.lockBallot(userId, voteId);
-        userVoteRepository.findByUserIdAndVoteIdAndOptionId(userUuid, voteUuid, UUID.fromString(optionId))
-            .ifPresent(this::releaseBallot);
-        log.info("User {} removed vote from option {} in vote {}", userId, optionId, voteId);
-
-        return convertToVoteResponse(voteUuid, userId);
+        transactionTemplate.execute(s -> {
+            lockOpenVote(voteUuid, userId);
+            userVoteRepository.findByUserIdAndVoteIdAndOptionId(userUuid, voteUuid, UUID.fromString(optionId))
+                .ifPresent(this::releaseBallot);
+            log.info("User {} removed vote from option {} in vote {}", userId, optionId, voteId);
+            return null;
+        });
+        return transactionTemplate.execute(s -> convertToVoteResponse(voteUuid, userId));
     }
 
     /**
@@ -408,7 +420,7 @@ public class VoteService {
 
     public VoteResponse closeVote(String voteId, String creatorId) {
         // Exclusive lock: waits for in-flight Ballot changes, and a concurrent Close then sees Ended and keeps its end time
-        Vote vote = requireOwned(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), creatorId);
+        Vote vote = requireOwned(lockVote(UUID.fromString(voteId)), creatorId);
 
         vote.closeAt(OffsetDateTime.now());
         vote = voteRepository.save(vote);
@@ -423,7 +435,7 @@ public class VoteService {
      */
     public void deleteVote(String voteId, String userId) {
         // Exclusive lock: an in-flight Ballot finishes first, and none can land once Delete returns
-        Vote vote = requireOwned(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), userId);
+        Vote vote = requireOwned(lockVote(UUID.fromString(voteId)), userId);
         OffsetDateTime now = OffsetDateTime.now();
         if (!vote.canDeleteAt(now, voteConfig.getDeleteWindow())) {
             throw ApiException.badRequest(MessageKey.VOTE_DELETE_WINDOW_PASSED, voteConfig.getDeleteWindow().toMinutes());
@@ -446,7 +458,7 @@ public class VoteService {
     /** Adds Invitees to a Scheduled or Open Invite-only Poll (owner only); users already invited are skipped. */
     public List<InviteeResponse> addInvitees(String voteId, InviteesRequest request, String userId) {
         // Exclusive lock: serializes with Invitee removal and Ballot changes, so concurrent adds cannot collide
-        Vote vote = requireOwned(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), userId);
+        Vote vote = requireOwned(lockVote(UUID.fromString(voteId)), userId);
         vote.checkInviteesEditable(OffsetDateTime.now());
         GroupService.Members groups = groupService.expand(orEmpty(request.getGroupIds()), vote.getCreator().getId());
         insertInvitees(vote, concat(request.getUserIds(), groups.userIds()), concat(request.getEmails(), groups.emails()));
@@ -469,7 +481,7 @@ public class VoteService {
     // The one removal path for both kinds of Invitee
     private List<InviteeResponse> removeInvitee(String voteId, String userId, Function<UUID, Optional<Invitee>> findInvitee) {
         // Exclusive lock: a Ballot by this Invitee either committed first (then it is seen) or waits and then loses access
-        Vote vote = requireOwned(voteRepository.findByIdForUpdate(UUID.fromString(voteId)), userId);
+        Vote vote = requireOwned(lockVote(UUID.fromString(voteId)), userId);
         vote.checkInviteesEditable(OffsetDateTime.now());
         findInvitee.apply(vote.getId()).ifPresent(invitee -> {
             // An email Invitee holds a Ballot only once tied to a user
@@ -758,11 +770,21 @@ public class VoteService {
     }
 
     /**
-     * Ballots can change only while Open; frozen once Ended. Takes the exclusive Poll-row lock before the existing
-     * (user, Poll) advisory lock and checks the status under it, so a Close or Edit cannot slip in between.
+     * Ballots can change only while Open; frozen once Ended. Takes the exclusive Poll-row lock and checks the status
+     * under it, so a Close or Edit cannot slip in between. The lock also serializes one user's Ballot changes in the Poll.
      */
+    // Every Poll-row lock goes through here: a waiter past the lock timeout gets 409 instead of holding a pooled connection
+    private Optional<Vote> lockVote(UUID voteId) {
+        try {
+            voteRepository.setLockTimeout();
+            return voteRepository.findByIdForUpdate(voteId);
+        } catch (PessimisticLockingFailureException e) {
+            throw ApiException.conflict(MessageKey.COMMON_CONFLICT);
+        }
+    }
+
     private Vote lockOpenVote(UUID voteId, String userId) {
-        Vote vote = requireAccessible(voteRepository.findByIdForUpdate(voteId), userId);
+        Vote vote = requireAccessible(lockVote(voteId), userId);
         switch (vote.getStatus()) {
             case ENDED -> throw ApiException.badRequest(MessageKey.VOTE_ENDED);
             case SCHEDULED -> throw ApiException.badRequest(MessageKey.VOTE_NOT_ALLOWED);

@@ -38,8 +38,4 @@ public interface UserVoteRepository extends JpaRepository<UserVote, UUID> {
     List<UserVote> findVoterPage(@Param("voteId") UUID voteId, @Param("afterTime") OffsetDateTime afterTime,
                                  @Param("afterId") UUID afterId, Limit limit);
 
-    /** Serialises Ballot changes of one user in one Poll until the transaction ends. */
-    @Query(value = "SELECT 1 FROM pg_advisory_xact_lock(hashtext(:userId), hashtext(:voteId))", nativeQuery = true)
-    Integer lockBallot(@Param("userId") String userId, @Param("voteId") String voteId);
-
 }

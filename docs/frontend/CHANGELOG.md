@@ -4,6 +4,7 @@ Contract changes that affect the frontend. 💥 BREAKING means frontend code mus
 
 ## 2026-10-17
 
+- Ballot writes and the other Poll changes (`POST /vote`, Retract, remove Selection, edit, close, delete, Invitee changes) now return 409 `common.conflict` when the Poll stays busy with other changes for 3 seconds; nothing is recorded, retry.
 - Creating or editing a Poll now validates each option (`text` required and length limits) with the usual 400 `common.validation_failed`; such requests used to fail later.
 - `totalVotes` on `GET /api/users/{username}` and `GET /api/users/me` now counts only Ballots on Public Polls (not Deleted), matching `totalPolls`; Ballots on Unlisted and Invite-only Polls are left out, so the number can drop for existing accounts.
 - Error envelopes for malformed requests: an unreadable or invalid JSON body returns 400 `common.bad_request`, a wrong HTTP method 405 `common.bad_request`, an unsupported `Content-Type` 415 `common.bad_request`, and a database uniqueness clash (e.g. a username taken between check and save) 409 `common.conflict`. These used to return 500 `common.internal_error`-style responses.

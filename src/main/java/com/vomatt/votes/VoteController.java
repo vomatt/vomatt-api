@@ -334,6 +334,7 @@ public class VoteController {
             - 404 `user.not_found`: the signed-in user no longer exists
             - 400 `common.validation_failed`: `optionIds` is empty
             - 429 `common.rate_limited`: more than 30 Ballot writes (cast, Retract, remove Selection) by the caller within 60 seconds; no `Retry-After`
+            - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was recorded, try again
             """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = @ExampleObject(name = "Choose Java", value = """
@@ -372,6 +373,7 @@ public class VoteController {
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen
             - 400 `vote.not_allowed`: the Poll is still Scheduled
             - 429 `common.rate_limited`: more than 30 Ballot writes (cast, Retract, remove Selection) by the caller within 60 seconds; no `Retry-After`
+            - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was recorded, try again
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Ballot withdrawn (or none existed); `myOptionId` is null",
             content = @Content(examples = @ExampleObject(name = "Open Poll (Sealed)", value = EX_POLL_OPEN_NO_BALLOT)))
@@ -402,6 +404,7 @@ public class VoteController {
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen
             - 400 `vote.not_allowed`: the Poll is still Scheduled
             - 429 `common.rate_limited`: more than 30 Ballot writes (cast, Retract, remove Selection) by the caller within 60 seconds; no `Retry-After`
+            - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was recorded, try again
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Poll after the removal",
             content = @Content(examples = @ExampleObject(name = "Open Poll (Sealed)", value = EX_POLL_OPEN)))

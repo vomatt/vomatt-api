@@ -5,7 +5,7 @@ Vomatt polling community backend. The architecture follows sachmis-api (domain-d
 ## Tech stack
 
 - Java 25 (virtual threads), Spring Boot 4.0.5, Maven Wrapper
-- Spring Web MVC, Data JPA (Hibernate 7), Security 7, Mail, Data Redis (Jedis)
+- Spring Web MVC, Data JPA (Hibernate 7), Security 7, Mail, Data Redis (Lettuce)
 - PostgreSQL (schema `vomatt`), Redis
 - JJWT, Bucket4j, SpringDoc OpenAPI 3, Lombok + MapStruct, Thymeleaf (email)
 

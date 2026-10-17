@@ -26,7 +26,6 @@
         <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
         <uuid-generator.version>5.2.0</uuid-generator.version>
         <postgresql.version>42.7.7</postgresql.version>
-        <jedis.version>7.2.1</jedis.version>
     </properties>
 
     <dependencies>
@@ -131,10 +130,10 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
+        <!-- Pool for the Lettuce client (spring.data.redis.lettuce.pool.*) -->
         <dependency>
-            <groupId>redis.clients</groupId>
-            <artifactId>jedis</artifactId>
-            <version>${jedis.version}</version>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
         </dependency>
 
         <!-- Test -->

@@ -151,12 +151,13 @@ class AuthServiceTest {
         when(redisService.setIfAbsent(eq("otp:email:cooldown"), eq("user@example.com"), any(), any(Duration.class)))
                 .thenReturn(false);
         when(redisService.get("otp:email:cooldown", "user@example.com", String.class))
-                .thenReturn(Long.toString(Instant.now().minusSeconds(30).getEpochSecond()));
+                .thenReturn(Long.toString(Instant.now().plusSeconds(30).getEpochSecond()));
 
         assertThatThrownBy(() -> authService.sendOtp("user@example.com", null, null, false))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> {
                     assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_RESEND_COOLDOWN);
+                    assertThat((long) ((ApiException) ex).getMessageArgs()[0]).isBetween(29L, 30L);
                 });
         verify(redisService, never()).setOrThrow(eq("otp:email"), anyString(), any(), any(Duration.class));
     }
@@ -182,7 +183,7 @@ class AuthServiceTest {
     }
 
     @Test
-    void shouldDeleteOtpAndCooldownWithoutLeakingCauseWhenEmailSendFails() {
+    void shouldKeepShortCooldownWithoutLeakingCauseWhenEmailSendFails() {
         when(userRepository.existsByEmail("user@example.com")).thenReturn(true);
         org.mockito.Mockito.doThrow(new RuntimeException("smtp.internal:25 refused"))
                 .when(emailService).sendVerificationEmail(anyString(), anyString());
@@ -195,11 +196,12 @@ class AuthServiceTest {
                     assertThat(api.getMessageArgs()).isNullOrEmpty();
                 });
         verify(redisService).delete("otp:email", "user@example.com");
-        verify(redisService).delete("otp:email:cooldown", "user@example.com");
+        verify(redisService).set(eq("otp:email:cooldown"), eq("user@example.com"), anyString(), eq(Duration.ofSeconds(30)));
+        verify(redisService, never()).delete("otp:email:cooldown", "user@example.com");
     }
 
     @Test
-    void shouldDeleteOtpAndCooldownWhenSmsSendFails() {
+    void shouldKeepShortCooldownWhenSmsSendFails() {
         org.mockito.Mockito.doThrow(new RuntimeException("twilio 500"))
                 .when(smsService).sendOtp(anyString(), anyString());
 
@@ -207,7 +209,8 @@ class AuthServiceTest {
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_SMS_SEND_FAILED));
         verify(redisService).delete("otp:phone", "+886912345678");
-        verify(redisService).delete("otp:phone:cooldown", "+886912345678");
+        verify(redisService).set(eq("otp:phone:cooldown"), eq("+886912345678"), anyString(), eq(Duration.ofSeconds(30)));
+        verify(redisService, never()).delete("otp:phone:cooldown", "+886912345678");
     }
 
     // ── verifyOtp ────────────────────────────────────────────────────

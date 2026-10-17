@@ -154,7 +154,7 @@ public class AuthService {
                 emailService.sendVerificationEmail(normalizedEmail, code);
             }
         } catch (Exception ex) {
-            // The code never reached the user: drop it and the cooldown so an immediate retry is possible
+            // The code never reached the user: drop it and shorten the cooldown so a retry is possible soon
             releaseUndeliveredOtp(OTP_EMAIL_NS, normalizedEmail);
             log.warn("Failed to send OTP email: {}", ex.getMessage());
             throw ApiException.badRequest(MessageKey.AUTH_EMAIL_SEND_FAILED);
@@ -247,10 +247,13 @@ public class AuthService {
     /** Namespace suffix for the lockout marker; independent of the OTP so it survives OTP deletion and resends. */
     private static final String OTP_LOCK_SUFFIX = ":lock";
 
-    /** Namespace suffix for the resend cooldown marker (SET NX), holding the send time in epoch seconds. */
+    /** Namespace suffix for the resend cooldown marker (SET NX), holding the epoch second a resend is allowed again. */
     private static final String OTP_COOLDOWN_SUFFIX = ":cooldown";
 
     private static final Duration OTP_LOCK_TTL = Duration.ofMinutes(15);
+
+    /** Cooldown kept after a failed delivery, so a script cannot hammer the paid SMS / email provider. */
+    private static final Duration OTP_FAILED_SEND_COOLDOWN = Duration.ofSeconds(30);
 
     private OtpRecord consumeOtp(String namespace, String key, String code) {
         rejectIfLocked(namespace, key);
@@ -310,13 +313,13 @@ public class AuthService {
     /** Atomically claims the resend slot (SET NX + TTL), so concurrent sends cannot both pass the cooldown. */
     private void acquireResendCooldown(String namespace, String key) {
         String cooldownNs = namespace + OTP_COOLDOWN_SUFFIX;
-        String now = Long.toString(Instant.now().getEpochSecond());
-        if (redisService.setIfAbsent(cooldownNs, key, now, Duration.ofSeconds(otpResendCooldownSeconds))) {
+        Duration cooldown = Duration.ofSeconds(otpResendCooldownSeconds);
+        if (redisService.setIfAbsent(cooldownNs, key, availableAt(cooldown), cooldown)) {
             return;
         }
-        String sentAt = redisService.get(cooldownNs, key, String.class);
-        long elapsed = sentAt == null ? 0 : Instant.now().getEpochSecond() - Long.parseLong(sentAt);
-        long remaining = Math.max(otpResendCooldownSeconds - elapsed, 1);
+        String availableAt = redisService.get(cooldownNs, key, String.class);
+        long remaining = availableAt == null ? otpResendCooldownSeconds : Long.parseLong(availableAt) - Instant.now().getEpochSecond();
+        remaining = Math.max(remaining, 1);
         throw ApiException.badRequest(MessageKey.AUTH_OTP_RESEND_COOLDOWN, remaining);
     }
 
@@ -330,10 +333,17 @@ public class AuthService {
         }
     }
 
-    /** Drops an OTP whose delivery failed, plus its cooldown, so the user is not blocked by a message that never arrived. */
+    /**
+     * Drops an OTP whose delivery failed and shortens its cooldown to {@link #OTP_FAILED_SEND_COOLDOWN}, so the user can
+     * retry soon but a failing provider is not hit on every request. Fail-soft: a Redis error must not mask the send failure.
+     */
     private void releaseUndeliveredOtp(String namespace, String key) {
         redisService.delete(namespace, key);
-        redisService.delete(namespace + OTP_COOLDOWN_SUFFIX, key);
+        redisService.set(namespace + OTP_COOLDOWN_SUFFIX, key, availableAt(OTP_FAILED_SEND_COOLDOWN), OTP_FAILED_SEND_COOLDOWN);
+    }
+
+    private static String availableAt(Duration cooldown) {
+        return Long.toString(Instant.now().plus(cooldown).getEpochSecond());
     }
 
     public boolean checkEmailExists(String email) {

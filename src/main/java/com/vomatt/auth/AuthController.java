@@ -94,7 +94,7 @@ public class AuthController {
                     **Errors**:
                     - 400 `auth.identifier.required`: `email` is missing or blank
                     - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
-                    - 400 `auth.email.send_failed`: the email provider rejected the message
+                    - 400 `auth.email.send_failed`: the email provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
                     - 401 `auth.otp.too_many_attempts`: the identifier is locked for 15 minutes after 5 wrong codes
                     - 403 `auth.admin.forbidden`: `checkRole` is "true" and the account is not an admin""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> sendOtp(@Valid @RequestBody SendOtpRequest req) {
@@ -172,7 +172,7 @@ public class AuthController {
                     - 400 `auth.phone.invalid`: the number is neither a Taiwan mobile number (`09` + 8 digits) nor `+` country code and number (8-15 digits)
                     - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
                     - 400 `auth.phone.not_registered`: `type` is "login" and the number is not registered
-                    - 400 `auth.sms.send_failed`: the SMS provider rejected the message
+                    - 400 `auth.sms.send_failed`: the SMS provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
                     - 401 `auth.otp.too_many_attempts`: the identifier is locked for 15 minutes after 5 wrong codes""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> phoneSendOtp(@Valid @RequestBody PhoneSendOtpRequest req) {
         authService.sendOtp(null, req.phone(), req.type(), false);

@@ -48,6 +48,7 @@ Wrong codes are limited per email (or phone, §3) **and client IP**:
 - The 3rd wrong code locks that email for that IP for 5 minutes. Each further lockout doubles it: 10, 20, 40 minutes... up to 24 hours. The doubling is forgotten 24 hours after the last lock ends, and a successful sign-in from that IP resets it.
 - Resending an OTP does not reset the count of wrong codes.
 - While locked, `send-otp` and `verify-otp` from that IP return 401 `auth.otp.too_many_attempts`, even for a correct code. Other IPs are not affected, and the OTP already sent stays valid. The response does not say how long the lock lasts.
+- Each OTP allows 10 guesses in total across all IPs. The 10th wrong guess deletes it; `verify-otp` then returns 401 `auth.otp.invalid_or_expired` and the user must request a new OTP.
 
 Emails are trimmed and lower-cased. A Gmail address (`gmail.com` / `googlemail.com`) also loses its dots and `+tag` and moves to `gmail.com`, so `A.B+news@GoogleMail.com` and `ab@gmail.com` are one account. `user.email` comes back in this canonical form.
 
@@ -197,7 +198,7 @@ UI: on `auth.account_banned`, at login or on any write, show "This account has b
 | `auth.email.send_failed` / `auth.sms.send_failed` | 400 | Failed to send the email / SMS; the OTP is dropped and a resend is allowed after 30 seconds | Allow resend after a 30-second countdown |
 | `auth.phone.not_registered` | 400 | `type=login` but the number is not registered | Go to the signup flow (`type=signup`) |
 | `auth.phone.invalid` | 400 | The number is neither `09xxxxxxxx` nor `+` country code and number | Show the accepted formats next to the field |
-| `auth.otp.invalid_or_expired` | 401 | No valid OTP (expired, already used, or never sent) | Guide the user to resend |
+| `auth.otp.invalid_or_expired` | 401 | No valid OTP (expired, already used, never sent, or deleted after 10 wrong guesses) | Guide the user to resend |
 | `auth.invalid_otp` | 401 | Wrong code | Ask the user to re-enter |
 | `auth.otp.too_many_attempts` | 401 | 3 wrong codes from this IP; the email / phone is locked for this IP for 5 minutes, doubling on each further lockout up to 24 hours, and `send-otp`, `phone/send-otp` and both `verify-otp` return this until then | Tell the user to try again later (no exact time is returned); disable resend |
 | `auth.admin.forbidden` | 403 | `checkRole` but not an admin | Show no permission |

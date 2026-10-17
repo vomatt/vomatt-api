@@ -128,10 +128,11 @@ public class AuthController {
                     Wrong codes are counted per email and client IP; resending does not reset the count. \
                     The 3rd wrong code locks this email for the caller's IP for 5 minutes, doubling on each further lockout (10, 20, 40 minutes...) up to 24 hours; \
                     the doubling is forgotten 24 hours after the last lock ends, and a successful sign-in from that IP resets it. \
-                    While locked, sending or verifying an OTP from that IP is refused; other IPs are not affected and the OTP stays valid
+                    While locked, sending or verifying an OTP from that IP is refused; other IPs are not affected and the OTP stays valid. \
+                    One OTP allows 10 guesses in total across all IPs; the 10th wrong guess deletes it
                     **Errors**:
                     - 400 `auth.identifier.required`: `email` is missing or blank
-                    - 401 `auth.otp.invalid_or_expired`: no OTP exists for this email (never sent, expired, or already used)
+                    - 401 `auth.otp.invalid_or_expired`: no OTP exists for this email (never sent, expired, already used, or deleted after 10 wrong guesses)
                     - 401 `auth.invalid_otp`: the code is wrong
                     - 401 `auth.otp.too_many_attempts`: 3rd wrong code, or this identifier is locked for the caller's IP (even a correct code is refused until the lock ends)
                     - 403 `auth.admin.forbidden`: `checkRole` is "true" and the account is not an existing admin
@@ -207,10 +208,11 @@ public class AuthController {
                     **Side effects**: the OTP is consumed on success; a new user (with a random bot avatar) is created if needed; `lastLoginAt` is updated. Wrong codes are counted per number and client IP; resending does not reset the count. \
                     The 3rd wrong code locks this number for the caller's IP for 5 minutes, doubling on each further lockout (10, 20, 40 minutes...) up to 24 hours; \
                     the doubling is forgotten 24 hours after the last lock ends, and a successful sign-in from that IP resets it. \
-                    While locked, sending or verifying an OTP from that IP is refused; other IPs are not affected and the OTP stays valid
+                    While locked, sending or verifying an OTP from that IP is refused; other IPs are not affected and the OTP stays valid. \
+                    One OTP allows 10 guesses in total across all IPs; the 10th wrong guess deletes it
                     **Errors**:
                     - 400 `auth.phone.invalid`: the number is not in a supported format (see send-otp)
-                    - 401 `auth.otp.invalid_or_expired`: no OTP exists for this number (never sent, expired, or already used)
+                    - 401 `auth.otp.invalid_or_expired`: no OTP exists for this number (never sent, expired, already used, or deleted after 10 wrong guesses)
                     - 401 `auth.invalid_otp`: the code is wrong
                     - 401 `auth.otp.too_many_attempts`: 3rd wrong code, or this identifier is locked for the caller's IP (even a correct code is refused until the lock ends)
                     - 403 `auth.account_banned`: the user is suspended (`active=false`)""")

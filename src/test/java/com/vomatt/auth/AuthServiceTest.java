@@ -35,6 +35,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
@@ -271,6 +272,9 @@ class AuthServiceTest {
         when(redisService.get(eq("otp:email"), eq("user@example.com"), eq(OtpRecord.class))).thenReturn(otpRecord);
         when(redisService.incrementAndExpire(eq("otp:email:fail"), eq(attempt("user@example.com")), any(Duration.class)))
                 .thenReturn(attempts);
+        // First guess on this OTP across all IPs, unless a test says otherwise
+        lenient().when(redisService.incrementAndExpire(eq("otp:email:guesses"), startsWith("user@example.com:"), any(Duration.class)))
+                .thenReturn(1L);
     }
 
     private void assertTooManyAttempts(String code) {
@@ -327,6 +331,36 @@ class AuthServiceTest {
 
         verify(redisService, never()).setOrThrow(eq("otp:email:lock"), anyString(), any(), any(Duration.class));
         verify(redisService, never()).incrementAndExpire(eq("otp:email:level"), anyString(), any(Duration.class));
+        verify(userRepository, never()).findByEmail(anyString());
+    }
+
+    private void stubGuesses(long guesses) {
+        when(redisService.incrementAndExpire(eq("otp:email:guesses"), startsWith("user@example.com:"), any(Duration.class)))
+                .thenReturn(guesses);
+    }
+
+    @Test
+    void shouldVoidOtpWhenLastGuessAcrossIpsIsWrong() {
+        stubWrongCodeAttempt(1L);
+        stubGuesses(10L);
+
+        assertThatThrownBy(() -> authService.verifyOtp("user@example.com", null, "999999", false, IP))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_INVALID_OTP));
+
+        verify(redisService).delete("otp:email", "user@example.com");
+    }
+
+    @Test
+    void shouldRejectCorrectCodeWhenOtpGuessesExhaustedFromOtherIps() {
+        stubWrongCodeAttempt(1L);
+        stubGuesses(11L);
+
+        assertThatThrownBy(() -> authService.verifyOtp("user@example.com", null, "123456", false, IP))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_INVALID_OR_EXPIRED));
+
+        verify(redisService).delete("otp:email", "user@example.com");
         verify(userRepository, never()).findByEmail(anyString());
     }
 

@@ -243,6 +243,12 @@ public class AuthService {
 
     private static final int MAX_OTP_ATTEMPTS = 3;
 
+    /** Guesses one OTP allows across all IPs; the guess that uses the last one voids the OTP, so more IPs buy no more guesses. */
+    private static final int MAX_OTP_GUESSES = 10;
+
+    /** Namespace suffix for the per-OTP guess counter (all IPs), keyed by identifier + OTP creation time so each OTP starts at zero. */
+    private static final String OTP_GUESS_SUFFIX = ":guesses";
+
     /**
      * Namespace suffix for the failure counter, atomic INCR (P1-#7). The counter, lock and level keys are all keyed by
      * {@link #attemptKey} (identifier + client IP), so guessing from one IP never locks the identifier out elsewhere.
@@ -281,10 +287,18 @@ public class AuthService {
         // all slip past the limit (P1-#7). TTL matches the OTP's remaining lifetime (at least 1 second); a resend extends it.
         String failNs = namespace + OTP_FAIL_SUFFIX;
         long remainingSeconds = otpTtlSeconds - Duration.between(rec.createdAt(), Instant.now()).getSeconds();
-        long attempts = redisService.incrementAndExpire(failNs, attemptKey, Duration.ofSeconds(Math.max(remainingSeconds, 1)));
+        Duration counterTtl = Duration.ofSeconds(Math.max(remainingSeconds, 1));
+        long attempts = redisService.incrementAndExpire(failNs, attemptKey, counterTtl);
         // Past the limit: a concurrent guess already used the last attempt (and locks out), so even a correct code is refused
         if (attempts > MAX_OTP_ATTEMPTS) {
             throw ApiException.unauthorized(MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS);
+        }
+        long guesses = redisService.incrementAndExpire(namespace + OTP_GUESS_SUFFIX,
+                key + ":" + rec.createdAt().toEpochMilli(), counterTtl);
+        if (guesses > MAX_OTP_GUESSES) {
+            // A concurrent guess already used the OTP's last guess and voided it
+            redisService.delete(namespace, key);
+            throw ApiException.unauthorized(MessageKey.AUTH_OTP_INVALID_OR_EXPIRED);
         }
 
         // P5-#19: constant-time comparison so a short-circuit does not leak the OTP prefix via a timing side-channel.
@@ -293,6 +307,10 @@ public class AuthService {
                 rec.code().getBytes(StandardCharsets.UTF_8),
                 code.getBytes(StandardCharsets.UTF_8));
         if (!codeMatches) {
+            // The OTP's last guess was wrong: void it, so the user has to request a new one
+            if (guesses == MAX_OTP_GUESSES) {
+                redisService.delete(namespace, key);
+            }
             // The last allowed attempt was wrong: lock now rather than on the next request.
             // Only this request escalates, so concurrent guesses cannot double the lockout twice.
             if (attempts == MAX_OTP_ATTEMPTS) {

@@ -294,8 +294,8 @@ class AuthServiceTest {
         verify(redisService).setOrThrow("otp:email:lock", attempt("user@example.com"), "1", Duration.ofMinutes(5));
         // The level outlives the lock by 24h so the next lockout doubles
         verify(redisService).expire("otp:email:level", attempt("user@example.com"), Duration.ofMinutes(5).plusHours(24));
-        // The counter restarts for the next lock window; the OTP stays valid for the real user on other IPs
-        verify(redisService).delete("otp:email:fail", attempt("user@example.com"));
+        // The counter is kept so in-flight guesses cannot escalate again; the OTP stays valid for the real user on other IPs
+        verify(redisService, never()).delete(eq("otp:email:fail"), anyString());
         verify(redisService, never()).delete("otp:email", "user@example.com");
     }
 
@@ -375,6 +375,20 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.verifyOtp("user@example.com", null, "123456", false, IP))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_INVALID_OR_EXPIRED));
+        verify(userRepository, never()).findByEmail(anyString());
+    }
+
+    @Test
+    void shouldRestoreResentOtpWhenOldCodeArrivesDuringResend() {
+        stubWrongCodeAttempt(1L);
+        OtpRecord resent = new OtpRecord("777777", "login", Instant.now().plusSeconds(1), 0);
+        when(redisService.getAndDelete("otp:email", "user@example.com", OtpRecord.class)).thenReturn(resent);
+
+        assertThatThrownBy(() -> authService.verifyOtp("user@example.com", null, "123456", false, IP))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_INVALID_OR_EXPIRED));
+
+        verify(redisService).set(eq("otp:email"), eq("user@example.com"), eq(resent), any(Duration.class));
         verify(userRepository, never()).findByEmail(anyString());
     }
 
@@ -675,10 +689,9 @@ class AuthServiceTest {
     void shouldResolveSameAccountWhenGmailVariantVerifiesOtp() {
         User existing = User.builder().id(UUID.randomUUID()).email("ab@gmail.com")
                 .roles(new String[] { "user" }).build();
-        when(redisService.get(eq("otp:email"), eq("ab@gmail.com"), eq(OtpRecord.class)))
-                .thenReturn(new OtpRecord("123456", "login", Instant.now(), 0));
-        when(redisService.getAndDelete(eq("otp:email"), eq("ab@gmail.com"), eq(OtpRecord.class)))
-                .thenReturn(new OtpRecord("123456", "login", Instant.now(), 0));
+        OtpRecord gmailOtp = new OtpRecord("123456", "login", Instant.now(), 0);
+        when(redisService.get(eq("otp:email"), eq("ab@gmail.com"), eq(OtpRecord.class))).thenReturn(gmailOtp);
+        when(redisService.getAndDelete(eq("otp:email"), eq("ab@gmail.com"), eq(OtpRecord.class))).thenReturn(gmailOtp);
         when(userRepository.findByEmail("ab@gmail.com")).thenReturn(Optional.of(existing));
         when(jwtUtil.generateToken(anyString(), anyString(), any())).thenReturn("mock-token");
         when(refreshTokenService.generate(anyString(), anyString(), any())).thenReturn("mock-refresh-token");

@@ -325,7 +325,16 @@ public class AuthService {
         }
 
         // Atomic GETDEL: of concurrent requests carrying the right code, only one consumes the OTP
-        if (redisService.getAndDelete(namespace, key, OtpRecord.class) == null) {
+        OtpRecord consumed = redisService.getAndDelete(namespace, key, OtpRecord.class);
+        if (consumed == null) {
+            throw ApiException.unauthorized(MessageKey.AUTH_OTP_INVALID_OR_EXPIRED);
+        }
+        if (!consumed.createdAt().equals(rec.createdAt())) {
+            // A resend replaced the OTP after it was read: the old code must not sign in, and the new OTP goes back
+            long left = otpTtlSeconds - Duration.between(consumed.createdAt(), Instant.now()).getSeconds();
+            if (left > 0) {
+                redisService.set(namespace, key, consumed, Duration.ofSeconds(left));
+            }
             throw ApiException.unauthorized(MessageKey.AUTH_OTP_INVALID_OR_EXPIRED);
         }
         redisService.delete(failNs, attemptKey);
@@ -336,7 +345,9 @@ public class AuthService {
     /**
      * Locks this identifier + IP for 5 minutes, doubling with each lockout in a row, then rejects. The OTP itself is kept,
      * so one IP's lockout does not void the code the real user is about to enter from another (only the shared
-     * {@link #MAX_OTP_GUESSES} budget does); the counter is cleared so the next lock window starts with fresh attempts.
+     * {@link #MAX_OTP_GUESSES} budget does). The counter is kept, so requests already in flight see it past the limit
+     * and cannot escalate again; it outlives the OTP by at most its TTL, which is shorter than any lock, and a locked
+     * pair cannot resend to extend it, so the next lock window starts with fresh attempts.
      */
     private void lockOut(String namespace, String attemptKey) {
         String levelNs = namespace + OTP_LEVEL_SUFFIX;
@@ -344,7 +355,6 @@ public class AuthService {
         Duration lock = lockDuration(level);
         redisService.setOrThrow(namespace + OTP_LOCK_SUFFIX, attemptKey, "1", lock);
         redisService.expire(levelNs, attemptKey, lock.plus(OTP_LEVEL_TTL));
-        redisService.delete(namespace + OTP_FAIL_SUFFIX, attemptKey);
         throw ApiException.unauthorized(MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS);
     }
 

@@ -124,6 +124,10 @@ public enum MessageKey {
     // === Lookup ===
     LOOKUP_NOT_FOUND("lookup.not_found"),
     LOOKUP_EXISTS("lookup.exists"),
+
+    // === Admin ===
+    ADMIN_SELF_ACTION_FORBIDDEN("admin.self_action_forbidden"),
+    ADMIN_LAST_ADMIN("admin.last_admin"),
     ;
 
     private final String code;

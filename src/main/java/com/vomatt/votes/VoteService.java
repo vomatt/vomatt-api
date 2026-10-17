@@ -777,8 +777,13 @@ public class VoteService {
         return response;
     }
 
-    // Fixed queries per page: options / tags / creators via batch fetching, Selections and comment counts one query each
-    private List<VoteResponse> toResponses(List<Vote> votes, String userId) {
+    /**
+     * The one Poll-to-response path (Sealed via {@link VoteMapper}). Fixed queries per page: options / tags / creators via
+     * batch fetching, Selections and comment counts one query each.
+     *
+     * @param userId viewer, or null for none (no Selection, no {@code deletable}), as for admin views
+     */
+    public List<VoteResponse> toResponses(List<Vote> votes, String userId) {
         if (votes.isEmpty()) {
             return List.of();
         }
@@ -854,8 +859,8 @@ public class VoteService {
         voteRepository.adjustTurnout(voteId, -1);
     }
 
-    // Popular tag counts include only Public Polls
-    private static Set<UUID> countedTagIds(Vote vote) {
+    /** Tags whose usage count includes the Poll: popular tag counts include only Public Polls. */
+    public static Set<UUID> countedTagIds(Vote vote) {
         return vote.getAudience() != Audience.PUBLIC ? Set.of()
             : vote.getTags().stream().map(Tag::getId).collect(Collectors.toSet());
     }

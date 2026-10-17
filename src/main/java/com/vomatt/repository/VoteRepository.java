@@ -18,6 +18,8 @@ import jakarta.persistence.LockModeType;
 @Repository
 public interface VoteRepository extends JpaRepository<Vote, UUID> {
 
+    long countByCreatorId(UUID creatorId);
+
     @Query("SELECT v FROM Vote v LEFT JOIN FETCH v.options WHERE v.id = :id")
     Optional<Vote> findByIdWithOptions(@Param("id") UUID id);
 

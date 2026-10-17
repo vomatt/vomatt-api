@@ -14,4 +14,7 @@ public @interface Auditable {
     String resourceType();
     
     int resourceIdIndex() default -1;
+
+    /** Index of the argument whose toString() is stored in details (e.g. a suspend reason); -1 for none. */
+    int detailsIndex() default -1;
 }

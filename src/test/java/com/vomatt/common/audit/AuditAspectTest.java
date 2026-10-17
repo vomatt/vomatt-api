@@ -46,7 +46,7 @@ class AuditAspectTest {
         aspect.logFailedAction(joinPoint, auditable,
                 new ApiException(HttpStatus.TOO_MANY_REQUESTS, MessageKey.COMMON_RATE_LIMITED));
 
-        verify(auditService, never()).logFailedAction(any(), any(), any(), any(), any(), any(), any());
+        verify(auditService, never()).logFailedAction(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -55,7 +55,7 @@ class AuditAspectTest {
         aspect.logFailedAction(joinPoint, auditable, new ApiException(HttpStatus.UNAUTHORIZED, MessageKey.COMMON_UNAUTHORIZED));
 
         verify(auditService, org.mockito.Mockito.times(2))
-                .logFailedAction(any(), any(), any(), any(), any(), any(), any());
+                .logFailedAction(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -65,6 +65,6 @@ class AuditAspectTest {
                 new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, MessageKey.COMMON_INTERNAL_ERROR));
 
         verify(auditService, org.mockito.Mockito.times(2))
-                .logFailedAction(any(), any(), any(), any(), any(), any(), any());
+                .logFailedAction(any(), any(), any(), any(), any(), any(), any(), any());
     }
 }

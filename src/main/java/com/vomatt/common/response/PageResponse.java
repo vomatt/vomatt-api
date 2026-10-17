@@ -2,6 +2,8 @@ package com.vomatt.common.response;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
@@ -12,6 +14,11 @@ public record PageResponse<T>(
         @Schema(description = "Current page number (1-based)", example = "1") int page,
         @Schema(description = "Page size", example = "20") int limit
 ) {
+
+    /** 1-based {@code page} (default 1) and {@code limit} (default 20, max 50, as cursor lists) as a Pageable. */
+    public static Pageable pageable(Integer page, Integer limit) {
+        return PageRequest.of(page == null || page < 1 ? 0 : page - 1, CursorResponse.limit(limit));
+    }
 
     public static <T> PageResponse<T> of(List<T> content, long total, int page, int limit) {
         return new PageResponse<>(content, total, page, limit);

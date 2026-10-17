@@ -71,6 +71,8 @@ public interface VoteCommentRepository extends JpaRepository<VoteComment, UUID> 
             + "WHERE c.parent.id IN :parentIds AND c.isDeleted = false GROUP BY c.parent.id")
     List<IdCount> countRepliesByParentIds(@Param("parentIds") Collection<UUID> parentIds);
 
+    long countByUserId(UUID userId);
+
     /**
      * Find all comments by user
      */

@@ -42,6 +42,10 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     boolean existsByIdAndActiveFalse(UUID id);
 
+    /** Active accounts holding the admin role; guards against removing the last one. */
+    @Query(value = "SELECT count(*) FROM vomatt.users WHERE active = true AND 'admin' = ANY(roles)", nativeQuery = true)
+    long countActiveAdmins();
+
     /**
      * Keyset page of username search (case-insensitive contains), ordered by username; null cursor for the first page.
      * The bigram GIN index finds candidates and LIKE confirms the contiguous match, as in Poll search (ADR 0001).

@@ -53,6 +53,13 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void shouldReturn409ConflictWhenRowLockTimesOut() throws Exception {
+        mockMvc.perform(get("/test/lock-timeout"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value(MessageKey.COMMON_CONFLICT.code()));
+    }
+
+    @Test
     void accessDeniedException_returns403() throws Exception {
         mockMvc.perform(get("/test/access-denied"))
                 .andExpect(status().isForbidden())
@@ -136,6 +143,11 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/test/illegal-argument")
         public String illegalArgument() {
             throw new IllegalArgumentException("Invalid UUID string: not-a-uuid");
+        }
+
+        @GetMapping("/test/lock-timeout")
+        public String lockTimeout() {
+            throw new org.springframework.dao.PessimisticLockingFailureException("lock timeout");
         }
 
         @GetMapping("/test/access-denied")

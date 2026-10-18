@@ -7,6 +7,7 @@ import com.vomatt.votes.dto.VoterResponse;
 import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
+import com.vomatt.entity.VoterVisibility;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -33,7 +34,7 @@ public class VoteMapper {
         response.setDeadline(vote.getDeadline());
         response.setActive(vote.isActive());
         response.setAllowMultipleChoices(vote.isAllowMultipleChoices());
-        response.setAnonymous(vote.isAnonymous());
+        response.setAnonymous(vote.getVoterVisibility() == VoterVisibility.NOBODY);
         response.setVoterVisibility(vote.getVoterVisibility());
         response.setAudience(vote.getAudience());
         response.setCreatedAt(vote.getCreatedAt());
@@ -85,7 +86,7 @@ public class VoteMapper {
         response.setDeadline(vote.getDeadline());
         response.setActive(vote.isActive());
         response.setAllowMultipleChoices(vote.isAllowMultipleChoices());
-        response.setAnonymous(vote.isAnonymous());
+        response.setAnonymous(vote.getVoterVisibility() == VoterVisibility.NOBODY);
         response.setCreatedAt(vote.getCreatedAt());
         response.setTotalVotes(participants);
         response.setVotingActive(vote.isVotingActive());

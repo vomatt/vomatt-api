@@ -4,9 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
-/**
- * Request to verify an email OTP and complete login / signup.
- */
+/** Request to verify an email OTP and complete login / signup (consumer login or admin console login). */
 @Schema(description = "Request to verify an email OTP")
 public record VerifyOtpRequest(
 
@@ -15,10 +13,6 @@ public record VerifyOtpRequest(
 
         @Schema(description = "OTP code received by email", requiredMode = Schema.RequiredMode.REQUIRED,
                 example = "123456")
-        @NotBlank String code,
-
-        @Schema(description = "Set to \"true\" to restrict to existing admin accounts (admin console login). Any other value, or null, means no restriction",
-                example = "false", allowableValues = {"true", "false"}, nullable = true)
-        String checkRole
+        @NotBlank String code
 ) {
 }

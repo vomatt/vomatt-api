@@ -31,8 +31,11 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import com.vomatt.common.constant.LoginUnlock;
 import com.vomatt.common.i18n.MessageKey;
 
 @Slf4j
@@ -111,6 +114,7 @@ public class AuthService {
 
     private static final String OTP_EMAIL_NS = "otp:email";
     private static final String OTP_PHONE_NS = "otp:phone";
+    private static final String OTP_ADMIN_EMAIL_NS = "otp:admin-email";
 
     @Value("${otp.ttl-seconds:180}")
     private long otpTtlSeconds;
@@ -118,18 +122,12 @@ public class AuthService {
     @Value("${otp.resend-cooldown-seconds:180}")
     private long otpResendCooldownSeconds;
 
-    public void sendOtp(String email, String phone, String type, boolean checkRole, String clientIp) {
+    public void sendOtp(String email, String phone, String type, String clientIp) {
         String otpType = (type != null) ? type : "login";
         String code = generateOtpCode();
 
         if (email != null && !email.isBlank()) {
-            String normalizedEmail = User.normalizeEmail(email);
-            if (checkRole) {
-                userRepository.findByEmail(normalizedEmail)
-                        .filter(User::isAdmin)
-                        .orElseThrow(() -> ApiException.forbidden(MessageKey.AUTH_ADMIN_FORBIDDEN));
-            }
-            sendEmailOtp(normalizedEmail, code, clientIp);
+            sendEmailOtp(OTP_EMAIL_NS, User.normalizeEmail(email), code, clientIp);
         } else if (phone != null && !phone.isBlank()) {
             sendPhoneOtp(User.normalizePhone(phone), otpType, code, clientIp);
         } else {
@@ -137,15 +135,25 @@ public class AuthService {
         }
     }
 
-    private void sendEmailOtp(String normalizedEmail, String code, String clientIp) {
+    /**
+     * Admin console login, step 1. Its OTPs, attempt counters, lockouts and cooldowns live in their own namespace, so a
+     * code sent by the consumer login cannot sign in here, and lockouts on one side do not block the other.
+     */
+    public void sendAdminOtp(String email, String clientIp) {
+        String normalizedEmail = requireEmail(email);
+        requireExistingAdminByEmail(normalizedEmail);
+        sendEmailOtp(OTP_ADMIN_EMAIL_NS, normalizedEmail, generateOtpCode(), clientIp);
+    }
+
+    private void sendEmailOtp(String namespace, String normalizedEmail, String code, String clientIp) {
         String attemptKey = attemptKey(normalizedEmail, clientIp);
-        rejectIfLocked(OTP_EMAIL_NS, attemptKey);
+        rejectIfLocked(namespace, attemptKey);
 
         boolean isExisting = userRepository.existsByEmail(normalizedEmail);
         String otpType = isExisting ? "login" : "signup";
 
-        acquireResendCooldown(OTP_EMAIL_NS, normalizedEmail);
-        storeOtp(OTP_EMAIL_NS, normalizedEmail, attemptKey, new OtpRecord(code, otpType, Instant.now(), 0));
+        acquireResendCooldown(namespace, normalizedEmail);
+        storeOtp(namespace, normalizedEmail, attemptKey, new OtpRecord(code, otpType, Instant.now(), 0));
 
         try {
             if ("signup".equals(otpType)) {
@@ -155,7 +163,7 @@ public class AuthService {
             }
         } catch (Exception ex) {
             // The code never reached the user: drop it and shorten the cooldown so a retry is possible soon
-            releaseUndeliveredOtp(OTP_EMAIL_NS, normalizedEmail);
+            releaseUndeliveredOtp(namespace, normalizedEmail);
             log.warn("Failed to send OTP email: {}", ex.getMessage());
             throw ApiException.badRequest(MessageKey.AUTH_EMAIL_SEND_FAILED);
         }
@@ -181,40 +189,35 @@ public class AuthService {
         }
     }
 
-    public AuthResponse verifyOtp(String email, String phone, String code, boolean checkRole, String clientIp) {
+    public AuthResponse verifyOtp(String email, String phone, String code, String clientIp) {
         if (email != null && !email.isBlank()) {
-            String normalizedEmail = User.normalizeEmail(email);
-            // P5-#13: the admin login role check must run before "consume OTP / create account / send welcome email".
-            // Otherwise a non-admin attempt would burn the OTP, auto-create an account and send an email before returning 403.
-            if (checkRole) {
-                requireExistingAdminByEmail(normalizedEmail);
-            }
-            return verifyEmailOtp(normalizedEmail, code, clientIp);
+            return verifyEmailOtp(User.normalizeEmail(email), code, clientIp);
         } else if (phone != null && !phone.isBlank()) {
-            String normalizedPhone = User.normalizePhone(phone);
-            // P5-#13: the phone path must also check the role before consuming the OTP (both paths covered).
-            if (checkRole) {
-                requireExistingAdminByPhone(normalizedPhone);
-            }
-            return verifyPhoneOtp(normalizedPhone, code, clientIp);
+            return verifyPhoneOtp(User.normalizePhone(phone), code, clientIp);
         } else {
             throw ApiException.badRequest(MessageKey.AUTH_IDENTIFIER_REQUIRED);
         }
     }
 
-    /**
-     * P5-#13: requires an existing account for the email with the ADMIN role; otherwise throws 403.
-     * Called before {@link #consumeOtp} so a rejected admin attempt does not consume the OTP, create an account or send email.
-     */
-    private void requireExistingAdminByEmail(String normalizedEmail) {
-        userRepository.findByEmail(normalizedEmail)
-                .filter(User::isAdmin)
-                .orElseThrow(() -> ApiException.forbidden(MessageKey.AUTH_ADMIN_FORBIDDEN));
+    /** Admin console login, step 2: the only path that issues admin-scope tokens. Never creates an account. */
+    public AuthResponse verifyAdminOtp(String email, String code, String clientIp) {
+        String normalizedEmail = requireEmail(email);
+        // P5-#13: the role check runs before the OTP is consumed, so a non-admin attempt burns nothing
+        User user = requireExistingAdminByEmail(normalizedEmail);
+        consumeOtp(OTP_ADMIN_EMAIL_NS, normalizedEmail, code, clientIp);
+        return buildAuthResponse(user, true);
     }
 
-    /** P5-#13: phone variant of the existing ADMIN account check; same semantics as {@link #requireExistingAdminByEmail}. */
-    private void requireExistingAdminByPhone(String normalizedPhone) {
-        userRepository.findByPhoneNumber(normalizedPhone)
+    private static String requireEmail(String email) {
+        if (email == null || email.isBlank()) {
+            throw ApiException.badRequest(MessageKey.AUTH_IDENTIFIER_REQUIRED);
+        }
+        return User.normalizeEmail(email);
+    }
+
+    /** Requires an existing account for the email with the ADMIN role; otherwise throws 403. */
+    private User requireExistingAdminByEmail(String normalizedEmail) {
+        return userRepository.findByEmail(normalizedEmail)
                 .filter(User::isAdmin)
                 .orElseThrow(() -> ApiException.forbidden(MessageKey.AUTH_ADMIN_FORBIDDEN));
     }
@@ -275,6 +278,14 @@ public class AuthService {
     /** How long the lockout level outlives the lock it set, so the next lockout within that window doubles again. */
     private static final Duration OTP_LEVEL_TTL = Duration.ofHours(24);
 
+    /**
+     * Namespace suffix for the per-identifier index of attempt keys that guessed wrong (hash: attemptKey -> "1"), so an
+     * admin can clear one identifier's counters and locks across every IP; the attempt keys alone are one-way hashes.
+     */
+    private static final String OTP_ATTEMPT_IDX_SUFFIX = ":attempt-idx";
+    /** Outlives the longest lock plus its level, so the index never expires before a key it lists. */
+    private static final Duration OTP_ATTEMPT_IDX_TTL = OTP_LOCK_MAX.plus(OTP_LEVEL_TTL);
+
     /** Cooldown kept after a failed delivery, so a script cannot hammer the paid SMS / email provider. */
     private static final Duration OTP_FAILED_SEND_COOLDOWN = Duration.ofSeconds(30);
 
@@ -315,6 +326,7 @@ public class AuthService {
             if (guesses == MAX_OTP_GUESSES) {
                 redisService.set(namespace + OTP_COOLDOWN_SUFFIX, key, availableAt(OTP_EXHAUSTED_COOLDOWN), OTP_EXHAUSTED_COOLDOWN);
             }
+            indexAttempt(namespace, key, attemptKey);
             // The last allowed attempt was wrong: lock now rather than on the next request.
             // Only this request escalates, so concurrent guesses cannot double the lockout twice.
             if (attempts == MAX_OTP_ATTEMPTS) {
@@ -362,6 +374,70 @@ public class AuthService {
         // Clamp the exponent first: 5 min x 2^9 already exceeds 24h, and a larger shift would overflow
         Duration lock = OTP_LOCK_BASE.multipliedBy(1L << Math.clamp(level - 1, 0, 9));
         return lock.compareTo(OTP_LOCK_MAX) > 0 ? OTP_LOCK_MAX : lock;
+    }
+
+    /** Fail-soft: the index only serves admin unlock, so a Redis error must not turn a wrong-code 401 into a 500. */
+    private void indexAttempt(String namespace, String identifier, String attemptKey) {
+        try {
+            redisService.execInTransaction(List.of(
+                    RedisService.RedisWrite.hput(namespace + OTP_ATTEMPT_IDX_SUFFIX, identifier, attemptKey, "1"),
+                    RedisService.RedisWrite.expire(namespace + OTP_ATTEMPT_IDX_SUFFIX, identifier, OTP_ATTEMPT_IDX_TTL)));
+        } catch (RuntimeException ex) {
+            log.warn("Failed to index OTP attempt: {}", ex.getMessage());
+        }
+    }
+
+    /**
+     * Admin unlock: clears the chosen {@link LoginUnlock} targets for one identifier on one channel.
+     *
+     * @param identifier normalized email or E.164 phone, as stored on the account
+     * @param clientIp   only this IP (as the server resolved it); null for every IP that guessed wrong since the
+     *                   index existed
+     * @return how many Redis keys were removed (0 when nothing was locked or counted)
+     */
+    public int unlockLogin(String channel, String identifier, String clientIp, Set<String> targets) {
+        String namespace = switch (channel) {
+            case LoginUnlock.CHANNEL_EMAIL -> OTP_EMAIL_NS;
+            case LoginUnlock.CHANNEL_PHONE -> OTP_PHONE_NS;
+            case LoginUnlock.CHANNEL_ADMIN -> OTP_ADMIN_EMAIL_NS;
+            default -> throw new IllegalArgumentException("Unknown login channel: " + channel);
+        };
+        String indexNs = namespace + OTP_ATTEMPT_IDX_SUFFIX;
+        Collection<String> attemptKeys = clientIp != null ? List.of(attemptKey(identifier, clientIp))
+                : redisService.hGetAll(indexNs, identifier).keySet();
+        boolean lock = targets.contains(LoginUnlock.TARGET_LOCK);
+        boolean attempts = targets.contains(LoginUnlock.TARGET_ATTEMPTS);
+        int removed = 0;
+        for (String attemptKey : attemptKeys) {
+            if (lock) {
+                removed += deleted(namespace + OTP_LOCK_SUFFIX, attemptKey) + deleted(namespace + OTP_LEVEL_SUFFIX, attemptKey);
+            }
+            if (attempts) {
+                removed += deleted(namespace + OTP_FAIL_SUFFIX, attemptKey);
+            }
+        }
+        if (attempts) {
+            OtpRecord otp = redisService.get(namespace, identifier, OtpRecord.class);
+            if (otp != null) {
+                removed += deleted(namespace + OTP_GUESS_SUFFIX, identifier + ":" + otp.createdAt().toEpochMilli());
+            }
+        }
+        if (targets.contains(LoginUnlock.TARGET_COOLDOWN)) {
+            removed += deleted(namespace + OTP_COOLDOWN_SUFFIX, identifier);
+        }
+        // Nothing left to clear for these keys once both the lock and the counter are gone
+        if (lock && attempts) {
+            if (clientIp == null) {
+                redisService.delete(indexNs, identifier);
+            } else {
+                redisService.hDelete(indexNs, identifier, attemptKeys.iterator().next());
+            }
+        }
+        return removed;
+    }
+
+    private int deleted(String namespace, String key) {
+        return redisService.delete(namespace, key) ? 1 : 0;
     }
 
     private void rejectIfLocked(String namespace, String attemptKey) {
@@ -775,6 +851,10 @@ public class AuthService {
     }
 
     public AuthResponse buildAuthResponse(User user) {
+        return buildAuthResponse(user, false);
+    }
+
+    private AuthResponse buildAuthResponse(User user, boolean adminScope) {
         // Ban check: all login paths (OTP/Google/LINE/Apple, phone) funnel through here, so they are blocked in one place
         if (!user.isActive()) {
             throw ApiException.forbidden(MessageKey.AUTH_ACCOUNT_BANNED);
@@ -782,8 +862,8 @@ public class AuthService {
         user.setLastLoginAt(java.time.OffsetDateTime.now());
         userRepository.save(user);
         List<String> roles = List.of(user.getRoles());
-        String token = jwtUtil.generateToken(user.getId().toString(), user.getEmail(), roles);
-        String refreshToken = refreshTokenService.generate(user.getId().toString(), user.getEmail(), roles);
+        String token = jwtUtil.generateToken(user.getId().toString(), user.getEmail(), roles, adminScope);
+        String refreshToken = refreshTokenService.generate(user.getId().toString(), user.getEmail(), roles, adminScope);
         return new AuthResponse(token, refreshToken,
                 new AuthResponse.UserInfo(user.getId().toString(), user.getEmail(), user.getUsername(),
                         user.getDisplayName(), roles, user.getAvatarUrl(), user.getPhoneNumber()));

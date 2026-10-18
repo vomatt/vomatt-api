@@ -1,5 +1,6 @@
 package com.vomatt.common.security;
 
+import com.vomatt.common.constant.UserRole;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtParser;
@@ -29,6 +30,10 @@ public class JwtUtil {
     // HS256 needs a key of >= 256 bits (32 bytes); matches the JWT_SECRET >= 32 characters rule
     private static final int MIN_SECRET_BYTES = 32;
 
+    private static final String SCOPE_CLAIM = "scope";
+    private static final String SCOPE_ADMIN = "admin";
+    private static final String SCOPE_USER = "user";
+
     public JwtUtil(@Value("${jwt.secret}") String secret, @Value("${jwt.expiration-seconds}") long expirationSeconds) {
         // Validate the key length at startup (bean creation) to fail fast on misconfiguration,
         // instead of JJWT failing implicitly on the first token sign/verify
@@ -43,18 +48,27 @@ public class JwtUtil {
         this.expirationSeconds = expirationSeconds;
     }
 
-    public String generateToken(String userId, String email, List<String> roles) {
+    /**
+     * @param adminScope true only for tokens issued by the admin console login; other tokens never grant the admin
+     *                   role, even when the account holds it
+     */
+    public String generateToken(String userId, String email, List<String> roles, boolean adminScope) {
         long nowMs = System.currentTimeMillis();
-        return Jwts.builder().subject(userId).claim("email", email).claim("roles", roles).issuedAt(new Date(nowMs))
+        return Jwts.builder().subject(userId).claim("email", email).claim("roles", roles)
+                .claim(SCOPE_CLAIM, adminScope ? SCOPE_ADMIN : SCOPE_USER).issuedAt(new Date(nowMs))
                 .expiration(new Date(nowMs + expirationSeconds * 1000)).signWith(key).compact();
     }
 
     @SuppressWarnings("unchecked")
     public UserPrincipal parseToken(String token) {
         Claims claims = parser.parseSignedClaims(token).getPayload();
-
-        return new UserPrincipal(claims.getSubject(), claims.get("email", String.class),
-                (List<String>) claims.get("roles"));
+        List<String> roles = (List<String>) claims.get("roles");
+        // Fails closed: a token without the admin scope (including ones issued before the claim existed) drops the
+        // admin role here, so nothing downstream can grant it
+        if (roles != null && !SCOPE_ADMIN.equals(claims.get(SCOPE_CLAIM, String.class))) {
+            roles = roles.stream().filter(r -> !UserRole.ADMIN.equalsIgnoreCase(r)).toList();
+        }
+        return new UserPrincipal(claims.getSubject(), claims.get("email", String.class), roles);
     }
 
     public boolean validateJwtToken(String authToken) {

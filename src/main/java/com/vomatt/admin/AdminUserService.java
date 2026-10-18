@@ -11,7 +11,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.vomatt.admin.dto.AdminUserDetail;
+import com.vomatt.admin.dto.AdminUserOptionsResponse;
 import com.vomatt.admin.dto.AdminUserResponse;
+import com.vomatt.admin.dto.UnlockLoginRequest;
+import com.vomatt.admin.dto.UnlockLoginResponse;
+import com.vomatt.auth.AuthService;
+import com.vomatt.common.constant.LoginUnlock;
 import com.vomatt.common.constant.UserRole;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
@@ -45,6 +50,7 @@ public class AdminUserService {
     private final VoteCommentRepository voteCommentRepository;
     private final UserService userService;
     private final AdminMapper adminMapper;
+    private final AuthService authService;
 
     /** @param status active, suspended, or null for both */
     @Transactional(readOnly = true)
@@ -104,6 +110,27 @@ public class AdminUserService {
         userService.revokeTokensAfterCommit(userId.toString());
         log.info("User {} roles set to {} by admin {}", userId, roles, actorId);
         return detail(user);
+    }
+
+    public AdminUserOptionsResponse options() {
+        return new AdminUserOptionsResponse(UserRole.ALL, LoginUnlock.CHANNELS, LoginUnlock.TARGETS);
+    }
+
+    /** Clears OTP lockouts in Redis only; no row changes, so it needs no transaction. */
+    @Transactional(readOnly = true)
+    public UnlockLoginResponse unlockLogin(UUID userId, UnlockLoginRequest request, String actorId) {
+        User user = findUser(userId);
+        Set<String> targets = Set.copyOf(request.clearOrAll());
+        int cleared = 0;
+        for (String channel : Set.copyOf(request.channelsOrAll())) {
+            String identifier = LoginUnlock.CHANNEL_PHONE.equals(channel) ? user.getPhoneNumber() : user.getEmail();
+            // An account without this identifier cannot be locked on its channel
+            if (identifier != null) {
+                cleared += authService.unlockLogin(channel, identifier, blankToNull(request.ip()), targets);
+            }
+        }
+        log.info("User {} login unlocked by admin {} ({}): {} entries cleared", userId, actorId, request.auditDetails(), cleared);
+        return new UnlockLoginResponse(cleared);
     }
 
     private User findUser(UUID userId) {

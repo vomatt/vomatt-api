@@ -10,4 +10,6 @@ public final class UserRole {
 
     /** Every assignable role; the one list for role validation. */
     public static final String PATTERN   = "user|moderator|admin";
+
+    public static final java.util.List<String> ALL = java.util.List.of(USER, MODERATOR, ADMIN);
 }

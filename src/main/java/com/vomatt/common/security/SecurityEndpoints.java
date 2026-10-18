@@ -15,7 +15,8 @@ public final class SecurityEndpoints {
     /** Auth endpoints that require no token. */
     public static final String[] PUBLIC_AUTH = { "/api/auth/send-otp", "/api/auth/verify-otp", "/api/auth/check-email",
             "/api/auth/phone/send-otp", "/api/auth/phone/verify-otp", "/api/auth/google", "/api/auth/line",
-            "/api/auth/apple", "/api/auth/refresh", "/api/auth/logout" };
+            "/api/auth/apple", "/api/auth/refresh", "/api/auth/logout", "/api/auth/admin/send-otp",
+            "/api/auth/admin/verify-otp" };
 
     /**
      * Authenticated /api/users sub-paths; must be matched before {@link #PUBLIC_GET},

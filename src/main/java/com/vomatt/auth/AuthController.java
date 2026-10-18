@@ -32,7 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/auth")
-@Tag(name = "Auth", description = "Authentication: email OTP, phone OTP, Google / LINE / Apple login, token refresh and logout. "
+@Tag(name = "Auth", description = "Authentication: email OTP, phone OTP, Google / LINE / Apple login, admin console login, token refresh and logout. "
         + "See docs/frontend/auth-flow.md for the end-to-end flows.")
 @RequiredArgsConstructor
 public class AuthController {
@@ -74,6 +74,30 @@ public class AuthController {
               "error": null
             }""";
 
+    private static final String OK_ADMIN_AUTH = """
+            {
+              "success": true,
+              "data": {
+                "token": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTkwYThiMi0xMjM0LTc4OTAtYWJjZC1lZjAxMjM0NTY3ODkifQ.sig",
+                "refreshToken": "8c7e3f4a-1234-5678-90ab-cdef12345678",
+                "user": {
+                  "id": "0190a8b2-1234-7890-abcd-ef0123456789",
+                  "email": "admin@example.com",
+                  "username": "admin",
+                  "displayName": "Admin",
+                  "roles": ["user", "admin"],
+                  "avatarUrl": "bot:boba",
+                  "phoneNumber": null
+                }
+              },
+              "message": null,
+              "errorCode": null,
+              "error": null
+            }""";
+
+    private static final String ADMIN_FORBIDDEN = """
+            {"success": false, "data": null, "message": "This account does not have admin privileges", "errorCode": "auth.admin.forbidden", "error": "This account does not have admin privileges"}""";
+
     private final AuthService authService;
 
     @PostMapping("/send-otp")
@@ -81,26 +105,21 @@ public class AuthController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = OK_RESULT)))
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
-                    {"email": "user@example.com", "checkRole": "false"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-            description = "`checkRole` is \"true\" and the email is not an existing admin account",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
-                    {"success": false, "data": null, "message": "This account does not have admin privileges", "errorCode": "auth.admin.forbidden", "error": "This account does not have admin privileges"}""")))
+                    {"email": "user@example.com"}""")))
     @Operation(summary = "Send email OTP",
             description = """
                     **Auth**: public
                     **Precondition**: none; the same endpoint serves login and signup (the server picks which by whether the email is registered)
                     **Behavior**: generates a 6-digit OTP, stores it with a TTL (default 180 s) and emails it. The email is lower-cased and trimmed; a Gmail address (gmail.com / googlemail.com) also loses its +tag and dots and moves to gmail.com. \
-                    If `checkRole` is "true", only an existing admin account may request an OTP (admin console login)
+                    The admin console signs in with `POST /api/auth/admin/send-otp` instead
                     **Side effects**: sends an email; replaces any previous OTP for this address. A resend is refused during the cooldown (default 180 s)
                     **Errors**:
                     - 400 `auth.identifier.required`: `email` is missing or blank
                     - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
                     - 400 `auth.email.send_failed`: the email provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
-                    - 401 `auth.otp.too_many_attempts`: this email is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected
-                    - 403 `auth.admin.forbidden`: `checkRole` is "true" and the account is not an admin""")
+                    - 401 `auth.otp.too_many_attempts`: this email is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> sendOtp(@Valid @RequestBody SendOtpRequest req, HttpServletRequest httpRequest) {
-        authService.sendOtp(req.email(), null, null, Boolean.parseBoolean(req.checkRole()), ClientIpResolver.resolve(httpRequest));
+        authService.sendOtp(req.email(), null, null, ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 
@@ -109,13 +128,13 @@ public class AuthController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = OK_AUTH)))
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
-                    {"email": "user@example.com", "code": "123456", "checkRole": "false"}""")))
+                    {"email": "user@example.com", "code": "123456"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
             description = "OTP missing/expired, wrong, or too many wrong attempts",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
                     {"success": false, "data": null, "message": "Invalid verification code", "errorCode": "auth.invalid_otp", "error": "Invalid verification code"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-            description = "Account suspended (`auth.account_banned`) or not an admin when `checkRole` is \"true\" (`auth.admin.forbidden`)",
+            description = "Account suspended (`auth.account_banned`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
                     {"success": false, "data": null, "message": "This account has been banned and cannot sign in", "errorCode": "auth.account_banned", "error": "This account has been banned and cannot sign in"}""")))
     @Operation(summary = "Verify email OTP and sign in",
@@ -123,7 +142,7 @@ public class AuthController {
                     **Auth**: public
                     **Precondition**: an OTP was sent to this email via `POST /api/auth/send-otp` and has not expired
                     **Behavior**: consumes the OTP and returns an access token and refresh token. Creates the user if the email is new (signup), \
-                    otherwise signs the existing user in. If `checkRole` is "true", the account must already exist and be an admin, and this is checked before the OTP is consumed
+                    otherwise signs the existing user in. The tokens never grant the admin role, even for an admin account: the admin console signs in with `POST /api/auth/admin/verify-otp`
                     **Side effects**: the OTP is consumed on success; a new user (with a random bot avatar) is created and a welcome email sent on signup; `lastLoginAt` is updated. \
                     Wrong codes are counted per email and client IP; resending does not reset the count. \
                     The 3rd wrong code locks this email for the caller's IP for 5 minutes, doubling on each further lockout (10, 20, 40 minutes...) up to 24 hours; \
@@ -135,12 +154,68 @@ public class AuthController {
                     - 401 `auth.otp.invalid_or_expired`: no OTP exists for this email (never sent, expired, already used, or its 10 guesses are used up)
                     - 401 `auth.invalid_otp`: the code is wrong
                     - 401 `auth.otp.too_many_attempts`: 3rd wrong code, or this identifier is locked for the caller's IP (even a correct code is refused until the lock ends)
-                    - 403 `auth.admin.forbidden`: `checkRole` is "true" and the account is not an existing admin
                     - 403 `auth.account_banned`: the user is suspended (`active=false`)""")
     public ResponseEntity<ApiResponse<AuthResponse>> verifyOtp(@Valid @RequestBody VerifyOtpRequest req, HttpServletRequest httpRequest) {
-        AuthResponse response = authService.verifyOtp(req.email(), null, req.code(), Boolean.parseBoolean(req.checkRole()),
-                ClientIpResolver.resolve(httpRequest));
+        AuthResponse response = authService.verifyOtp(req.email(), null, req.code(), ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(response));
+    }
+
+    @PostMapping("/admin/send-otp")
+    @PublicApiResponse
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
+            content = @Content(examples = @ExampleObject(value = OK_RESULT)))
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
+                    {"email": "admin@example.com"}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+            description = "The email is not an existing admin account (`auth.admin.forbidden`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = ADMIN_FORBIDDEN)))
+    @Operation(summary = "Send admin console email OTP",
+            description = """
+                    **Auth**: public
+                    **Precondition**: the email belongs to an existing account holding the admin role
+                    **Behavior**: like `POST /api/auth/send-otp` (6-digit OTP, TTL default 180 s, same email normalization), but only for admin accounts. \
+                    Its OTPs, wrong-code counters, lockouts and resend cooldown are separate from the consumer login, so a code from `send-otp` does not work here and vice versa
+                    **Side effects**: sends an email; replaces any previous admin console OTP for this address. A resend is refused during the cooldown (default 180 s)
+                    **Errors**:
+                    - 400 `auth.identifier.required`: `email` is missing or blank
+                    - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
+                    - 400 `auth.email.send_failed`: the email provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
+                    - 401 `auth.otp.too_many_attempts`: this email is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected
+                    - 403 `auth.admin.forbidden`: the email is not an existing admin account""")
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> adminSendOtp(@Valid @RequestBody SendOtpRequest req, HttpServletRequest httpRequest) {
+        authService.sendAdminOtp(req.email(), ClientIpResolver.resolve(httpRequest));
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
+    @PostMapping("/admin/verify-otp")
+    @PublicApiResponse
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
+            content = @Content(examples = @ExampleObject(value = OK_ADMIN_AUTH)))
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
+                    {"email": "admin@example.com", "code": "123456"}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+            description = "OTP missing/expired, wrong, or too many wrong attempts",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
+                    {"success": false, "data": null, "message": "Invalid verification code", "errorCode": "auth.invalid_otp", "error": "Invalid verification code"}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+            description = "Not an existing admin account (`auth.admin.forbidden`) or account suspended (`auth.account_banned`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = ADMIN_FORBIDDEN)))
+    @Operation(summary = "Verify admin console email OTP and sign in",
+            description = """
+                    **Auth**: public
+                    **Precondition**: an OTP was sent to this email via `POST /api/auth/admin/send-otp` and has not expired
+                    **Behavior**: the only sign-in whose tokens grant the admin role (`/api/admin/**`). Checks the account is an existing admin before consuming the OTP, then returns an access token and refresh token; \
+                    refreshing them keeps the admin scope. Never creates an account. Wrong-code counting, lockouts and the 10-guess budget work as in `POST /api/auth/verify-otp`, separately from it
+                    **Side effects**: the OTP is consumed on success; `lastLoginAt` is updated
+                    **Errors**:
+                    - 400 `auth.identifier.required`: `email` is missing or blank
+                    - 401 `auth.otp.invalid_or_expired`: no admin console OTP exists for this email (never sent, expired, already used, or its 10 guesses are used up)
+                    - 401 `auth.invalid_otp`: the code is wrong
+                    - 401 `auth.otp.too_many_attempts`: 3rd wrong code, or this email is locked for the caller's IP (even a correct code is refused until the lock ends)
+                    - 403 `auth.admin.forbidden`: the email is not an existing admin account
+                    - 403 `auth.account_banned`: the user is suspended (`active=false`)""")
+    public ResponseEntity<ApiResponse<AuthResponse>> adminVerifyOtp(@Valid @RequestBody VerifyOtpRequest req, HttpServletRequest httpRequest) {
+        return ResponseEntity.ok(ApiResponse.ok(authService.verifyAdminOtp(req.email(), req.code(), ClientIpResolver.resolve(httpRequest))));
     }
 
     @PostMapping("/check-email")
@@ -182,7 +257,7 @@ public class AuthController {
                     - 400 `auth.sms.send_failed`: the SMS provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
                     - 401 `auth.otp.too_many_attempts`: this number is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> phoneSendOtp(@Valid @RequestBody PhoneSendOtpRequest req, HttpServletRequest httpRequest) {
-        authService.sendOtp(null, req.phone(), req.type(), false, ClientIpResolver.resolve(httpRequest));
+        authService.sendOtp(null, req.phone(), req.type(), ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 
@@ -217,7 +292,7 @@ public class AuthController {
                     - 401 `auth.otp.too_many_attempts`: 3rd wrong code, or this identifier is locked for the caller's IP (even a correct code is refused until the lock ends)
                     - 403 `auth.account_banned`: the user is suspended (`active=false`)""")
     public ResponseEntity<ApiResponse<AuthResponse>> phoneVerifyOtp(@Valid @RequestBody PhoneVerifyOtpRequest req, HttpServletRequest httpRequest) {
-        AuthResponse response = authService.verifyOtp(null, req.phone(), req.code(), false, ClientIpResolver.resolve(httpRequest));
+        AuthResponse response = authService.verifyOtp(null, req.phone(), req.code(), ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
@@ -344,7 +419,7 @@ public class AuthController {
                     **Auth**: public (authenticated by the refresh token in the body, not by the Authorization header)
                     **Precondition**: a refresh token from a previous login or refresh
                     **Behavior**: rotates the refresh token: the old one is spent and a new access token and refresh token are returned. \
-                    The response `user` is null; keep the user info from login. Roles are re-read from the database, so a role change takes effect on refresh. \
+                    The response `user` is null; keep the user info from login. Roles are re-read from the database, so a role change takes effect on refresh; the token keeps the scope of its sign-in, so only an admin console session refreshes into a token that grants the admin role. \
                     A second call with the same old token within the grace window (default 10 s) returns the same new pair instead of failing, so concurrent refreshes are safe
                     **Side effects**: the old refresh token is spent. If a spent token is presented again after the grace window, that sign-in is ended: \
                     its latest refresh token can no longer be refreshed (401 `auth.refresh_token.invalid`), so it must sign in again once its access token expires; the user's other devices stay signed in. \
@@ -367,7 +442,7 @@ public class AuthController {
                     **Auth**: public (identified by the refresh token in the body)
                     **Precondition**: none; an unknown or already-revoked token is not an error
                     **Behavior**: revokes the given refresh token. Other devices' refresh tokens stay valid
-                    **Side effects**: the refresh token can no longer be refreshed. The access token is stateless and stays valid until it expires (default 1 hour), so the client must discard it
+                    **Side effects**: the refresh token can no longer be refreshed. The access token is stateless and stays valid until it expires (default 15 minutes), so the client must discard it
                     **Errors**:
                     - 400 `common.validation_failed`: `refreshToken` is blank""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> logout(@Valid @RequestBody RefreshRequest req) {

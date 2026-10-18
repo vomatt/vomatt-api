@@ -224,14 +224,14 @@ public class UserController {
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Delete user account", description = """
-            **Auth**: required (own account; an active admin may delete any account)
-            **Precondition**: `userId` is the caller's own id, or the caller is an active admin in the database
+            **Auth**: required (own account; an active admin signed in through the admin console may delete any account)
+            **Precondition**: `userId` is the caller's own id, or the caller holds an admin console token (`POST /api/auth/admin/verify-otp`) and is an active admin in the database
             **Behavior**: permanently deletes the account. The user's Ballots are removed and released from the stored option counts \
             (this is a Retraction of every Ballot the user held).
             **Side effects**: once the deletion commits, all refresh tokens of the user are revoked, so the client must discard its tokens and sign out; \
             the deletion is written to the audit log
             **Errors**:
-            - 403 `user.delete.forbidden`: deleting another user's account without being an active admin (checked against the database, not the token)
+            - 403 `user.delete.forbidden`: deleting another user's account without an admin console token, or without being an active admin in the database
             - 409 `admin.last_admin`: the account is the only active admin
             - 409 `common.conflict`: another admin change is in progress; retry
             - 404 `user.not_found`: no account with this id

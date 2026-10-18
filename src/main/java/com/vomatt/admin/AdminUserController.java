@@ -3,8 +3,11 @@ package com.vomatt.admin;
 import java.util.UUID;
 
 import com.vomatt.admin.dto.AdminUserDetail;
+import com.vomatt.admin.dto.AdminUserOptionsResponse;
 import com.vomatt.admin.dto.AdminUserResponse;
 import com.vomatt.admin.dto.SuspendUserRequest;
+import com.vomatt.admin.dto.UnlockLoginRequest;
+import com.vomatt.admin.dto.UnlockLoginResponse;
 import com.vomatt.admin.dto.UpdateRolesRequest;
 import com.vomatt.common.annotation.CommonApiResponses;
 import com.vomatt.common.audit.Auditable;
@@ -26,6 +29,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -131,6 +135,32 @@ public class AdminUserController {
             @Parameter(description = "Page number, 1-based (default 1)") @RequestParam(required = false) Integer page,
             @Parameter(description = "Page size (1-50, default 20)") @RequestParam(required = false) Integer limit) {
         return ResponseEntity.ok(ApiResponse.ok(adminUserService.listUsers(q, status, role, page, limit)));
+    }
+
+    @GetMapping("/options")
+    @CommonApiResponses
+    @Operation(summary = "List User Admin Options",
+            description = """
+                    **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
+                    **Precondition**: caller holds role ADMIN
+                    **Behavior**: returns the values accepted by the user admin APIs: `roles` for Set User Roles and the `role` filter, `unlockChannels` and `unlockTargets` for Unlock User Login
+                    **Side effects**: none
+                    **Errors**: none beyond the common ones""")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Allowed values",
+            content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Options", value = """
+                    {
+                      "success": true,
+                      "data": {
+                        "roles": ["user", "moderator", "admin"],
+                        "unlockChannels": ["email", "phone", "admin"],
+                        "unlockTargets": ["lock", "attempts", "cooldown"]
+                      },
+                      "message": null,
+                      "errorCode": null,
+                      "error": null
+                    }""")))
+    public ResponseEntity<ApiResponse<AdminUserOptionsResponse>> options() {
+        return ResponseEntity.ok(ApiResponse.ok(adminUserService.options()));
     }
 
     @GetMapping("/{userId}")
@@ -281,5 +311,50 @@ public class AdminUserController {
             @Valid @RequestBody UpdateRolesRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(adminUserService.updateRoles(userId, request.roles(), principal.userId())));
+    }
+
+    @PostMapping("/{userId}/unlock-login")
+    @Auditable(action = "UNLOCK_LOGIN", resourceType = "USER", resourceIdIndex = 0, detailsIndex = 1)
+    @CommonApiResponses
+    @Operation(summary = "Unlock User Login",
+            description = """
+                    **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
+                    **Precondition**: the account exists. Not the same as Unsuspend User: this clears OTP sign-in lockouts, not a suspension
+                    **Behavior**: clears the OTP sign-in limits of the account's email and phone number. `channels`: `email` (consumer email OTP), `phone` (consumer phone OTP), `admin` (admin console login). \
+                    `clear`: `lock` (the lockout after 3 wrong codes, its doubling level and the wrong-code counter, so the user can try again at once and the next lockout is 5 minutes again), `attempts` (wrong-code counters, and the current OTP is discarded so the user requests a new one), `cooldown` (the resend wait, including the 15-minute wait after an OTP's guesses run out). \
+                    `ip` limits it to one client IP, in any spelling (`2001:DB8::1` matches `2001:db8:0:0:0:0:0:1`); without it every IP is cleared, except lockouts set before this API existed, which can be cleared only by `ip` (they expire within 24 hours). \
+                    Every field is optional and an omitted or empty one means all; the body itself may be omitted. Allowed values are listed by List User Admin Options. Idempotent: returns `clearedEntries` 0 when nothing matched
+                    **Side effects**: the user can request and verify OTPs again right away. Written to the audit log with the scope in `details` (empty when the body is omitted, which means all)
+                    **Errors**:
+                    - 400 `common.type_mismatch`: `userId` is not a valid UUID
+                    - 400 `common.validation_failed`: an unknown channel or target, or `ip` is not an IP address
+                    - 404 `user.not_found`: no account with this ID""")
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(mediaType = "application/json",
+            examples = @ExampleObject(name = "UnlockOneIp", value = """
+                    {
+                      "channels": ["email"],
+                      "ip": "203.0.113.5",
+                      "clear": ["lock", "attempts"]
+                    }""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Login limits cleared",
+            content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Unlocked", value = """
+                    {
+                      "success": true,
+                      "data": {
+                        "clearedEntries": 3
+                      },
+                      "message": null,
+                      "errorCode": null,
+                      "error": null
+                    }""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found (`user.not_found`)",
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "UserNotFound", value = USER_NOT_FOUND_EXAMPLE)))
+    public ResponseEntity<ApiResponse<UnlockLoginResponse>> unlockLogin(
+            @Parameter(description = "User ID (UUIDv7)", required = true) @PathVariable UUID userId,
+            @Valid @RequestBody(required = false) UnlockLoginRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        UnlockLoginRequest scope = request != null ? request : new UnlockLoginRequest(null, null, null);
+        return ResponseEntity.ok(ApiResponse.ok(adminUserService.unlockLogin(userId, scope, principal.userId())));
     }
 }

@@ -53,10 +53,10 @@ class AuthControllerTest {
 
     @Test
     void sendOtp_withValidEmail_shouldReturn200() throws Exception {
-        doNothing().when(authService).sendOtp(anyString(), any(), any(), anyBoolean(), any());
+        doNothing().when(authService).sendOtp(anyString(), any(), any(), any());
 
         mockMvc.perform(post("/api/auth/send-otp").contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new SendOtpRequest("user@example.com", null))))
+                        .content(objectMapper.writeValueAsString(new SendOtpRequest("user@example.com"))))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.success").value(true));
     }
 
@@ -64,10 +64,10 @@ class AuthControllerTest {
     void verifyOtp_withValidCode_shouldReturnToken() throws Exception {
         AuthResponse mockResponse = new AuthResponse("mock-token", "mock-refresh-token",
                 new AuthResponse.UserInfo("id1", "user@example.com", "test_0001", "Test", List.of("user"), null, null));
-        when(authService.verifyOtp(anyString(), any(), anyString(), anyBoolean(), any())).thenReturn(mockResponse);
+        when(authService.verifyOtp(anyString(), any(), anyString(), any())).thenReturn(mockResponse);
 
         mockMvc.perform(post("/api/auth/verify-otp").contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new VerifyOtpRequest("user@example.com", "123456", null))))
+                        .content(objectMapper.writeValueAsString(new VerifyOtpRequest("user@example.com", "123456"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.token").value("mock-token"))
                 .andExpect(jsonPath("$.data.user.username").value("test_0001"));
@@ -76,11 +76,11 @@ class AuthControllerTest {
     @Test
     void verifyOtp_withWrongCode_shouldReturn401() throws Exception {
         when(messageService.resolve(any(MessageKey.class))).thenReturn("Invalid or expired verification code");
-        when(authService.verifyOtp(anyString(), any(), anyString(), anyBoolean(), any())).thenThrow(
+        when(authService.verifyOtp(anyString(), any(), anyString(), any())).thenThrow(
                 ApiException.unauthorized(MessageKey.AUTH_INVALID_OTP));
 
         mockMvc.perform(post("/api/auth/verify-otp").contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new VerifyOtpRequest("user@example.com", "000000", null))))
+                        .content(objectMapper.writeValueAsString(new VerifyOtpRequest("user@example.com", "000000"))))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.errorCode").value(MessageKey.AUTH_INVALID_OTP.code()));

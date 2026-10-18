@@ -10,4 +10,11 @@ public final class UserRole {
 
     /** Every assignable role; the one list for role validation. */
     public static final String PATTERN   = "user|moderator|admin";
+
+    public static final java.util.List<String> ALL = java.util.List.of(USER, MODERATOR, ADMIN);
+
+    /** Whether a role string maps to ROLE_ADMIN; same upper-casing as the authorities JwtAuthFilter builds. */
+    public static boolean isAdmin(String role) {
+        return role != null && role.toUpperCase(java.util.Locale.ROOT).equals("ADMIN");
+    }
 }

@@ -7,12 +7,12 @@ import java.util.List;
 /**
  * Response after a successful login, signup or token refresh: access token, refresh token and basic user info.
  *
- * <p>Access token is valid for 1 hour and refresh token for 30 days by default (configurable by environment variables).</p>
+ * <p>Access token is valid for 15 minutes and refresh token for 30 days by default (configurable by environment variables).</p>
  */
 @Schema(description = "Response after a successful login, signup or token refresh")
 public record AuthResponse(
 
-        @Schema(description = "JWT access token; send it as `Authorization: Bearer <token>`. Valid for 1 hour by default",
+        @Schema(description = "JWT access token; send it as `Authorization: Bearer <token>`. Valid for 15 minutes by default",
                 example = "eyJhbGciOiJIUzI1NiJ9...")
         String token,
 

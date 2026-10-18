@@ -65,8 +65,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         // token granting ROLE_ADMIN (same upper-casing as the authorities above) re-checks the account in one query;
         // other tokens are refused by the security rule. Matched on the decoded path like the security rules, so an
         // encoded /api/%61dmin/... cannot skip the check
-        boolean adminCall = principal != null && ADMIN_PATHS.matches(request)
-                && principal.roles().stream().anyMatch(r -> r.toUpperCase(Locale.ROOT).equals("ADMIN"));
+        boolean adminCall = principal != null && ADMIN_PATHS.matches(request) && principal.grantsAdmin();
         if (adminCall && !userRepository.isActiveAdmin(UUID.fromString(principal.userId()))) {
             // Second query only on refusal: suspended gets the same code as other writes, demoted the plain 403
             UUID userId = UUID.fromString(principal.userId());

@@ -35,6 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -107,24 +108,40 @@ class RefreshTokenServiceTest {
         assertThat(result).isNull();
         verify(redisService, never()).set(eq(GRACE_NS), anyString(), any(), any());
         verify(redisService, never()).setOrThrow(eq(CONSUMED_NS), anyString(), any(), any());
-        verify(jwtUtil, never()).generateToken(anyString(), anyString(), any());
+        verify(jwtUtil, never()).generateToken(anyString(), anyString(), any(), anyBoolean());
     }
 
     // ── rotate: happy path ────────────────────────────────────────────
+
+    @Test
+    void shouldKeepAdminScopeWhenRotatingAdminConsoleSession() {
+        String oldToken = "admin-refresh-token";
+        String userId = UUID.randomUUID().toString();
+        when(redisService.get(GRACE_NS, oldToken, RefreshTokenService.RotateResult.class)).thenReturn(null);
+        when(redisService.getAndDelete(NAMESPACE, oldToken, RefreshTokenService.RefreshTokenData.class))
+                .thenReturn(new RefreshTokenService.RefreshTokenData(userId, "admin@example.com", List.of("admin"), "session-1", true));
+        when(userRepository.findById(UUID.fromString(userId))).thenReturn(Optional.of(userWithRoles(userId, false, "admin")));
+        when(jwtUtil.generateToken(eq(userId), eq("admin@example.com"), eq(List.of("admin")), eq(true))).thenReturn("admin-access");
+
+        RefreshTokenService.RotateResult result = service.rotate(oldToken);
+
+        assertThat(result.newAccessToken()).isEqualTo("admin-access");
+        assertThat(result.data().grantsAdmin()).isTrue();
+    }
 
     @Test
     void rotate_happyPath_writesGraceAndConsumedAndNewToken() {
         String oldToken = "old-refresh-token";
         String userId = UUID.randomUUID().toString();
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
-                userId, "user@example.com", List.of("user"), "session-1");
+                userId, "user@example.com", List.of("user"), "session-1", false);
 
         when(redisService.get(GRACE_NS, oldToken, RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getAndDelete(NAMESPACE, oldToken, RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
         // Step 4 reload User: not banned, roles match the token
         when(userRepository.findById(UUID.fromString(userId)))
                 .thenReturn(Optional.of(userWithRoles(userId, false, "user")));
-        when(jwtUtil.generateToken(eq(userId), eq("user@example.com"), eq(List.of("user")))).thenReturn("new-access-token");
+        when(jwtUtil.generateToken(eq(userId), eq("user@example.com"), eq(List.of("user")), eq(false))).thenReturn("new-access-token");
 
         RefreshTokenService.RotateResult result = service.rotate(oldToken);
 
@@ -156,7 +173,7 @@ class RefreshTokenServiceTest {
     void rotate_withinGraceWindow_returnsSamePairWithoutRotating() {
         String oldToken = "racing-token";
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
-                "user-2", "racer@example.com", List.of("user"), "session-1");
+                "user-2", "racer@example.com", List.of("user"), "session-1", false);
         RefreshTokenService.RotateResult cached = new RefreshTokenService.RotateResult(
                 "cached-access", "cached-refresh", data);
 
@@ -169,7 +186,7 @@ class RefreshTokenServiceTest {
         verify(redisService, never()).set(eq(GRACE_NS), anyString(), any(), any());
         verify(redisService, never()).setOrThrow(eq(CONSUMED_NS), anyString(), any(), any());
         verify(redisService, never()).setOrThrow(eq(NAMESPACE), anyString(), any(), any());
-        verify(jwtUtil, never()).generateToken(anyString(), anyString(), any());
+        verify(jwtUtil, never()).generateToken(anyString(), anyString(), any(), anyBoolean());
     }
 
     // ── rotate: concurrent race ───────────────────────────────────────
@@ -179,7 +196,7 @@ class RefreshTokenServiceTest {
         String oldToken = "concurrent-token";
         String userId = UUID.randomUUID().toString();
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
-                userId, "race@example.com", List.of("user"), "session-1");
+                userId, "race@example.com", List.of("user"), "session-1", false);
 
         // The first thread in gets data; the second thread gets null (GETDEL already consumed)
         AtomicBoolean getAndDeleteConsumed = new AtomicBoolean(false);
@@ -191,7 +208,7 @@ class RefreshTokenServiceTest {
                 .thenReturn(Optional.of(userWithRoles(userId, false, "user")));
 
         // jwtUtil returns a fixed token for the same data (simulates a deterministic access token; real JWTs differ by iat, but the grace cache handles that)
-        when(jwtUtil.generateToken(eq(userId), eq("race@example.com"), eq(List.of("user"))))
+        when(jwtUtil.generateToken(eq(userId), eq("race@example.com"), eq(List.of("user")), eq(false)))
                 .thenReturn("concurrent-access-token");
 
         // grace cache behavior: after the first write, subsequent lookups return that result
@@ -281,7 +298,7 @@ class RefreshTokenServiceTest {
     void shouldRejectRotationWhenSessionRevokedAfterReuse() {
         String liveToken = "thief-live-token";
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
-                "user-victim", "victim@example.com", List.of("user"), "session-1");
+                "user-victim", "victim@example.com", List.of("user"), "session-1", false);
         when(redisService.get(GRACE_NS, liveToken, RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getAndDelete(NAMESPACE, liveToken, RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
         when(redisService.hasKeyOrThrow(REVOKED_SESSION_NS, "session-1")).thenReturn(true);
@@ -289,7 +306,7 @@ class RefreshTokenServiceTest {
         assertThat(service.rotate(liveToken)).isNull();
 
         verify(redisService).hDelete(USER_IDX_NS, "user-victim", liveToken);
-        verify(jwtUtil, never()).generateToken(anyString(), anyString(), any());
+        verify(jwtUtil, never()).generateToken(anyString(), anyString(), any(), anyBoolean());
         verify(redisService, never()).execInTransaction(any());
     }
 
@@ -299,7 +316,7 @@ class RefreshTokenServiceTest {
         String userId = UUID.randomUUID().toString();
         when(redisService.get(GRACE_NS, oldToken, RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getAndDelete(NAMESPACE, oldToken, RefreshTokenService.RefreshTokenData.class))
-                .thenReturn(new RefreshTokenService.RefreshTokenData(userId, "old@example.com", List.of("user"), null));
+                .thenReturn(new RefreshTokenService.RefreshTokenData(userId, "old@example.com", List.of("user"), null, false));
         when(userRepository.findById(UUID.fromString(userId))).thenReturn(Optional.of(userWithRoles(userId, false, "user")));
 
         RefreshTokenService.RotateResult result = service.rotate(oldToken);
@@ -330,7 +347,7 @@ class RefreshTokenServiceTest {
         String oldToken = "banned-rotate-token";
         String userId = UUID.randomUUID().toString();
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
-                userId, "banned@example.com", List.of("admin"), "session-1");
+                userId, "banned@example.com", List.of("admin"), "session-1", false);
 
         when(redisService.get(GRACE_NS, oldToken, RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getAndDelete(NAMESPACE, oldToken, RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
@@ -346,7 +363,7 @@ class RefreshTokenServiceTest {
         verify(redisService).delete(NAMESPACE, "t1");
         verify(redisService).delete(USER_IDX_NS, userId);
         // Must not issue a new access token
-        verify(jwtUtil, never()).generateToken(anyString(), anyString(), any());
+        verify(jwtUtil, never()).generateToken(anyString(), anyString(), any(), anyBoolean());
     }
 
     @Test
@@ -354,7 +371,7 @@ class RefreshTokenServiceTest {
         String oldToken = "ghost-rotate-token";
         String userId = UUID.randomUUID().toString();
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
-                userId, "ghost@example.com", List.of("user"), "session-1");
+                userId, "ghost@example.com", List.of("user"), "session-1", false);
 
         when(redisService.get(GRACE_NS, oldToken, RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getAndDelete(NAMESPACE, oldToken, RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
@@ -365,7 +382,7 @@ class RefreshTokenServiceTest {
 
         assertThat(result).isNull();
         verify(redisService).delete(USER_IDX_NS, userId);
-        verify(jwtUtil, never()).generateToken(anyString(), anyString(), any());
+        verify(jwtUtil, never()).generateToken(anyString(), anyString(), any(), anyBoolean());
     }
 
     // ── rotate: Step 4 reload User -- latest roles win ────────────────
@@ -376,14 +393,14 @@ class RefreshTokenServiceTest {
         String userId = UUID.randomUUID().toString();
         // Old roles in the token are admin (issued before the role was revoked)
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
-                userId, "demoted@example.com", List.of("admin"), "session-1");
+                userId, "demoted@example.com", List.of("admin"), "session-1", false);
 
         when(redisService.get(GRACE_NS, oldToken, RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getAndDelete(NAMESPACE, oldToken, RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
         // Current User roles have been downgraded to user
         when(userRepository.findById(UUID.fromString(userId)))
                 .thenReturn(Optional.of(userWithRoles(userId, false, "user")));
-        when(jwtUtil.generateToken(eq(userId), eq("demoted@example.com"), any())).thenReturn("fresh-access");
+        when(jwtUtil.generateToken(eq(userId), eq("demoted@example.com"), any(), eq(false))).thenReturn("fresh-access");
 
         RefreshTokenService.RotateResult result = service.rotate(oldToken);
 
@@ -393,7 +410,7 @@ class RefreshTokenServiceTest {
         // Access token must be issued with fresh roles (user), not old roles (admin)
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<String>> rolesCaptor = ArgumentCaptor.forClass(List.class);
-        verify(jwtUtil).generateToken(eq(userId), eq("demoted@example.com"), rolesCaptor.capture());
+        verify(jwtUtil).generateToken(eq(userId), eq("demoted@example.com"), rolesCaptor.capture(), eq(false));
         assertThat(rolesCaptor.getValue()).containsExactly("user");
 
         // The new RefreshTokenData written to NAMESPACE must also use fresh roles (now passed via execInTransaction's RedisWrite)
@@ -415,7 +432,7 @@ class RefreshTokenServiceTest {
     void rotate_cacheHit_emitsInfoLogWithShaPrefixAndNoRawToken() {
         String oldToken = "log-token";
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
-                "user-4", "log@example.com", List.of("user"), "session-1");
+                "user-4", "log@example.com", List.of("user"), "session-1", false);
         RefreshTokenService.RotateResult cached = new RefreshTokenService.RotateResult(
                 "log-access", "log-refresh", data);
 
@@ -440,7 +457,7 @@ class RefreshTokenServiceTest {
     @Test
     @SuppressWarnings("unchecked")
     void shouldRenewUserIndexTtlWhenGeneratingToken() {
-        String token = service.generate("user-5", "gen@example.com", List.of("user"));
+        String token = service.generate("user-5", "gen@example.com", List.of("user"), false);
 
         assertThat(token).isNotBlank();
         ArgumentCaptor<List<RedisService.RedisWrite>> writes = ArgumentCaptor.forClass(List.class);
@@ -449,7 +466,7 @@ class RefreshTokenServiceTest {
         assertThat(stored.sessionId()).isNotBlank();
         assertThat(writes.getValue()).containsExactly(
                 RedisService.RedisWrite.set(NAMESPACE, token,
-                        new RefreshTokenService.RefreshTokenData("user-5", "gen@example.com", List.of("user"), stored.sessionId()), Duration.ofDays(30)),
+                        new RefreshTokenService.RefreshTokenData("user-5", "gen@example.com", List.of("user"), stored.sessionId(), false), Duration.ofDays(30)),
                 RedisService.RedisWrite.hput(USER_IDX_NS, "user-5", token, "1"),
                 // The index TTL is renewed on every issue, not only when the index is first created
                 RedisService.RedisWrite.expire(USER_IDX_NS, "user-5", Duration.ofDays(30)));
@@ -462,7 +479,7 @@ class RefreshTokenServiceTest {
         doThrow(new RedisOperationException("redis down", null))
                 .when(redisService).execInTransaction(any());
 
-        assertThatThrownBy(() -> service.generate("user-9", "g@example.com", List.of("user")))
+        assertThatThrownBy(() -> service.generate("user-9", "g@example.com", List.of("user"), false))
                 .isInstanceOf(RedisOperationException.class);
     }
 
@@ -472,12 +489,12 @@ class RefreshTokenServiceTest {
         String oldToken = "old-token";
         String userId = UUID.randomUUID().toString();
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
-                userId, "user@example.com", List.of("user"), "session-1");
+                userId, "user@example.com", List.of("user"), "session-1", false);
         when(redisService.get(GRACE_NS, oldToken, RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getAndDelete(NAMESPACE, oldToken, RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
         when(userRepository.findById(UUID.fromString(userId)))
                 .thenReturn(Optional.of(userWithRoles(userId, false, "user")));
-        when(jwtUtil.generateToken(anyString(), anyString(), any())).thenReturn("new-access");
+        when(jwtUtil.generateToken(anyString(), anyString(), any(), anyBoolean())).thenReturn("new-access");
         doThrow(new RedisOperationException("redis down", null))
                 .when(redisService).execInTransaction(any());
 
@@ -489,7 +506,7 @@ class RefreshTokenServiceTest {
     void revoke_existingToken_deletesNamespaceAndUserIndex() {
         String token = "revoke-token";
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
-                "user-6", "rv@example.com", List.of("user"), "session-1");
+                "user-6", "rv@example.com", List.of("user"), "session-1", false);
         when(redisService.getAndDelete(NAMESPACE, token, RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
 
         service.revoke(token);

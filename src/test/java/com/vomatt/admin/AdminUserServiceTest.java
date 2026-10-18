@@ -46,6 +46,7 @@ class AdminUserServiceTest {
     @Mock UserVoteRepository userVoteRepository;
     @Mock VoteCommentRepository voteCommentRepository;
     @Mock RefreshTokenService refreshTokenService;
+    @Mock com.vomatt.auth.AuthService authService;
     LockTimeout lockTimeout = new LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
 
     AdminUserService service;
@@ -58,7 +59,7 @@ class AdminUserServiceTest {
         // The real guard, so these tests cover the shared last-admin rule as admins reach it
         UserService userService = new UserService(userRepository, null, null, refreshTokenService, null, voteRepository, lockTimeout);
         service = new AdminUserService(adminQueryRepository, userRepository, voteRepository, userVoteRepository,
-                voteCommentRepository, userService, new AdminMapper());
+                voteCommentRepository, userService, new AdminMapper(), authService);
     }
 
     private User user(UUID id, String... roles) {
@@ -222,5 +223,39 @@ class AdminUserServiceTest {
     @Test
     void shouldRejectStatusWhenNotActiveOrSuspended() {
         assertApiError(() -> service.listUsers(null, "banned", null, null, null), HttpStatus.BAD_REQUEST, MessageKey.COMMON_INVALID_STATUS);
+    }
+
+    @Test
+    void shouldUnlockEveryChannelAndTargetWhenRequestIsEmpty() {
+        UUID id = UUID.randomUUID();
+        User target = user(id, "user");
+        target.setEmail("a@example.com");
+        target.setPhoneNumber("+886912345678");
+        when(userRepository.findById(id)).thenReturn(Optional.of(target));
+        java.util.Set<String> all = java.util.Set.of("lock", "attempts", "cooldown");
+        when(authService.unlockLogin("email", "a@example.com", null, all)).thenReturn(2);
+        when(authService.unlockLogin("admin", "a@example.com", null, all)).thenReturn(1);
+        when(authService.unlockLogin("phone", "+886912345678", null, all)).thenReturn(0);
+
+        var result = service.unlockLogin(id, new com.vomatt.admin.dto.UnlockLoginRequest(null, null, null), "actor");
+
+        assertThat(result.clearedEntries()).isEqualTo(3);
+    }
+
+    @Test
+    void shouldSkipChannelWhenUserHasNoSuchIdentifier() {
+        UUID id = UUID.randomUUID();
+        User target = user(id, "user");
+        target.setEmail("a@example.com");
+        when(userRepository.findById(id)).thenReturn(Optional.of(target));
+        when(authService.unlockLogin("email", "a@example.com", "203.0.113.5", java.util.Set.of("lock"))).thenReturn(1);
+
+        var result = service.unlockLogin(id, new com.vomatt.admin.dto.UnlockLoginRequest(
+                java.util.List.of("email", "phone"), "203.0.113.5", java.util.List.of("lock")), "actor");
+
+        assertThat(result.clearedEntries()).isEqualTo(1);
+        org.mockito.Mockito.verify(authService, org.mockito.Mockito.never())
+                .unlockLogin(org.mockito.ArgumentMatchers.eq("phone"), org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 }

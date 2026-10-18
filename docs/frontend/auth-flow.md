@@ -180,14 +180,15 @@ async function request(input, init) {
 
 UI: on `auth.account_banned`, at login or on any write, show "This account has been suspended" and do not retry.
 
-## 9. Admin console login (`checkRole`)
+## 9. Admin console login
 
-`checkRole: "true"` (a string) on `send-otp` and `verify-otp` is only for the admin console:
+The admin console signs in with its own endpoints, `POST /api/auth/admin/send-otp` (`{ email }`) and `POST /api/auth/admin/verify-otp` (`{ email, code }`). They are the only sign-in whose tokens grant the admin role:
 
-- The account must **already exist and have the `admin` role**, otherwise 403 `auth.admin.forbidden`.
-- The check happens before the OTP is sent / consumed, so it never creates a new account or burns an OTP.
-- Regular user clients must not send `checkRole` (omit it or send `"false"`).
-- This only restricts the login entry point; `/api/admin/**` is still guarded by the JWT's roles (non-admins get 403 `common.forbidden`).
+- The account must **already exist and have the `admin` role**, otherwise 403 `auth.admin.forbidden`. The check happens before the OTP is sent / consumed, so it never creates an account or burns an OTP.
+- Admin OTPs, wrong-code counts, lockouts and the resend cooldown are separate from the consumer login: a code from `send-otp` does not work on `admin/verify-otp`, and vice versa. The limits themselves (180 s OTP, 180 s cooldown, 3 wrong codes per IP, 10 guesses per OTP) are the same.
+- Every other sign-in (`verify-otp`, phone, Google, LINE, Apple) issues tokens that never grant the admin role, even for an admin account: `/api/admin/**` answers 403 `common.forbidden`. `user.roles` in the response still lists `admin`, so read it as profile info, not as access.
+- `POST /api/auth/refresh` keeps the scope of the sign-in: an admin console session refreshes into admin tokens, a consumer session never does.
+- An admin can clear another user's OTP lockouts with `POST /api/admin/users/{userId}/unlock-login`; the accepted values are listed by `GET /api/admin/users/options`.
 
 ## 10. Common errors
 
@@ -201,7 +202,7 @@ UI: on `auth.account_banned`, at login or on any write, show "This account has b
 | `auth.otp.invalid_or_expired` | 401 | No valid OTP (expired, already used, never sent, or its 10 guesses are used up) | Guide the user to resend |
 | `auth.invalid_otp` | 401 | Wrong code | Ask the user to re-enter |
 | `auth.otp.too_many_attempts` | 401 | 3 wrong codes from this IP; the email / phone is locked for this IP for 5 minutes, doubling on each further lockout up to 24 hours, and `send-otp`, `phone/send-otp` and both `verify-otp` return this until then | Tell the user to try again later (no exact time is returned); disable resend |
-| `auth.admin.forbidden` | 403 | `checkRole` but not an admin | Show no permission |
+| `auth.admin.forbidden` | 403 | `admin/send-otp` or `admin/verify-otp` for an email that is not an existing admin | Show no permission |
 | `auth.account_banned` | 403 | Account is suspended (at login, or on a write with a still-valid access token) | Show that the account is suspended |
 | `auth.email_not_verified` | 401 | The OAuth provider's email is not verified | Suggest another login method |
 | `auth.google.*` / `auth.line.*` / `auth.apple.*` | 400 / 401 | Provider credential is invalid or the backend is not configured | Suggest another method or retry later |

@@ -324,7 +324,7 @@ public class AdminUserController {
                     `clear`: `lock` (the lockout after 3 wrong codes and its doubling level, so the next lockout is 5 minutes again), `attempts` (wrong-code counters and the current OTP's 10-guess budget), `cooldown` (the resend wait, including the 15-minute wait after an OTP's guesses run out). \
                     `ip` limits it to one client IP; without it every IP is cleared, except lockouts set before this API existed, which can be cleared only by `ip` (they expire within 24 hours). \
                     Every field is optional and an omitted or empty one means all; the body itself may be omitted. Allowed values are listed by List User Admin Options. Idempotent: returns `clearedEntries` 0 when nothing matched
-                    **Side effects**: the user can request and verify OTPs again right away. Written to the audit log with the scope in `details`
+                    **Side effects**: the user can request and verify OTPs again right away. Written to the audit log with the scope in `details` (empty when the body is omitted, which means all)
                     **Errors**:
                     - 400 `common.type_mismatch`: `userId` is not a valid UUID
                     - 400 `common.validation_failed`: an unknown channel or target, or `ip` is not an IP address

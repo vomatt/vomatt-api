@@ -1,5 +1,6 @@
 package com.vomatt.users;
 
+import com.vomatt.common.constant.UserRole;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.security.RefreshTokenService;
@@ -46,11 +47,15 @@ public class UserService {
 
     /**
      * The user themself or an active admin can delete the account; deletion also revokes all of the user's refresh tokens.
-     * Admin rights are read from the database, not the token, so a demoted or suspended admin cannot use a stale token.
+     * Deleting someone else needs both an admin-scope token (admin console login) and an active admin in the database,
+     * so neither a consumer-app session of an admin nor a demoted or suspended admin's stale token can do it.
      */
     @Transactional
     public void deleteUser(String userId, UserPrincipal principal) {
-        if (!principal.userId().equals(userId) && !userRepository.isActiveAdmin(UUID.fromString(principal.userId()))) {
+        boolean tokenGrantsAdmin = principal.roles() != null
+                && principal.roles().stream().anyMatch(UserRole.ADMIN::equalsIgnoreCase);
+        if (!principal.userId().equals(userId)
+                && !(tokenGrantsAdmin && userRepository.isActiveAdmin(UUID.fromString(principal.userId())))) {
             log.warn("User {} attempted to delete user {} without permission", principal.userId(), userId);
             throw ApiException.forbidden(MessageKey.USER_DELETE_FORBIDDEN);
         }

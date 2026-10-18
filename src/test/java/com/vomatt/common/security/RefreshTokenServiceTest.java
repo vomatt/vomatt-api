@@ -126,7 +126,7 @@ class RefreshTokenServiceTest {
         RefreshTokenService.RotateResult result = service.rotate(oldToken);
 
         assertThat(result.newAccessToken()).isEqualTo("admin-access");
-        assertThat(result.data().adminScope()).isTrue();
+        assertThat(result.data().grantsAdmin()).isTrue();
     }
 
     @Test

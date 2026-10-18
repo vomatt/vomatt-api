@@ -47,9 +47,13 @@ public class RefreshTokenService {
     /**
      * {@code sessionId} names one sign-in and is kept across rotations; null on tokens issued before it existed.
      * {@code adminScope} is fixed at sign-in (admin console login only) and kept across rotations, so refreshing a
-     * consumer-app session never yields an admin token; false on tokens issued before it existed.
+     * consumer-app session never yields an admin token; null on tokens issued before it existed (read as false).
      */
-    public record RefreshTokenData(String userId, String email, List<String> roles, String sessionId, boolean adminScope) {}
+    public record RefreshTokenData(String userId, String email, List<String> roles, String sessionId, Boolean adminScope) {
+        public boolean grantsAdmin() {
+            return Boolean.TRUE.equals(adminScope);
+        }
+    }
 
     public record RotateResult(String newAccessToken, String newRefreshToken, RefreshTokenData data) {}
 
@@ -137,11 +141,11 @@ public class RefreshTokenService {
         // Tokens issued before session ids existed start a session on their next rotation
         String sessionId = data.sessionId() != null ? data.sessionId() : UUID.randomUUID().toString();
         RefreshTokenData freshData = new RefreshTokenData(data.userId(), data.email(), freshRoles, sessionId,
-                data.adminScope());
+                data.grantsAdmin());
 
         String newRefreshToken = UUID.randomUUID().toString();
         String newAccessToken = jwtUtil.generateToken(freshData.userId(), freshData.email(), freshRoles,
-                freshData.adminScope());
+                freshData.grantsAdmin());
         RotateResult result = new RotateResult(newAccessToken, newRefreshToken, freshData);
 
         Duration refreshTtl = Duration.ofDays(refreshExpirationDays);

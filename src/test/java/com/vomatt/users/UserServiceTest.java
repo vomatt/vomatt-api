@@ -109,6 +109,20 @@ class UserServiceTest {
     }
 
     @Test
+    void shouldRefuseWhenAdminDeletesOtherUserWithConsumerToken() {
+        UUID callerId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+
+        // A consumer-app token of an admin carries no admin role (JwtUtil drops it), so the DB is never consulted
+        assertThatThrownBy(() -> userService.deleteUser(targetId.toString(),
+                new UserPrincipal(callerId.toString(), "c@test.local", List.of("user"))))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_DELETE_FORBIDDEN));
+        verify(userRepository, never()).isActiveAdmin(any());
+        verify(userRepository, never()).delete(any());
+    }
+
+    @Test
     void shouldDeleteOtherUserWhenCallerIsActiveAdminInDatabase() {
         UUID callerId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();

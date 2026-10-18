@@ -67,6 +67,22 @@ class OpenApiSnapshotTest {
                 "./mvnw test -Dtest=OpenApiSnapshotTest -Dsnapshot.update=true");
     }
 
+    @Autowired
+    tools.jackson.databind.ObjectMapper appMapper;
+
+    /** Uses the app's own mapper (HTTP bodies and Redis values), since the contract relies on its defaults. */
+    @Test
+    void shouldAcceptPayloadsFromBeforeAdminSplitWhenDeserializedByAppMapper() {
+        // Old clients may still send checkRole; it must be ignored, not rejected
+        var otp = appMapper.readValue("{\"email\":\"a@b.c\",\"checkRole\":\"false\"}",
+                com.vomatt.auth.dto.SendOtpRequest.class);
+        org.assertj.core.api.Assertions.assertThat(otp.email()).isEqualTo("a@b.c");
+        // Refresh tokens stored before adminScope existed must still rotate, as consumer sessions
+        var data = appMapper.convertValue(java.util.Map.of("userId", "u", "email", "e", "roles", java.util.List.of("user"),
+                "sessionId", "s"), com.vomatt.common.security.RefreshTokenService.RefreshTokenData.class);
+        org.assertj.core.api.Assertions.assertThat(data.grantsAdmin()).isFalse();
+    }
+
     /** ORDER_MAP_ENTRIES_BY_KEYS ignores ObjectNode, so rebuild the tree through a sorted Map. */
     private static Object sorted(JsonMapper mapper, JsonNode tree) {
         return mapper.convertValue(tree, Object.class);

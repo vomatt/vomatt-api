@@ -26,7 +26,8 @@ Swagger UI: <http://localhost:8080/swagger-ui.html>. `*PostgresTest` and `OpenAp
 - Code and API paths keep the `Vote` naming; business terms follow `CONTEXT.md` (Poll, Ballot, Selection, Participant, Sealed, Turnout, Support...). Renaming would break the contract, so it is not renamed.
 - Poll status is not stored in a column; it is derived from time: `Vote.statusAt()`, with Ended taking precedence over Scheduled. Cancelled is an Ended Poll with `endTime < startTime`.
 - Result sealing (Sealed) is handled in one place only, `VoteMapper`: while a Poll is not Ended, every option's vote count is null. Any new path that returns `VoteResponse` must go through the mapper.
-- Anonymous Ballots (`user_votes.anonymous`) are excluded from the voter list (`GET /api/votes/{voteId}/voters`), which is fully hidden while other users hold 1-2 of them (k-anonymity gate in `VoteService`). Any new query that exposes who chose what must exclude them too.
+- Anonymous Ballots (`user_votes.anonymous`) are excluded from the voter list (`GET /api/votes/{voteId}/voters`), which is fully hidden while other users hold fewer than `VoteService.ANONYMOUS_BALLOT_K` of them. Any new query that exposes who chose what must exclude them and apply the same k-gate: exclusion alone leaks, because per-option counts minus named voters reveal what the anonymous ones chose. Even past the gate, Anonymous Ballots that all chose the same option stay inferable (see the `ANONYMOUS_BALLOT_K` Javadoc).
+- The Poll-level `votes.is_anonymous` (`anonymous` in the API) is deprecated: it only sets Voter Visibility to NOBODY when sent as true without `voterVisibility`, and hides nothing on its own. Use `voterVisibility`.
 - Option vote counts are stored in `vote_options.vote_count` and maintained with atomic increments/decrements; `db/reconcile-vote-counts.sql` can be used to reconcile them.
 - Public lists use cursor pagination (`CursorResponse` / `Cursor`, `limit` defaults to 20, max 50); keyset queries live in `VoteListRepository`. Title and description search uses a custom bigram GIN index; `q` needs at least 2 characters.
 - "Poll ended" notifications are derived at read time; the database stores only read state (`notification_reads`). There is no scheduler.
@@ -37,7 +38,7 @@ Swagger UI: <http://localhost:8080/swagger-ui.html>. `*PostgresTest` and `OpenAp
 ## Database
 
 - The single source of DDL is `src/main/resources/db/schema.sql` (`ddl-auto: none`). All time columns are `TIMESTAMPTZ` <-> `OffsetDateTime`; primary keys use UUID v7 (`UUIDv7Generator`).
-- Write schema changes as re-runnable `ALTER TABLE ... IF NOT EXISTS`; in production (Neon), run `schema.sql` manually. Data migrations go in `db/migrations/YYYY-MM-DD-<topic>.sql`, applied manually, each covered by a `*MigrationPostgresTest`; `2026-10-02-sachmis-arch.sql` upgrades pre-sachmis schemas.
+- Write schema changes as re-runnable `ALTER TABLE ... IF NOT EXISTS`; in production (Neon), run `schema.sql` manually. Data migrations go in `db/migrations/YYYY-MM-DD-<topic>.sql`, applied manually; each new one needs a `*MigrationPostgresTest`. The exception is `2026-10-02-sachmis-arch.sql`, a one-time upgrade of pre-sachmis schemas that cannot run against the current schema and has no test.
 
 ## API contract and frontend docs
 

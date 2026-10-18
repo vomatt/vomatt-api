@@ -52,8 +52,9 @@ public class CreateVoteRequest {
             deprecated = true, example = "false")
     private boolean allowMultipleChoices = false;
 
-    @Schema(description = "Deprecated: use `voterVisibility` instead", deprecated = true, example = "false")
-    private boolean isAnonymous = false;
+    @Schema(description = "Deprecated: use `voterVisibility` instead. True with no `voterVisibility` means NOBODY. "
+            + "Null keeps false on create and the current value on edit", deprecated = true, example = "false", nullable = true)
+    private Boolean anonymous;
 
     @Schema(description = "Who may see which option each Participant chose once the Poll has Ended: NOBODY (not even the owner), "
             + "OWNER (default) or SIGNED_IN (anyone who can see the Poll). Null keeps the default OWNER on create and the current value on edit. "
@@ -120,5 +121,13 @@ public class CreateVoteRequest {
         @Schema(description = "Sort position within the Poll (ascending). Null falls back to the option's position in the array; "
                 + "defaults to 0 when the field is omitted", example = "0", nullable = true)
         private Integer displayOrder = 0;
+    }
+
+    /** {@code voterVisibility}, or NOBODY for a legacy client that only sends {@code anonymous: true}; null keeps the default / current value. */
+    public VoterVisibility effectiveVoterVisibility() {
+        if (voterVisibility != null) {
+            return voterVisibility;
+        }
+        return Boolean.TRUE.equals(anonymous) ? VoterVisibility.NOBODY : null;
     }
 }

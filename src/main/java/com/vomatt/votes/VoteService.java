@@ -118,9 +118,9 @@ public class VoteService {
 
         Vote vote = new Vote(request.getTitle(), request.getDescription(), creator, request.getEndTime());
         vote.setStartTime(request.getStartTime() != null ? request.getStartTime() : OffsetDateTime.now());
-        vote.setAnonymous(request.isAnonymous());
-        if (request.getVoterVisibility() != null) {
-            vote.setVoterVisibility(request.getVoterVisibility());
+        vote.setAnonymous(Boolean.TRUE.equals(request.getAnonymous()));
+        if (request.effectiveVoterVisibility() != null) {
+            vote.setVoterVisibility(request.effectiveVoterVisibility());
         }
         if (request.getAudience() != null) {
             vote.setAudience(request.getAudience());
@@ -166,9 +166,12 @@ public class VoteService {
         vote.setDescription(request.getDescription());
         vote.setStartTime(startTime);
         vote.scheduleEnd(request.getEndTime());
-        vote.setAnonymous(request.isAnonymous());
-        if (request.getVoterVisibility() != null) {
-            vote.setVoterVisibility(request.getVoterVisibility());
+        // An omitted legacy flag keeps the current value, like the other nullable fields on edit
+        if (request.getAnonymous() != null) {
+            vote.setAnonymous(request.getAnonymous());
+        }
+        if (request.effectiveVoterVisibility() != null) {
+            vote.setVoterVisibility(request.effectiveVoterVisibility());
         }
 
         Set<UUID> oldTagIds = countedTagIds(vote);

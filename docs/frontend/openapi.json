@@ -1913,6 +1913,10 @@
             "type" : "boolean"
           },
           "anonymous" : {
+            "deprecated" : true,
+            "description" : "Deprecated: use `voterVisibility` instead. True with no `voterVisibility` means NOBODY. Null keeps false on create and the current value on edit",
+            "example" : false,
+            "nullable" : true,
             "type" : "boolean"
           },
           "audience" : {

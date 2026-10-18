@@ -826,6 +826,37 @@ class VoteServiceTest {
         }
 
         @Test
+        @DisplayName("should keep the legacy anonymous flag when edit omits it, and map true to NOBODY")
+        void shouldKeepLegacyAnonymousWhenEditOmitsIt() {
+            scheduled();
+            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
+            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
+            when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
+            stubSaveAssignsId();
+            CreateVoteRequest request = editRequest(null);
+            request.setAnonymous(true);
+
+            voteService.updateVote(voteId.toString(), request, userId.toString());
+            assertThat(vote.isAnonymous()).isTrue();
+            assertThat(vote.getVoterVisibility()).isEqualTo(com.vomatt.entity.VoterVisibility.NOBODY);
+
+            request.setAnonymous(null);
+            voteService.updateVote(voteId.toString(), request, userId.toString());
+            assertThat(vote.isAnonymous()).isTrue();
+            assertThat(vote.getVoterVisibility()).isEqualTo(com.vomatt.entity.VoterVisibility.NOBODY);
+        }
+
+        @Test
+        @DisplayName("should let an explicit voterVisibility win over the legacy anonymous flag")
+        void shouldPreferVoterVisibilityWhenBothSent() {
+            CreateVoteRequest request = editRequest(null);
+            request.setAnonymous(true);
+            request.setVoterVisibility(com.vomatt.entity.VoterVisibility.SIGNED_IN);
+
+            assertThat(request.effectiveVoterVisibility()).isEqualTo(com.vomatt.entity.VoterVisibility.SIGNED_IN);
+        }
+
+        @Test
         @DisplayName("should change Audience when Scheduled, and keep it when edit omits audience")
         void shouldChangeAudienceWhenScheduledPollEdited() {
             scheduled();

@@ -167,12 +167,12 @@ public class AuthController {
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
                     {"email": "admin@example.com"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-            description = "The email is not an existing admin account (`auth.admin.forbidden`)",
+            description = "The email is not an existing admin account (`auth.admin.forbidden`) or the admin is suspended (`auth.account_banned`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = ADMIN_FORBIDDEN)))
     @Operation(summary = "Send admin console email OTP",
             description = """
                     **Auth**: public
-                    **Precondition**: the email belongs to an existing account holding the admin role
+                    **Precondition**: the email belongs to an existing, active account holding the admin role
                     **Behavior**: like `POST /api/auth/send-otp` (6-digit OTP, TTL default 180 s, same email normalization), but only for admin accounts. \
                     Its OTPs, wrong-code counters, lockouts and resend cooldown are separate from the consumer login, so a code from `send-otp` does not work here and vice versa
                     **Side effects**: sends an email; replaces any previous admin console OTP for this address. A resend is refused during the cooldown (default 180 s)
@@ -181,7 +181,8 @@ public class AuthController {
                     - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
                     - 400 `auth.email.send_failed`: the email provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
                     - 401 `auth.otp.too_many_attempts`: this email is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected
-                    - 403 `auth.admin.forbidden`: the email is not an existing admin account""")
+                    - 403 `auth.admin.forbidden`: the email is not an existing admin account
+                    - 403 `auth.account_banned`: the admin is suspended (`active=false`); no OTP is sent""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> adminSendOtp(@Valid @RequestBody SendOtpRequest req, HttpServletRequest httpRequest) {
         authService.sendAdminOtp(req.email(), ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
@@ -213,7 +214,7 @@ public class AuthController {
                     - 401 `auth.invalid_otp`: the code is wrong
                     - 401 `auth.otp.too_many_attempts`: 3rd wrong code, or this email is locked for the caller's IP (even a correct code is refused until the lock ends)
                     - 403 `auth.admin.forbidden`: the email is not an existing admin account
-                    - 403 `auth.account_banned`: the user is suspended (`active=false`)""")
+                    - 403 `auth.account_banned`: the admin is suspended (`active=false`); checked before the OTP is consumed""")
     public ResponseEntity<ApiResponse<AuthResponse>> adminVerifyOtp(@Valid @RequestBody VerifyOtpRequest req, HttpServletRequest httpRequest) {
         return ResponseEntity.ok(ApiResponse.ok(authService.verifyAdminOtp(req.email(), req.code(), ClientIpResolver.resolve(httpRequest))));
     }

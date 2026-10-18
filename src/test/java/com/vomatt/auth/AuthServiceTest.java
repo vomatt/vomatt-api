@@ -546,40 +546,85 @@ class AuthServiceTest {
     }
 
     @Test
-    void shouldClearEveryTargetForOneIpWhenUnlockGivesIp() {
+    void shouldClearEveryTargetAndDiscardOtpWhenUnlockGivesIp() {
         Instant created = Instant.now();
-        String key = attempt("user@example.com");
-        when(redisService.delete(anyString(), anyString())).thenReturn(true);
-        when(redisService.get("otp:email", "user@example.com", OtpRecord.class))
+        List<String> key = List.of(attempt("user@example.com"));
+        when(redisService.deleteAll(anyString(), any())).thenReturn(1L);
+        when(redisService.getAndDelete("otp:email", "user@example.com", OtpRecord.class))
                 .thenReturn(new OtpRecord("123456", "login", created, 0));
 
         int cleared = authService.unlockLogin("email", "user@example.com", IP, Set.of("lock", "attempts", "cooldown"));
 
-        assertThat(cleared).isEqualTo(5);
-        verify(redisService).delete("otp:email:lock", key);
-        verify(redisService).delete("otp:email:level", key);
-        verify(redisService).delete("otp:email:fail", key);
-        verify(redisService).delete("otp:email:guesses", "user@example.com:" + created.toEpochMilli());
-        verify(redisService).delete("otp:email:cooldown", "user@example.com");
-        verify(redisService).hDelete("otp:email:attempt-idx", "user@example.com", key);
+        // lock + level + fail + OTP + guesses + cooldown
+        assertThat(cleared).isEqualTo(6);
+        verify(redisService).deleteAll("otp:email:lock", key);
+        verify(redisService).deleteAll("otp:email:level", key);
+        verify(redisService).deleteAll("otp:email:fail", key);
+        verify(redisService).deleteAll("otp:email:guesses", List.of("user@example.com:" + created.toEpochMilli()));
+        verify(redisService).deleteAll("otp:email:cooldown", List.of("user@example.com"));
+        verify(redisService).hDelete("otp:email:attempt-idx", "user@example.com", key.get(0));
         verify(redisService, never()).hGetAll(anyString(), anyString());
     }
 
     @Test
-    void shouldClearIndexedIpsOnlyLockWhenUnlockOmitsIp() {
+    void shouldAlsoClearCounterWhenUnlockClearsOnlyLock() {
+        // A lock removed with its counter still at 3 would keep refusing the right code
         when(redisService.hGetAll("otp:phone:attempt-idx", "+886912345678"))
                 .thenReturn(java.util.Map.of("k1", "1", "k2", "1"));
-        when(redisService.delete(anyString(), anyString())).thenReturn(true);
+        when(redisService.deleteAll(anyString(), any())).thenReturn(2L);
 
         int cleared = authService.unlockLogin("phone", "+886912345678", null, Set.of("lock"));
 
-        assertThat(cleared).isEqualTo(4);
-        verify(redisService).delete("otp:phone:lock", "k1");
-        verify(redisService).delete("otp:phone:level", "k2");
-        verify(redisService, never()).delete(eq("otp:phone:fail"), anyString());
-        verify(redisService, never()).delete(eq("otp:phone:cooldown"), anyString());
-        // Counters are kept, so the index must stay for a later attempts-only unlock
-        verify(redisService, never()).delete("otp:phone:attempt-idx", "+886912345678");
+        assertThat(cleared).isEqualTo(6);
+        verify(redisService).deleteAll(eq("otp:phone:lock"), argThat(keys -> Set.copyOf(keys).equals(Set.of("k1", "k2"))));
+        verify(redisService).deleteAll(eq("otp:phone:fail"), argThat(keys -> keys.size() == 2));
+        // The OTP and its guess budget are left alone: only `attempts` discards them
+        verify(redisService, never()).getAndDelete(eq("otp:phone"), anyString(), any());
+        verify(redisService, never()).deleteAll(eq("otp:phone:cooldown"), any());
+        verify(redisService).delete("otp:phone:attempt-idx", "+886912345678");
+    }
+
+    @Test
+    void shouldHitSameAttemptKeyWhenIpIsSpelledDifferently() {
+        assertThat(AuthService.attemptKey("a@b.c", "2001:DB8::1"))
+                .isEqualTo(AuthService.attemptKey("a@b.c", "2001:0db8:0:0:0:0:0:1"));
+        assertThat(AuthService.attemptKey("a@b.c", " 203.0.113.7")).isEqualTo(AuthService.attemptKey("a@b.c", "203.0.113.7"));
+        assertThat(AuthService.canonicalIp("not-an-ip")).isEqualTo("not-an-ip");
+    }
+
+    @Test
+    void shouldRefuseSuspendedAdminBeforeSendingOtp() {
+        User admin = User.builder().id(UUID.randomUUID()).email("admin@example.com")
+                .roles(new String[] { "user", "admin" }).active(false).build();
+        when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
+
+        assertThatThrownBy(() -> authService.sendAdminOtp("admin@example.com", IP))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.AUTH_ACCOUNT_BANNED));
+        verify(emailService, never()).sendVerificationEmail(anyString(), anyString());
+    }
+
+    @Test
+    void shouldRejectLockedAdminLoginWithoutDatabaseLookup() {
+        when(redisService.hasKeyOrThrow("otp:admin-email:lock", attempt("admin@example.com"))).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.verifyAdminOtp("admin@example.com", "123456", IP))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS));
+        verify(userRepository, never()).findByEmail(anyString());
+    }
+
+    @Test
+    void shouldSendLoginEmailWithoutSignupLookupWhenAdminRequestsOtp() {
+        User admin = User.builder().id(UUID.randomUUID()).email("admin@example.com")
+                .roles(new String[] { "admin" }).active(true).build();
+        when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
+        when(redisService.setIfAbsent(eq("otp:admin-email:cooldown"), eq("admin@example.com"), any(), any())).thenReturn(true);
+
+        authService.sendAdminOtp("admin@example.com", IP);
+
+        verify(emailService).sendVerificationEmail(eq("admin@example.com"), anyString());
+        verify(userRepository, never()).existsByEmail(anyString());
     }
 
     // ── consumeOtp constant-time comparison (P5-#19) ─────────────────────────────────

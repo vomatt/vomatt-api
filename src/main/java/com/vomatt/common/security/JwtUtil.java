@@ -66,7 +66,7 @@ public class JwtUtil {
         // Fails closed: a token without the admin scope (including ones issued before the claim existed) drops the
         // admin role here, so nothing downstream can grant it
         if (roles != null && !SCOPE_ADMIN.equals(claims.get(SCOPE_CLAIM, String.class))) {
-            roles = roles.stream().filter(r -> !UserRole.ADMIN.equalsIgnoreCase(r)).toList();
+            roles = roles.stream().filter(r -> !UserRole.isAdmin(r)).toList();
         }
         return new UserPrincipal(claims.getSubject(), claims.get("email", String.class), roles);
     }

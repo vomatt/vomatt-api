@@ -113,6 +113,20 @@ public class RedisServiceImpl implements RedisService {
     }
 
     @Override
+    public long deleteAll(String cacheName, java.util.Collection<String> keys) {
+        if (keys.isEmpty()) {
+            return 0;
+        }
+        List<String> cacheKeys = keys.stream().map(k -> CacheKeyUtil.buildKey(cacheName, k)).toList();
+        try {
+            Long n = redisTemplate.delete(cacheKeys);
+            return n == null ? 0 : n;
+        } catch (Exception e) {
+            throw new RedisOperationException("Redis DEL failed, cacheName=" + cacheName + ", keys=" + cacheKeys.size(), e);
+        }
+    }
+
+    @Override
     public long deleteByPrefix(String cacheName, String keyPrefix) {
         // Full match pattern: cacheName:keyPrefix*
         String matchPattern = CacheKeyUtil.buildKey(cacheName, keyPrefix) + "*";

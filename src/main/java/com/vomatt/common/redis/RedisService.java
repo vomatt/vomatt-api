@@ -40,6 +40,9 @@ public interface RedisService {
      */
     <T> T getAndDelete(String cacheName, String key, Class<T> clazz);
 
+    /** One multi-key DEL for many keys of one cacheName; returns how many existed. Throws RedisOperationException on Redis failure. */
+    long deleteAll(String cacheName, java.util.Collection<String> keys);
+
     /**
      * Uses SCAN to match the prefix and batch-deletes all matching keys (including the cacheName prefix).
      * Returns the number actually deleted, or 0 if none found. Throws RedisOperationException on Redis failure.

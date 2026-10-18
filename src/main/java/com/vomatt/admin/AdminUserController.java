@@ -321,8 +321,8 @@ public class AdminUserController {
                     **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
                     **Precondition**: the account exists. Not the same as Unsuspend User: this clears OTP sign-in lockouts, not a suspension
                     **Behavior**: clears the OTP sign-in limits of the account's email and phone number. `channels`: `email` (consumer email OTP), `phone` (consumer phone OTP), `admin` (admin console login). \
-                    `clear`: `lock` (the lockout after 3 wrong codes and its doubling level, so the next lockout is 5 minutes again), `attempts` (wrong-code counters and the current OTP's 10-guess budget), `cooldown` (the resend wait, including the 15-minute wait after an OTP's guesses run out). \
-                    `ip` limits it to one client IP; without it every IP is cleared, except lockouts set before this API existed, which can be cleared only by `ip` (they expire within 24 hours). \
+                    `clear`: `lock` (the lockout after 3 wrong codes, its doubling level and the wrong-code counter, so the user can try again at once and the next lockout is 5 minutes again), `attempts` (wrong-code counters, and the current OTP is discarded so the user requests a new one), `cooldown` (the resend wait, including the 15-minute wait after an OTP's guesses run out). \
+                    `ip` limits it to one client IP, in any spelling (`2001:DB8::1` matches `2001:db8:0:0:0:0:0:1`); without it every IP is cleared, except lockouts set before this API existed, which can be cleared only by `ip` (they expire within 24 hours). \
                     Every field is optional and an omitted or empty one means all; the body itself may be omitted. Allowed values are listed by List User Admin Options. Idempotent: returns `clearedEntries` 0 when nothing matched
                     **Side effects**: the user can request and verify OTPs again right away. Written to the audit log with the scope in `details` (empty when the body is omitted, which means all)
                     **Errors**:

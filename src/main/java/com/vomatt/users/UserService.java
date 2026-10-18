@@ -1,6 +1,5 @@
 package com.vomatt.users;
 
-import com.vomatt.common.constant.UserRole;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.security.RefreshTokenService;
@@ -52,10 +51,8 @@ public class UserService {
      */
     @Transactional
     public void deleteUser(String userId, UserPrincipal principal) {
-        boolean tokenGrantsAdmin = principal.roles() != null
-                && principal.roles().stream().anyMatch(UserRole.ADMIN::equalsIgnoreCase);
         if (!principal.userId().equals(userId)
-                && !(tokenGrantsAdmin && userRepository.isActiveAdmin(UUID.fromString(principal.userId())))) {
+                && !(principal.grantsAdmin() && userRepository.isActiveAdmin(UUID.fromString(principal.userId())))) {
             log.warn("User {} attempted to delete user {} without permission", principal.userId(), userId);
             throw ApiException.forbidden(MessageKey.USER_DELETE_FORBIDDEN);
         }

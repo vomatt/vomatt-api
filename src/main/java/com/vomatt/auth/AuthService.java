@@ -127,7 +127,7 @@ public class AuthService {
         String code = generateOtpCode();
 
         if (email != null && !email.isBlank()) {
-            sendEmailOtp(OTP_EMAIL_NS, User.normalizeEmail(email), code, clientIp);
+            sendEmailOtp(User.normalizeEmail(email), code, clientIp);
         } else if (phone != null && !phone.isBlank()) {
             sendPhoneOtp(User.normalizePhone(phone), otpType, code, clientIp);
         } else {
@@ -141,16 +141,22 @@ public class AuthService {
      */
     public void sendAdminOtp(String email, String clientIp) {
         String normalizedEmail = requireEmail(email);
+        // Lock first: a locked pair is refused from Redis alone, without a DB hit per attempt
+        rejectIfLocked(OTP_ADMIN_EMAIL_NS, attemptKey(normalizedEmail, clientIp));
         requireExistingAdminByEmail(normalizedEmail);
-        sendEmailOtp(OTP_ADMIN_EMAIL_NS, normalizedEmail, generateOtpCode(), clientIp);
+        sendEmailOtp(OTP_ADMIN_EMAIL_NS, normalizedEmail, "login", generateOtpCode(), clientIp);
     }
 
-    private void sendEmailOtp(String namespace, String normalizedEmail, String code, String clientIp) {
+    private void sendEmailOtp(String normalizedEmail, String code, String clientIp) {
+        // Checked before the DB lookup, for the same reason as sendAdminOtp; sendEmailOtp checks again (Redis only)
+        rejectIfLocked(OTP_EMAIL_NS, attemptKey(normalizedEmail, clientIp));
+        String otpType = userRepository.existsByEmail(normalizedEmail) ? "login" : "signup";
+        sendEmailOtp(OTP_EMAIL_NS, normalizedEmail, otpType, code, clientIp);
+    }
+
+    private void sendEmailOtp(String namespace, String normalizedEmail, String otpType, String code, String clientIp) {
         String attemptKey = attemptKey(normalizedEmail, clientIp);
         rejectIfLocked(namespace, attemptKey);
-
-        boolean isExisting = userRepository.existsByEmail(normalizedEmail);
-        String otpType = isExisting ? "login" : "signup";
 
         acquireResendCooldown(namespace, normalizedEmail);
         storeOtp(namespace, normalizedEmail, attemptKey, new OtpRecord(code, otpType, Instant.now(), 0));
@@ -202,7 +208,8 @@ public class AuthService {
     /** Admin console login, step 2: the only path that issues admin-scope tokens. Never creates an account. */
     public AuthResponse verifyAdminOtp(String email, String code, String clientIp) {
         String normalizedEmail = requireEmail(email);
-        // P5-#13: the role check runs before the OTP is consumed, so a non-admin attempt burns nothing
+        rejectIfLocked(OTP_ADMIN_EMAIL_NS, attemptKey(normalizedEmail, clientIp));
+        // P5-#13: the role check runs before the OTP is consumed, so a non-admin or suspended attempt burns nothing
         User user = requireExistingAdminByEmail(normalizedEmail);
         consumeOtp(OTP_ADMIN_EMAIL_NS, normalizedEmail, code, clientIp);
         return buildAuthResponse(user, true);
@@ -215,11 +222,15 @@ public class AuthService {
         return User.normalizeEmail(email);
     }
 
-    /** Requires an existing account for the email with the ADMIN role; otherwise throws 403. */
+    /** Requires an existing, active account for the email with the ADMIN role; otherwise throws 403. */
     private User requireExistingAdminByEmail(String normalizedEmail) {
-        return userRepository.findByEmail(normalizedEmail)
+        User user = userRepository.findByEmail(normalizedEmail)
                 .filter(User::isAdmin)
                 .orElseThrow(() -> ApiException.forbidden(MessageKey.AUTH_ADMIN_FORBIDDEN));
+        if (!user.isActive()) {
+            throw ApiException.forbidden(MessageKey.AUTH_ACCOUNT_BANNED);
+        }
+        return user;
     }
 
     private AuthResponse verifyEmailOtp(String normalizedEmail, String code, String clientIp) {
@@ -388,11 +399,18 @@ public class AuthService {
     }
 
     /**
-     * Admin unlock: clears the chosen {@link LoginUnlock} targets for one identifier on one channel.
+     * Admin unlock: clears the chosen {@link LoginUnlock} targets for one identifier on one channel, in one multi-key
+     * DEL per key family so a long index costs a handful of round trips.
+     * <ul>
+     *   <li>{@code lock}: the lock, its doubling level and the per-IP wrong-code counter (a lock left with its counter at
+     *       the limit would still refuse the right code)</li>
+     *   <li>{@code attempts}: the per-IP wrong-code counters, plus the current OTP and its guess budget; the OTP is
+     *       discarded rather than given fresh guesses, so the user requests a new one</li>
+     *   <li>{@code cooldown}: the resend wait</li>
+     * </ul>
      *
      * @param identifier normalized email or E.164 phone, as stored on the account
-     * @param clientIp   only this IP (as the server resolved it); null for every IP that guessed wrong since the
-     *                   index existed
+     * @param clientIp   only this IP (any spelling of it); null for every IP that guessed wrong since the index existed
      * @return how many Redis keys were removed (0 when nothing was locked or counted)
      */
     public int unlockLogin(String channel, String identifier, String clientIp, Set<String> targets) {
@@ -407,37 +425,33 @@ public class AuthService {
                 : redisService.hGetAll(indexNs, identifier).keySet();
         boolean lock = targets.contains(LoginUnlock.TARGET_LOCK);
         boolean attempts = targets.contains(LoginUnlock.TARGET_ATTEMPTS);
-        int removed = 0;
-        for (String attemptKey : attemptKeys) {
-            if (lock) {
-                removed += deleted(namespace + OTP_LOCK_SUFFIX, attemptKey) + deleted(namespace + OTP_LEVEL_SUFFIX, attemptKey);
-            }
-            if (attempts) {
-                removed += deleted(namespace + OTP_FAIL_SUFFIX, attemptKey);
-            }
+        long removed = 0;
+        if (lock) {
+            removed += redisService.deleteAll(namespace + OTP_LOCK_SUFFIX, attemptKeys)
+                    + redisService.deleteAll(namespace + OTP_LEVEL_SUFFIX, attemptKeys);
+        }
+        if (lock || attempts) {
+            removed += redisService.deleteAll(namespace + OTP_FAIL_SUFFIX, attemptKeys);
         }
         if (attempts) {
-            OtpRecord otp = redisService.get(namespace, identifier, OtpRecord.class);
+            OtpRecord otp = redisService.getAndDelete(namespace, identifier, OtpRecord.class);
             if (otp != null) {
-                removed += deleted(namespace + OTP_GUESS_SUFFIX, identifier + ":" + otp.createdAt().toEpochMilli());
+                removed += 1 + redisService.deleteAll(namespace + OTP_GUESS_SUFFIX,
+                        List.of(identifier + ":" + otp.createdAt().toEpochMilli()));
             }
         }
         if (targets.contains(LoginUnlock.TARGET_COOLDOWN)) {
-            removed += deleted(namespace + OTP_COOLDOWN_SUFFIX, identifier);
+            removed += redisService.deleteAll(namespace + OTP_COOLDOWN_SUFFIX, List.of(identifier));
         }
-        // Nothing left to clear for these keys once both the lock and the counter are gone
-        if (lock && attempts) {
+        // Lock and counter are both gone for these keys, so the index has nothing left to point at
+        if (lock) {
             if (clientIp == null) {
                 redisService.delete(indexNs, identifier);
             } else {
                 redisService.hDelete(indexNs, identifier, attemptKeys.iterator().next());
             }
         }
-        return removed;
-    }
-
-    private int deleted(String namespace, String key) {
-        return redisService.delete(namespace, key) ? 1 : 0;
+        return (int) removed;
     }
 
     private void rejectIfLocked(String namespace, String attemptKey) {
@@ -447,14 +461,29 @@ public class AuthService {
         }
     }
 
-    /** Redis key for one identifier guessing from one client IP; hashed so neither part can break the key format. */
+    /**
+     * Redis key for one identifier guessing from one client IP; hashed so neither part can break the key format. The IP
+     * is canonicalized first, so an admin unlocking "2001:DB8::1" hits the key the server wrote for "2001:db8:0:0:0:0:0:1".
+     */
     static String attemptKey(String identifier, String clientIp) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest((identifier + "\n" + clientIp).getBytes(StandardCharsets.UTF_8));
+                    .digest((identifier + "\n" + canonicalIp(clientIp)).getBytes(StandardCharsets.UTF_8));
             return java.util.HexFormat.of().formatHex(digest);
         } catch (java.security.NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 not available", e);
+        }
+    }
+
+    /** An IP literal in one spelling (InetAddress.ofLiteral never does DNS); anything else is kept as is. */
+    static String canonicalIp(String ip) {
+        if (ip == null) {
+            return null;
+        }
+        try {
+            return java.net.InetAddress.ofLiteral(ip.trim()).getHostAddress();
+        } catch (IllegalArgumentException e) {
+            return ip;
         }
     }
 

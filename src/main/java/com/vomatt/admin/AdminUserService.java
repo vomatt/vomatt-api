@@ -8,6 +8,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.vomatt.admin.dto.AdminUserDetail;
@@ -116,8 +117,8 @@ public class AdminUserService {
         return new AdminUserOptionsResponse(UserRole.ALL, LoginUnlock.CHANNELS, LoginUnlock.TARGETS);
     }
 
-    /** Clears OTP lockouts in Redis only; no row changes, so it needs no transaction. */
-    @Transactional(readOnly = true)
+    /** Clears OTP lockouts in Redis only; runs outside a transaction so no DB connection is held during the Redis calls. */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public UnlockLoginResponse unlockLogin(UUID userId, UnlockLoginRequest request, String actorId) {
         User user = findUser(userId);
         Set<String> targets = Set.copyOf(request.clearOrAll());

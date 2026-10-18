@@ -11,7 +11,7 @@ public record AdminUserOptionsResponse(
         @Schema(description = "`channels` accepted by POST /api/admin/users/{userId}/unlock-login: `email` consumer email OTP, `phone` consumer phone OTP, `admin` admin console login",
                 example = "[\"email\", \"phone\", \"admin\"]")
         List<String> unlockChannels,
-        @Schema(description = "`clear` accepted by POST /api/admin/users/{userId}/unlock-login: `lock` the lockout and its doubling, `attempts` wrong-code counters, `cooldown` the resend wait",
+        @Schema(description = "`clear` accepted by POST /api/admin/users/{userId}/unlock-login: `lock` the lockout, its doubling and the wrong-code counter, `attempts` wrong-code counters and the current OTP, `cooldown` the resend wait",
                 example = "[\"lock\", \"attempts\", \"cooldown\"]")
         List<String> unlockTargets
 ) {

@@ -17,9 +17,9 @@ public final class LoginUnlock {
     public static final List<String> CHANNELS = List.of(CHANNEL_EMAIL, CHANNEL_PHONE, CHANNEL_ADMIN);
     public static final String CHANNEL_PATTERN = "email|phone|admin";
 
-    /** Lockout and its doubling level */
+    /** Lockout, its doubling level and the per-IP wrong-code counter */
     public static final String TARGET_LOCK = "lock";
-    /** Wrong-code counters (per IP) and the current OTP's guess counter */
+    /** Wrong-code counters (per IP); also discards the current OTP, so the user requests a new one */
     public static final String TARGET_ATTEMPTS = "attempts";
     /** Resend cooldown, including the 15-minute one after an OTP's guesses run out */
     public static final String TARGET_COOLDOWN = "cooldown";

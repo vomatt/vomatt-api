@@ -51,6 +51,7 @@ import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
 import com.vomatt.entity.VoteStatus;
+import com.vomatt.entity.VoterVisibility;
 import com.vomatt.groups.GroupService;
 import com.vomatt.repository.TagRepository;
 import com.vomatt.repository.UserPreferenceRepository;
@@ -118,10 +119,7 @@ public class VoteService {
 
         Vote vote = new Vote(request.getTitle(), request.getDescription(), creator, request.getEndTime());
         vote.setStartTime(request.getStartTime() != null ? request.getStartTime() : OffsetDateTime.now());
-        vote.setAnonymous(Boolean.TRUE.equals(request.getAnonymous()));
-        if (request.effectiveVoterVisibility() != null) {
-            vote.setVoterVisibility(request.effectiveVoterVisibility());
-        }
+        applyVoterVisibility(vote, request);
         if (request.getAudience() != null) {
             vote.setAudience(request.getAudience());
         }
@@ -166,13 +164,7 @@ public class VoteService {
         vote.setDescription(request.getDescription());
         vote.setStartTime(startTime);
         vote.scheduleEnd(request.getEndTime());
-        // An omitted legacy flag keeps the current value, like the other nullable fields on edit
-        if (request.getAnonymous() != null) {
-            vote.setAnonymous(request.getAnonymous());
-        }
-        if (request.effectiveVoterVisibility() != null) {
-            vote.setVoterVisibility(request.effectiveVoterVisibility());
-        }
+        applyVoterVisibility(vote, request);
 
         Set<UUID> oldTagIds = countedTagIds(vote);
         if (request.getAudience() != null) {
@@ -721,6 +713,12 @@ public class VoteService {
         if (count > limit.getCapacity()) {
             throw ApiException.tooManyRequests(MessageKey.COMMON_RATE_LIMITED);
         }
+    }
+
+    // is_anonymous mirrors NOBODY so the legacy column never disagrees with Voter Visibility
+    private static void applyVoterVisibility(Vote vote, CreateVoteRequest request) {
+        vote.setVoterVisibility(request.resolveVoterVisibility(vote.getVoterVisibility()));
+        vote.setAnonymous(vote.getVoterVisibility() == VoterVisibility.NOBODY);
     }
 
     private static <T> List<T> orEmpty(List<T> list) {

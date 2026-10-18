@@ -9,7 +9,9 @@ Contract changes that affect the frontend. 💥 BREAKING means frontend code mus
 - New `POST /api/admin/users/{userId}/unlock-login` clears a user's OTP sign-in limits. Optional body `{ channels, ip, clear }`: `channels` from `email` / `phone` / `admin`, `ip` one client IP, `clear` from `lock` (lock, its doubling and the wrong-code counter) / `attempts` (wrong-code counters; also discards the current OTP, so the user requests a new one) / `cooldown`; an omitted or empty field means all. `ip` matches any spelling of the address. Returns `{ clearedEntries }`. Without `ip` it cannot clear lockouts set before this release (they expire within 24 hours). Recorded in the audit log as `UNLOCK_LOGIN`.
 - New `GET /api/admin/users/options` returns `{ roles, unlockChannels, unlockTargets }`, the values accepted by the role and unlock APIs.
 - Docs only: the access token lasts 15 minutes by default (`JWT_EXPIRATION_SECONDS=900`); some descriptions still said 1 hour.
-- Deprecated `anonymous` on `POST /api/votes` and `PUT /api/votes/{voteId}`: `true` without `voterVisibility` now sets Voter Visibility to NOBODY (it used to hide nothing), and an omitted or `null` value on edit keeps the current flag instead of resetting it to `false`. An explicit `voterVisibility` still wins. New clients should send only `voterVisibility`.
+- Deprecated `anonymous` on `POST /api/votes` and `PUT /api/votes/{voteId}`: when `voterVisibility` is omitted, `true` now sets Voter Visibility to NOBODY (it used to hide nothing) and `false` turns NOBODY back into OWNER; an omitted or `null` value keeps the current level on edit instead of resetting the flag to `false`. An explicit `voterVisibility` still wins. New clients should send only `voterVisibility`.
+- `anonymous` in Poll and result responses is now `true` exactly when `voterVisibility` is NOBODY, including Polls created by new clients with `voterVisibility` only.
+- Existing Polls that were created with `anonymous: true` but kept OWNER are switched to NOBODY by `db/migrations/2026-10-18-legacy-anonymous-poll.sql`, so their owner no longer sees who voted for what.
 
 ## 2026-10-17
 

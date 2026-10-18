@@ -119,7 +119,8 @@ public class VoteController {
             **Auth**: required
             **Precondition**: none
             **Behavior**: creates a Poll owned by the caller. With no `startTime` (or a past one) the Poll is Open immediately; \
-            a future `startTime` makes it Scheduled until that time. `voterVisibility` defaults to OWNER; `audience` defaults to PUBLIC. \
+            a future `startTime` makes it Scheduled until that time. `voterVisibility` defaults to OWNER (the deprecated `anonymous: true` \
+            without `voterVisibility` means NOBODY); `audience` defaults to PUBLIC. \
             An UNLISTED Poll is reachable only through its link: it stays out of Feed / Explore / Search and the owner's profile, \
             and is listed only in My Polls. An INVITE_ONLY Poll is reachable only by its owner and its Invitees: the users in `inviteeIds` and the addresses in `inviteeEmails` \
             (duplicates and the owner's own ID / address are ignored; more can be added later); everyone else gets 404 `vote.not_found`. \
@@ -179,7 +180,8 @@ public class VoteController {
             **Auth**: required (owner only)
             **Precondition**: the Poll is Scheduled (its start time has not arrived)
             **Behavior**: replaces title, description, times, Voter Visibility, Audience, Invitees, tags and options with the body (same body and validation as create). \
-            An omitted `startTime`, `voterVisibility`, `audience`, `inviteeIds` or `inviteeEmails` keeps the current value; the Poll does not open on edit. \
+            An omitted `startTime`, `voterVisibility`, `anonymous`, `audience`, `inviteeIds` or `inviteeEmails` keeps the current value; the Poll does not open on edit. \
+            With no `voterVisibility`, the deprecated `anonymous: true` sets NOBODY and `anonymous: false` turns NOBODY back into OWNER. \
             Audience can change only here, so it is fixed once the Poll is Open. `groupIds` expands the caller's Groups now: their members are merged into \
             `inviteeIds` / `inviteeEmails` when that list is set, so an explicit `[]` plus `groupIds` replaces that kind of Invitee with the Groups' members \
             (already-invited members are kept as they are); a null list keeps that kind of Invitee and adds the Groups' members on top.

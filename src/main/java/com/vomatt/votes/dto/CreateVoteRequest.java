@@ -52,8 +52,9 @@ public class CreateVoteRequest {
             deprecated = true, example = "false")
     private boolean allowMultipleChoices = false;
 
-    @Schema(description = "Deprecated: use `voterVisibility` instead. True with no `voterVisibility` means NOBODY. "
-            + "Null keeps false on create and the current value on edit", deprecated = true, example = "false", nullable = true)
+    @Schema(description = "Deprecated: use `voterVisibility` instead. Read only when `voterVisibility` is null: true sets NOBODY, "
+            + "false turns NOBODY back into OWNER (any other level is kept), null keeps the default OWNER on create and the current value on edit",
+            deprecated = true, example = "false", nullable = true)
     private Boolean anonymous;
 
     @Schema(description = "Who may see which option each Participant chose once the Poll has Ended: NOBODY (not even the owner), "
@@ -123,11 +124,20 @@ public class CreateVoteRequest {
         private Integer displayOrder = 0;
     }
 
-    /** {@code voterVisibility}, or NOBODY for a legacy client that only sends {@code anonymous: true}; null keeps the default / current value. */
-    public VoterVisibility effectiveVoterVisibility() {
+    /**
+     * The Voter Visibility to store, given the {@code current} one (OWNER on create). An explicit {@code voterVisibility} wins;
+     * otherwise legacy {@code anonymous: true} means NOBODY, {@code false} turns NOBODY back into OWNER, and null keeps {@code current}.
+     */
+    public VoterVisibility resolveVoterVisibility(VoterVisibility current) {
         if (voterVisibility != null) {
             return voterVisibility;
         }
-        return Boolean.TRUE.equals(anonymous) ? VoterVisibility.NOBODY : null;
+        if (anonymous == null) {
+            return current;
+        }
+        if (anonymous) {
+            return VoterVisibility.NOBODY;
+        }
+        return current == VoterVisibility.NOBODY ? VoterVisibility.OWNER : current;
     }
 }

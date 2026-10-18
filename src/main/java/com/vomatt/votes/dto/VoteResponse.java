@@ -52,7 +52,7 @@ public class VoteResponse {
     @Schema(description = "Deprecated: always false, Polls are single-choice", deprecated = true, example = "false")
     private boolean allowMultipleChoices;
 
-    @Schema(description = "Deprecated: use `voterVisibility` instead", deprecated = true, example = "false")
+    @Schema(description = "Deprecated: use `voterVisibility` instead; true exactly when Voter Visibility is NOBODY", deprecated = true, example = "false")
     private boolean isAnonymous;
 
     @Schema(description = "When the Poll was created", example = "2026-10-09T15:20:31+08:00")

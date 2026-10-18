@@ -9,6 +9,7 @@ import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
 import com.vomatt.entity.VoteStatus;
+import com.vomatt.entity.VoterVisibility;
 import com.vomatt.groups.GroupService;
 import com.vomatt.repository.IdCount;
 import com.vomatt.repository.InviteeRepository;
@@ -350,6 +351,24 @@ class VoteServiceTest {
             assertThat(result.getOptions()).extracting(VoteResponse.VoteOptionResponse::getVotes).containsOnlyNulls();
             verify(voteRepository, times(2)).save(argThat(v ->
                     "Favourite Color?".equals(v.getTitle()) && v.getCreator() == user));
+        }
+
+        @Test
+        @DisplayName("should create a NOBODY Poll when a legacy client sends only anonymous true")
+        void shouldCreateNobodyPollWhenOnlyLegacyAnonymousSent() {
+            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
+            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
+            when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+            stubSaveAssignsId();
+            CreateVoteRequest request = new CreateVoteRequest();
+            request.setTitle("Secret?");
+            request.setOptions(List.of(buildOption("Yes"), buildOption("No")));
+            request.setAnonymous(true);
+
+            VoteResponse result = voteService.createVote(request, userId.toString());
+
+            assertThat(result.getVoterVisibility()).isEqualTo(VoterVisibility.NOBODY);
+            assertThat(result.isAnonymous()).isTrue();
         }
     }
 
@@ -701,7 +720,7 @@ class VoteServiceTest {
     @DisplayName("getVoters")
     class VoterVisibilityTests {
 
-        private void endedWith(com.vomatt.entity.VoterVisibility visibility) {
+        private void endedWith(VoterVisibility visibility) {
             vote.setEndTime(OffsetDateTime.now().minusMinutes(1));
             vote.setVoterVisibility(visibility);
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
@@ -715,14 +734,14 @@ class VoteServiceTest {
         @Test
         @DisplayName("should hide voters even from owner when visibility is NOBODY")
         void shouldHideVotersWhenVisibilityIsNobody() {
-            endedWith(com.vomatt.entity.VoterVisibility.NOBODY);
+            endedWith(VoterVisibility.NOBODY);
             assertHidden(userId.toString());
         }
 
         @Test
         @DisplayName("should show voters only to owner when visibility is OWNER")
         void shouldShowVotersOnlyToOwnerWhenVisibilityIsOwner() {
-            endedWith(com.vomatt.entity.VoterVisibility.OWNER);
+            endedWith(VoterVisibility.OWNER);
             when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of());
 
             assertThat(voteService.getVoters(voteId.toString(), userId.toString(), null, null).items()).isEmpty();
@@ -732,7 +751,7 @@ class VoteServiceTest {
         @Test
         @DisplayName("should show voters to any signed-in user when visibility is SIGNED_IN")
         void shouldShowVotersToAnySignedInUserWhenVisibilityIsSignedIn() {
-            endedWith(com.vomatt.entity.VoterVisibility.SIGNED_IN);
+            endedWith(VoterVisibility.SIGNED_IN);
             when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of());
 
             assertThat(voteService.getVoters(voteId.toString(), UUID.randomUUID().toString(), null, null).nextCursor())
@@ -742,7 +761,7 @@ class VoteServiceTest {
         @Test
         @DisplayName("should show voters when the Poll holds no Anonymous Ballot")
         void shouldShowVotersWhenNoAnonymousBallot() {
-            endedWith(com.vomatt.entity.VoterVisibility.OWNER);
+            endedWith(VoterVisibility.OWNER);
             when(userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn(0L);
             when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of());
 
@@ -752,7 +771,7 @@ class VoteServiceTest {
         @Test
         @DisplayName("should hide voters when the Poll holds fewer than K Anonymous Ballots")
         void shouldHideVotersWhenAnonymousBallotsBelowK() {
-            endedWith(com.vomatt.entity.VoterVisibility.OWNER);
+            endedWith(VoterVisibility.OWNER);
             when(userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn(1L);
 
             assertHidden(userId.toString());
@@ -762,7 +781,7 @@ class VoteServiceTest {
         @Test
         @DisplayName("should show voters when the Poll holds K Anonymous Ballots")
         void shouldShowVotersWhenAnonymousBallotsReachK() {
-            endedWith(com.vomatt.entity.VoterVisibility.OWNER);
+            endedWith(VoterVisibility.OWNER);
             when(userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn((long) VoteService.ANONYMOUS_BALLOT_K);
             when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of());
 
@@ -773,7 +792,7 @@ class VoteServiceTest {
         @DisplayName("should reject viewing voters when Poll has not ended")
         void shouldRejectVotersWhenPollOpen() {
             vote.setEndTime(OffsetDateTime.now().plusDays(1));
-            vote.setVoterVisibility(com.vomatt.entity.VoterVisibility.SIGNED_IN);
+            vote.setVoterVisibility(VoterVisibility.SIGNED_IN);
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
 
             assertThatThrownBy(() -> voteService.getVoters(voteId.toString(), userId.toString(), null, null))
@@ -826,8 +845,35 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("should keep the legacy anonymous flag when edit omits it, and map true to NOBODY")
-        void shouldKeepLegacyAnonymousWhenEditOmitsIt() {
+        @DisplayName("should map the legacy anonymous flag on edit: true to NOBODY, null keeps it, false back to OWNER")
+        void shouldMapLegacyAnonymousWhenEditSendsOnlyIt() {
+            scheduled();
+            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
+            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
+            when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
+            stubSaveAssignsId();
+            CreateVoteRequest request = editRequest(null);
+
+            request.setAnonymous(true);
+            VoteResponse response = voteService.updateVote(voteId.toString(), request, userId.toString());
+            assertThat(vote.getVoterVisibility()).isEqualTo(VoterVisibility.NOBODY);
+            assertThat(vote.isAnonymous()).isTrue();
+            assertThat(response.isAnonymous()).isTrue();
+
+            request.setAnonymous(null);
+            voteService.updateVote(voteId.toString(), request, userId.toString());
+            assertThat(vote.getVoterVisibility()).isEqualTo(VoterVisibility.NOBODY);
+
+            request.setAnonymous(false);
+            response = voteService.updateVote(voteId.toString(), request, userId.toString());
+            assertThat(vote.getVoterVisibility()).isEqualTo(VoterVisibility.OWNER);
+            assertThat(vote.isAnonymous()).isFalse();
+            assertThat(response.isAnonymous()).isFalse();
+        }
+
+        @Test
+        @DisplayName("should let an explicit voterVisibility win over the legacy anonymous flag on edit")
+        void shouldPreferVoterVisibilityWhenEditSendsBoth() {
             scheduled();
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
@@ -835,25 +881,13 @@ class VoteServiceTest {
             stubSaveAssignsId();
             CreateVoteRequest request = editRequest(null);
             request.setAnonymous(true);
+            request.setVoterVisibility(VoterVisibility.SIGNED_IN);
 
-            voteService.updateVote(voteId.toString(), request, userId.toString());
-            assertThat(vote.isAnonymous()).isTrue();
-            assertThat(vote.getVoterVisibility()).isEqualTo(com.vomatt.entity.VoterVisibility.NOBODY);
+            VoteResponse response = voteService.updateVote(voteId.toString(), request, userId.toString());
 
-            request.setAnonymous(null);
-            voteService.updateVote(voteId.toString(), request, userId.toString());
-            assertThat(vote.isAnonymous()).isTrue();
-            assertThat(vote.getVoterVisibility()).isEqualTo(com.vomatt.entity.VoterVisibility.NOBODY);
-        }
-
-        @Test
-        @DisplayName("should let an explicit voterVisibility win over the legacy anonymous flag")
-        void shouldPreferVoterVisibilityWhenBothSent() {
-            CreateVoteRequest request = editRequest(null);
-            request.setAnonymous(true);
-            request.setVoterVisibility(com.vomatt.entity.VoterVisibility.SIGNED_IN);
-
-            assertThat(request.effectiveVoterVisibility()).isEqualTo(com.vomatt.entity.VoterVisibility.SIGNED_IN);
+            assertThat(vote.getVoterVisibility()).isEqualTo(VoterVisibility.SIGNED_IN);
+            assertThat(vote.isAnonymous()).isFalse();
+            assertThat(response.isAnonymous()).isFalse();
         }
 
         @Test
@@ -1256,7 +1290,7 @@ class VoteServiceTest {
         @DisplayName("should show voters to an Invitee when visibility is SIGNED_IN on an Ended Invite-only Poll")
         void shouldShowVotersToInviteeWhenVisibilitySignedIn() {
             inviteOnly(OffsetDateTime.now().minusMinutes(1));
-            vote.setVoterVisibility(com.vomatt.entity.VoterVisibility.SIGNED_IN);
+            vote.setVoterVisibility(VoterVisibility.SIGNED_IN);
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             when(inviteeRepository.existsByVoteIdAndUserId(voteId, inviteeId)).thenReturn(true);
             when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of());

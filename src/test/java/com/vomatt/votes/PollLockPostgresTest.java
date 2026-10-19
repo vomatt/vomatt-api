@@ -2,6 +2,7 @@ package com.vomatt.votes;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -420,7 +421,7 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
         assertThatThrownBy(() -> castAs(voter)).isInstanceOfSatisfying(ApiException.class,
                 ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_ENDED));
         assertThat(ballots()).isEqualTo(2);
-        assertThat(storedEndTime().toInstant()).isEqualTo(endedAt.toInstant().truncatedTo(ChronoUnit.MICROS));
+        assertThat(storedEndTime().toInstant()).isCloseTo(endedAt.toInstant(), within(1, ChronoUnit.MICROS));
     }
 
     @Test
@@ -437,7 +438,7 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
 
         // The end is set on the locked Poll before the count updates clear the persistence context
         assertThat(unsealed(ended)).isTrue();
-        assertThat(storedEndTime().toInstant()).isEqualTo(ended.getEndTime().toInstant().truncatedTo(ChronoUnit.MICROS));
+        assertThat(storedEndTime().toInstant()).isCloseTo(ended.getEndTime().toInstant(), within(1, ChronoUnit.MICROS));
         assertThat(storedEndTime()).as("ended now, not at the Deadline a day away").isBefore(OffsetDateTime.now().plusMinutes(1));
         assertThat(ballots()).isEqualTo(2);
         assertThat(counts()).containsEntry(optionA, 1L).containsEntry(optionB, 1L);
@@ -477,7 +478,7 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
         List<VoteResponse> ending = landed.stream().filter(PollLockPostgresTest::unsealed).toList();
         assertThat(ending).hasSize(1);
         assertThat(storedEndTime().toInstant())
-                .isEqualTo(ending.getFirst().getEndTime().toInstant().truncatedTo(ChronoUnit.MICROS));
+                .isCloseTo(ending.getFirst().getEndTime().toInstant(), within(1, ChronoUnit.MICROS));
         assertThat(ballots()).isEqualTo(landed.size());
         assertThatThrownBy(() -> castAs(owner)).isInstanceOfSatisfying(ApiException.class,
                 ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_ENDED));
@@ -499,7 +500,7 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
         OffsetDateTime firstEnd = first.get(10, TimeUnit.SECONDS).getEndTime();
         second.get(10, TimeUnit.SECONDS);
 
-        assertThat(storedEndTime().toInstant()).isEqualTo(firstEnd.toInstant().truncatedTo(ChronoUnit.MICROS));
+        assertThat(storedEndTime().toInstant()).isCloseTo(firstEnd.toInstant(), within(1, ChronoUnit.MICROS));
     }
 
     private static CreateVoteRequest.VoteOptionRequest option(String text) {

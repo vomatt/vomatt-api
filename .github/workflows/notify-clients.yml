@@ -1,0 +1,39 @@
+# Tells each client that the API contract or frontend docs changed, so its
+# sync-api-contract workflow can follow the change and update its PR.
+name: Notify clients of contract change
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/frontend/**
+  workflow_dispatch:
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send repository_dispatch to each client
+        env:
+          # Fine-grained PATs with "Contents: read and write" on the matching repo
+          WEB_TOKEN: ${{ secrets.WEB_DISPATCH_TOKEN }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_DISPATCH_TOKEN }}
+          IOS_TOKEN: ${{ secrets.IOS_DISPATCH_TOKEN }}
+          SHA: ${{ github.sha }}
+          BEFORE: ${{ github.event.before || '' }}
+        run: |
+          # One failed dispatch must not skip the others; fail at the end instead.
+          failed=0
+          for client in web admin ios; do
+            token_var="$(echo "$client" | tr a-z A-Z)_TOKEN"
+            if GH_TOKEN="${!token_var}" gh api "repos/vomatt/vomatt-$client/dispatches" \
+                -f event_type=api-contract-updated \
+                -f "client_payload[sha]=$SHA" \
+                -f "client_payload[before]=$BEFORE"; then
+              echo "- vomatt-$client: dispatched" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "- vomatt-$client: **failed**" >> "$GITHUB_STEP_SUMMARY"
+              failed=1
+            fi
+          done
+          exit "$failed"

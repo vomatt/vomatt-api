@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
@@ -36,7 +37,8 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
     @Autowired InviteeRepository inviteeRepository;
     @Autowired NotificationReadRepository notificationReadRepository;
 
-    private final OffsetDateTime now = OffsetDateTime.now();
+    // Postgres keeps microseconds; Linux clocks have nanoseconds, so stored times would not round-trip
+    private final OffsetDateTime now = OffsetDateTime.now().truncatedTo(ChronoUnit.MICROS);
     private final String carolEmail = "carol-" + System.nanoTime() + "@example.com";
     private User owner;
     private Vote poll;

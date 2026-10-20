@@ -23,6 +23,7 @@ import org.thymeleaf.context.Context;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
@@ -40,6 +41,10 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class EmailServiceImpl implements EmailService {
     private static final ClassPathResource LOGO = new ClassPathResource("templates/email/logo.png");
+    // Same budget as the spring.mail SMTP timeouts: OTP emails are sent on the request thread
+    private static final Duration RESEND_TIMEOUT = Duration.ofSeconds(5);
+    // Resend allows 2 requests per second per team by default
+    private static final Duration RESEND_SEND_INTERVAL = Duration.ofMillis(500);
 
     private final JavaMailSender mailSender;
     private final TemplateEngine templateEngine;
@@ -65,6 +70,7 @@ public class EmailServiceImpl implements EmailService {
 
     // null means SMTP
     private Resend resend;
+    private String logoBase64;
 
     @PostConstruct
     void initProvider() {
@@ -72,10 +78,14 @@ public class EmailServiceImpl implements EmailService {
             case "smtp" -> { }
             case "resend" -> {
                 // Fail at startup rather than on the first OTP request
-                if (resendApiKey.isBlank()) {
+                String apiKey = resendApiKey.strip();
+                if (apiKey.isEmpty()) {
                     throw new IllegalStateException("app.email.provider=resend requires app.email.resend-api-key");
                 }
-                resend = new Resend(resendApiKey);
+                resend = Resend.builder().apiKey(apiKey)
+                        .connectTimeout(RESEND_TIMEOUT).readTimeout(RESEND_TIMEOUT).writeTimeout(RESEND_TIMEOUT)
+                        .build();
+                logoBase64 = readLogoBase64();
             }
             default -> throw new IllegalStateException("Unknown app.email.provider: " + provider + " (smtp or resend)");
         }
@@ -116,11 +126,29 @@ public class EmailServiceImpl implements EmailService {
         }
     }
 
-    // Serial on purpose: one task per batch keeps a large invite from opening many SMTP sessions at once
+    // Serial on purpose: one task per batch keeps a large invite from opening many SMTP sessions at once, and over
+    // Resend it is paced under the per-second rate limit, which would otherwise reject part of the list with 429
+    // ponytail: the pace ignores OTP emails sharing the same quota; retry on 429 if invites and logins collide
     @Async
     @Override
     public void sendInvitationEmails(List<String> recipients, String inviterName, String pollTitle, UUID pollId, Locale locale) {
-        recipients.forEach(address -> sendInvitationEmail(address, inviterName, pollTitle, pollId, locale));
+        for (int i = 0; i < recipients.size(); i++) {
+            if (i > 0 && resend != null && !pause(RESEND_SEND_INTERVAL)) {
+                log.warn("Invitation emails for vote {} interrupted, {} not sent", pollId, recipients.size() - i);
+                return;
+            }
+            sendInvitationEmail(recipients.get(i), inviterName, pollTitle, pollId, locale);
+        }
+    }
+
+    private static boolean pause(Duration duration) {
+        try {
+            Thread.sleep(duration);
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
     }
 
     private void sendInvitationEmail(String to, String inviterName, String pollTitle, UUID pollId, Locale locale) {
@@ -178,13 +206,13 @@ public class EmailServiceImpl implements EmailService {
                 .attachments(Attachment.builder()
                         .fileName("logo.png")
                         .contentType("image/png")
-                        .content(logoBase64())
+                        .content(logoBase64)
                         .contentId("logo")
                         .build())
                 .build());
     }
 
-    private static String logoBase64() {
+    private static String readLogoBase64() {
         try {
             return Base64.getEncoder().encodeToString(LOGO.getContentAsByteArray());
         } catch (IOException e) {

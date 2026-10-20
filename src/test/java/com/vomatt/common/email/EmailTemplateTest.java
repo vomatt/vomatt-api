@@ -1,6 +1,7 @@
 package com.vomatt.common.email;
 
 import com.resend.Resend;
+import com.resend.core.exception.ResendException;
 import com.resend.services.emails.Emails;
 import com.resend.services.emails.model.Attachment;
 import com.resend.services.emails.model.CreateEmailOptions;
@@ -94,10 +95,7 @@ class EmailTemplateTest {
 
     @Test
     void shouldSendOverResendWithInlineLogoWhenProviderIsResend() throws Exception {
-        Resend resend = mock(Resend.class);
-        Emails emails = mock(Emails.class);
-        when(resend.emails()).thenReturn(emails);
-        ReflectionTestUtils.setField(emailService, "resend", resend);
+        Emails emails = useResend();
 
         emailService.sendWelcomeEmail("a@example.com", "Amy", Locale.ENGLISH);
 
@@ -114,13 +112,45 @@ class EmailTemplateTest {
     }
 
     @Test
+    void shouldThrowWhenResendRejectsVerificationEmail() throws Exception {
+        Emails emails = useResend();
+        when(emails.send(any(CreateEmailOptions.class))).thenThrow(new ResendException(429, "rate_limit_exceeded"));
+
+        // OTP callers rely on the throw to report the failure instead of claiming the code was sent
+        assertThatThrownBy(() -> emailService.sendVerificationEmail("a@example.com", "123456"))
+                .isInstanceOf(RuntimeException.class).hasCauseInstanceOf(ResendException.class);
+    }
+
+    @Test
+    void shouldInitResendWhenApiKeyHasSurroundingWhitespace() {
+        ReflectionTestUtils.setField(emailService, "provider", "resend");
+        ReflectionTestUtils.setField(emailService, "resendApiKey", " re_test\n");
+        emailService.initProvider();
+
+        assertThat(ReflectionTestUtils.getField(emailService, "resend")).isNotNull();
+        assertThat((String) ReflectionTestUtils.getField(emailService, "logoBase64")).isNotBlank();
+    }
+
+    @Test
     void shouldFailStartupWhenResendHasNoApiKey() {
         ReflectionTestUtils.setField(emailService, "provider", "resend");
-        ReflectionTestUtils.setField(emailService, "resendApiKey", "");
+        ReflectionTestUtils.setField(emailService, "resendApiKey", " ");
         assertThatThrownBy(emailService::initProvider).isInstanceOf(IllegalStateException.class);
+    }
 
+    @Test
+    void shouldFailStartupWhenProviderIsUnknown() {
         ReflectionTestUtils.setField(emailService, "provider", "sendgrid");
         assertThatThrownBy(emailService::initProvider).isInstanceOf(IllegalStateException.class);
+    }
+
+    private Emails useResend() {
+        Resend resend = mock(Resend.class);
+        Emails emails = mock(Emails.class);
+        when(resend.emails()).thenReturn(emails);
+        ReflectionTestUtils.setField(emailService, "resend", resend);
+        ReflectionTestUtils.setField(emailService, "logoBase64", "bG9nbw==");
+        return emails;
     }
 
     @Test

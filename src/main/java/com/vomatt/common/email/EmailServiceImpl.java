@@ -4,6 +4,7 @@ import com.resend.Resend;
 import com.resend.core.exception.ResendException;
 import com.resend.services.emails.model.Attachment;
 import com.resend.services.emails.model.CreateEmailOptions;
+import com.resend.services.emails.model.Template;
 import jakarta.annotation.PostConstruct;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
@@ -18,6 +19,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.web.util.HtmlUtils;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
@@ -25,6 +27,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -33,7 +36,8 @@ import java.util.UUID;
 
 /**
  * EmailService over SMTP or the Resend HTTP API, chosen by {@code app.email.provider} (HTML templates under
- * {@code templates/email}, text from {@code messages*.properties})
+ * {@code templates/email}, text from {@code messages*.properties}). With {@code app.email.resend-templates} it sends
+ * through Resend Templates kept in sync with those files instead, one per language
  */
 @Slf4j
 @Service
@@ -68,6 +72,10 @@ public class EmailServiceImpl implements EmailService {
     @Value("${app.email.resend-api-key:}")
     private String resendApiKey;
 
+    // Send through the published Resend Templates instead of rendering templates/email locally
+    @Value("${app.email.resend-templates:false}")
+    private boolean resendTemplates;
+
     // null means SMTP
     private Resend resend;
     private String logoBase64;
@@ -89,6 +97,9 @@ public class EmailServiceImpl implements EmailService {
             }
             default -> throw new IllegalStateException("Unknown app.email.provider: " + provider + " (smtp or resend)");
         }
+        if (resendTemplates && resend == null) {
+            throw new IllegalStateException("app.email.resend-templates=true requires app.email.provider=resend");
+        }
     }
 
     @Override
@@ -103,9 +114,11 @@ public class EmailServiceImpl implements EmailService {
 
     private void sendVerificationEmail(String to, String verificationCode, boolean isPreSignup) {
         try {
-            send(to, "email.verification.subject", "email/email-verification", LocaleContextHolder.getLocale(),
+            Locale locale = LocaleContextHolder.getLocale();
+            String messageKey = isPreSignup ? "email.verification.pre.signup.message" : "email.verification.login.message";
+            send(to, "email.verification.subject", "email/email-verification", locale,
                     Map.of("verificationCode", verificationCode,
-                            "isPreSignup", isPreSignup,
+                            "verificationMessage", messageSource.getMessage(messageKey, null, locale),
                             // the email states the real OTP lifetime, rounded up to whole minutes
                             "expiryMinutes", (otpTtlSeconds + 59) / 60));
             log.info("Verification email ({}) sent to: {}", isPreSignup ? "pre-signup" : "login", to);
@@ -172,9 +185,13 @@ public class EmailServiceImpl implements EmailService {
     private void send(String to, String subjectKey, String template, Locale locale, Map<String, Object> variables)
             throws MessagingException, ResendException {
         String subject = messageSource.getMessage(subjectKey, null, locale);
-        Context context = new Context(locale, variables);
-        context.setVariable("siteUrl", siteUrl);
-        String html = templateEngine.process(template, context);
+        Map<String, Object> allVariables = new HashMap<>(variables);
+        allVariables.put("siteUrl", siteUrl);
+        if (resendTemplates) {
+            sendViaResendTemplate(to, subject, templateAlias(template, locale), allVariables);
+            return;
+        }
+        String html = templateEngine.process(template, new Context(locale, allVariables));
 
         if (resend != null) {
             sendViaResend(to, subject, html);
@@ -210,6 +227,32 @@ public class EmailServiceImpl implements EmailService {
                         .contentId("logo")
                         .build())
                 .build());
+    }
+
+    private void sendViaResendTemplate(String to, String subject, String alias, Map<String, Object> variables)
+            throws ResendException {
+        resend.emails().send(CreateEmailOptions.builder()
+                .from(fromEmail)
+                .to(to)
+                .subject(subject)
+                .template(Template.builder().id(alias).variables(templateVariables(variables)).build())
+                .build());
+    }
+
+    // Aliases are <file>-<lang>, matching the messages*.properties fallback: en, otherwise zh-TW
+    static String templateAlias(String template, Locale locale) {
+        String name = template.substring(template.lastIndexOf('/') + 1);
+        return name + ("en".equals(locale.getLanguage()) ? "-en" : "-zh-tw");
+    }
+
+    // pollTitle -> POLL_TITLE; values are HTML-escaped because Resend inserts {{{VAR}}} as raw HTML,
+    // where th:text escapes them on the local path
+    static Map<String, Object> templateVariables(Map<String, Object> variables) {
+        Map<String, Object> result = new HashMap<>();
+        variables.forEach((key, value) -> result.put(
+                key.replaceAll("([A-Z])", "_$1").toUpperCase(Locale.ROOT),
+                HtmlUtils.htmlEscape(String.valueOf(value), "UTF-8")));
+        return result;
     }
 
     private static String readLogoBase64() {

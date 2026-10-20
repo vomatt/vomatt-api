@@ -29,6 +29,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.atLeastOnce;
@@ -109,6 +110,53 @@ class EmailTemplateTest {
         assertThat(logo.getContentId()).isEqualTo("logo");
         assertThat(logo.getContent()).isNotBlank();
         verify(mailSender, never()).send(any(MimeMessage.class));
+    }
+
+    @Test
+    void shouldSendEnglishResendTemplateWithEscapedVariablesWhenResendTemplatesEnabled() throws Exception {
+        Emails emails = useResend();
+        ReflectionTestUtils.setField(emailService, "resendTemplates", true);
+        UUID pollId = UUID.fromString("0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05");
+
+        emailService.sendInvitationEmails(List.of("a@example.com"), "Amy", "Lunch <b>vote</b>", pollId, Locale.ENGLISH);
+
+        ArgumentCaptor<CreateEmailOptions> captor = ArgumentCaptor.forClass(CreateEmailOptions.class);
+        verify(emails).send(captor.capture());
+        CreateEmailOptions sent = captor.getValue();
+        assertThat(sent.getHtml()).isNull();
+        assertThat(sent.getSubject()).isEqualTo("You are invited to a Vomatt Poll");
+        assertThat(sent.getTemplate().getId()).isEqualTo("invitation-email-en");
+        // Keys must match the {{{VAR}}} names in the Resend Template, which rejects a send missing any of them
+        assertThat(sent.getTemplate().getVariables()).containsOnly(
+                entry("INVITER_NAME", "Amy"),
+                entry("POLL_TITLE", "Lunch &lt;b&gt;vote&lt;/b&gt;"),
+                entry("POLL_URL", "https://staging.vomatt.com/poll/" + pollId),
+                entry("SITE_URL", "https://staging.vomatt.com"));
+    }
+
+    @Test
+    void shouldFallBackToZhTwResendTemplateWhenLocaleIsUnsupported() throws Exception {
+        Emails emails = useResend();
+        ReflectionTestUtils.setField(emailService, "resendTemplates", true);
+        LocaleContextHolder.setLocale(Locale.JAPANESE);
+
+        emailService.sendVerificationEmail("a@example.com", "654321");
+
+        ArgumentCaptor<CreateEmailOptions> captor = ArgumentCaptor.forClass(CreateEmailOptions.class);
+        verify(emails).send(captor.capture());
+        assertThat(captor.getValue().getTemplate().getId()).isEqualTo("email-verification-zh-tw");
+        assertThat(captor.getValue().getTemplate().getVariables()).containsOnly(
+                entry("VERIFICATION_CODE", "654321"),
+                entry("VERIFICATION_MESSAGE", "請使用以下驗證碼完成登入："),
+                entry("EXPIRY_MINUTES", "3"),
+                entry("SITE_URL", "https://staging.vomatt.com"));
+    }
+
+    @Test
+    void shouldFailStartupWhenResendTemplatesEnabledOverSmtp() {
+        ReflectionTestUtils.setField(emailService, "provider", "smtp");
+        ReflectionTestUtils.setField(emailService, "resendTemplates", true);
+        assertThatThrownBy(emailService::initProvider).isInstanceOf(IllegalStateException.class);
     }
 
     @Test

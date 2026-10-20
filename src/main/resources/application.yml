@@ -112,6 +112,9 @@ app:
     # smtp (spring.mail.*) or resend (HTTP API, for hosts that block outbound SMTP)
     provider: ${EMAIL_PROVIDER:smtp}
     resend-api-key: ${RESEND_API_KEY:}
+    # true sends via published Resend Templates (requires provider resend) aliased <file>-<zh-tw|en>,
+    # e.g. email-verification-en; false renders templates/email locally
+    resend-templates: ${EMAIL_RESEND_TEMPLATES:false}
     from: ${EMAIL_FROM:noreply@vomatt.com}
     # Frontend origin used for links in emails (logo, footer)
     site-url: ${EMAIL_SITE_URL:https://vomatt.com}

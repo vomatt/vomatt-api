@@ -1,5 +1,10 @@
 package com.vomatt.common.email;
 
+import com.resend.Resend;
+import com.resend.core.exception.ResendException;
+import com.resend.services.emails.Emails;
+import com.resend.services.emails.model.Attachment;
+import com.resend.services.emails.model.CreateEmailOptions;
 import com.vomatt.common.config.I18nConfig;
 import jakarta.mail.Multipart;
 import jakarta.mail.Part;
@@ -23,6 +28,9 @@ import java.util.Locale;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -83,6 +91,66 @@ class EmailTemplateTest {
         emailService.sendInvitationEmails(List.of("b@example.com"), "Amy", "Lunch", pollId, Locale.ENGLISH);
         assertThat(sentHtml()).contains("Amy invited you", "Open the Poll", "https://staging.vomatt.com/poll/" + pollId)
                 .doesNotContain("??", "Thank you");
+    }
+
+    @Test
+    void shouldSendOverResendWithInlineLogoWhenProviderIsResend() throws Exception {
+        Emails emails = useResend();
+
+        emailService.sendWelcomeEmail("a@example.com", "Amy", Locale.ENGLISH);
+
+        ArgumentCaptor<CreateEmailOptions> captor = ArgumentCaptor.forClass(CreateEmailOptions.class);
+        verify(emails).send(captor.capture());
+        CreateEmailOptions sent = captor.getValue();
+        assertThat(sent.getFrom()).isEqualTo("noreply@vomatt.com");
+        assertThat(sent.getTo()).containsExactly("a@example.com");
+        assertThat(sent.getHtml()).contains("Hello Amy", "cid:logo");
+        Attachment logo = sent.getAttachments().getFirst();
+        assertThat(logo.getContentId()).isEqualTo("logo");
+        assertThat(logo.getContent()).isNotBlank();
+        verify(mailSender, never()).send(any(MimeMessage.class));
+    }
+
+    @Test
+    void shouldThrowWhenResendRejectsVerificationEmail() throws Exception {
+        Emails emails = useResend();
+        when(emails.send(any(CreateEmailOptions.class))).thenThrow(new ResendException(429, "rate_limit_exceeded"));
+
+        // OTP callers rely on the throw to report the failure instead of claiming the code was sent
+        assertThatThrownBy(() -> emailService.sendVerificationEmail("a@example.com", "123456"))
+                .isInstanceOf(RuntimeException.class).hasCauseInstanceOf(ResendException.class);
+    }
+
+    @Test
+    void shouldInitResendWhenApiKeyHasSurroundingWhitespace() {
+        ReflectionTestUtils.setField(emailService, "provider", "resend");
+        ReflectionTestUtils.setField(emailService, "resendApiKey", " re_test\n");
+        emailService.initProvider();
+
+        assertThat(ReflectionTestUtils.getField(emailService, "resend")).isNotNull();
+        assertThat((String) ReflectionTestUtils.getField(emailService, "logoBase64")).isNotBlank();
+    }
+
+    @Test
+    void shouldFailStartupWhenResendHasNoApiKey() {
+        ReflectionTestUtils.setField(emailService, "provider", "resend");
+        ReflectionTestUtils.setField(emailService, "resendApiKey", " ");
+        assertThatThrownBy(emailService::initProvider).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void shouldFailStartupWhenProviderIsUnknown() {
+        ReflectionTestUtils.setField(emailService, "provider", "sendgrid");
+        assertThatThrownBy(emailService::initProvider).isInstanceOf(IllegalStateException.class);
+    }
+
+    private Emails useResend() {
+        Resend resend = mock(Resend.class);
+        Emails emails = mock(Emails.class);
+        when(resend.emails()).thenReturn(emails);
+        ReflectionTestUtils.setField(emailService, "resend", resend);
+        ReflectionTestUtils.setField(emailService, "logoBase64", "bG9nbw==");
+        return emails;
     }
 
     @Test

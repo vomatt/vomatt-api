@@ -109,6 +109,9 @@ app:
     prod-url: ${OPENAPI_PROD_URL:https://localhost:8080}
   email:
     enabled: ${EMAIL_ENABLED:false}
+    # smtp (spring.mail.*) or resend (HTTP API, for hosts that block outbound SMTP)
+    provider: ${EMAIL_PROVIDER:smtp}
+    resend-api-key: ${RESEND_API_KEY:}
     from: ${EMAIL_FROM:noreply@vomatt.com}
     # Frontend origin used for links in emails (logo, footer)
     site-url: ${EMAIL_SITE_URL:https://vomatt.com}

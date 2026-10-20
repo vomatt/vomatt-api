@@ -58,8 +58,8 @@ class EmailTemplateTest {
         emailService.sendPreSignupEmail("a@example.com", "123456");
 
         String html = sentHtml();
-        assertThat(html).contains("123456", "感謝您註冊", "3 分鐘", "點一下驗證碼", "服務條款", "https://staging.vomatt.com/privacy-policy")
-                .doesNotContain("??", "©");
+        assertThat(html).contains("123456", "感謝您註冊", "3 分鐘", "服務條款", "https://staging.vomatt.com/privacy-policy")
+                .doesNotContain("??", "©", "點一下驗證碼");
     }
 
     @Test
@@ -69,7 +69,7 @@ class EmailTemplateTest {
 
         String html = sentHtml();
         assertThat(html).contains("654321", "complete your login", "expire in 3 minutes",
-                "Tap the code", "Contact Us", "https://staging.vomatt.com/terms-of-service").doesNotContain("??", "pre-signup", "©");
+                "Contact Us", "https://staging.vomatt.com/terms-of-service").doesNotContain("??", "pre-signup", "©", "Tap the code");
     }
 
     @Test

@@ -1,5 +1,7 @@
 package com.vomatt.users;
 
+import static com.vomatt.common.util.TextUtil.blankToNull;
+
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.security.RefreshTokenService;
@@ -232,6 +234,15 @@ public class UserService {
         }
         if (request.getDisplayName() != null) {
             user.setDisplayName(request.getDisplayName());
+        }
+        if (request.getFirstName() != null) {
+            user.setFirstName(blankToNull(request.getFirstName()));
+        }
+        if (request.getLastName() != null) {
+            user.setLastName(blankToNull(request.getLastName()));
+        }
+        if (request.getBirthday() != null) {
+            user.setBirthday(request.getBirthday());
         }
         if (request.getBio() != null) {
             user.setBio(request.getBio());

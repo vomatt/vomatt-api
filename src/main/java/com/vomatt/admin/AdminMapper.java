@@ -19,14 +19,16 @@ import com.vomatt.entity.VoteComment;
 public class AdminMapper {
 
     public AdminUserResponse toUserResponse(User user) {
-        return new AdminUserResponse(user.getId().toString(), user.getUsername(), user.getDisplayName(), user.getEmail(),
+        return new AdminUserResponse(user.getId().toString(), user.getUsername(), user.getDisplayName(),
+                user.getFirstName(), user.getLastName(), user.getBirthday(), user.getEmail(),
                 user.getPhoneNumber(), user.getAuthMethod(), List.of(user.getRoles()), user.isActive(),
                 user.getLastLoginAt(), user.getCreatedAt());
     }
 
     public AdminUserDetail toUserDetail(User user, long pollCount, long ballotCount, long commentCount,
                                         long blockingCount, long blockedByCount) {
-        return new AdminUserDetail(user.getId().toString(), user.getUsername(), user.getDisplayName(), user.getEmail(),
+        return new AdminUserDetail(user.getId().toString(), user.getUsername(), user.getDisplayName(),
+                user.getFirstName(), user.getLastName(), user.getBirthday(), user.getEmail(),
                 user.getPhoneNumber(), user.getAuthMethod(), List.of(user.getRoles()), user.isActive(),
                 user.getLastLoginAt(), user.getPoints(), user.getMembershipLevel(), user.getCreatedAt(),
                 pollCount, ballotCount, commentCount, blockingCount, blockedByCount);

@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS vomatt.users (
     active           BOOLEAN      NOT NULL DEFAULT TRUE,
     first_name       VARCHAR(50),
     last_name        VARCHAR(50),
+    birthday         DATE,
     location         VARCHAR(100),
     display_name     VARCHAR(100),
     bio              TEXT,
@@ -316,6 +317,8 @@ ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS voter_visibility VARCHAR(20) N
 ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS search_bigrams TEXT[] GENERATED ALWAYS AS
     (vomatt.text_bigrams(COALESCE(title, '') || ' ' || COALESCE(description, ''))) STORED;
 CREATE INDEX IF NOT EXISTS idx_votes_search_bigrams ON vomatt.votes USING GIN (search_bigrams);
+-- Profile birthday, private by default (visibility key "birthday")
+ALTER TABLE vomatt.users ADD COLUMN IF NOT EXISTS birthday DATE;
 -- Same bigram search for usernames (user search); not mapped to the entity
 ALTER TABLE vomatt.users ADD COLUMN IF NOT EXISTS username_bigrams TEXT[] GENERATED ALWAYS AS
     (vomatt.text_bigrams(username)) STORED;

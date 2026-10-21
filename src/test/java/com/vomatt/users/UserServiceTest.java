@@ -234,6 +234,39 @@ class UserServiceTest {
     }
 
     @Test
+    @DisplayName("should update name and birthday when given and leave them alone when null")
+    void shouldUpdateNameAndBirthdayWhenGiven() {
+        UUID id = UUID.randomUUID();
+        User user = User.builder().id(id).username("alice").firstName("Old").lastName("Name")
+                .birthday(java.time.LocalDate.of(1990, 1, 1)).build();
+        when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        UserProfileProjection profile = org.mockito.Mockito.mock(UserProfileProjection.class);
+        when(profile.getActive()).thenReturn(true);
+        when(profile.getId()).thenReturn(id);
+        when(userRepository.findProfileByUsername("alice")).thenReturn(Optional.of(profile));
+        UpdateProfileRequest request = new UpdateProfileRequest();
+
+        userService.updateMyProfile(id.toString(), request);
+        assertThat(user.getFirstName()).isEqualTo("Old");
+        assertThat(user.getLastName()).isEqualTo("Name");
+        assertThat(user.getBirthday()).isEqualTo(java.time.LocalDate.of(1990, 1, 1));
+
+        request.setFirstName("Alice");
+        request.setLastName("Chen");
+        request.setBirthday(java.time.LocalDate.of(1995, 4, 12));
+        userService.updateMyProfile(id.toString(), request);
+        assertThat(user.getFirstName()).isEqualTo("Alice");
+        assertThat(user.getLastName()).isEqualTo("Chen");
+        assertThat(user.getBirthday()).isEqualTo(java.time.LocalDate.of(1995, 4, 12));
+
+        request.setFirstName("  Al ");
+        request.setLastName("   ");
+        userService.updateMyProfile(id.toString(), request);
+        assertThat(user.getFirstName()).isEqualTo("Al");
+        assertThat(user.getLastName()).isNull();
+    }
+
+    @Test
     @DisplayName("should store anonymousBallotByDefault when given and leave it alone when null")
     void shouldSaveAnonymousBallotDefaultWhenGiven() {
         UUID id = UUID.randomUUID();

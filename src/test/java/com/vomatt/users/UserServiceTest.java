@@ -64,19 +64,7 @@ class UserServiceTest {
         assertThatThrownBy(() -> userService.blockUser(id.toString(), id.toString()))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_BLOCK_SELF));
-        verify(blockRepository, never()).save(any());
-    }
-
-    @Test
-    void shouldNotSaveAgainWhenAlreadyBlocked() {
-        UUID me = UUID.randomUUID();
-        UUID target = UUID.randomUUID();
-        when(userRepository.findById(target)).thenReturn(Optional.of(User.builder().id(target).username("t").build()));
-        when(blockRepository.existsByBlockerIdAndBlockedId(me, target)).thenReturn(true);
-
-        userService.blockUser(me.toString(), target.toString());
-
-        verify(blockRepository, never()).save(any());
+        verify(blockRepository, never()).insertIfAbsent(any(), any(), any());
     }
 
     @Test

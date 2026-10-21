@@ -20,9 +20,17 @@ public interface UserBlockRepository extends JpaRepository<UserBlock, UUID> {
 
     boolean existsByBlockerIdAndBlockedId(UUID blockerId, UUID blockedId);
 
+    /** Idempotent, also under concurrent requests; returns 1 when the block is new, 0 when it already existed. */
+    @Modifying
+    @Query(value = """
+            INSERT INTO vomatt.user_blocks (id, blocker_id, blocked_id) VALUES (:id, :blockerId, :blockedId)
+            ON CONFLICT (blocker_id, blocked_id) DO NOTHING""", nativeQuery = true)
+    int insertIfAbsent(@Param("id") UUID id, @Param("blockerId") UUID blockerId, @Param("blockedId") UUID blockedId);
+
+    /** @return 1 when a block was removed, 0 when there was none */
     @Modifying
     @Query("DELETE FROM UserBlock b WHERE b.blocker.id = :blockerId AND b.blocked.id = :blockedId")
-    void deleteByBlockerIdAndBlockedId(@Param("blockerId") UUID blockerId, @Param("blockedId") UUID blockedId);
+    int deleteByBlockerIdAndBlockedId(@Param("blockerId") UUID blockerId, @Param("blockedId") UUID blockedId);
 
     /** Keyset page of the users a user blocked, most recently blocked first. Null cursor values for the first page. */
     @Query("""

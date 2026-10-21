@@ -82,13 +82,13 @@ public class AdminUserService {
     /** @param direction {@code blocking} (default: users this user blocks) or {@code blocked-by} (users blocking them) */
     @Transactional(readOnly = true)
     public PageResponse<AdminUserBlockResponse> listBlocks(UUID userId, String direction, Integer page, Integer limit) {
+        findUser(userId);
         String dir = blankToNull(direction);
         boolean blocking = switch (dir == null ? "blocking" : dir) {
             case "blocking" -> true;
             case "blocked-by" -> false;
-            default -> throw ApiException.badRequest(MessageKey.COMMON_VALIDATION_FAILED);
+            default -> throw ApiException.badRequest(MessageKey.COMMON_INVALID_DIRECTION, direction);
         };
-        findUser(userId);
         var pageable = PageResponse.pageable(page, limit);
         return blocking
             ? PageResponse.from(userBlockRepository.findBlocking(userId, pageable), b -> adminMapper.toBlockResponse(b, b.getBlocked()))

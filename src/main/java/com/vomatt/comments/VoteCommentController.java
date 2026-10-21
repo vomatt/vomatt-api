@@ -223,7 +223,7 @@ public class VoteCommentController {
                     **Side effects**: none
                     **Errors**:
                     - 400 `common.cursor_invalid`: `cursor` is not a token returned by this endpoint
-                    - 404 `comment.not_found`: Comment does not exist, is a Reply rather than a top-level Comment, or belongs to another Poll
+                    - 404 `comment.not_found`: Comment does not exist, is a Reply rather than a top-level Comment, belongs to another Poll, or was written by a user the caller blocked
                     - 404 `vote.not_found`: the Comment's Poll is Deleted
                     """)
     public ResponseEntity<ApiResponse<CursorResponse<CommentDto>>> getReplies(

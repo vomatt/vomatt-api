@@ -15,6 +15,7 @@ import com.vomatt.common.response.Cursor;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.repository.CommentLikeRepository;
 import com.vomatt.repository.IdCount;
+import com.vomatt.repository.UserBlockRepository;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.votes.VoteService;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +40,7 @@ public class VoteCommentService {
     private final VoteService voteService;
     private final UserRepository userRepository;
     private final CommentLikeRepository commentLikeRepository;
+    private final UserBlockRepository blockRepository;
     private final CommentMapper commentMapper;
 
     public CommentDto createComment(String voteId, String userId, CreateCommentRequest request) {
@@ -81,6 +83,9 @@ public class VoteCommentService {
         voteService.findAccessibleVote(UUID.fromString(voteId), currentUserId);
         VoteComment root = commentRepository.findById(commentId)
             .filter(c -> c.getParent() == null && c.getVote().getId().toString().equals(voteId))
+            // A thread started by a user the viewer blocked is hidden from the list, so its Replies are too
+            .filter(c -> currentUserId == null
+                || !blockRepository.existsByBlockerIdAndBlockedId(UUID.fromString(currentUserId), c.getUser().getId()))
             .orElseThrow(() -> ApiException.notFound(MessageKey.COMMENT_NOT_FOUND));
 
         int size = CursorResponse.limit(limit);

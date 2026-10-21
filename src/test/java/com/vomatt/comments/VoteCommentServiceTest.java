@@ -31,6 +31,7 @@ import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
 import com.vomatt.repository.CommentLikeRepository;
 import com.vomatt.repository.IdCount;
+import com.vomatt.repository.UserBlockRepository;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.votes.VoteService;
@@ -43,6 +44,7 @@ class VoteCommentServiceTest {
     @Mock VoteService voteService;
     @Mock UserRepository userRepository;
     @Mock CommentLikeRepository commentLikeRepository;
+    @Mock UserBlockRepository blockRepository;
     @Spy CommentMapper commentMapper = new CommentMapper();
     @InjectMocks VoteCommentService commentService;
 

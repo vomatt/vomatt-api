@@ -1,6 +1,7 @@
 package com.vomatt.users;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -19,6 +20,9 @@ import com.vomatt.comments.CommentMapper;
 import com.vomatt.comments.VoteCommentService;
 import com.vomatt.comments.dto.CommentDto;
 import com.vomatt.comments.dto.CreateCommentRequest;
+import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.common.util.UUIDv7Generator;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserBlock;
 import com.vomatt.entity.Vote;
@@ -128,7 +132,7 @@ class UserBlockPostgresTest extends PostgresRepositoryTest {
 
     @Test
     @DisplayName("should page blocked users most recently blocked first")
-    void shouldPageBlocksNewestFirst() {
+    void shouldListNewestFirstWhenPagingBlocks() {
         List<UUID> expected = new ArrayList<>(List.of(blocked.getId()));
         for (int i = 0; i < 3; i++) {
             User u = persistUser("ub-more-" + UUID.randomUUID());
@@ -160,5 +164,26 @@ class UserBlockPostgresTest extends PostgresRepositoryTest {
         var blockedBy = blockRepository.findBlockedBy(blocked.getId(), PageRequest.of(0, 1));
         assertThat(blockedBy.getTotalElements()).isEqualTo(2);
         assertThat(blockedBy.getContent()).extracting(b -> b.getBlocker().getId()).containsExactly(other.getId());
+    }
+
+    @Test
+    @DisplayName("should 404 the replies of a thread started by a blocked user, for the blocker only")
+    void shouldRejectRepliesWhenRootAuthorIsBlocked() {
+        CommentDto blockedRoot = post(blocked, "blocked root", null);
+        post(other, "reply", blockedRoot);
+
+        assertThatThrownBy(() -> replies(blockedRoot, viewer))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.COMMENT_NOT_FOUND));
+        assertThat(replies(blockedRoot, other)).containsExactly("reply");
+    }
+
+    @Test
+    @DisplayName("should insert a block once and ignore the duplicate")
+    void shouldIgnoreDuplicateWhenInsertingExistingBlock() {
+        assertThat(blockRepository.insertIfAbsent(UUIDv7Generator.generateId(), viewer.getId(), other.getId())).isEqualTo(1);
+        assertThat(blockRepository.insertIfAbsent(UUIDv7Generator.generateId(), viewer.getId(), other.getId())).isEqualTo(0);
+        assertThat(blockRepository.deleteByBlockerIdAndBlockedId(viewer.getId(), other.getId())).isEqualTo(1);
+        assertThat(blockRepository.deleteByBlockerIdAndBlockedId(viewer.getId(), other.getId())).isEqualTo(0);
     }
 }

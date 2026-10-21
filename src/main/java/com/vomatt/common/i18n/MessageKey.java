@@ -23,6 +23,7 @@ public enum MessageKey {
     COMMON_SIGN_URL_FAILED("common.sign_url_failed"),
     COMMON_INVALID_STATUS("common.invalid_status"),
     COMMON_INVALID_SORT("common.invalid_sort"),
+    COMMON_INVALID_DIRECTION("common.invalid_direction"),
     COMMON_CURSOR_INVALID("common.cursor_invalid"),
 
     // === Auth ===

@@ -80,9 +80,10 @@ class AdminUserServiceTest {
 
     @Test
     void shouldRejectWhenBlockDirectionIsUnknown() {
+        user(targetId, "user");
         assertThatThrownBy(() -> service.listBlocks(targetId, "sideways", null, null))
                 .isInstanceOfSatisfying(ApiException.class,
-                        e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.COMMON_VALIDATION_FAILED));
+                        e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.COMMON_INVALID_DIRECTION));
     }
 
     @Test

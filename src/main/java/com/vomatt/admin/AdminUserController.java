@@ -197,7 +197,7 @@ public class AdminUserController {
                     **Side effects**: none
                     **Errors**:
                     - 400 `common.type_mismatch`: `userId` is not a valid UUID
-                    - 400 `common.validation_failed`: `direction` is neither `blocking` nor `blocked-by`
+                    - 400 `common.invalid_direction`: `direction` is neither `blocking` nor `blocked-by`
                     - 404 `user.not_found`: no account with this ID""")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of block relationships",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Blocks", value = """

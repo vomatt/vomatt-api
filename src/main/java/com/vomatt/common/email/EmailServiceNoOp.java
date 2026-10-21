@@ -29,6 +29,11 @@ public class EmailServiceNoOp implements EmailService {
     }
 
     @Override
+    public void sendAdminLoginEmail(String to, String verificationCode) {
+        logger.debug("Email service disabled: Skipping admin login email to {}", to);
+    }
+
+    @Override
     public void sendWelcomeEmail(String to, String username, Locale locale) {
         logger.debug("Email service disabled: Skipping welcome email to {}", to);
     }

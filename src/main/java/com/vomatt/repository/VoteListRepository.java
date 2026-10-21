@@ -49,10 +49,11 @@ public class VoteListRepository {
      * @param tag   tag slug filter, or null
      * @param query Search text (already validated, at least two characters), or null
      * @param after keyset position (sort key + id) of the previous page's last item, or null
+     * @param viewerId signed-in caller, whose blocked users' Polls are left out; null for anonymous callers
      */
     @SuppressWarnings("unchecked")
     public List<Vote> findPage(VoteListOrder order, String tag, String query, Cursor after, OffsetDateTime now,
-                               int limit) {
+                               int limit, UUID viewerId) {
         StringBuilder sql = new StringBuilder("SELECT v.* FROM vomatt.votes v WHERE v.deleted_at IS NULL AND v.audience = 'PUBLIC' AND ");
         List<String> sortColumns = switch (order) {
             case NEWEST -> List.of("v.start_time");
@@ -70,6 +71,10 @@ public class VoteListRepository {
         }
         if (query != null) {
             sql.append(SEARCH_CONDITION);
+        }
+        if (viewerId != null) {
+            sql.append(" AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b")
+               .append(" WHERE b.blocker_id = :viewerId AND b.blocked_id = v.creator_id)");
         }
         if (after != null) {
             sql.append(" AND (").append(String.join(", ", sortColumns)).append(", v.id) ").append(descending ? "<" : ">")
@@ -89,6 +94,9 @@ public class VoteListRepository {
         if (query != null) {
             nativeQuery.setParameter("q", query)
                     .setParameter("pattern", LikePattern.containsPattern(query));
+        }
+        if (viewerId != null) {
+            nativeQuery.setParameter("viewerId", viewerId);
         }
         if (after != null && order == VoteListOrder.TOP) {
             nativeQuery.setParameter("afterCount", after.countKey())

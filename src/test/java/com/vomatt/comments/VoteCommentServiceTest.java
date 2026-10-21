@@ -74,7 +74,7 @@ class VoteCommentServiceTest {
         VoteComment liked = comment(vote, author, "liked");
         VoteComment plain = comment(vote, author, "plain");
         when(voteService.findAccessibleVote(voteId, viewerId.toString())).thenReturn(vote);
-        when(commentRepository.findPageByVoteId(eq(voteId), any(), any(), eq(Limit.of(21))))
+        when(commentRepository.findPageByVoteId(eq(voteId), any(), any(), eq(viewerId), eq(Limit.of(21))))
                 .thenReturn(List.of(liked, plain));
         IdCount likedCount = count(liked.getId(), 3);
         when(commentLikeRepository.countByCommentIds(List.of(liked.getId(), plain.getId())))

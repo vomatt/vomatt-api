@@ -34,6 +34,7 @@ import com.vomatt.common.response.CursorResponse;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserPreference;
 import com.vomatt.users.dto.UserDto;
+import com.vomatt.repository.UserBlockRepository;
 import com.vomatt.repository.UserPreferenceRepository;
 import com.vomatt.users.dto.UpdateProfileRequest;
 import com.vomatt.repository.UserProfileProjection;
@@ -47,12 +48,36 @@ class UserServiceTest {
 
     @Mock UserRepository userRepository;
     @Mock UserPreferenceRepository preferenceRepository;
+    @Mock UserBlockRepository blockRepository;
     @Spy UserMapper userMapper = new UserMapper();
     @Mock RefreshTokenService refreshTokenService;
     @Mock VoteOptionRepository voteOptionRepository;
     @Mock VoteRepository voteRepository;
     @Spy com.vomatt.repository.LockTimeout lockTimeout = new com.vomatt.repository.LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @InjectMocks UserService userService;
+
+    @Test
+    void shouldRejectWhenBlockingSelf() {
+        UUID id = UUID.randomUUID();
+        when(userRepository.findById(id)).thenReturn(Optional.of(User.builder().id(id).username("u").build()));
+
+        assertThatThrownBy(() -> userService.blockUser(id.toString(), id.toString()))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_BLOCK_SELF));
+        verify(blockRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldNotSaveAgainWhenAlreadyBlocked() {
+        UUID me = UUID.randomUUID();
+        UUID target = UUID.randomUUID();
+        when(userRepository.findById(target)).thenReturn(Optional.of(User.builder().id(target).username("t").build()));
+        when(blockRepository.existsByBlockerIdAndBlockedId(me, target)).thenReturn(true);
+
+        userService.blockUser(me.toString(), target.toString());
+
+        verify(blockRepository, never()).save(any());
+    }
 
     @Test
     @DisplayName("should release user's Ballot from option counts and Turnout before deleting account")

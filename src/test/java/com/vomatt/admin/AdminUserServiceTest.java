@@ -57,7 +57,7 @@ class AdminUserServiceTest {
     @BeforeEach
     void setUp() {
         // The real guard, so these tests cover the shared last-admin rule as admins reach it
-        UserService userService = new UserService(userRepository, null, null, refreshTokenService, null, voteRepository, lockTimeout);
+        UserService userService = new UserService(userRepository, null, null, null, refreshTokenService, null, voteRepository, lockTimeout);
         service = new AdminUserService(adminQueryRepository, userRepository, voteRepository, userVoteRepository,
                 voteCommentRepository, userService, new AdminMapper(), authService);
     }

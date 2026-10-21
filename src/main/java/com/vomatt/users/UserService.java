@@ -9,7 +9,9 @@ import com.vomatt.users.dto.UpdateProfileRequest;
 import com.vomatt.users.dto.UserDto;
 import com.vomatt.users.dto.UserProfileResponse;
 import com.vomatt.entity.User;
+import com.vomatt.entity.UserBlock;
 import com.vomatt.entity.UserPreference;
+import com.vomatt.repository.UserBlockRepository;
 import com.vomatt.repository.UserPreferenceRepository;
 import com.vomatt.repository.UserProfileProjection;
 import com.vomatt.common.response.Cursor;
@@ -38,6 +40,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final UserPreferenceRepository preferenceRepository;
+    private final UserBlockRepository blockRepository;
     private final UserMapper userMapper;
     private final RefreshTokenService refreshTokenService;
     private final VoteOptionRepository voteOptionRepository;
@@ -112,6 +115,46 @@ public class UserService {
                 Map<UUID, Boolean> shown = displayNameSettings(page);
                 boolean byDefault = VisibilityField.DISPLAY_NAME.isVisibleByDefault();
                 return page.stream().map(u -> userMapper.toSearchResult(u, shown.getOrDefault(u.getId(), byDefault)))
+                    .toList();
+            });
+    }
+
+    /** Blocks a user (one-way, see {@link UserBlock}); idempotent. */
+    @Transactional
+    public void blockUser(String userId, String targetId) {
+        User target = findUserById(targetId);
+        if (target.getId().toString().equals(userId)) {
+            throw ApiException.badRequest(MessageKey.USER_BLOCK_SELF);
+        }
+        UUID blockerId = UUID.fromString(userId);
+        if (blockRepository.existsByBlockerIdAndBlockedId(blockerId, target.getId())) {
+            return;
+        }
+        // A concurrent duplicate hits the unique constraint and becomes 409 common.conflict
+        blockRepository.save(new UserBlock(userRepository.getReferenceById(blockerId), target));
+        log.info("User {} blocked user {}", userId, targetId);
+    }
+
+    /** Unblocks a user; idempotent, also when the user does not exist. */
+    @Transactional
+    public void unblockUser(String userId, String targetId) {
+        blockRepository.deleteByBlockerIdAndBlockedId(UUID.fromString(userId), UUID.fromString(targetId));
+        log.info("User {} unblocked user {}", userId, targetId);
+    }
+
+    /** Users the caller blocked, most recently blocked first, as public profile fields. */
+    @Transactional(readOnly = true)
+    public CursorResponse<UserDto> listBlockedUsers(String userId, String cursor, Integer limit) {
+        int size = CursorResponse.limit(limit);
+        Cursor after = Cursor.decode(cursor, Cursor.Scope.BLOCKS);
+        List<UserBlock> rows = blockRepository.findPage(UUID.fromString(userId),
+            after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
+        return CursorResponse.of(rows, size, Cursor.Scope.BLOCKS, b -> Cursor.of(b.getCreatedAt(), b.getId()),
+            page -> {
+                List<User> users = page.stream().map(UserBlock::getBlocked).toList();
+                Map<UUID, Boolean> shown = displayNameSettings(users);
+                boolean byDefault = VisibilityField.DISPLAY_NAME.isVisibleByDefault();
+                return users.stream().map(u -> userMapper.toSearchResult(u, shown.getOrDefault(u.getId(), byDefault)))
                     .toList();
             });
     }

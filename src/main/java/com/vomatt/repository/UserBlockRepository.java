@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.UUID;
 
 import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -31,4 +33,18 @@ public interface UserBlockRepository extends JpaRepository<UserBlock, UUID> {
             ORDER BY b.createdAt DESC, b.id DESC""")
     List<UserBlock> findPage(@Param("blockerId") UUID blockerId, @Param("afterTime") OffsetDateTime afterTime,
                              @Param("afterId") UUID afterId, Limit limit);
+
+    long countByBlockerId(UUID blockerId);
+
+    long countByBlockedId(UUID blockedId);
+
+    /** Back office: users this user blocks, most recently blocked first. */
+    @Query(value = "SELECT b FROM UserBlock b JOIN FETCH b.blocked WHERE b.blocker.id = :userId ORDER BY b.createdAt DESC, b.id DESC",
+            countQuery = "SELECT COUNT(b) FROM UserBlock b WHERE b.blocker.id = :userId")
+    Page<UserBlock> findBlocking(@Param("userId") UUID userId, Pageable pageable);
+
+    /** Back office: users blocking this user, most recently blocked first. */
+    @Query(value = "SELECT b FROM UserBlock b JOIN FETCH b.blocker WHERE b.blocked.id = :userId ORDER BY b.createdAt DESC, b.id DESC",
+            countQuery = "SELECT COUNT(b) FROM UserBlock b WHERE b.blocked.id = :userId")
+    Page<UserBlock> findBlockedBy(@Param("userId") UUID userId, Pageable pageable);
 }

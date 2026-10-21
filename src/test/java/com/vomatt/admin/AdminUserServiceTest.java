@@ -6,6 +6,7 @@ import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.entity.User;
 import com.vomatt.repository.AdminQueryRepository;
 import com.vomatt.repository.LockTimeout;
+import com.vomatt.repository.UserBlockRepository;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.UserVoteRepository;
 import com.vomatt.repository.VoteCommentRepository;
@@ -45,6 +46,7 @@ class AdminUserServiceTest {
     @Mock VoteRepository voteRepository;
     @Mock UserVoteRepository userVoteRepository;
     @Mock VoteCommentRepository voteCommentRepository;
+    @Mock UserBlockRepository userBlockRepository;
     @Mock RefreshTokenService refreshTokenService;
     @Mock com.vomatt.auth.AuthService authService;
     LockTimeout lockTimeout = new LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
@@ -59,7 +61,7 @@ class AdminUserServiceTest {
         // The real guard, so these tests cover the shared last-admin rule as admins reach it
         UserService userService = new UserService(userRepository, null, null, null, refreshTokenService, null, voteRepository, lockTimeout);
         service = new AdminUserService(adminQueryRepository, userRepository, voteRepository, userVoteRepository,
-                voteCommentRepository, userService, new AdminMapper(), authService);
+                voteCommentRepository, userBlockRepository, userService, new AdminMapper(), authService);
     }
 
     private User user(UUID id, String... roles) {
@@ -74,6 +76,13 @@ class AdminUserServiceTest {
             assertThat(e.getStatus()).isEqualTo(status);
             assertThat(e.getMessageKey()).isEqualTo(key);
         });
+    }
+
+    @Test
+    void shouldRejectWhenBlockDirectionIsUnknown() {
+        assertThatThrownBy(() -> service.listBlocks(targetId, "sideways", null, null))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.COMMON_VALIDATION_FAILED));
     }
 
     @Test

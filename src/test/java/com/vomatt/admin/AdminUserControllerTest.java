@@ -55,7 +55,7 @@ class AdminUserControllerTest {
 
     private AdminUserDetail detail(boolean active) {
         return new AdminUserDetail(userId.toString(), "alice", null, "alice@example.com", null, "email_otp",
-                List.of("user"), active, null, 0, "BASIC", null, 1, 2, 3);
+                List.of("user"), active, null, 0, "BASIC", null, 1, 2, 3, 0, 0);
     }
 
     @Test

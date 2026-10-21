@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.PageRequest;
 
 import com.vomatt.comments.CommentMapper;
 import com.vomatt.comments.VoteCommentService;
@@ -144,5 +145,20 @@ class UserBlockPostgresTest extends PostgresRepositoryTest {
         first.forEach(b -> all.add(b.getBlocked().getId()));
         rest.forEach(b -> all.add(b.getBlocked().getId()));
         assertThat(all).containsExactlyElementsOf(expected);
+    }
+
+    @Test
+    @DisplayName("should count and list blocks in both directions for the back office")
+    void shouldListBothDirectionsWhenAdminReadsBlocks() {
+        em.persist(new UserBlock(other, blocked));
+        em.flush();
+
+        assertThat(blockRepository.countByBlockerId(viewer.getId())).isEqualTo(1);
+        assertThat(blockRepository.countByBlockedId(blocked.getId())).isEqualTo(2);
+        assertThat(blockRepository.findBlocking(viewer.getId(), PageRequest.of(0, 10)).getContent())
+                .extracting(b -> b.getBlocked().getId()).containsExactly(blocked.getId());
+        var blockedBy = blockRepository.findBlockedBy(blocked.getId(), PageRequest.of(0, 1));
+        assertThat(blockedBy.getTotalElements()).isEqualTo(2);
+        assertThat(blockedBy.getContent()).extracting(b -> b.getBlocker().getId()).containsExactly(other.getId());
     }
 }

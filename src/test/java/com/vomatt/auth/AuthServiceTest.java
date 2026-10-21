@@ -491,7 +491,7 @@ class AuthServiceTest {
                         .isEqualTo(MessageKey.AUTH_ADMIN_FORBIDDEN));
 
         verify(redisService, never()).execInTransaction(any());
-        verify(emailService, never()).sendVerificationEmail(anyString(), anyString());
+        verify(emailService, never()).sendAdminLoginEmail(anyString(), anyString());
     }
 
     @Test
@@ -601,7 +601,7 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.sendAdminOtp("admin@example.com", IP))
                 .isInstanceOfSatisfying(ApiException.class,
                         ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.AUTH_ACCOUNT_BANNED));
-        verify(emailService, never()).sendVerificationEmail(anyString(), anyString());
+        verify(emailService, never()).sendAdminLoginEmail(anyString(), anyString());
     }
 
     @Test
@@ -623,7 +623,7 @@ class AuthServiceTest {
 
         authService.sendAdminOtp("admin@example.com", IP);
 
-        verify(emailService).sendVerificationEmail(eq("admin@example.com"), anyString());
+        verify(emailService).sendAdminLoginEmail(eq("admin@example.com"), anyString());
         verify(userRepository, never()).existsByEmail(anyString());
     }
 

@@ -15,6 +15,9 @@ public interface EmailService {
     /** Sends the OTP for a registered address (login). Throws when delivery fails. */
     void sendVerificationEmail(String to, String verificationCode);
 
+    /** Sends the OTP for the admin console login, worded and titled apart from the consumer login. Throws when delivery fails. */
+    void sendAdminLoginEmail(String to, String verificationCode);
+
     /**
      * Sends the welcome email in the background; failures are only logged.
      *

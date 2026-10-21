@@ -73,6 +73,14 @@ class EmailTemplateTest {
     }
 
     @Test
+    void shouldRenderAdminLoginEmailWhenLocaleIsZhTw() throws Exception {
+        LocaleContextHolder.setLocale(ZH_TW);
+        emailService.sendAdminLoginEmail("a@example.com", "112233");
+
+        assertThat(sentHtml()).contains("112233", "Vomatt 管理後台").doesNotContain("??");
+    }
+
+    @Test
     void shouldRenderWelcomeEmailWhenLocaleIsZhTwOrEn() throws Exception {
         emailService.sendWelcomeEmail("a@example.com", "Amy", ZH_TW);
         assertThat(sentHtml()).contains("您好 Amy", "投下您的第一票", "隱私權政策", "lang=\"zh-TW\"").doesNotContain("??");

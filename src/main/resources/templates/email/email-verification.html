@@ -28,7 +28,7 @@
 
                         <p style="margin: 0 0 20px; font-size: 15px; line-height: 1.6;">
                             <span th:text="#{email.verification.greeting}">Hello,</span><br>
-                            <span th:text="${isPreSignup} ? #{email.verification.pre.signup.message} : #{email.verification.login.message}">Verification message</span>
+                            <span th:text="${verificationMessage}">Verification message</span>
                         </p>
 
                         <!-- No JS in email, so "copy" is a one-tap select-all on the code -->

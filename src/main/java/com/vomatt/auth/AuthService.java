@@ -162,7 +162,9 @@ public class AuthService {
         storeOtp(namespace, normalizedEmail, attemptKey, new OtpRecord(code, otpType, Instant.now(), 0));
 
         try {
-            if ("signup".equals(otpType)) {
+            if (OTP_ADMIN_EMAIL_NS.equals(namespace)) {
+                emailService.sendAdminLoginEmail(normalizedEmail, code);
+            } else if ("signup".equals(otpType)) {
                 emailService.sendPreSignupEmail(normalizedEmail, code);
             } else {
                 emailService.sendVerificationEmail(normalizedEmail, code);

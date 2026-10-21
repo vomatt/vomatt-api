@@ -93,22 +93,28 @@ public class EmailServiceImpl implements EmailService {
 
     @Override
     public void sendPreSignupEmail(String to, String verificationCode) {
-        sendVerificationEmail(to, verificationCode, true);
+        sendVerificationEmail(to, verificationCode, "email.verification.subject", "email.verification.pre.signup.message", "pre-signup");
     }
 
     @Override
     public void sendVerificationEmail(String to, String verificationCode) {
-        sendVerificationEmail(to, verificationCode, false);
+        sendVerificationEmail(to, verificationCode, "email.verification.subject", "email.verification.login.message", "login");
     }
 
-    private void sendVerificationEmail(String to, String verificationCode, boolean isPreSignup) {
+    @Override
+    public void sendAdminLoginEmail(String to, String verificationCode) {
+        sendVerificationEmail(to, verificationCode, "email.verification.admin.subject", "email.verification.admin.message", "admin");
+    }
+
+    private void sendVerificationEmail(String to, String verificationCode, String subjectKey, String messageKey, String kind) {
         try {
-            send(to, "email.verification.subject", "email/email-verification", LocaleContextHolder.getLocale(),
+            Locale locale = LocaleContextHolder.getLocale();
+            send(to, subjectKey, "email/email-verification", locale,
                     Map.of("verificationCode", verificationCode,
-                            "isPreSignup", isPreSignup,
+                            "verificationMessage", messageSource.getMessage(messageKey, null, locale),
                             // the email states the real OTP lifetime, rounded up to whole minutes
                             "expiryMinutes", (otpTtlSeconds + 59) / 60));
-            log.info("Verification email ({}) sent to: {}", isPreSignup ? "pre-signup" : "login", to);
+            log.info("Verification email ({}) sent to: {}", kind, to);
         } catch (MessagingException | ResendException | RuntimeException e) {
             log.error("Failed to send verification email to: {}", to, e);
             throw new RuntimeException("Failed to send verification email", e);

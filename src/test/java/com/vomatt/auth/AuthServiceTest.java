@@ -741,7 +741,9 @@ class AuthServiceTest {
         assertThat(result.getUsername()).matches("fresh_\\d{4}");
         assertThat(result.getRoles()).containsExactly("user");
         assertThat(result.isActive()).isTrue();
-        assertThat(result.getAvatarUrl()).matches(com.vomatt.users.BotAvatar.PATTERN);
+        // A random cast member, never bot:none (that is only ever the user's own choice)
+        assertThat(result.getAvatarUrl()).startsWith("bot:").isNotEqualTo("bot:none");
+        assertThat(com.vomatt.users.BotAvatar.KINDS).contains(result.getAvatarUrl().substring("bot:".length()));
         verify(userRepository).save(any(User.class));
     }
 
@@ -1039,7 +1041,9 @@ class AuthServiceTest {
         assertThat(result.getEmail()).isNull();
         assertThat(result.getUsername()).matches("user_\\d{4}");
         assertThat(result.getDisplayName()).isEqualTo("+886912345678");
-        assertThat(result.getAvatarUrl()).matches(com.vomatt.users.BotAvatar.PATTERN);
+        // A random cast member, never bot:none (that is only ever the user's own choice)
+        assertThat(result.getAvatarUrl()).startsWith("bot:").isNotEqualTo("bot:none");
+        assertThat(com.vomatt.users.BotAvatar.KINDS).contains(result.getAvatarUrl().substring("bot:".length()));
     }
 
     @Test

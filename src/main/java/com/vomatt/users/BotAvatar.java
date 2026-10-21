@@ -6,6 +6,7 @@ import java.util.List;
 /**
  * The bot cast avatars: stored in {@code users.avatar_url} as {@code bot:<kind>}, rendered by the frontend.
  * Kinds and their order mirror vomatt-web {@code src/features/avatars/catalog.ts}.
+ * {@code bot:none} is a user's choice of no character (the frontend draws a plain account icon); it is never assigned.
  */
 public final class BotAvatar {
 
@@ -16,7 +17,7 @@ public final class BotAvatar {
             + "|bear|magpie|pangolin|shihu|macaque|deer|pheasant|firefly|crab|flyfish|turtle|dog";
 
     /** Compile-time constant so it can be used in {@code @Pattern}. */
-    public static final String PATTERN = "^bot:(" + KIND_ALTERNATION + ")$";
+    public static final String PATTERN = "^bot:(" + KIND_ALTERNATION + "|none)$";
 
     public static final List<String> KINDS = List.of(KIND_ALTERNATION.split("\\|"));
 

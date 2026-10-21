@@ -94,8 +94,23 @@ class UserControllerTest {
         assertThat(BotAvatar.KINDS).hasSize(48).doesNotHaveDuplicates();
     }
 
+    @Test
+    @DisplayName("should accept bot:none as avatarUrl when updating profile")
+    void shouldAcceptAvatarUrlWhenNone() throws Exception {
+        signIn("u1");
+        when(userService.updateMyProfile(eq("u1"), any())).thenAnswer(inv -> new UserProfileResponse("alice", null, null,
+                inv.<com.vomatt.users.dto.UpdateProfileRequest>getArgument(1).getAvatarUrl(), null, 0, 0,
+                null, null, null, null, null, null, null));
+
+        mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"avatarUrl\":\"bot:none\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.avatarUrl").value("bot:none"));
+        assertThat(BotAvatar.KINDS).doesNotContain("none");
+    }
+
     @ParameterizedTest
-    @ValueSource(strings = {"bot:unicorn", "boba", "bot:", "bot:Boba", "bot:boba ", "https://cdn.example.com/a.png", ""})
+    @ValueSource(strings = {"bot:unicorn", "boba", "bot:", "none", "bot:None", "bot:Boba", "bot:boba ", "https://cdn.example.com/a.png", ""})
     @DisplayName("should reject avatarUrl when it is not a known bot kind")
     void shouldRejectAvatarUrlWhenNotBotKind(String avatarUrl) throws Exception {
         signIn("u1");

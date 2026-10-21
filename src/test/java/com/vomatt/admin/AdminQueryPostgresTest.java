@@ -82,6 +82,16 @@ class AdminQueryPostgresTest extends PostgresRepositoryTest {
                 .containsExactly(named.getId());
         assertThat(repository.findUsers(first + " " + last, null, null, firstPage).getContent()).extracting(User::getId)
                 .containsExactly(named.getId());
+        assertThat(repository.findUsers(last + " " + first, null, null, firstPage).getContent()).extracting(User::getId)
+                .containsExactly(named.getId());
+
+        String family = unique("陳");
+        User chinese = persistUser(unique("zh"));
+        chinese.setLastName(family);
+        chinese.setFirstName("小明");
+        em.flush();
+        assertThat(repository.findUsers(family + "小明", null, null, firstPage).getContent()).extracting(User::getId)
+                .containsExactly(chinese.getId());
     }
 
     @Test

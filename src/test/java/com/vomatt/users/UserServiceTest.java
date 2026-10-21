@@ -245,6 +245,12 @@ class UserServiceTest {
         assertThat(user.getFirstName()).isEqualTo("Alice");
         assertThat(user.getLastName()).isEqualTo("Chen");
         assertThat(user.getBirthday()).isEqualTo(java.time.LocalDate.of(1995, 4, 12));
+
+        request.setFirstName("  Al ");
+        request.setLastName("   ");
+        userService.updateMyProfile(id.toString(), request);
+        assertThat(user.getFirstName()).isEqualTo("Al");
+        assertThat(user.getLastName()).isNull();
     }
 
     @Test

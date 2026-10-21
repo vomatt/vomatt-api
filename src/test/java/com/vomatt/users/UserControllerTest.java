@@ -148,14 +148,16 @@ class UserControllerTest {
     }
 
     @Test
-    @DisplayName("should reject birthday when it is today or later")
-    void shouldRejectBirthdayWhenNotInPast() throws Exception {
+    @DisplayName("should reject birthday when it is today or later in Taipei, or before 1900")
+    void shouldRejectBirthdayWhenOutOfRange() throws Exception {
         signIn("u1");
-        for (java.time.LocalDate day : List.of(java.time.LocalDate.now(), java.time.LocalDate.now().plusDays(1))) {
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Taipei"));
+        for (java.time.LocalDate day : List.of(today, today.plusDays(1), java.time.LocalDate.of(1899, 12, 31))) {
             mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
                             .content("{\"birthday\":\"" + day + "\"}"))
                     .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.errorCode").value("common.validation_failed"));
+                    .andExpect(jsonPath("$.errorCode").value("common.validation_failed"))
+                    .andExpect(jsonPath("$.message").value("birthdayInRange: Birthday must be between 1900-01-01 and yesterday"));
         }
         verifyNoInteractions(userService);
     }

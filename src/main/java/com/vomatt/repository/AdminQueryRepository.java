@@ -47,7 +47,10 @@ public class AdminQueryRepository {
         if (q != null) {
             sql.append(" AND (lower(u.username) LIKE :pattern ESCAPE '\\' OR lower(u.email) LIKE :pattern ESCAPE '\\'")
                .append(" OR u.phone_number LIKE :pattern ESCAPE '\\' OR lower(u.display_name) LIKE :pattern ESCAPE '\\'")
-               .append(" OR lower(concat_ws(' ', u.first_name, u.last_name)) LIKE :pattern ESCAPE '\\')");
+               .append(" OR lower(concat_ws(' ', u.first_name, u.last_name)) LIKE :pattern ESCAPE '\\'")
+               // Family name first, with or without a space, as in Chinese names (陳小明, Chen Alice)
+               .append(" OR lower(concat_ws(' ', u.last_name, u.first_name)) LIKE :pattern ESCAPE '\\'")
+               .append(" OR lower(concat(u.last_name, u.first_name)) LIKE :pattern ESCAPE '\\')");
             params.put("pattern", LikePattern.containsPattern(q));
         }
         if (active != null) {

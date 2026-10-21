@@ -3,12 +3,15 @@ package com.vomatt.users.dto;
 import com.vomatt.common.constant.ReservedUsernames;
 import com.vomatt.users.BotAvatar; 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.Past;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.vomatt.common.util.TimeUtil;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 
 @Data
 @Schema(description = "Profile update; omitted or null fields are left unchanged")
@@ -26,19 +29,20 @@ public class UpdateProfileRequest {
     @Size(max = 100, message = "Display name cannot exceed 100 characters")
     private String displayName;
 
-    @Schema(description = "New first name (max 50 characters); null or omitted keeps the current value",
+    static final LocalDate MIN_BIRTHDAY = LocalDate.of(1900, 1, 1);
+
+    @Schema(description = "New first name (max 50 characters, surrounding whitespace removed); null or omitted keeps the current value",
             example = "Alice", maxLength = 50, nullable = true)
     @Size(max = 50, message = "First name cannot exceed 50 characters")
     private String firstName;
 
-    @Schema(description = "New last name (max 50 characters); null or omitted keeps the current value",
+    @Schema(description = "New last name (max 50 characters, surrounding whitespace removed); null or omitted keeps the current value",
             example = "Chen", maxLength = 50, nullable = true)
     @Size(max = 50, message = "Last name cannot exceed 50 characters")
     private String lastName;
 
-    @Schema(description = "New birthday as an ISO date (yyyy-MM-dd), strictly before today; null or omitted keeps the current value. "
+    @Schema(description = "New birthday as an ISO date (yyyy-MM-dd), from 1900-01-01 to yesterday in Asia/Taipei; null or omitted keeps the current value. "
             + "Cannot be cleared once set", example = "1995-04-12", nullable = true)
-    @Past(message = "Birthday must be in the past")
     private LocalDate birthday;
 
     @Schema(description = "New bio (max 500 characters); null or omitted keeps the current value",
@@ -54,4 +58,13 @@ public class UpdateProfileRequest {
     @Schema(description = "Whether Ballots are Anonymous when `POST /api/votes/{voteId}/vote` omits `anonymous`; "
             + "existing Ballots are unchanged. null or omitted keeps the current value", example = "true", nullable = true)
     private Boolean anonymousBallotByDefault;
+
+    /** "Today" is the Taipei calendar date, not the JVM default zone (see {@link TimeUtil}). */
+    @JsonIgnore
+    @Schema(hidden = true)
+    @AssertTrue(message = "Birthday must be between 1900-01-01 and yesterday")
+    public boolean isBirthdayInRange() {
+        return birthday == null || (!birthday.isBefore(MIN_BIRTHDAY)
+                && birthday.isBefore(TimeUtil.taipeiBusinessDate(OffsetDateTime.now())));
+    }
 }

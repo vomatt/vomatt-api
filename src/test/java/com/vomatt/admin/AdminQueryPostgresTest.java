@@ -66,6 +66,25 @@ class AdminQueryPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    void shouldMatchFirstLastOrFullNameWhenSearchingUsers() {
+        String first = unique("Fn");
+        String last = unique("Ln");
+        User named = persistUser(unique("named"));
+        named.setFirstName(first);
+        named.setLastName(last);
+        User firstOnly = persistUser(unique("first"));
+        firstOnly.setFirstName(first + "x");
+        em.flush();
+
+        assertThat(repository.findUsers(first.toLowerCase(), null, null, firstPage).getContent()).extracting(User::getId)
+                .containsExactlyInAnyOrder(named.getId(), firstOnly.getId());
+        assertThat(repository.findUsers(last, null, null, firstPage).getContent()).extracting(User::getId)
+                .containsExactly(named.getId());
+        assertThat(repository.findUsers(first + " " + last, null, null, firstPage).getContent()).extracting(User::getId)
+                .containsExactly(named.getId());
+    }
+
+    @Test
     void shouldFilterByStatusAndRoleWhenListingUsers() {
         String tag = unique("st");
         User suspended = persistUser(tag + "a");

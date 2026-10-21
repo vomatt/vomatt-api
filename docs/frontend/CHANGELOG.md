@@ -6,6 +6,7 @@ Contract changes that affect the frontend. 💥 BREAKING means frontend code mus
 
 - `PATCH /api/users/me` accepts `firstName`, `lastName` (each max 50 characters) and `birthday` (ISO date `yyyy-MM-dd`, strictly before today). An omitted or `null` field keeps its value; `birthday` cannot be cleared. A name over 50 characters or a birthday of today or later is 400 `common.validation_failed`; a birthday that is not a valid `yyyy-MM-dd` date is 400 `common.bad_request`.
 - New `birthday` field (`yyyy-MM-dd` or `null`) on `GET /api/users/me`, `GET /api/users/{username}` and the `PATCH /api/users/me` response. On the public profile it is hidden by default, like `firstName` / `lastName`; the owner can show it with `PATCH /api/users/me/visibility` key `birthday`, and `visibilitySettings` now includes `birthday`.
+- Admin: `GET /api/admin/users` items and `GET /api/admin/users/{userId}` now include `firstName`, `lastName` and `birthday` (`yyyy-MM-dd` or `null`), shown regardless of the user's visibility settings. `q` on `GET /api/admin/users` also matches first name, last name and the full name `firstName lastName` (case-insensitive contains).
 
 ## 2026-10-18
 

@@ -46,7 +46,8 @@ public class AdminQueryRepository {
         Map<String, Object> params = new HashMap<>();
         if (q != null) {
             sql.append(" AND (lower(u.username) LIKE :pattern ESCAPE '\\' OR lower(u.email) LIKE :pattern ESCAPE '\\'")
-               .append(" OR u.phone_number LIKE :pattern ESCAPE '\\' OR lower(u.display_name) LIKE :pattern ESCAPE '\\')");
+               .append(" OR u.phone_number LIKE :pattern ESCAPE '\\' OR lower(u.display_name) LIKE :pattern ESCAPE '\\'")
+               .append(" OR lower(concat_ws(' ', u.first_name, u.last_name)) LIKE :pattern ESCAPE '\\')");
             params.put("pattern", LikePattern.containsPattern(q));
         }
         if (active != null) {

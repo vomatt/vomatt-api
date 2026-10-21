@@ -25,6 +25,8 @@ public record AdminUserDetail(
         @Schema(description = "When the account was created", example = "2026-09-01T10:00:00+08:00") OffsetDateTime createdAt,
         @Schema(description = "Polls the user created, any Audience, Deleted ones included", example = "8") long pollCount,
         @Schema(description = "Ballots the user currently holds", example = "35") long ballotCount,
-        @Schema(description = "Comments and Replies the user wrote, deleted ones included", example = "14") long commentCount
+        @Schema(description = "Comments and Replies the user wrote, deleted ones included", example = "14") long commentCount,
+        @Schema(description = "Users this user blocks", example = "2") long blockingCount,
+        @Schema(description = "Users who block this user", example = "1") long blockedByCount
 ) {
 }

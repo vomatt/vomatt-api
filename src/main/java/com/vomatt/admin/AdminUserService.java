@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.vomatt.admin.dto.AdminUserBlockResponse;
 import com.vomatt.admin.dto.AdminUserDetail;
 import com.vomatt.admin.dto.AdminUserOptionsResponse;
 import com.vomatt.admin.dto.AdminUserResponse;
@@ -24,6 +25,7 @@ import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.PageResponse;
 import com.vomatt.entity.User;
 import com.vomatt.repository.AdminQueryRepository;
+import com.vomatt.repository.UserBlockRepository;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.UserVoteRepository;
 import com.vomatt.repository.VoteCommentRepository;
@@ -49,6 +51,7 @@ public class AdminUserService {
     private final VoteRepository voteRepository;
     private final UserVoteRepository userVoteRepository;
     private final VoteCommentRepository voteCommentRepository;
+    private final UserBlockRepository userBlockRepository;
     private final UserService userService;
     private final AdminMapper adminMapper;
     private final AuthService authService;
@@ -74,6 +77,22 @@ public class AdminUserService {
     @Transactional(readOnly = true)
     public AdminUserDetail getUser(UUID userId) {
         return detail(findUser(userId));
+    }
+
+    /** @param direction {@code blocking} (default: users this user blocks) or {@code blocked-by} (users blocking them) */
+    @Transactional(readOnly = true)
+    public PageResponse<AdminUserBlockResponse> listBlocks(UUID userId, String direction, Integer page, Integer limit) {
+        findUser(userId);
+        String dir = blankToNull(direction);
+        boolean blocking = switch (dir == null ? "blocking" : dir) {
+            case "blocking" -> true;
+            case "blocked-by" -> false;
+            default -> throw ApiException.badRequest(MessageKey.COMMON_INVALID_DIRECTION, direction);
+        };
+        var pageable = PageResponse.pageable(page, limit);
+        return blocking
+            ? PageResponse.from(userBlockRepository.findBlocking(userId, pageable), b -> adminMapper.toBlockResponse(b, b.getBlocked()))
+            : PageResponse.from(userBlockRepository.findBlockedBy(userId, pageable), b -> adminMapper.toBlockResponse(b, b.getBlocker()));
     }
 
     public AdminUserDetail suspend(UUID userId, String actorId) {
@@ -141,6 +160,7 @@ public class AdminUserService {
     private AdminUserDetail detail(User user) {
         UUID id = user.getId();
         return adminMapper.toUserDetail(user, voteRepository.countByCreatorId(id), userVoteRepository.countByUserId(id),
-                voteCommentRepository.countByUserId(id));
+                voteCommentRepository.countByUserId(id), userBlockRepository.countByBlockerId(id),
+                userBlockRepository.countByBlockedId(id));
     }
 }

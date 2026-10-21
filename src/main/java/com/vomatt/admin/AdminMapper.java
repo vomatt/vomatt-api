@@ -5,11 +5,13 @@ import java.util.List;
 import org.springframework.stereotype.Component;
 
 import com.vomatt.admin.dto.AdminCommentResponse;
+import com.vomatt.admin.dto.AdminUserBlockResponse;
 import com.vomatt.admin.dto.AdminUserDetail;
 import com.vomatt.admin.dto.AdminUserResponse;
 import com.vomatt.admin.dto.AuditLogResponse;
 import com.vomatt.common.audit.AuditLog;
 import com.vomatt.entity.User;
+import com.vomatt.entity.UserBlock;
 import com.vomatt.entity.VoteComment;
 
 /** Back-office views; unlike the public mappers nothing is masked (deleted Comments keep author and text). */
@@ -23,12 +25,19 @@ public class AdminMapper {
                 user.getLastLoginAt(), user.getCreatedAt());
     }
 
-    public AdminUserDetail toUserDetail(User user, long pollCount, long ballotCount, long commentCount) {
+    public AdminUserDetail toUserDetail(User user, long pollCount, long ballotCount, long commentCount,
+                                        long blockingCount, long blockedByCount) {
         return new AdminUserDetail(user.getId().toString(), user.getUsername(), user.getDisplayName(),
                 user.getFirstName(), user.getLastName(), user.getBirthday(), user.getEmail(),
                 user.getPhoneNumber(), user.getAuthMethod(), List.of(user.getRoles()), user.isActive(),
                 user.getLastLoginAt(), user.getPoints(), user.getMembershipLevel(), user.getCreatedAt(),
-                pollCount, ballotCount, commentCount);
+                pollCount, ballotCount, commentCount, blockingCount, blockedByCount);
+    }
+
+    /** {@code other} is the side of the block that is not the user being looked at. */
+    public AdminUserBlockResponse toBlockResponse(UserBlock block, User other) {
+        return new AdminUserBlockResponse(other.getId().toString(), other.getUsername(), other.getDisplayName(),
+                other.isActive(), block.getCreatedAt());
     }
 
     public AdminCommentResponse toCommentResponse(VoteComment comment) {

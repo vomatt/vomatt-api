@@ -23,6 +23,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `common.type_mismatch` | 400 | 參數格式錯誤：{0} | Invalid parameter format: {0} | Show message so the user can fix the input | GlobalExceptionHandler |
 | `common.invalid_status` | 400 | 無效的狀態：{0} | Invalid status: {0} | Show message so the user can fix the input | AdminUserService, VoteListOrder, VoteService, VoteStatus |
 | `common.invalid_sort` | 400 | 無效的排序：{0} | Invalid sort: {0} | Show message so the user can fix the input | VoteListOrder |
+| `common.invalid_direction` | 400 | 無效的方向：{0}（應為 blocking 或 blocked-by） | Invalid direction: {0} (expected blocking or blocked-by) | Show message so the user can fix the input | AdminUserService |
 | `common.cursor_invalid` | 400 | 分頁 cursor 無效 | Invalid pagination cursor | Show message so the user can fix the input | Cursor |
 | `auth.token.invalid` | 401 | Token 無效 | Invalid token | See [auth-flow.md](auth-flow.md) | JwtAuthFilter |
 | `auth.token.expired` | 401 | 登入已過期，請重新登入 | Session expired, please log in again | See [auth-flow.md](auth-flow.md) | JwtAuthFilter |
@@ -58,6 +59,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | AdminUserService, GroupService, UserService, VoteCommentService, VoteService |
 | `user.username.taken` | 409 | 使用者名稱已被使用 | Username already taken | Show message (resource state conflict) | UserService |
 | `user.delete.forbidden` | 403 | 只能刪除自己的帳號 | You can only delete your own account | Show a permission-denied notice | UserService |
+| `user.block.self` | 400 | 不能封鎖自己 | You cannot block yourself | Show message so the user can fix the input | UserService |
 | `vote.not_found` | 404 | 找不到投票 | Vote not found | Show resource not found | AdminVoteService, VoteService |
 | `vote.option.not_found` | 404 | 找不到投票選項 | Vote option not found | Show resource not found | VoteService |
 | `vote.option.not_in_vote` | 400 | 選項不屬於此投票 | Option does not belong to this vote | Show message so the user can fix the input | VoteService |

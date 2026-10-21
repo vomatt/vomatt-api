@@ -43,33 +43,39 @@ public interface VoteCommentRepository extends JpaRepository<VoteComment, UUID> 
 
     /**
      * Keyset page of a Poll's top-level Comments, newest first; a deleted Comment stays as a placeholder
-     * while it still has visible Replies. Null cursor values for the first page.
+     * while it still has visible Replies. Threads started by a user the viewer blocked are left out, and so are their
+     * Replies ({@code viewerId} null: nothing is left out). Null cursor values for the first page.
      */
     @Query("""
             SELECT c FROM VoteComment c JOIN FETCH c.user
             WHERE c.vote.id = :voteId AND c.parent IS NULL
+              AND NOT EXISTS (SELECT 1 FROM UserBlock b WHERE b.blocker.id = :viewerId AND b.blocked = c.user)
               AND (c.isDeleted = false
-                   OR EXISTS (SELECT 1 FROM VoteComment r WHERE r.parent = c AND r.isDeleted = false))
+                   OR EXISTS (SELECT 1 FROM VoteComment r WHERE r.parent = c AND r.isDeleted = false
+                              AND NOT EXISTS (SELECT 1 FROM UserBlock b WHERE b.blocker.id = :viewerId AND b.blocked = r.user)))
               AND (CAST(:afterTime AS OffsetDateTime) IS NULL OR c.createdAt < :afterTime
                    OR (c.createdAt = :afterTime AND c.id < :afterId))
             ORDER BY c.createdAt DESC, c.id DESC""")
     List<VoteComment> findPageByVoteId(@Param("voteId") UUID voteId, @Param("afterTime") OffsetDateTime afterTime,
-                                       @Param("afterId") UUID afterId, Limit limit);
+                                       @Param("afterId") UUID afterId, @Param("viewerId") UUID viewerId,
+                                       Limit limit);
 
-    /** Keyset page of a Comment's visible Replies, oldest first. */
+    /** Keyset page of a Comment's visible Replies, oldest first, without those of users the viewer blocked. */
     @Query("""
             SELECT c FROM VoteComment c JOIN FETCH c.user
             WHERE c.parent.id = :parentId AND c.isDeleted = false
+              AND NOT EXISTS (SELECT 1 FROM UserBlock b WHERE b.blocker.id = :viewerId AND b.blocked = c.user)
               AND (CAST(:afterTime AS OffsetDateTime) IS NULL OR c.createdAt > :afterTime
                    OR (c.createdAt = :afterTime AND c.id > :afterId))
             ORDER BY c.createdAt, c.id""")
     List<VoteComment> findReplyPage(@Param("parentId") UUID parentId, @Param("afterTime") OffsetDateTime afterTime,
-                                    @Param("afterId") UUID afterId, Limit limit);
+                                    @Param("afterId") UUID afterId, @Param("viewerId") UUID viewerId, Limit limit);
 
-    /** Visible Reply counts for a page of top-level Comments. */
+    /** Visible Reply counts for a page of top-level Comments, without Replies of users the viewer blocked. */
     @Query("SELECT c.parent.id AS id, COUNT(c) AS count FROM VoteComment c "
-            + "WHERE c.parent.id IN :parentIds AND c.isDeleted = false GROUP BY c.parent.id")
-    List<IdCount> countRepliesByParentIds(@Param("parentIds") Collection<UUID> parentIds);
+            + "WHERE c.parent.id IN :parentIds AND c.isDeleted = false AND NOT EXISTS (SELECT 1 FROM UserBlock b WHERE b.blocker.id = :viewerId AND b.blocked = c.user) GROUP BY c.parent.id")
+    List<IdCount> countRepliesByParentIds(@Param("parentIds") Collection<UUID> parentIds,
+                                          @Param("viewerId") UUID viewerId);
 
     long countByUserId(UUID userId);
 

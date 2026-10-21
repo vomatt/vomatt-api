@@ -228,7 +228,7 @@ public class VoteService {
 
     /**
      * Feed / Explore / Search / Top page: Open (newest, closing soonest or highest Turnout) or Ended Polls, optionally under one tag
-     * and matching a free-text query on title and description.
+     * and matching a free-text query on title and description. A signed-in caller does not see Polls of users they blocked.
      */
     @Transactional(readOnly = true)
     public CursorResponse<VoteResponse> listVotes(VoteListOrder order, String tag, String q, String cursor,
@@ -243,7 +243,7 @@ public class VoteService {
             case TOP -> Cursor.Scope.FEED_TOP;
         };
         List<Vote> rows = voteListRepository.findPage(order, tagSlug, query, Cursor.decode(cursor, scope),
-            OffsetDateTime.now(), size + 1);
+            OffsetDateTime.now(), size + 1, userId == null ? null : UUID.fromString(userId));
         return CursorResponse.of(rows, size, scope,
             v -> switch (order) {
                 case NEWEST -> Cursor.of(v.getStartTime(), v.getId());

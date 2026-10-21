@@ -31,6 +31,7 @@ import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
 import com.vomatt.repository.CommentLikeRepository;
 import com.vomatt.repository.IdCount;
+import com.vomatt.repository.UserBlockRepository;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.votes.VoteService;
@@ -43,6 +44,7 @@ class VoteCommentServiceTest {
     @Mock VoteService voteService;
     @Mock UserRepository userRepository;
     @Mock CommentLikeRepository commentLikeRepository;
+    @Mock UserBlockRepository blockRepository;
     @Spy CommentMapper commentMapper = new CommentMapper();
     @InjectMocks VoteCommentService commentService;
 
@@ -74,7 +76,7 @@ class VoteCommentServiceTest {
         VoteComment liked = comment(vote, author, "liked");
         VoteComment plain = comment(vote, author, "plain");
         when(voteService.findAccessibleVote(voteId, viewerId.toString())).thenReturn(vote);
-        when(commentRepository.findPageByVoteId(eq(voteId), any(), any(), eq(Limit.of(21))))
+        when(commentRepository.findPageByVoteId(eq(voteId), any(), any(), eq(viewerId), eq(Limit.of(21))))
                 .thenReturn(List.of(liked, plain));
         IdCount likedCount = count(liked.getId(), 3);
         when(commentLikeRepository.countByCommentIds(List.of(liked.getId(), plain.getId())))

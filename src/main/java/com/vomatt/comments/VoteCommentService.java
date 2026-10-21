@@ -15,6 +15,7 @@ import com.vomatt.common.response.Cursor;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.repository.CommentLikeRepository;
 import com.vomatt.repository.IdCount;
+import com.vomatt.repository.UserBlockRepository;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.votes.VoteService;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +40,7 @@ public class VoteCommentService {
     private final VoteService voteService;
     private final UserRepository userRepository;
     private final CommentLikeRepository commentLikeRepository;
+    private final UserBlockRepository blockRepository;
     private final CommentMapper commentMapper;
 
     public CommentDto createComment(String voteId, String userId, CreateCommentRequest request) {
@@ -67,10 +69,11 @@ public class VoteCommentService {
 
         int size = CursorResponse.limit(limit);
         Cursor after = Cursor.decode(cursor, Cursor.Scope.COMMENTS);
+        UUID viewerId = currentUserId == null ? null : UUID.fromString(currentUserId);
         List<VoteComment> rows = commentRepository.findPageByVoteId(voteUuid,
-            after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
+            after == null ? null : after.timeKey(), after == null ? null : after.id(), viewerId, Limit.of(size + 1));
         return CursorResponse.of(rows, size, Cursor.Scope.COMMENTS, c -> Cursor.of(c.getCreatedAt(), c.getId()),
-            page -> withReplyCounts(page, toDtos(page, currentUserId)));
+            page -> withReplyCounts(page, toDtos(page, currentUserId), viewerId));
     }
 
     /** Replies under one top-level Comment, oldest first, cursor-paged. */
@@ -80,12 +83,16 @@ public class VoteCommentService {
         voteService.findAccessibleVote(UUID.fromString(voteId), currentUserId);
         VoteComment root = commentRepository.findById(commentId)
             .filter(c -> c.getParent() == null && c.getVote().getId().toString().equals(voteId))
+            // A thread started by a user the viewer blocked is hidden from the list, so its Replies are too
+            .filter(c -> currentUserId == null
+                || !blockRepository.existsByBlockerIdAndBlockedId(UUID.fromString(currentUserId), c.getUser().getId()))
             .orElseThrow(() -> ApiException.notFound(MessageKey.COMMENT_NOT_FOUND));
 
         int size = CursorResponse.limit(limit);
         Cursor after = Cursor.decode(cursor, Cursor.Scope.REPLIES);
         List<VoteComment> rows = commentRepository.findReplyPage(root.getId(),
-            after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
+            after == null ? null : after.timeKey(), after == null ? null : after.id(),
+            currentUserId == null ? null : UUID.fromString(currentUserId), Limit.of(size + 1));
         return CursorResponse.of(rows, size, Cursor.Scope.REPLIES, c -> Cursor.of(c.getCreatedAt(), c.getId()),
             page -> toDtos(page, currentUserId));
     }
@@ -106,12 +113,12 @@ public class VoteCommentService {
         return target.getParent() != null ? target.getParent() : target;
     }
 
-    private List<CommentDto> withReplyCounts(List<VoteComment> roots, List<CommentDto> dtos) {
+    private List<CommentDto> withReplyCounts(List<VoteComment> roots, List<CommentDto> dtos, UUID viewerId) {
         if (roots.isEmpty()) {
             return dtos;
         }
         Map<UUID, Long> replyCounts = commentRepository.countRepliesByParentIds(
-                roots.stream().map(VoteComment::getId).toList()).stream()
+                roots.stream().map(VoteComment::getId).toList(), viewerId).stream()
             .collect(Collectors.toMap(IdCount::getId, IdCount::getCount));
         dtos.forEach(dto -> dto.setReplyCount(replyCounts.getOrDefault(UUID.fromString(dto.getId()), 0L)));
         return dtos;

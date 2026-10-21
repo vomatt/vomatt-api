@@ -184,6 +184,18 @@ CREATE TABLE IF NOT EXISTS vomatt.comment_likes (
 );
 
 -- =============================================================================
+-- USER BLOCKS: one-way; the blocker no longer sees Polls (public lists) or Comments authored by the blocked user
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS vomatt.user_blocks (
+    id         UUID        PRIMARY KEY,
+    blocker_id UUID        NOT NULL REFERENCES vomatt.users (id) ON DELETE CASCADE,
+    blocked_id UUID        NOT NULL REFERENCES vomatt.users (id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (blocker_id, blocked_id),
+    CHECK (blocker_id <> blocked_id)
+);
+
+-- =============================================================================
 -- NOTIFICATIONS: "Poll ended" notifications are derived at read time; only read state is stored (ADR 0003)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS vomatt.notification_reads (
@@ -279,6 +291,10 @@ CREATE INDEX IF NOT EXISTS idx_vote_comments_user_id       ON vomatt.vote_commen
 CREATE INDEX IF NOT EXISTS idx_comment_likes_user_id       ON vomatt.comment_likes (user_id);
 -- Poll FK: the primary key (user_id, vote_id) cannot serve ON DELETE CASCADE from votes
 CREATE INDEX IF NOT EXISTS idx_notification_reads_vote     ON vomatt.notification_reads (vote_id);
+-- Blocked-user FK: the UNIQUE (blocker_id, blocked_id) cannot serve ON DELETE CASCADE from the blocked side
+CREATE INDEX IF NOT EXISTS idx_user_blocks_blocked         ON vomatt.user_blocks (blocked_id);
+-- Block list page (UserBlockRepository.findPage)
+CREATE INDEX IF NOT EXISTS idx_user_blocks_blocker_created ON vomatt.user_blocks (blocker_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_tags_usage_count            ON vomatt.tags (usage_count DESC);
 CREATE INDEX IF NOT EXISTS idx_vote_tags_tag_id            ON vomatt.vote_tags (tag_id);
 CREATE INDEX IF NOT EXISTS idx_lookup_type_active          ON vomatt.lookup (lookup_type, is_active);

@@ -11,7 +11,9 @@ import com.vomatt.users.dto.UpdateProfileRequest;
 import com.vomatt.users.dto.UserDto;
 import com.vomatt.users.dto.UserProfileResponse;
 import com.vomatt.entity.User;
+import com.vomatt.entity.UserBlock;
 import com.vomatt.entity.UserPreference;
+import com.vomatt.repository.UserBlockRepository;
 import com.vomatt.repository.UserPreferenceRepository;
 import com.vomatt.repository.UserProfileProjection;
 import com.vomatt.common.response.Cursor;
@@ -21,6 +23,7 @@ import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.VoteRepository;
 import com.vomatt.repository.LockTimeout;
 import com.vomatt.common.util.AfterCommit;
+import com.vomatt.common.util.UUIDv7Generator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Limit;
@@ -40,6 +43,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final UserPreferenceRepository preferenceRepository;
+    private final UserBlockRepository blockRepository;
     private final UserMapper userMapper;
     private final RefreshTokenService refreshTokenService;
     private final VoteOptionRepository voteOptionRepository;
@@ -110,12 +114,45 @@ public class UserService {
         List<User> rows = userRepository.searchByUsernameAfter(username, after == null ? null : after.key(),
             Limit.of(size + 1));
         return CursorResponse.of(rows, size, Cursor.Scope.USER_SEARCH,
-            u -> Cursor.of(u.getUsername(), u.getId()), page -> {
-                Map<UUID, Boolean> shown = displayNameSettings(page);
-                boolean byDefault = VisibilityField.DISPLAY_NAME.isVisibleByDefault();
-                return page.stream().map(u -> userMapper.toSearchResult(u, shown.getOrDefault(u.getId(), byDefault)))
-                    .toList();
-            });
+            u -> Cursor.of(u.getUsername(), u.getId()), this::toSearchResults);
+    }
+
+    /** Blocks a user (one-way, see {@link UserBlock}); idempotent. */
+    @Transactional
+    public void blockUser(String userId, String targetId) {
+        User target = findUserById(targetId);
+        if (target.getId().toString().equals(userId)) {
+            throw ApiException.badRequest(MessageKey.USER_BLOCK_SELF);
+        }
+        if (blockRepository.insertIfAbsent(UUIDv7Generator.generateId(), UUID.fromString(userId), target.getId()) > 0) {
+            log.info("User {} blocked user {}", userId, targetId);
+        }
+    }
+
+    /** Unblocks a user; idempotent, also when the user does not exist. */
+    @Transactional
+    public void unblockUser(String userId, String targetId) {
+        if (blockRepository.deleteByBlockerIdAndBlockedId(UUID.fromString(userId), UUID.fromString(targetId)) > 0) {
+            log.info("User {} unblocked user {}", userId, targetId);
+        }
+    }
+
+    /** Users the caller blocked, most recently blocked first, as public profile fields. */
+    @Transactional(readOnly = true)
+    public CursorResponse<UserDto> listBlockedUsers(String userId, String cursor, Integer limit) {
+        int size = CursorResponse.limit(limit);
+        Cursor after = Cursor.decode(cursor, Cursor.Scope.BLOCKS);
+        List<UserBlock> rows = blockRepository.findPage(UUID.fromString(userId),
+            after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
+        return CursorResponse.of(rows, size, Cursor.Scope.BLOCKS, b -> Cursor.of(b.getCreatedAt(), b.getId()),
+            page -> toSearchResults(page.stream().map(UserBlock::getBlocked).toList()));
+    }
+
+    /** Public profile fields of a page of users, display name masked by each owner's setting. */
+    private List<UserDto> toSearchResults(List<User> users) {
+        Map<UUID, Boolean> shown = displayNameSettings(users);
+        boolean byDefault = VisibilityField.DISPLAY_NAME.isVisibleByDefault();
+        return users.stream().map(u -> userMapper.toSearchResult(u, shown.getOrDefault(u.getId(), byDefault))).toList();
     }
 
     /** Display name visibility explicitly set by users on the page, in one query; unset users are absent. */

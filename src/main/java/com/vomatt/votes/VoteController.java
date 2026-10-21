@@ -282,9 +282,9 @@ public class VoteController {
     @GetMapping
     @PublicApiResponse
     @Operation(summary = "List Polls (Feed / Explore / Search / Top)", description = """
-            **Auth**: public (optional login changes response: `myOptionId` of each item is filled for the caller's Ballots)
+            **Auth**: public (optional login changes response: `myOptionId` of each item is filled for the caller's Ballots, and Polls created by users the caller blocked are left out)
             **Precondition**: none
-            **Behavior**: cursor-paged list of Open or Ended PUBLIC Polls; Scheduled, UNLISTED and INVITE_ONLY Polls never appear.
+            **Behavior**: cursor-paged list of Open or Ended PUBLIC Polls; Scheduled, UNLISTED and INVITE_ONLY Polls never appear, nor, for a signed-in caller, Polls created by users they blocked (`POST /api/users/me/blocks/{userId}`).
             - `status=open` (default) + `sort=newest` (default): most recently opened first (the Feed)
             - `status=open` + `sort=closing`: closing soonest first
             - `status=open` + `sort=top`: highest Turnout (`participantCount`) first, ties most recently opened first (Top); Turnout can change between pages, so dedupe items by `id`

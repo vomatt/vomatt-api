@@ -60,7 +60,7 @@ class CursorListsPostgresTest extends PostgresRepositoryTest {
 
         List<VoteComment> all = walk(2, Cursor.Scope.COMMENTS,
                 c -> commentRepository.findPageByVoteId(poll.getId(), c == null ? null : c.timeKey(),
-                        c == null ? null : c.id(), Limit.of(3)),
+                        c == null ? null : c.id(), null, Limit.of(3)),
                 c -> Cursor.of(c.getCreatedAt(), c.getId()));
 
         assertThat(all).extracting(VoteComment::getContent).containsExactlyElementsOf(expected);

@@ -167,9 +167,9 @@ public class VoteCommentController {
                             """)))
     @Operation(summary = "List Comments of a Poll",
             description = """
-                    **Auth**: public (optional login changes response: `likedByCurrentUser` reflects the signed-in user's likes, and is always false when not logged in; nothing else differs)
+                    **Auth**: public (optional login changes response: `likedByCurrentUser` reflects the signed-in user's likes, and is always false when not logged in; threads started by and Replies written by users the caller blocked are left out)
                     **Precondition**: the Poll exists
-                    **Behavior**: returns top-level Comments only, newest first, cursor-paged (`limit` default 20, max 50; pass `nextCursor` back as `cursor`). Each item carries `replyCount`; load Replies with the replies endpoint. A deleted Comment that still has non-deleted Replies stays as a placeholder (`deleted` = true; `userId`, `author` and `text` are null); a deleted Comment without Replies is omitted
+                    **Behavior**: returns top-level Comments only, newest first, cursor-paged (`limit` default 20, max 50; pass `nextCursor` back as `cursor`). Each item carries `replyCount`; load Replies with the replies endpoint. A deleted Comment that still has non-deleted Replies stays as a placeholder (`deleted` = true; `userId`, `author` and `text` are null); a deleted Comment without Replies is omitted. For a signed-in caller, a thread whose top-level Comment was written by a user they blocked (`POST /api/users/me/blocks/{userId}`) is omitted with all its Replies, Replies by blocked users do not count in `replyCount`, and a deleted placeholder whose only Replies are by blocked users is omitted
                     **Side effects**: none
                     **Errors**:
                     - 400 `common.cursor_invalid`: `cursor` is not a token returned by this endpoint
@@ -217,13 +217,13 @@ public class VoteCommentController {
                             """)))
     @Operation(summary = "List Replies of a Comment",
             description = """
-                    **Auth**: public (optional login changes response: `likedByCurrentUser` reflects the signed-in user's likes, and is always false when not logged in; nothing else differs)
+                    **Auth**: public (optional login changes response: `likedByCurrentUser` reflects the signed-in user's likes, and is always false when not logged in; Replies written by users the caller blocked are left out)
                     **Precondition**: `commentId` is a top-level Comment of the Poll in the path. It may itself be a deleted placeholder; its Replies are still readable
                     **Behavior**: returns the non-deleted Replies, oldest first, cursor-paged (`limit` default 20, max 50). Replies are one level deep and `replyCount` is always 0 on them
                     **Side effects**: none
                     **Errors**:
                     - 400 `common.cursor_invalid`: `cursor` is not a token returned by this endpoint
-                    - 404 `comment.not_found`: Comment does not exist, is a Reply rather than a top-level Comment, or belongs to another Poll
+                    - 404 `comment.not_found`: Comment does not exist, is a Reply rather than a top-level Comment, belongs to another Poll, or was written by a user the caller blocked
                     - 404 `vote.not_found`: the Comment's Poll is Deleted
                     """)
     public ResponseEntity<ApiResponse<CursorResponse<CommentDto>>> getReplies(

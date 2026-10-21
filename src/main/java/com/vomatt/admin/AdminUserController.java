@@ -2,6 +2,7 @@ package com.vomatt.admin;
 
 import java.util.UUID;
 
+import com.vomatt.admin.dto.AdminUserBlockResponse;
 import com.vomatt.admin.dto.AdminUserDetail;
 import com.vomatt.admin.dto.AdminUserOptionsResponse;
 import com.vomatt.admin.dto.AdminUserResponse;
@@ -68,7 +69,9 @@ public class AdminUserController {
                 "createdAt": "2026-09-01T10:00:00+08:00",
                 "pollCount": 8,
                 "ballotCount": 35,
-                "commentCount": 14
+                "commentCount": 14,
+                "blockingCount": 2,
+                "blockedByCount": 1
               },
               "message": null,
               "errorCode": null,
@@ -175,7 +178,7 @@ public class AdminUserController {
             description = """
                     **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
                     **Precondition**: caller holds role ADMIN
-                    **Behavior**: returns the account with sign-in details, points and counts of Polls created (any Audience, Deleted included), Ballots held and Comments written (deleted included)
+                    **Behavior**: returns the account with sign-in details, points and counts of Polls created (any Audience, Deleted included), Ballots held, Comments written (deleted included), users this user blocks (`blockingCount`) and users who block them (`blockedByCount`)
                     **Side effects**: none
                     **Errors**:
                     - 400 `common.type_mismatch`: `userId` is not a valid UUID
@@ -188,6 +191,52 @@ public class AdminUserController {
     public ResponseEntity<ApiResponse<AdminUserDetail>> getUser(
             @Parameter(description = "User ID (UUIDv7)", required = true) @PathVariable UUID userId) {
         return ResponseEntity.ok(ApiResponse.ok(adminUserService.getUser(userId)));
+    }
+
+    @GetMapping("/{userId}/blocks")
+    @CommonApiResponses
+    @Operation(summary = "List User Blocks",
+            description = """
+                    **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
+                    **Precondition**: caller holds role ADMIN
+                    **Behavior**: offset page of the user's block relationships, most recently blocked first. `direction=blocking` (default) lists users this user blocks; `direction=blocked-by` lists users who block this user. Each item is the other user plus `blockedAt`. Read-only; the admin's own blocks never filter back-office views. `page` is 1-based (default 1), `limit` 1-50 (default 20)
+                    **Side effects**: none
+                    **Errors**:
+                    - 400 `common.type_mismatch`: `userId` is not a valid UUID
+                    - 400 `common.invalid_direction`: `direction` is neither `blocking` nor `blocked-by`
+                    - 404 `user.not_found`: no account with this ID""")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of block relationships",
+            content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Blocks", value = """
+                    {
+                      "success": true,
+                      "data": {
+                        "content": [
+                          {
+                            "userId": "0199c1a2-8c4f-7e5b-a021-3d6f9b2c4e58",
+                            "username": "bob",
+                            "displayName": "Bob",
+                            "active": true,
+                            "blockedAt": "2026-10-20T09:15:00+08:00"
+                          }
+                        ],
+                        "total": 1,
+                        "page": 1,
+                        "limit": 20
+                      },
+                      "message": null,
+                      "errorCode": null,
+                      "error": null
+                    }""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found (`user.not_found`)",
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "UserNotFound", value = USER_NOT_FOUND_EXAMPLE)))
+    public ResponseEntity<ApiResponse<PageResponse<AdminUserBlockResponse>>> listBlocks(
+            @Parameter(description = "User ID (UUIDv7)", required = true) @PathVariable UUID userId,
+            @Parameter(description = "`blocking` (default) or `blocked-by`", example = "blocked-by")
+            @RequestParam(required = false) String direction,
+            @Parameter(description = "Page number, 1-based (default 1)") @RequestParam(required = false) Integer page,
+            @Parameter(description = "Page size (1-50, default 20)") @RequestParam(required = false) Integer limit) {
+        return ResponseEntity.ok(ApiResponse.ok(adminUserService.listBlocks(userId, direction, page, limit)));
     }
 
     @PatchMapping("/{userId}/suspend")

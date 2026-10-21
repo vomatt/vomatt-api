@@ -23,6 +23,7 @@ public enum MessageKey {
     COMMON_SIGN_URL_FAILED("common.sign_url_failed"),
     COMMON_INVALID_STATUS("common.invalid_status"),
     COMMON_INVALID_SORT("common.invalid_sort"),
+    COMMON_INVALID_DIRECTION("common.invalid_direction"),
     COMMON_CURSOR_INVALID("common.cursor_invalid"),
 
     // === Auth ===
@@ -76,6 +77,7 @@ public enum MessageKey {
     USER_EMAIL_TAKEN("user.email.taken"),
     USER_PHONE_TAKEN("user.phone.taken"),
     USER_DELETE_FORBIDDEN("user.delete.forbidden"),
+    USER_BLOCK_SELF("user.block.self"),
 
     // === Vote ===
     VOTE_NOT_FOUND("vote.not_found"),

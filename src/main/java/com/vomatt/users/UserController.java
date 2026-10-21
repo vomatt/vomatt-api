@@ -214,6 +214,84 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.ok(users));
     }
 
+    @GetMapping("/me/blocks")
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of blocked users",
+            content = @Content(examples = @ExampleObject(value = """
+                    {"success":true,"data":{"items":[{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice","avatarUrl":"bot:boba"}],"nextCursor":null},"message":null,"errorCode":null,"error":null}""")))
+    @Operation(summary = "List blocked users", description = """
+            **Auth**: required
+            **Precondition**: none
+            **Behavior**: users the caller blocked, most recently blocked first, cursor-paged \
+            (`limit` 1-50, default 20; out-of-range values are clamped). `nextCursor` is `null` on the last page. \
+            Each item carries only public profile fields, like user search.
+            **Side effects**: none
+            **Errors**:
+            - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list""")
+    public ResponseEntity<ApiResponse<CursorResponse<UserDto>>> listBlockedUsers(
+            @Parameter(description = "`nextCursor` returned by the previous page") @RequestParam(required = false) String cursor,
+            @Parameter(description = "Page size (1-50, default 20)") @RequestParam(required = false) Integer limit,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(userService.listBlockedUsers(principal.userId(), cursor, limit)));
+    }
+
+    @PostMapping("/me/blocks/{userId}")
+    @Auditable(action = "BLOCK", resourceType = "USER", resourceIdIndex = 0)
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
+            content = @Content(examples = @ExampleObject(value = """
+                    {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Blocking yourself (errorCode `user.block.self`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(value = """
+                            {"success":false,"data":null,"message":"You cannot block yourself","errorCode":"user.block.self","error":"You cannot block yourself"}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account does not exist (errorCode `user.not_found`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(value = """
+                            {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
+    @Operation(summary = "Block a user", description = """
+            **Auth**: required
+            **Precondition**: `userId` is another existing account
+            **Behavior**: one-way block. From then on the caller no longer sees, in `GET /api/votes` (Feed / Explore / Search / Top), \
+            Polls the blocked user created, nor, in `GET /api/votes/{voteId}/comments` and its replies, Comment threads the blocked user \
+            started or Replies they wrote. Nothing else changes: the Poll detail, voter list, profile and My Polls still show them, \
+            and the blocked user is not told and sees the caller's content as before. Idempotent: blocking an already blocked user succeeds.
+            **Side effects**: the block is written to the audit log
+            **Errors**:
+            - 400 `user.block.self`: `userId` is the caller's own id
+            - 400 `common.bad_request`: `userId` is not a valid id
+            - 404 `user.not_found`: no account with this id
+            - 409 `common.conflict`: the same block was added concurrently; it is in place, nothing to retry""")
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> blockUser(
+            @Parameter(description = "Id of the user to block", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47")
+            @PathVariable String userId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        userService.blockUser(principal.userId(), userId);
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
+    @DeleteMapping("/me/blocks/{userId}")
+    @Auditable(action = "UNBLOCK", resourceType = "USER", resourceIdIndex = 0)
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
+            content = @Content(examples = @ExampleObject(value = """
+                    {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
+    @Operation(summary = "Unblock a user", description = """
+            **Auth**: required
+            **Precondition**: none
+            **Behavior**: removes the caller's block on the user, so their Polls and Comments show again. \
+            Idempotent: succeeds when the user was not blocked or does not exist.
+            **Side effects**: the unblock is written to the audit log
+            **Errors**:
+            - 400 `common.bad_request`: `userId` is not a valid id""")
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> unblockUser(
+            @Parameter(description = "Id of the user to unblock", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47")
+            @PathVariable String userId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        userService.unblockUser(principal.userId(), userId);
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
     @DeleteMapping("/{userId}")
     @Auditable(action = "DELETE", resourceType = "USER", resourceIdIndex = 0)
     @CommonApiResponses

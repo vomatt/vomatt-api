@@ -2,6 +2,12 @@
 
 Contract changes that affect the frontend. 💥 BREAKING means frontend code must change. See [openapi.json](openapi.json) for the contract snapshot and [error-codes.md](error-codes.md) for error codes.
 
+## 2026-10-21
+
+- `PATCH /api/users/me` accepts `firstName`, `lastName` (each max 50 characters, stored without surrounding whitespace; a blank value clears it) and `birthday` (ISO date `yyyy-MM-dd`, from 1900-01-01 to yesterday in Asia/Taipei). An omitted or `null` field keeps its value; `birthday` cannot be cleared. A name over 50 characters or a birthday out of that range is 400 `common.validation_failed`; a birthday that is not a valid `yyyy-MM-dd` date is 400 `common.bad_request`.
+- New `birthday` field (`yyyy-MM-dd` or `null`) on `GET /api/users/me`, `GET /api/users/{username}` and the `PATCH /api/users/me` response. On the public profile it is hidden by default, like `firstName` / `lastName`; the owner can show it with `PATCH /api/users/me/visibility` key `birthday`, and `visibilitySettings` now includes `birthday`.
+- Admin: `GET /api/admin/users` items and `GET /api/admin/users/{userId}` now include `firstName`, `lastName` and `birthday` (`yyyy-MM-dd` or `null`), shown regardless of the user's visibility settings. `q` on `GET /api/admin/users` also matches first name, last name and the full name as `firstName lastName`, `lastName firstName` or `lastNamefirstName` (e.g. `陳小明`; case-insensitive contains).
+
 ## 2026-10-18
 
 - 💥 BREAKING Admin console login has its own endpoints: `POST /api/auth/admin/send-otp` (`{ email }`) and `POST /api/auth/admin/verify-otp` (`{ email, code }`), 403 `auth.admin.forbidden` unless the email is an existing admin, 403 `auth.account_banned` for a suspended admin (before any OTP is sent or consumed). Only their tokens grant the admin role. Tokens from every other sign-in (`verify-otp`, phone, Google, LINE, Apple) no longer work on `/api/admin/**` (403 `common.forbidden`), even for an admin account, and `POST /api/auth/refresh` keeps the sign-in's scope. Tokens issued before this change count as consumer tokens, so admins must sign in again through the new endpoints. `checkRole` is removed from `send-otp` / `verify-otp` (ignored if sent). Admin OTPs, lockouts and cooldowns are separate from the consumer ones. See [auth-flow](auth-flow.md#9-admin-console-login).

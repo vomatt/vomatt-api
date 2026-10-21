@@ -1,5 +1,6 @@
 package com.vomatt.repository;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -20,6 +21,7 @@ public interface UserProfileProjection {
     String getEmail();
     String getFirstName();
     String getLastName();
+    LocalDate getBirthday();
     String getLocation();
     Integer getPoints();
     String getMembershipLevel();

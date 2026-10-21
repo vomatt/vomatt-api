@@ -19,6 +19,7 @@ import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -85,6 +86,9 @@ public class User extends AuditableEntity {
 
     @Column(name = "last_name", length = 50)
     private String lastName;
+
+    @Column(name = "birthday")
+    private LocalDate birthday;
 
     @Column(name = "location", length = 100)
     private String location;

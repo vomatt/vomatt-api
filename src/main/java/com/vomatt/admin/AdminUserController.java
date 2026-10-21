@@ -51,6 +51,9 @@ public class AdminUserController {
                 "id": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
                 "username": "alice",
                 "displayName": "Alice",
+                "firstName": "Alice",
+                "lastName": "Chen",
+                "birthday": "1995-04-12",
                 "email": "alice@example.com",
                 "phoneNumber": null,
                 "authMethod": "email_otp",
@@ -93,7 +96,7 @@ public class AdminUserController {
             description = """
                     **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
                     **Precondition**: caller holds role ADMIN
-                    **Behavior**: offset page of every account, suspended included, newest first. `q` matches (case-insensitive contains) username, email, phone number or display name; `status` is `active` or `suspended`; `role` is `user`, `moderator` or `admin`. All filters are optional and combine with AND. `page` is 1-based (default 1), `limit` 1-50 (default 20)
+                    **Behavior**: offset page of every account, suspended included, newest first. `q` matches (case-insensitive contains) username, email, phone number, display name, first name, last name or full name (`firstName lastName`, `lastName firstName`, or `lastNamefirstName` with no space); `status` is `active` or `suspended`; `role` is `user`, `moderator` or `admin`. All filters are optional and combine with AND. `page` is 1-based (default 1), `limit` 1-50 (default 20)
                     **Side effects**: none
                     **Errors**:
                     - 400 `common.invalid_status`: `status` is neither `active` nor `suspended`
@@ -108,6 +111,9 @@ public class AdminUserController {
                             "id": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
                             "username": "alice",
                             "displayName": "Alice",
+                            "firstName": "Alice",
+                            "lastName": "Chen",
+                            "birthday": "1995-04-12",
                             "email": "alice@example.com",
                             "phoneNumber": null,
                             "authMethod": "email_otp",
@@ -126,7 +132,7 @@ public class AdminUserController {
                       "error": null
                     }""")))
     public ResponseEntity<ApiResponse<PageResponse<AdminUserResponse>>> listUsers(
-            @Parameter(description = "Text matched against username, email, phone number and display name", example = "alice")
+            @Parameter(description = "Text matched against username, email, phone number, display name, first name, last name and full name", example = "alice")
             @RequestParam(required = false) String q,
             @Parameter(description = "`active` or `suspended`; omit for both", example = "suspended")
             @RequestParam(required = false) String status,

@@ -83,7 +83,7 @@ class UserControllerTest {
         signIn("u1");
         when(userService.updateMyProfile(eq("u1"), any())).thenAnswer(inv -> new UserProfileResponse("alice", null, null,
                 inv.<com.vomatt.users.dto.UpdateProfileRequest>getArgument(1).getAvatarUrl(), null, 0, 0,
-                null, null, null, null, null, null));
+                null, null, null, null, null, null, null));
 
         for (String kind : BotAvatar.KINDS) {
             mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
@@ -113,11 +113,62 @@ class UserControllerTest {
         signIn("u1");
         when(userService.updateMyProfile(eq("u1"), argThat(r -> r.getAvatarUrl() == null && "Al".equals(r.getDisplayName()))))
                 .thenReturn(new UserProfileResponse("alice", "Al", null, "bot:boba", null, 0, 0,
-                        null, null, null, null, null, null));
+                        null, null, null, null, null, null, null));
 
         mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON).content("{\"displayName\":\"Al\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.avatarUrl").value("bot:boba"));
+    }
+
+    @Test
+    @DisplayName("should pass name and birthday to the service when updating profile")
+    void shouldPassNameAndBirthdayWhenUpdatingProfile() throws Exception {
+        signIn("u1");
+        when(userService.updateMyProfile(eq("u1"), argThat(r -> "Alice".equals(r.getFirstName())
+                && "Chen".equals(r.getLastName()) && java.time.LocalDate.of(1995, 4, 12).equals(r.getBirthday()))))
+                .thenReturn(new UserProfileResponse("alice", null, null, "bot:boba", null, 0, 0,
+                        null, "Alice", "Chen", java.time.LocalDate.of(1995, 4, 12), null, null, null));
+
+        mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"firstName\":\"Alice\",\"lastName\":\"Chen\",\"birthday\":\"1995-04-12\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.birthday").value("1995-04-12"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"firstName", "lastName"})
+    @DisplayName("should reject a name longer than 50 characters")
+    void shouldRejectNameWhenLongerThan50(String field) throws Exception {
+        signIn("u1");
+        mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"" + field + "\":\"" + "a".repeat(51) + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("common.validation_failed"));
+        verifyNoInteractions(userService);
+    }
+
+    @Test
+    @DisplayName("should reject birthday when it is today or later")
+    void shouldRejectBirthdayWhenNotInPast() throws Exception {
+        signIn("u1");
+        for (java.time.LocalDate day : List.of(java.time.LocalDate.now(), java.time.LocalDate.now().plusDays(1))) {
+            mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"birthday\":\"" + day + "\"}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errorCode").value("common.validation_failed"));
+        }
+        verifyNoInteractions(userService);
+    }
+
+    @Test
+    @DisplayName("should reject birthday when it is not a yyyy-MM-dd date")
+    void shouldRejectBirthdayWhenMalformed() throws Exception {
+        signIn("u1");
+        mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"birthday\":\"12/04/1995\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("common.bad_request"));
+        verifyNoInteractions(userService);
     }
 
     @Test

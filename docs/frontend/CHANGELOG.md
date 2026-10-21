@@ -2,6 +2,11 @@
 
 Contract changes that affect the frontend. 💥 BREAKING means frontend code must change. See [openapi.json](openapi.json) for the contract snapshot and [error-codes.md](error-codes.md) for error codes.
 
+## 2026-10-21
+
+- `PATCH /api/users/me` accepts `firstName`, `lastName` (each max 50 characters) and `birthday` (ISO date `yyyy-MM-dd`, strictly before today). An omitted or `null` field keeps its value; `birthday` cannot be cleared. A name over 50 characters or a birthday of today or later is 400 `common.validation_failed`; a birthday that is not a valid `yyyy-MM-dd` date is 400 `common.bad_request`.
+- New `birthday` field (`yyyy-MM-dd` or `null`) on `GET /api/users/me`, `GET /api/users/{username}` and the `PATCH /api/users/me` response. On the public profile it is hidden by default, like `firstName` / `lastName`; the owner can show it with `PATCH /api/users/me/visibility` key `birthday`, and `visibilitySettings` now includes `birthday`.
+
 ## 2026-10-18
 
 - 💥 BREAKING Admin console login has its own endpoints: `POST /api/auth/admin/send-otp` (`{ email }`) and `POST /api/auth/admin/verify-otp` (`{ email, code }`), 403 `auth.admin.forbidden` unless the email is an existing admin, 403 `auth.account_banned` for a suspended admin (before any OTP is sent or consumed). Only their tokens grant the admin role. Tokens from every other sign-in (`verify-otp`, phone, Google, LINE, Apple) no longer work on `/api/admin/**` (403 `common.forbidden`), even for an admin account, and `POST /api/auth/refresh` keeps the sign-in's scope. Tokens issued before this change count as consumer tokens, so admins must sign in again through the new endpoints. `checkRole` is removed from `send-otp` / `verify-otp` (ignored if sent). Admin OTPs, lockouts and cooldowns are separate from the consumer ones. See [auth-flow](auth-flow.md#9-admin-console-login).

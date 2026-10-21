@@ -36,6 +36,7 @@ public class UserMapper {
                 user.getPhoneNumber(),
                 user.getFirstName(),
                 user.getLastName(),
+                user.getBirthday(),
                 user.getDisplayName(),
                 user.getBio(),
                 user.getAvatarUrl(),
@@ -68,6 +69,7 @@ public class UserMapper {
                 visibility.getOrDefault("email", false) ? projection.getEmail() : null,
                 visibility.getOrDefault("firstName", false) ? projection.getFirstName() : null,
                 visibility.getOrDefault("lastName", false) ? projection.getLastName() : null,
+                visibility.getOrDefault("birthday", false) ? projection.getBirthday() : null,
                 visibility.getOrDefault("location", false) ? projection.getLocation() : null,
                 visibility.getOrDefault("points", false) ? projection.getPoints() : null,
                 visibility.getOrDefault("membershipLevel", false) ? projection.getMembershipLevel() : null

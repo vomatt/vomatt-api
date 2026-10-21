@@ -19,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.*;
@@ -52,6 +53,7 @@ class UserProfileVisibilityTest {
     private static final UUID USER_UUID = UUID.randomUUID();
     private static final String USER_ID = USER_UUID.toString();
     private static final String USERNAME = "testuser";
+    private static final LocalDate BIRTHDAY = LocalDate.of(1995, 4, 12);
     private static final OffsetDateTime JOINED_AT = OffsetDateTime.of(2025, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC);
 
     private User createTestUser() {
@@ -62,6 +64,7 @@ class UserProfileVisibilityTest {
                 .phoneNumber("0912345678")
                 .firstName("Test")
                 .lastName("User")
+                .birthday(BIRTHDAY)
                 .displayName("TestDisplay")
                 .bio("Hello world")
                 .location("Taipei")
@@ -89,6 +92,7 @@ class UserProfileVisibilityTest {
             @Override public String getEmail() { return "test@example.com"; }
             @Override public String getFirstName() { return "Test"; }
             @Override public String getLastName() { return "User"; }
+            @Override public LocalDate getBirthday() { return BIRTHDAY; }
             @Override public String getLocation() { return "Taipei"; }
             @Override public Integer getPoints() { return 100; }
             @Override public String getMembershipLevel() { return "SILVER"; }
@@ -117,7 +121,7 @@ class UserProfileVisibilityTest {
             UserProfileProjection projection = createTestProjection();
             MyProfileResponse expectedResponse = new MyProfileResponse(
                     USER_ID, USERNAME, "test@example.com", "0912345678",
-                    "Test", "User", "TestDisplay", "Hello world", "bot:boba", "Taipei",
+                    "Test", "User", BIRTHDAY, "TestDisplay", "Hello world", "bot:boba", "Taipei",
                     100, "SILVER", true, null,
                     JOINED_AT, 5, 10,
                     Map.of("email", false, "firstName", false, "lastName", false,
@@ -197,7 +201,7 @@ class UserProfileVisibilityTest {
             UserProfileResponse expectedResponse = new UserProfileResponse(
                     USERNAME, "TestDisplay", "Hello world", "bot:boba",
                     JOINED_AT, 5, 10,
-                    null, null, null, null, null, null
+                    null, null, null, null, null, null, null
             );
 
             when(userRepository.findProfileByUsername(USERNAME)).thenReturn(Optional.of(projection));
@@ -244,7 +248,7 @@ class UserProfileVisibilityTest {
             UserProfileResponse expectedResponse = new UserProfileResponse(
                     USERNAME, "TestDisplay", "Hello world", "bot:boba",
                     JOINED_AT, 5, 10,
-                    "test@example.com", null, null, null, null, null
+                    "test@example.com", null, null, null, null, null, null
             );
 
             when(userRepository.findProfileByUsername(USERNAME)).thenReturn(Optional.of(projection));
@@ -391,5 +395,16 @@ class UserProfileVisibilityTest {
             assertThat(VisibilityField.extractFieldName("visibility.email")).isEqualTo("email");
             assertThat(VisibilityField.extractFieldName("noprefix")).isEqualTo("noprefix");
         }
+    }
+
+    @Test
+    @DisplayName("should hide birthday on the public profile until the owner makes it visible")
+    void shouldMaskBirthdayWhenNotVisible() {
+        UserMapper mapper = new UserMapper();
+        UserProfileProjection projection = createTestProjection();
+
+        assertThat(mapper.toPublicProfileResponse(projection, Map.of()).birthday()).isNull();
+        assertThat(mapper.toPublicProfileResponse(projection, Map.of("birthday", true)).birthday()).isEqualTo(BIRTHDAY);
+        assertThat(VisibilityField.BIRTHDAY.isVisibleByDefault()).isFalse();
     }
 }

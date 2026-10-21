@@ -63,6 +63,23 @@ class UserProfilePostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should return name and birthday in the profile projection")
+    void shouldReturnNameAndBirthdayWhenSet() {
+        User owner = persistUser("pn-" + System.nanoTime());
+        owner.setFirstName("Alice");
+        owner.setLastName("Chen");
+        owner.setBirthday(java.time.LocalDate.of(1995, 4, 12));
+        em.flush();
+        em.clear();
+
+        UserProfileProjection profile = userRepository.findProfileByUsername(owner.getUsername()).orElseThrow();
+
+        assertThat(profile.getFirstName()).isEqualTo("Alice");
+        assertThat(profile.getLastName()).isEqualTo("Chen");
+        assertThat(profile.getBirthday()).isEqualTo(java.time.LocalDate.of(1995, 4, 12));
+    }
+
+    @Test
     @DisplayName("should report active=false when user is suspended")
     void shouldReportSuspendedUser() {
         User owner = persistUser("ps-" + System.nanoTime());

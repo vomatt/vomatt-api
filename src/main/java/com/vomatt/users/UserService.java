@@ -196,6 +196,15 @@ public class UserService {
         if (request.getDisplayName() != null) {
             user.setDisplayName(request.getDisplayName());
         }
+        if (request.getFirstName() != null) {
+            user.setFirstName(request.getFirstName());
+        }
+        if (request.getLastName() != null) {
+            user.setLastName(request.getLastName());
+        }
+        if (request.getBirthday() != null) {
+            user.setBirthday(request.getBirthday());
+        }
         if (request.getBio() != null) {
             user.setBio(request.getBio());
         }

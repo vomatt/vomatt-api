@@ -2487,6 +2487,13 @@
             "nullable" : true,
             "type" : "string"
           },
+          "birthday" : {
+            "description" : "Birthday (ISO date); null if not set",
+            "example" : "1995-04-12",
+            "format" : "date",
+            "nullable" : true,
+            "type" : "string"
+          },
           "displayName" : {
             "description" : "Display name; null if not set",
             "example" : "Alice",
@@ -2572,11 +2579,11 @@
           },
           "visibilitySettings" : {
             "additionalProperties" : {
-              "description" : "Field name to visible flag, i.e. what other users see on the public profile; keys: email, firstName, lastName, location, points, displayName, bio, membershipLevel",
+              "description" : "Field name to visible flag, i.e. what other users see on the public profile; keys: email, firstName, lastName, birthday, location, points, displayName, bio, membershipLevel",
               "example" : false,
               "type" : "boolean"
             },
-            "description" : "Field name to visible flag, i.e. what other users see on the public profile; keys: email, firstName, lastName, location, points, displayName, bio, membershipLevel",
+            "description" : "Field name to visible flag, i.e. what other users see on the public profile; keys: email, firstName, lastName, birthday, location, points, displayName, bio, membershipLevel",
             "example" : {
               "bio" : true,
               "displayName" : true,
@@ -3025,10 +3032,33 @@
             "nullable" : true,
             "type" : "string"
           },
+          "birthday" : {
+            "description" : "New birthday as an ISO date (yyyy-MM-dd), strictly before today; null or omitted keeps the current value. Cannot be cleared once set",
+            "example" : "1995-04-12",
+            "format" : "date",
+            "nullable" : true,
+            "type" : "string"
+          },
           "displayName" : {
             "description" : "New display name (max 100 characters); null or omitted keeps the current value",
             "example" : "Alice C.",
             "maxLength" : 100,
+            "minLength" : 0,
+            "nullable" : true,
+            "type" : "string"
+          },
+          "firstName" : {
+            "description" : "New first name (max 50 characters); null or omitted keeps the current value",
+            "example" : "Alice",
+            "maxLength" : 50,
+            "minLength" : 0,
+            "nullable" : true,
+            "type" : "string"
+          },
+          "lastName" : {
+            "description" : "New last name (max 50 characters); null or omitted keeps the current value",
+            "example" : "Chen",
+            "maxLength" : 50,
             "minLength" : 0,
             "nullable" : true,
             "type" : "string"
@@ -3105,11 +3135,11 @@
         "properties" : {
           "visibility" : {
             "additionalProperties" : {
-              "description" : "Field name to visible flag. Allowed keys: email, firstName, lastName, location, points, displayName, bio, membershipLevel. Omitted fields keep their current setting; unknown keys are ignored",
+              "description" : "Field name to visible flag. Allowed keys: email, firstName, lastName, birthday, location, points, displayName, bio, membershipLevel. Omitted fields keep their current setting; unknown keys are ignored",
               "example" : false,
               "type" : "boolean"
             },
-            "description" : "Field name to visible flag. Allowed keys: email, firstName, lastName, location, points, displayName, bio, membershipLevel. Omitted fields keep their current setting; unknown keys are ignored",
+            "description" : "Field name to visible flag. Allowed keys: email, firstName, lastName, birthday, location, points, displayName, bio, membershipLevel. Omitted fields keep their current setting; unknown keys are ignored",
             "example" : {
               "email" : false,
               "firstName" : true,
@@ -3215,6 +3245,13 @@
           "bio" : {
             "description" : "Bio; null if the owner hid it (public by default) or never set one",
             "example" : "Poll enthusiast",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "birthday" : {
+            "description" : "Birthday (ISO date); null when hidden (default) or not set",
+            "example" : "1995-04-12",
+            "format" : "date",
             "nullable" : true,
             "type" : "string"
           },
@@ -10141,6 +10178,7 @@
                     "anonymousBallotByDefault" : false,
                     "avatarUrl" : "bot:boba",
                     "bio" : "Poll enthusiast",
+                    "birthday" : "1995-04-12",
                     "displayName" : "Alice",
                     "email" : "alice@example.com",
                     "firstName" : "Alice",
@@ -10157,6 +10195,7 @@
                     "username" : "alice",
                     "visibilitySettings" : {
                       "bio" : true,
+                      "birthday" : false,
                       "displayName" : true,
                       "email" : false,
                       "firstName" : false,
@@ -10244,7 +10283,7 @@
         "tags" : [ "User" ]
       },
       "patch" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: updates `username`, `displayName`, `bio`, `avatarUrl` and/or `anonymousBallotByDefault` (the default for Ballots that omit `anonymous`; existing Ballots are unchanged). `avatarUrl` must be `bot:<kind>` with one of the bot cast kinds. Sending the current `username` is a no-op, except that an older account holding a reserved name gets 400 (omit `username` when unchanged). A field that is omitted or `null` is left unchanged (`null` cannot be used to clear a value; send an empty string instead, except `avatarUrl`, which cannot be cleared). Returns the public profile after the update, so the optional fields are masked by the caller's own visibility settings.\n**Side effects**: persists the new values; after a `username` change the old public profile path returns 404\n**Errors**:\n- 400 `common.validation_failed`: `username` is not 3-50 characters of [a-z0-9_] or is a reserved name (see the `username` schema), `displayName` exceeds 100 characters, `bio` exceeds 500 characters, or `avatarUrl` is not a known `bot:<kind>`\n- 404 `user.not_found`: the account no longer exists\n- 409 `user.username.taken`: another account already uses `username`",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: updates `username`, `displayName`, `firstName`, `lastName`, `birthday`, `bio`, `avatarUrl` and/or `anonymousBallotByDefault` (the default for Ballots that omit `anonymous`; existing Ballots are unchanged). `avatarUrl` must be `bot:<kind>` with one of the bot cast kinds. `birthday` is an ISO date (`yyyy-MM-dd`) before today. Sending the current `username` is a no-op, except that an older account holding a reserved name gets 400 (omit `username` when unchanged). A field that is omitted or `null` is left unchanged (`null` cannot be used to clear a value; send an empty string instead, except `avatarUrl` and `birthday`, which cannot be cleared). Returns the public profile after the update, so the optional fields are masked by the caller's own visibility settings.\n**Side effects**: persists the new values; after a `username` change the old public profile path returns 404\n**Errors**:\n- 400 `common.validation_failed`: `username` is not 3-50 characters of [a-z0-9_] or is a reserved name (see the `username` schema), `displayName` exceeds 100 characters, `firstName` or `lastName` exceeds 50 characters, `birthday` is today or later, `bio` exceeds 500 characters, or `avatarUrl` is not a known `bot:<kind>`\n- 400 `common.bad_request`: `birthday` is not a valid `yyyy-MM-dd` date\n- 404 `user.not_found`: the account no longer exists\n- 409 `user.username.taken`: another account already uses `username`",
         "operationId" : "updateMyProfile",
         "requestBody" : {
           "content" : {
@@ -10264,6 +10303,7 @@
                   "data" : {
                     "avatarUrl" : "bot:boba",
                     "bio" : "Poll enthusiast",
+                    "birthday" : null,
                     "displayName" : "Alice C.",
                     "email" : null,
                     "firstName" : "Alice",
@@ -10392,6 +10432,7 @@
                 "example" : {
                   "data" : {
                     "bio" : true,
+                    "birthday" : false,
                     "displayName" : true,
                     "email" : false,
                     "firstName" : true,
@@ -10694,7 +10735,7 @@
     },
     "/api/users/{username}" : {
       "get" : {
-        "description" : "**Auth**: public (the response is the same whether or not the caller is signed in)\n**Precondition**: none\n**Behavior**: returns the public view of a user. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` (Public, non-Deleted Polls only) are always present (`avatarUrl` is `null` when never set). Every optional field is `null` unless the owner made it visible: `displayName` and `bio` are visible by default, `email`, `firstName`, `lastName`, `location`, `points` and `membershipLevel` are hidden by default. `totalPolls` counts only Polls that have opened (Open and Ended), matching `GET /api/users/{username}/votes`.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended",
+        "description" : "**Auth**: public (the response is the same whether or not the caller is signed in)\n**Precondition**: none\n**Behavior**: returns the public view of a user. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` (Public, non-Deleted Polls only) are always present (`avatarUrl` is `null` when never set). Every optional field is `null` unless the owner made it visible: `displayName` and `bio` are visible by default, `email`, `firstName`, `lastName`, `birthday`, `location`, `points` and `membershipLevel` are hidden by default. `totalPolls` counts only Polls that have opened (Open and Ended), matching `GET /api/users/{username}/votes`.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended",
         "operationId" : "getUserProfile",
         "parameters" : [ {
           "description" : "Username of the user to look up",
@@ -10714,6 +10755,7 @@
                   "data" : {
                     "avatarUrl" : "bot:boba",
                     "bio" : "Poll enthusiast",
+                    "birthday" : null,
                     "displayName" : "Alice",
                     "email" : null,
                     "firstName" : "Alice",

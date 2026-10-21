@@ -2,6 +2,7 @@ package com.vomatt.users.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.Map;
 
@@ -22,6 +23,8 @@ public record MyProfileResponse(
         String firstName,
         @Schema(description = "Last name; null if not set", example = "Chen", nullable = true)
         String lastName,
+        @Schema(description = "Birthday (ISO date); null if not set", example = "1995-04-12", nullable = true)
+        LocalDate birthday,
         @Schema(description = "Display name; null if not set", example = "Alice", nullable = true)
         String displayName,
         @Schema(description = "Bio; null if not set", example = "Poll enthusiast", nullable = true)
@@ -46,7 +49,7 @@ public record MyProfileResponse(
         @Schema(description = "Number of Polls the user holds a Ballot in", example = "17")
         int totalVotes,
         @Schema(description = "Field name to visible flag, i.e. what other users see on the public profile; "
-                + "keys: email, firstName, lastName, location, points, displayName, bio, membershipLevel",
+                + "keys: email, firstName, lastName, birthday, location, points, displayName, bio, membershipLevel",
                 example = "{\"email\": false, \"displayName\": true, \"bio\": true}")
         Map<String, Boolean> visibilitySettings,
         @Schema(description = "Whether Ballots are Anonymous when a Ballot does not say otherwise; false until set", example = "false")

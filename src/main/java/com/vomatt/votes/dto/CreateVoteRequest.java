@@ -98,8 +98,8 @@ public class CreateVoteRequest {
             + "On edit they are merged into whichever of `inviteeIds` / `inviteeEmails` is set, so an explicit `[]` plus `inviteListIds` replaces that kind of Invitee "
             + "with the Invite Lists' members (already-invited members are kept as they are); a null list keeps that kind of Invitee and adds the Invite Lists' members on top",
             example = "[\"0199f2b0-7a1c-7e45-9b3d-2c8f6a4e1d07\"]", nullable = true)
-    @Size(max = 20, message = "Maximum 20 inviteLists can be invited at once")
-    private List<@NotNull(message = "InviteList ID cannot be null") UUID> inviteListIds;
+    @Size(max = 20, message = "Maximum 20 Invite Lists can be invited at once")
+    private List<@NotNull(message = "Invite List ID cannot be null") UUID> inviteListIds;
 
     @Size(max = 5, message = "Maximum 5 tags can be selected")
     @Schema(description = "IDs of up to 5 existing tags (see `GET /api/tags`); null or empty means no tags. Unknown IDs are rejected with 400 `tag.ids.invalid`",

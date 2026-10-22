@@ -35,16 +35,16 @@ public interface InviteListMemberRepository extends JpaRepository<InviteListMemb
     /** Same rule as {@link InviteeRepository#BINDABLE}: the user is neither already a member of that Invite List nor its owner. */
     String BINDABLE = """
             (NOT EXISTS (SELECT 1 FROM vomatt.invite_list_members u WHERE u.invite_list_id = m.invite_list_id AND u.user_id = :userId)
-             AND NOT EXISTS (SELECT 1 FROM vomatt.invite_lists g WHERE g.id = m.invite_list_id AND g.owner_id = :userId))""";
+             AND NOT EXISTS (SELECT 1 FROM vomatt.invite_lists l WHERE l.id = m.invite_list_id AND l.owner_id = :userId))""";
 
     /**
      * Binding step 1: share-locks the Invite Lists holding a pending row of this email, in id order. Member changes take the
      * Invite List's write lock, so binding and a concurrent add of the same user serialize and cannot both add that user.
      */
     @Query(value = """
-            SELECT g.id FROM vomatt.invite_lists g
-            WHERE g.id IN (SELECT m.invite_list_id FROM vomatt.invite_list_members m WHERE m.email = :email AND m.user_id IS NULL)
-            ORDER BY g.id FOR SHARE""", nativeQuery = true)
+            SELECT l.id FROM vomatt.invite_lists l
+            WHERE l.id IN (SELECT m.invite_list_id FROM vomatt.invite_list_members m WHERE m.email = :email AND m.user_id IS NULL)
+            ORDER BY l.id FOR SHARE""", nativeQuery = true)
     List<UUID> lockInviteListsWithPendingEmail(@Param("email") String email);
 
     /** Binding step 2: ties the bindable pending rows of the locked Invite Lists to the user; each keeps its email. */

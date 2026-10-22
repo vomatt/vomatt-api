@@ -102,7 +102,7 @@ public class InviteListController {
                             { "name": "Book club" }
                             """))))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Invite List created",
-            content = @Content(examples = @ExampleObject(name = "InviteList", value = """
+            content = @Content(examples = @ExampleObject(name = "Invite List", value = """
                     { "success": true, "data": {
                         "id": "0199f2b0-7a1c-7e45-9b3d-2c8f6a4e1d07", "name": "Book club", "memberCount": 0, "createdAt": "2026-10-09T15:20:31+08:00"
                       }, "message": null, "errorCode": null, "error": null }
@@ -132,7 +132,7 @@ public class InviteListController {
                             { "name": "Book club 2026" }
                             """))))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Invite List renamed",
-            content = @Content(examples = @ExampleObject(name = "InviteList", value = EX_INVITE_LIST)))
+            content = @Content(examples = @ExampleObject(name = "Invite List", value = EX_INVITE_LIST)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Invite List does not exist or belongs to someone else (`invite_list.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "invite_list.not_found", value = ERR_INVITE_LIST_NOT_FOUND)))

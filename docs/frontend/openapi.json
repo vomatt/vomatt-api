@@ -8880,8 +8880,8 @@
             "content" : {
               "application/json" : {
                 "examples" : {
-                  "InviteList" : {
-                    "description" : "InviteList",
+                  "Invite List" : {
+                    "description" : "Invite List",
                     "value" : {
                       "data" : {
                         "createdAt" : "2026-10-09T15:20:31+08:00",
@@ -9100,8 +9100,8 @@
             "content" : {
               "application/json" : {
                 "examples" : {
-                  "InviteList" : {
-                    "description" : "InviteList",
+                  "Invite List" : {
+                    "description" : "Invite List",
                     "value" : {
                       "data" : {
                         "createdAt" : "2026-10-09T15:20:31+08:00",

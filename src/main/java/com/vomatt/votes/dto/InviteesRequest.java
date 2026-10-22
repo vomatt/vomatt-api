@@ -29,19 +29,19 @@ public class InviteesRequest {
             example = "[\"carol@example.com\"]", nullable = true)
     private List<@NotNull(message = "Invitee email cannot be null") @Email(message = "Invalid invitee email") @Size(max = 254, message = "Invitee email cannot exceed 254 characters") String> emails;
 
-    @Size(max = 20, message = "Maximum 20 inviteLists can be invited at once")
+    @Size(max = 20, message = "Maximum 20 Invite Lists can be invited at once")
     @Schema(description = "Up to 20 IDs of the caller's Invite Lists (see `GET /api/invite-lists`) whose current members to invite; null elements are rejected and "
             + "a missing Invite List or someone else's is 404 `invite_list.not_found`. Members added by ID join `userIds` (suspended ones are skipped) and members added "
             + "by email join `emails`, by their stored address, with the same rules and invitation emails. The members are copied now: later Invite List changes never touch the Poll",
             example = "[\"0199f2b0-7a1c-7e45-9b3d-2c8f6a4e1d07\"]", nullable = true)
-    private List<@NotNull(message = "InviteList ID cannot be null") UUID> inviteListIds;
+    private List<@NotNull(message = "Invite List ID cannot be null") UUID> inviteListIds;
 
     // Normalized like sign-in before validation, so padded or upper-case input is accepted and stored the same way
     public void setEmails(List<String> emails) {
         this.emails = emails == null ? null : emails.stream().map(e -> e == null ? null : User.normalizeEmail(e)).toList();
     }
 
-    @AssertTrue(message = "At least one user, email or inviteList must be invited")
+    @AssertTrue(message = "At least one user, email or Invite List must be invited")
     @Schema(hidden = true)
     public boolean isAnyInvitee() {
         return (userIds != null && !userIds.isEmpty()) || (emails != null && !emails.isEmpty())

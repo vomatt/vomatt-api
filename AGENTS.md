@@ -9,6 +9,7 @@ Vomatt polling community backend: Java 25 (virtual threads), Spring Boot 4.0.5 (
 ```bash
 docker compose up -d --build         # full stack (API + Postgres + Redis) for frontend integration
 docker compose up -d postgres redis  # DB only, pair with ./mvnw spring-boot:run; db/schema.sql is applied on first start
+                                     # an existing volume does not rerun it: apply new db/migrations/* by hand (psql) or docker compose down -v
 cp .env.example .env                 # fill in JWT_SECRET etc.
 ./mvnw spring-boot:run               # with EMAIL_ENABLED=false, read the OTP from Redis: redis-cli GET otp:email:<email>
 ./mvnw clean package -DskipTests

@@ -3,7 +3,8 @@
 --
 -- Run: psql "$DB" -v ON_ERROR_STOP=1 -f 2026-10-22-invite-lists.sql
 -- Run it BEFORE schema.sql: schema.sql would otherwise create empty invite_lists tables and this rename would fail.
--- Re-runnable: does nothing once vomatt.groups is gone.
+-- Apply 2026-10-14-canonical-gmail.sql first if this database has not had it: it targets group_members.
+-- Re-runnable: does nothing once vomatt.groups is gone; aborts with a hint if schema.sql already created invite_lists.
 --
 -- Rule: data is kept as is; tables, the group_id column and every constraint and index get the names a fresh
 --   schema.sql produces, including the ones Postgres generated (pkey, fkey, unique key).
@@ -13,6 +14,10 @@ DO $$
 BEGIN
     IF to_regclass('vomatt.groups') IS NULL THEN
         RETURN;
+    END IF;
+    IF to_regclass('vomatt.invite_lists') IS NOT NULL THEN
+        RAISE EXCEPTION 'vomatt.groups and vomatt.invite_lists both exist: schema.sql ran first. '
+            'Drop the empty invite_list_members and invite_lists tables, then rerun this script.';
     END IF;
     ALTER TABLE vomatt.groups RENAME TO invite_lists;
     ALTER TABLE vomatt.invite_lists RENAME CONSTRAINT groups_pkey TO invite_lists_pkey;

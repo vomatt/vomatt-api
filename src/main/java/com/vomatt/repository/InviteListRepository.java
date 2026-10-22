@@ -22,7 +22,7 @@ public interface InviteListRepository extends JpaRepository<InviteList, UUID> {
 
     /** Member changes take this lock, so they serialize with each other and with email binding. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT g FROM InviteList g WHERE g.id = :id AND g.owner.id = :ownerId")
+    @Query("SELECT l FROM InviteList l WHERE l.id = :id AND l.owner.id = :ownerId")
     Optional<InviteList> findOwnedForUpdate(@Param("id") UUID id, @Param("ownerId") UUID ownerId);
 
     List<InviteList> findByOwnerIdOrderByNameAscIdAsc(UUID ownerId);

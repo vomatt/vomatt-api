@@ -56,9 +56,9 @@ _Avoid_: Voter list, allowed voter
 **Invitation**:
 An Invitee being added to an Invite-only Poll. Invitees can be added while the Poll is Open, but an Invitee holding a Ballot cannot be removed. A user is told of their Invitation; an email address not yet tied to a user is sent one by email and becomes that user once they verify the address.
 
-**Group**:
-A reusable list of users and email addresses that its owner keeps privately for inviting. Inviting a Group adds its current members as Invitees; later changes to the Group do not touch existing Polls.
-_Avoid_: Team, circle
+**Invite List**:
+A reusable list of users and email addresses that its owner keeps privately for inviting. Inviting an Invite List adds its current members as Invitees; later changes to the Invite List do not touch existing Polls. Its members never learn of it, so it is not a group they join.
+_Avoid_: Group, team, circle
 
 ### Ballots
 

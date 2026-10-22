@@ -110,11 +110,11 @@ public enum MessageKey {
     COMMENT_PARENT_INVALID("comment.parent.invalid"),
     NOTIFICATION_NOT_FOUND("notification.not_found"),
 
-    // === Group ===
-    GROUP_NOT_FOUND("group.not_found"),
-    GROUP_MAX_REACHED("group.max_reached"),
-    GROUP_MEMBERS_MAX("group.members.max"),
-    GROUP_MEMBER_IDS_INVALID("group.member.ids_invalid"),
+    // === Invite List ===
+    INVITE_LIST_NOT_FOUND("invite_list.not_found"),
+    INVITE_LIST_MAX_REACHED("invite_list.max_reached"),
+    INVITE_LIST_MEMBERS_MAX("invite_list.members.max"),
+    INVITE_LIST_MEMBER_IDS_INVALID("invite_list.member.ids_invalid"),
 
     // === Tag ===
     TAG_NOT_FOUND("tag.not_found"),

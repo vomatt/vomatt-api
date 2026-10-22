@@ -2,6 +2,10 @@
 
 Contract changes that affect the frontend. 💥 BREAKING means frontend code must change. See [openapi.json](openapi.json) for the contract snapshot and [error-codes.md](error-codes.md) for error codes.
 
+## 2026-10-22
+
+- 💥 Groups are renamed to Invite Lists. Behavior, limits and response shapes are unchanged. Paths: `/api/groups` -> `/api/invite-lists` (`GET` / `POST`, `PUT` / `DELETE /{inviteListId}`, `GET` / `POST` / `DELETE /{inviteListId}/members`, `DELETE /{inviteListId}/members/{userId}`). Request field `groupIds` -> `inviteListIds` on `POST /api/votes`, `PUT /api/votes/{voteId}` and `POST /api/votes/{voteId}/invitees`. Error codes: `group.not_found` -> `invite_list.not_found`, `group.max_reached` -> `invite_list.max_reached`, `group.members.max` -> `invite_list.members.max`, `group.member.ids_invalid` -> `invite_list.member.ids_invalid`. The OpenAPI tag is `Invite List`. Deploy order: run `db/migrations/2026-10-22-invite-lists.sql` (before `schema.sql`), then release the API and vomatt-web together; the old paths and field are not kept.
+
 ## 2026-10-21
 
 - `PATCH /api/users/me` accepts `firstName`, `lastName` (each max 50 characters, stored without surrounding whitespace; a blank value clears it) and `birthday` (ISO date `yyyy-MM-dd`, from 1900-01-01 to yesterday in Asia/Taipei). An omitted or `null` field keeps its value; `birthday` cannot be cleared. A name over 50 characters or a birthday out of that range is 400 `common.validation_failed`; a birthday that is not a valid `yyyy-MM-dd` date is 400 `common.bad_request`.

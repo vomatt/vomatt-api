@@ -15,24 +15,24 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 
 /**
- * A member of a Group, shaped like {@link Invitee}: added by ID it holds the user; added by email it keeps that
+ * A member of an Invite List, shaped like {@link Invitee}: added by ID it holds the user; added by email it keeps that
  * normalized email for life and also holds the user once the address belongs to an active account (at add time, or
  * when someone verifies that email). An email member is always shown by its address.
  */
 @Entity
-@Table(name = "group_members", uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"group_id", "user_id"})
+@Table(name = "invite_list_members", uniqueConstraints = {
+    @UniqueConstraint(columnNames = {"invite_list_id", "user_id"})
 })
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
-@ToString(exclude = {"group", "user"})
-public class GroupMember extends AuditableEntity {
+@ToString(exclude = {"inviteList", "user"})
+public class InviteListMember extends AuditableEntity {
 
     @NotNull
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "group_id")
-    private Group group;
+    @JoinColumn(name = "invite_list_id")
+    private InviteList inviteList;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
@@ -41,11 +41,11 @@ public class GroupMember extends AuditableEntity {
     @Column(name = "email", length = 254)
     private String email;
 
-    public GroupMember(Group group, User user) {
-        this(group, user, null);
+    public InviteListMember(InviteList inviteList, User user) {
+        this(inviteList, user, null);
     }
 
-    public GroupMember(Group group, String email) {
-        this(group, null, email);
+    public InviteListMember(InviteList inviteList, String email) {
+        this(inviteList, null, email);
     }
 }

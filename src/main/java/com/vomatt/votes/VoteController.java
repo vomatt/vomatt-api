@@ -125,16 +125,16 @@ public class VoteController {
             and is listed only in My Polls. An INVITE_ONLY Poll is reachable only by its owner and its Invitees: the users in `inviteeIds` and the addresses in `inviteeEmails` \
             (duplicates and the owner's own ID / address are ignored; more can be added later); everyone else gets 404 `vote.not_found`. \
             An address is always listed as entered, whether or not it belongs to an account; an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in. \
-            `groupIds` invites the current members of the caller's Groups: members added by ID join `inviteeIds` (suspended ones are skipped) and members added by email \
-            join `inviteeEmails` by their stored address; later Group changes never touch the Poll.
+            `inviteListIds` invites the current members of the caller's Invite Lists: members added by ID join `inviteeIds` (suspended ones are skipped) and members added by email \
+            join `inviteeEmails` by their stored address; later Invite List changes never touch the Poll.
             **Side effects**: usage count of each attached tag +1 for a PUBLIC Poll (UNLISTED and INVITE_ONLY Polls are not counted); \
             each Invitee tied to a user gets an unread Invitation notification (unread count, `unread` on My Polls `status=open`); each new email Invitee \
             is sent an invitation email linking to the Poll (only when email is enabled) \
             (at most once per address per Poll, even after removing and re-adding it, and at most `EMAIL_INVITATION_DAILY_LIMIT` (default 200) per owner per day; \
             over the limit the Invitee is still added and only the email is skipped) and gets the Invitation notification once tied to a user; the creation is audit-logged.
             **Errors**:
-                    - 400 `vote.invitee.not_invite_only`: `inviteeIds`, `inviteeEmails` or `groupIds` is not empty but `audience` is not INVITE_ONLY
-                    - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended (`inviteeEmails` and `groupIds` never cause it)
+                    - 400 `vote.invitee.not_invite_only`: `inviteeIds`, `inviteeEmails` or `inviteListIds` is not empty but `audience` is not INVITE_ONLY
+                    - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended (`inviteeEmails` and `inviteListIds` never cause it)
                     - 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true
                     - 400 `vote.options.min`: fewer than 2 options
                     - 400 `vote.options.max`: more than 10 options
@@ -144,7 +144,7 @@ public class VoteController {
                     - 400 `tag.ids.invalid`: one of `tagIds` does not exist
                     - 400 `common.validation_failed`: a field breaks its size / required rule (first failing field only)
             - 404 `user.not_found`: the signed-in user no longer exists
-            - 404 `group.not_found`: one of `groupIds` does not exist or belongs to someone else
+            - 404 `invite_list.not_found`: one of `inviteListIds` does not exist or belongs to someone else
             """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = @ExampleObject(name = "Scheduled Poll", value = """
@@ -182,9 +182,9 @@ public class VoteController {
             **Behavior**: replaces title, description, times, Voter Visibility, Audience, Invitees, tags and options with the body (same body and validation as create). \
             An omitted `startTime`, `voterVisibility`, `anonymous`, `audience`, `inviteeIds` or `inviteeEmails` keeps the current value; the Poll does not open on edit. \
             With no `voterVisibility`, the deprecated `anonymous: true` sets NOBODY and `anonymous: false` turns NOBODY back into OWNER. \
-            Audience can change only here, so it is fixed once the Poll is Open. `groupIds` expands the caller's Groups now: their members are merged into \
-            `inviteeIds` / `inviteeEmails` when that list is set, so an explicit `[]` plus `groupIds` replaces that kind of Invitee with the Groups' members \
-            (already-invited members are kept as they are); a null list keeps that kind of Invitee and adds the Groups' members on top.
+            Audience can change only here, so it is fixed once the Poll is Open. `inviteListIds` expands the caller's Invite Lists now: their members are merged into \
+            `inviteeIds` / `inviteeEmails` when that list is set, so an explicit `[]` plus `inviteListIds` replaces that kind of Invitee with the Invite Lists' members \
+            (already-invited members are kept as they are); a null list keeps that kind of Invitee and adds the Invite Lists' members on top.
             **Side effects**: all options are replaced, so option IDs change; tag usage counts are adjusted for added / removed tags \
             and for an Audience change (only PUBLIC Polls are counted). `inviteeIds` replaces the Invitees added by ID and `inviteeEmails` those added by email (matched by address); \
             an Audience other than INVITE_ONLY removes them all. Each new Invitee tied to a user gets an unread Invitation notification, including one removed and invited again; \
@@ -194,8 +194,8 @@ public class VoteController {
             - 403 `vote.forbidden`: the caller is not the owner
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
             - 400 `vote.not_editable`: the Poll is Open or Ended
-            - 400 `vote.invitee.not_invite_only`: `inviteeIds`, `inviteeEmails` or `groupIds` is not empty but the resulting Audience is not INVITE_ONLY
-            - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended (`inviteeEmails` and `groupIds` never cause it)
+            - 400 `vote.invitee.not_invite_only`: `inviteeIds`, `inviteeEmails` or `inviteListIds` is not empty but the resulting Audience is not INVITE_ONLY
+            - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended (`inviteeEmails` and `inviteListIds` never cause it)
             - 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true
             - 400 `vote.options.min`: fewer than 2 options
             - 400 `vote.options.max`: more than 10 options
@@ -204,7 +204,7 @@ public class VoteController {
             - 400 `vote.duration.exceeded`: `endTime` is more than 365 days after the start time
             - 400 `tag.ids.invalid`: one of `tagIds` does not exist
             - 400 `common.validation_failed`: a field breaks its size / required rule (first failing field only)
-            - 404 `group.not_found`: one of `groupIds` does not exist or belongs to someone else
+            - 404 `invite_list.not_found`: one of `inviteListIds` does not exist or belongs to someone else
             - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was changed, try again
             """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
@@ -696,8 +696,8 @@ public class VoteController {
             **Behavior**: adds the users and email addresses as Invitees, so they can see the Poll, cast a Ballot and Comment, and find it in My Polls. \
             Users or addresses already invited, duplicates and the owner's own ID / address are ignored. \
             An address is always listed as entered, whether or not it belongs to an account; an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in. \
-            `groupIds` invites the current members of the caller's Groups: members added by ID join `userIds` (suspended ones are skipped) and members added by email \
-            join `emails` by their stored address; later Group changes never touch the Poll. Returns the full Invitee list.
+            `inviteListIds` invites the current members of the caller's Invite Lists: members added by ID join `userIds` (suspended ones are skipped) and members added by email \
+            join `emails` by their stored address; later Invite List changes never touch the Poll. Returns the full Invitee list.
             **Side effects**: `inviteeCount` grows (email Invitees included); each new Invitee tied to a user gets an unread Invitation notification \
             (again unread for one removed and invited again) and later the Ended Notification; each new email Invitee is sent an invitation email \
             (at most once per address per Poll, even after removing and re-adding it, and at most `EMAIL_INVITATION_DAILY_LIMIT` (default 200) per owner per day; \
@@ -706,18 +706,18 @@ public class VoteController {
             **Errors**:
             - 400 `vote.invitee.not_invite_only`: the Poll is not INVITE_ONLY
             - 400 `vote.ended`: the Poll has Ended
-            - 400 `vote.invitee.ids_invalid`: one of `userIds` is not an existing user or is suspended (`emails` and `groupIds` never cause it)
-            - 400 `common.validation_failed`: `userIds`, `emails` and `groupIds` are all empty, `userIds` / `emails` hold more than 100 entries or `groupIds` more than 20, a null element or an invalid address
+            - 400 `vote.invitee.ids_invalid`: one of `userIds` is not an existing user or is suspended (`emails` and `inviteListIds` never cause it)
+            - 400 `common.validation_failed`: `userIds`, `emails` and `inviteListIds` are all empty, `userIds` / `emails` hold more than 100 entries or `inviteListIds` more than 20, a null element or an invalid address
             - 403 `vote.forbidden`: the caller is not the owner
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
-            - 404 `group.not_found`: one of `groupIds` does not exist or belongs to someone else
+            - 404 `invite_list.not_found`: one of `inviteListIds` does not exist or belongs to someone else
             - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was changed, try again
             """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = {@ExampleObject(name = "Invite carol and dave", value = """
                             { "userIds": [ "0199f2a1-3d6e-7a24-8c1f-8e5b2f4a7d93" ], "emails": [ "dave@example.com" ] }
-                            """), @ExampleObject(name = "Invite a Group", value = """
-                            { "groupIds": [ "0199f2b0-7a1c-7e45-9b3d-2c8f6a4e1d07" ] }
+                            """), @ExampleObject(name = "Invite an Invite List", value = """
+                            { "inviteListIds": [ "0199f2b0-7a1c-7e45-9b3d-2c8f6a4e1d07" ] }
                             """)})))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Invitees after the addition",
             content = @Content(examples = @ExampleObject(name = "Invitees", value = EX_INVITEES)))

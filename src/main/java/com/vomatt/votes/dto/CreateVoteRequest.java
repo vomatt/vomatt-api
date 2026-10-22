@@ -91,15 +91,15 @@ public class CreateVoteRequest {
         this.inviteeEmails = emails == null ? null : emails.stream().map(e -> e == null ? null : User.normalizeEmail(e)).toList();
     }
 
-    @Schema(description = "IDs of the caller's Groups (see `GET /api/groups`) whose current members to invite; only for an INVITE_ONLY Poll "
-            + "(otherwise 400 `vote.invitee.not_invite_only`). At most 20; null elements are rejected; a missing Group or someone else's is 404 `group.not_found`. "
+    @Schema(description = "IDs of the caller's Invite Lists (see `GET /api/invite-lists`) whose current members to invite; only for an INVITE_ONLY Poll "
+            + "(otherwise 400 `vote.invitee.not_invite_only`). At most 20; null elements are rejected; a missing Invite List or someone else's is 404 `invite_list.not_found`. "
             + "Members added by ID join `inviteeIds` (suspended ones are skipped) and members added by email join `inviteeEmails`, by their stored address, "
-            + "with the same rules and invitation emails. The members are copied now: later Group changes never touch the Poll. "
-            + "On edit they are merged into whichever of `inviteeIds` / `inviteeEmails` is set, so an explicit `[]` plus `groupIds` replaces that kind of Invitee "
-            + "with the Groups' members (already-invited members are kept as they are); a null list keeps that kind of Invitee and adds the Groups' members on top",
+            + "with the same rules and invitation emails. The members are copied now: later Invite List changes never touch the Poll. "
+            + "On edit they are merged into whichever of `inviteeIds` / `inviteeEmails` is set, so an explicit `[]` plus `inviteListIds` replaces that kind of Invitee "
+            + "with the Invite Lists' members (already-invited members are kept as they are); a null list keeps that kind of Invitee and adds the Invite Lists' members on top",
             example = "[\"0199f2b0-7a1c-7e45-9b3d-2c8f6a4e1d07\"]", nullable = true)
-    @Size(max = 20, message = "Maximum 20 groups can be invited at once")
-    private List<@NotNull(message = "Group ID cannot be null") UUID> groupIds;
+    @Size(max = 20, message = "Maximum 20 inviteLists can be invited at once")
+    private List<@NotNull(message = "InviteList ID cannot be null") UUID> inviteListIds;
 
     @Size(max = 5, message = "Maximum 5 tags can be selected")
     @Schema(description = "IDs of up to 5 existing tags (see `GET /api/tags`); null or empty means no tags. Unknown IDs are rejected with 400 `tag.ids.invalid`",

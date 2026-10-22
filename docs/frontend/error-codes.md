@@ -56,7 +56,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.apple.not_configured` | 400 | Apple 登入尚未設定 | Apple Sign In is not configured | Show message so the user can fix the input | AuthService |
 | `auth.email_not_verified` | 401 | 此 OAuth 帳號的 email 尚未驗證，無法登入或合併既有帳號 | This OAuth account's email is not verified; cannot sign in or merge an existing account | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.account_banned` | 403 | 此帳號已被停權，無法登入 | This account has been banned and cannot sign in | Show a permission-denied notice | AuthService, JwtAuthFilter |
-| `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | AdminUserService, GroupService, UserService, VoteCommentService, VoteService |
+| `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | AdminUserService, InviteListService, UserService, VoteCommentService, VoteService |
 | `user.username.taken` | 409 | 使用者名稱已被使用 | Username already taken | Show message (resource state conflict) | UserService |
 | `user.delete.forbidden` | 403 | 只能刪除自己的帳號 | You can only delete your own account | Show a permission-denied notice | UserService |
 | `user.block.self` | 400 | 不能封鎖自己 | You cannot block yourself | Show message so the user can fix the input | UserService |
@@ -87,10 +87,10 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `comment.forbidden` | 403 | 只能修改或刪除自己的留言 | You can only modify your own comments | Show a permission-denied notice | VoteCommentService |
 | `comment.parent.invalid` | 400 | 要回覆的留言不存在或不屬於此投票 | The comment being replied to does not exist in this poll | Show message so the user can fix the input | VoteCommentService |
 | `notification.not_found` | 404 | 找不到此通知 | Notification not found | Show resource not found | NotificationService |
-| `group.not_found` | 404 | 找不到群組 | Group not found | Show resource not found | GroupService |
-| `group.max_reached` | 400 | 最多只能建立 {0} 個群組 | You can keep at most {0} Groups | Show message so the user can fix the input | GroupService |
-| `group.members.max` | 400 | 每個群組最多 {0} 位成員 | A Group can hold at most {0} members | Show message so the user can fix the input | GroupService |
-| `group.member.ids_invalid` | 400 | 部分使用者不存在或已停權 | One or more users do not exist or are suspended | Show message so the user can fix the input | GroupService |
+| `invite_list.not_found` | 404 | 找不到邀請名單 | Invite List not found | Show resource not found | InviteListService |
+| `invite_list.max_reached` | 400 | 最多只能建立 {0} 份邀請名單 | You can keep at most {0} Invite Lists | Show message so the user can fix the input | InviteListService |
+| `invite_list.members.max` | 400 | 每份邀請名單最多 {0} 位成員 | An Invite List can hold at most {0} members | Show message so the user can fix the input | InviteListService |
+| `invite_list.member.ids_invalid` | 400 | 部分使用者不存在或已停權 | One or more users do not exist or are suspended | Show message so the user can fix the input | InviteListService |
 | `tag.not_found` | 404 | 找不到標籤 | Tag not found | Show resource not found | TagService |
 | `tag.name.exists` | 409 | 標籤名稱已存在：{0} | Tag name already exists: {0} | Show message (resource state conflict) | TagService |
 | `tag.slug.exists` | 409 | 標籤 slug 已存在：{0} | Slug already exists: {0} | Show message (resource state conflict) | TagService |

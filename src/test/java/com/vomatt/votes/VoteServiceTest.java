@@ -10,7 +10,7 @@ import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
 import com.vomatt.entity.VoteStatus;
 import com.vomatt.entity.VoterVisibility;
-import com.vomatt.groups.GroupService;
+import com.vomatt.invitelists.InviteListService;
 import com.vomatt.repository.IdCount;
 import com.vomatt.repository.InviteeRepository;
 import com.vomatt.repository.NotificationReadRepository;
@@ -75,7 +75,7 @@ class VoteServiceTest {
     @Mock NotificationReadRepository notificationReadRepository;
     @Mock com.vomatt.common.email.EmailService emailService;
     @Mock com.vomatt.common.redis.RedisService redisService;
-    @Mock GroupService groupService;
+    @Mock InviteListService inviteListService;
     @Mock com.vomatt.repository.UserPreferenceRepository preferenceRepository;
     @Mock TransactionTemplate transactionTemplate;
     // Real helper over a stubbed EntityManager, so lockVote still runs the Poll-row lock it wraps
@@ -106,7 +106,7 @@ class VoteServiceTest {
         lenient().when(voteConfig.getDeleteWindow()).thenReturn(Duration.ofMinutes(20));
         lenient().when(voteConfig.getBallotRateLimit()).thenReturn(new VoteConfigurationProperties.BallotRateLimit());
         ReflectionTestUtils.setField(voteService, "invitationDailyLimit", 200);
-        lenient().when(groupService.expand(any(), any())).thenReturn(new GroupService.Members(List.of(), List.of()));
+        lenient().when(inviteListService.expand(any(), any())).thenReturn(new InviteListService.Members(List.of(), List.of()));
         // Runs the callback in place, as a real template does on the calling thread
         lenient().when(transactionTemplate.execute(any()))
                 .thenAnswer(inv -> inv.<TransactionCallback<?>>getArgument(0).doInTransaction(null));
@@ -271,18 +271,18 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("should throw 400 VOTE_INVITEE_NOT_INVITE_ONLY when groupIds are sent for a Public Poll")
-        void shouldRejectCreateWhenGroupIdsSentForPublicPoll() {
+        @DisplayName("should throw 400 VOTE_INVITEE_NOT_INVITE_ONLY when inviteListIds are sent for a Public Poll")
+        void shouldRejectCreateWhenInviteListIdsSentForPublicPoll() {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             CreateVoteRequest request = new CreateVoteRequest();
             request.setTitle("Test");
             request.setOptions(List.of(buildOption("A"), buildOption("B")));
-            request.setGroupIds(List.of(UUID.randomUUID()));
+            request.setInviteListIds(List.of(UUID.randomUUID()));
 
             assertThatThrownBy(() -> voteService.createVote(request, userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_INVITEE_NOT_INVITE_ONLY));
-            verify(groupService, never()).expand(any(), any());
+            verify(inviteListService, never()).expand(any(), any());
             verify(voteRepository, never()).save(any());
         }
 
@@ -1516,19 +1516,19 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("should invite a Group's members together with the listed users in one insert when groupIds are added")
-        void shouldInviteGroupMembersWhenAddingGroupIds() {
+        @DisplayName("should invite an Invite List's members together with the listed users in one insert when inviteListIds are added")
+        void shouldInviteInviteListMembersWhenAddingInviteListIds() {
             inviteOnly(OffsetDateTime.now().plusDays(1));
             User bob = User.builder().id(inviteeId).build();
             User carol = User.builder().id(UUID.randomUUID()).build();
-            UUID groupId = UUID.randomUUID();
+            UUID inviteListId = UUID.randomUUID();
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
-            when(groupService.expand(List.of(groupId), userId))
-                    .thenReturn(new GroupService.Members(List.of(carol.getId(), bob.getId()), List.of("dave@example.com")));
+            when(inviteListService.expand(List.of(inviteListId), userId))
+                    .thenReturn(new InviteListService.Members(List.of(carol.getId(), bob.getId()), List.of("dave@example.com")));
             when(userRepository.findAllById(Set.of(bob.getId(), carol.getId()))).thenReturn(List.of(bob, carol));
             InviteesRequest invite = new InviteesRequest();
             invite.setUserIds(List.of(bob.getId()));
-            invite.setGroupIds(List.of(groupId));
+            invite.setInviteListIds(List.of(inviteListId));
 
             voteService.addInvitees(voteId.toString(), invite, userId.toString());
 
@@ -1543,17 +1543,17 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("should throw 404 GROUP_NOT_FOUND and invite nobody when a Group is someone else's")
-        void shouldRefuseAddWhenGroupNotOwned() {
+        @DisplayName("should throw 404 INVITE_LIST_NOT_FOUND and invite nobody when an Invite List is someone else's")
+        void shouldRefuseAddWhenInviteListNotOwned() {
             inviteOnly(OffsetDateTime.now().plusDays(1));
-            UUID groupId = UUID.randomUUID();
+            UUID inviteListId = UUID.randomUUID();
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
-            when(groupService.expand(List.of(groupId), userId)).thenThrow(ApiException.notFound(MessageKey.GROUP_NOT_FOUND));
+            when(inviteListService.expand(List.of(inviteListId), userId)).thenThrow(ApiException.notFound(MessageKey.INVITE_LIST_NOT_FOUND));
             InviteesRequest invite = new InviteesRequest();
-            invite.setGroupIds(List.of(groupId));
+            invite.setInviteListIds(List.of(inviteListId));
 
             assertThatThrownBy(() -> voteService.addInvitees(voteId.toString(), invite, userId.toString()))
-                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.GROUP_NOT_FOUND));
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.INVITE_LIST_NOT_FOUND));
             verify(inviteeRepository, never()).saveAllAndFlush(any());
         }
 

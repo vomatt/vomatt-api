@@ -9,6 +9,7 @@ Vomatt polling community backend: Java 25 (virtual threads), Spring Boot 4.0.5 (
 ```bash
 docker compose up -d --build         # full stack (API + Postgres + Redis) for frontend integration
 docker compose up -d postgres redis  # DB only, pair with ./mvnw spring-boot:run; db/schema.sql is applied on first start
+                                     # an existing volume does not rerun it: apply new db/migrations/* by hand (psql) or docker compose down -v
 cp .env.example .env                 # fill in JWT_SECRET etc.
 ./mvnw spring-boot:run               # with EMAIL_ENABLED=false, read the OTP from Redis: redis-cli GET otp:email:<email>
 ./mvnw clean package -DskipTests
@@ -21,7 +22,7 @@ Swagger UI: <http://localhost:8080/swagger-ui.html>. `*PostgresTest` and `OpenAp
 
 ## Architecture
 
-- Packages are split by domain: `auth`, `users`, `votes`, `comments`, `notifications`, `tags`, `groups`, `lookups`, `admin`, each with Controller + Service + Mapper + `dto/`. All JPA entities live in `entity/`, all repositories in `repository/`, shared components in `common/`.
+- Packages are split by domain: `auth`, `users`, `votes`, `comments`, `notifications`, `tags`, `invitelists`, `lookups`, `admin`, each with Controller + Service + Mapper + `dto/`. All JPA entities live in `entity/`, all repositories in `repository/`, shared components in `common/`.
 - When a Service has only one implementation, do not split it into interface / Impl; `@Transactional` goes on the Service layer.
 - Code and API paths keep the `Vote` naming; business terms follow `CONTEXT.md` (Poll, Ballot, Selection, Participant, Sealed, Turnout, Support...). Renaming would break the contract, so it is not renamed.
 - Poll status is not stored in a column; it is derived from time: `Vote.statusAt()`, with Ended taking precedence over Scheduled. Cancelled is an Ended Poll with `endTime < startTime`.
@@ -38,7 +39,7 @@ Swagger UI: <http://localhost:8080/swagger-ui.html>. `*PostgresTest` and `OpenAp
 ## Database
 
 - The single source of DDL is `src/main/resources/db/schema.sql` (`ddl-auto: none`). All time columns are `TIMESTAMPTZ` <-> `OffsetDateTime`; primary keys use UUID v7 (`UUIDv7Generator`).
-- Write schema changes as re-runnable `ALTER TABLE ... IF NOT EXISTS`; in production (Neon), run `schema.sql` manually. Data migrations go in `db/migrations/YYYY-MM-DD-<topic>.sql`, applied manually; each new one needs a `*MigrationPostgresTest`. The exception is `2026-10-02-sachmis-arch.sql`, a one-time upgrade of pre-sachmis schemas that cannot run against the current schema and has no test.
+- Write schema changes as re-runnable `ALTER TABLE ... IF NOT EXISTS`; in production (Neon), run `schema.sql` manually. Data migrations go in `db/migrations/YYYY-MM-DD-<topic>.sql`, applied manually; each new one needs a `*MigrationPostgresTest`. The exceptions are `2026-10-02-sachmis-arch.sql` (a one-time upgrade of pre-sachmis schemas) and `2026-10-14-canonical-gmail.sql` (already applied; it targets `group_members`, renamed by `2026-10-22-invite-lists.sql`): neither can run against the current schema, so they have no test.
 
 ## API contract and frontend docs
 

@@ -1,4 +1,4 @@
-package com.vomatt.groups;
+package com.vomatt.invitelists;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -21,10 +21,10 @@ import com.vomatt.entity.Audience;
 import com.vomatt.entity.Invitee;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
-import com.vomatt.groups.dto.GroupMemberResponse;
-import com.vomatt.groups.dto.GroupMembersRequest;
-import com.vomatt.groups.dto.GroupRequest;
-import com.vomatt.repository.GroupMemberRepository;
+import com.vomatt.invitelists.dto.InviteListMemberResponse;
+import com.vomatt.invitelists.dto.InviteListMembersRequest;
+import com.vomatt.invitelists.dto.InviteListRequest;
+import com.vomatt.repository.InviteListMemberRepository;
 import com.vomatt.repository.InviteeRepository;
 import com.vomatt.repository.NotificationReadRepository;
 import com.vomatt.repository.PostgresRepositoryTest;
@@ -35,12 +35,12 @@ import com.vomatt.votes.dto.InviteeResponse;
 import com.vomatt.votes.dto.InviteesRequest;
 
 @Import(VoteServiceSlice.class)
-@DisplayName("Groups (Postgres)")
-class GroupPostgresTest extends PostgresRepositoryTest {
+@DisplayName("Invite Lists (Postgres)")
+class InviteListPostgresTest extends PostgresRepositoryTest {
 
-    @Autowired GroupService groupService;
+    @Autowired InviteListService inviteListService;
     @Autowired VoteService voteService;
-    @Autowired GroupMemberRepository groupMemberRepository;
+    @Autowired InviteListMemberRepository inviteListMemberRepository;
     @Autowired InviteeRepository inviteeRepository;
     @Autowired NotificationReadRepository notificationReadRepository;
 
@@ -49,7 +49,7 @@ class GroupPostgresTest extends PostgresRepositoryTest {
     private User owner;
     private User bob;
     private String ownerId;
-    private String groupId;
+    private String inviteListId;
 
     @BeforeEach
     void setUp() {
@@ -58,20 +58,20 @@ class GroupPostgresTest extends PostgresRepositoryTest {
         bob.setAvatarUrl("bot:boba");
         em.flush();
         ownerId = owner.getId().toString();
-        groupId = groupService.createGroup(name("Book club"), ownerId).id();
+        inviteListId = inviteListService.createInviteList(name("Book club"), ownerId).id();
     }
 
-    private static GroupRequest name(String name) {
-        GroupRequest request = new GroupRequest();
+    private static InviteListRequest name(String name) {
+        InviteListRequest request = new InviteListRequest();
         request.setName(name);
         return request;
     }
 
-    private List<GroupMemberResponse> addMembers(String id, List<UUID> userIds, List<String> emails, String callerId) {
-        GroupMembersRequest request = new GroupMembersRequest();
+    private List<InviteListMemberResponse> addMembers(String id, List<UUID> userIds, List<String> emails, String callerId) {
+        InviteListMembersRequest request = new InviteListMembersRequest();
         request.setUserIds(userIds);
         request.setEmails(emails);
-        return groupService.addMembers(id, request, callerId);
+        return inviteListService.addMembers(id, request, callerId);
     }
 
     private Vote inviteOnlyPoll(OffsetDateTime start, OffsetDateTime end) {
@@ -81,95 +81,95 @@ class GroupPostgresTest extends PostgresRepositoryTest {
         return poll;
     }
 
-    private List<InviteeResponse> inviteGroup(Vote poll, String id, String callerId) {
+    private List<InviteeResponse> inviteInviteList(Vote poll, String id, String callerId) {
         InviteesRequest request = new InviteesRequest();
-        request.setGroupIds(List.of(UUID.fromString(id)));
+        request.setInviteListIds(List.of(UUID.fromString(id)));
         return voteService.addInvitees(poll.getId().toString(), request, callerId);
     }
 
-    private static void assertGroupNotFound(ThrowingCallable call) {
+    private static void assertInviteListNotFound(ThrowingCallable call) {
         assertThatThrownBy(call).isInstanceOfSatisfying(ApiException.class,
-                ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.GROUP_NOT_FOUND));
+                ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.INVITE_LIST_NOT_FOUND));
     }
 
     @Test
-    @DisplayName("should copy the Group's current members into the Poll, untouched by later Group edits or deletion")
-    void shouldCopyMembersWhenGroupInvitedToPoll() {
-        addMembers(groupId, List.of(bob.getId(), owner.getId()), List.of(carolEmail.toUpperCase(), owner.getEmail()), ownerId);
+    @DisplayName("should copy the Invite List's current members into the Poll, untouched by later Invite List edits or deletion")
+    void shouldCopyMembersWhenInviteListInvitedToPoll() {
+        addMembers(inviteListId, List.of(bob.getId(), owner.getId()), List.of(carolEmail.toUpperCase(), owner.getEmail()), ownerId);
         Vote poll = inviteOnlyPoll(now.minusHours(1), now.plusDays(1));
 
-        List<InviteeResponse> invitees = inviteGroup(poll, groupId, ownerId);
+        List<InviteeResponse> invitees = inviteInviteList(poll, inviteListId, ownerId);
 
         assertThat(invitees).extracting(InviteeResponse::userId, InviteeResponse::avatarUrl, InviteeResponse::email).containsExactlyInAnyOrder(
                 Tuple.tuple(bob.getId().toString(), "bot:boba", null), Tuple.tuple(null, null, carolEmail));
-        groupService.removeMember(groupId, bob.getId().toString(), ownerId);
+        inviteListService.removeMember(inviteListId, bob.getId().toString(), ownerId);
         // A fresh request: the database cascades the members, none are loaded in this session
         em.flush();
         em.clear();
-        groupService.deleteGroup(groupId, ownerId);
+        inviteListService.deleteInviteList(inviteListId, ownerId);
         em.flush();
         em.clear();
         assertThat(voteService.getInvitees(poll.getId().toString(), ownerId)).hasSize(2);
-        assertThat(groupService.getGroups(ownerId)).isEmpty();
-        assertThat(groupMemberRepository.findByGroupId(UUID.fromString(groupId))).isEmpty();
+        assertThat(inviteListService.getInviteLists(ownerId)).isEmpty();
+        assertThat(inviteListMemberRepository.findByInviteListId(UUID.fromString(inviteListId))).isEmpty();
     }
 
     @Test
-    @DisplayName("should list, count and rename the owner's Group, skipping duplicates and existing members")
-    void shouldListAndRenameGroupWhenOwner() {
-        addMembers(groupId, List.of(bob.getId()), List.of(carolEmail), ownerId);
-        List<GroupMemberResponse> members = addMembers(groupId, List.of(bob.getId(), bob.getId()), List.of(carolEmail), ownerId);
+    @DisplayName("should list, count and rename the owner's Invite List, skipping duplicates and existing members")
+    void shouldListAndRenameInviteListWhenOwner() {
+        addMembers(inviteListId, List.of(bob.getId()), List.of(carolEmail), ownerId);
+        List<InviteListMemberResponse> members = addMembers(inviteListId, List.of(bob.getId(), bob.getId()), List.of(carolEmail), ownerId);
 
-        assertThat(members).extracting(GroupMemberResponse::username, GroupMemberResponse::avatarUrl, GroupMemberResponse::email)
+        assertThat(members).extracting(InviteListMemberResponse::username, InviteListMemberResponse::avatarUrl, InviteListMemberResponse::email)
                 .containsExactly(Tuple.tuple(bob.getUsername(), "bot:boba", null), Tuple.tuple(null, null, carolEmail));
-        assertThat(groupService.renameGroup(groupId, name("  Chess club "), ownerId).name()).isEqualTo("Chess club");
-        assertThat(groupService.getGroups(ownerId)).singleElement().satisfies(g -> {
+        assertThat(inviteListService.renameInviteList(inviteListId, name("  Chess club "), ownerId).name()).isEqualTo("Chess club");
+        assertThat(inviteListService.getInviteLists(ownerId)).singleElement().satisfies(g -> {
             assertThat(g.name()).isEqualTo("Chess club");
             assertThat(g.memberCount()).isEqualTo(2);
         });
     }
 
     @Test
-    @DisplayName("should return group.not_found to anyone but the owner on every Group path, including groupIds on a Poll")
-    void shouldHideGroupWhenCallerNotOwner() {
+    @DisplayName("should return invite_list.not_found to anyone but the owner on every Invite List path, including inviteListIds on a Poll")
+    void shouldHideInviteListWhenCallerNotOwner() {
         String strangerId = bob.getId().toString();
         Vote strangerPoll = persistPoll(bob, now.minusHours(1), now.plusDays(1), "A", "B");
         strangerPoll.setAudience(Audience.INVITE_ONLY);
         em.flush();
 
-        assertThat(groupService.getGroups(strangerId)).isEmpty();
-        assertGroupNotFound(() -> groupService.getMembers(groupId, strangerId));
-        assertGroupNotFound(() -> groupService.renameGroup(groupId, name("Mine"), strangerId));
-        assertGroupNotFound(() -> groupService.deleteGroup(groupId, strangerId));
-        assertGroupNotFound(() -> addMembers(groupId, List.of(), List.of(carolEmail), strangerId));
-        assertGroupNotFound(() -> groupService.removeEmailMember(groupId, carolEmail, strangerId));
-        assertGroupNotFound(() -> inviteGroup(strangerPoll, groupId, strangerId));
-        assertGroupNotFound(() -> groupService.getMembers(UUID.randomUUID().toString(), ownerId));
+        assertThat(inviteListService.getInviteLists(strangerId)).isEmpty();
+        assertInviteListNotFound(() -> inviteListService.getMembers(inviteListId, strangerId));
+        assertInviteListNotFound(() -> inviteListService.renameInviteList(inviteListId, name("Mine"), strangerId));
+        assertInviteListNotFound(() -> inviteListService.deleteInviteList(inviteListId, strangerId));
+        assertInviteListNotFound(() -> addMembers(inviteListId, List.of(), List.of(carolEmail), strangerId));
+        assertInviteListNotFound(() -> inviteListService.removeEmailMember(inviteListId, carolEmail, strangerId));
+        assertInviteListNotFound(() -> inviteInviteList(strangerPoll, inviteListId, strangerId));
+        assertInviteListNotFound(() -> inviteListService.getMembers(UUID.randomUUID().toString(), ownerId));
     }
 
     @Test
     @DisplayName("should tie an email member to the user on verification, still listing it by address, also after a rerun")
     void shouldBindEmailMemberWhenEmailVerified() {
-        addMembers(groupId, List.of(), List.of(carolEmail), ownerId);
+        addMembers(inviteListId, List.of(), List.of(carolEmail), ownerId);
         User carol = User.builder().username("gr-carol-" + System.nanoTime()).email(carolEmail).avatarUrl("bot:boba").build();
         em.persist(carol);
 
-        groupService.bindEmailMembers(carol);
-        groupService.bindEmailMembers(carol);
+        inviteListService.bindEmailMembers(carol);
+        inviteListService.bindEmailMembers(carol);
         em.clear();
 
-        assertThat(groupMemberRepository.findByGroupId(UUID.fromString(groupId))).singleElement().satisfies(m -> {
+        assertThat(inviteListMemberRepository.findByInviteListId(UUID.fromString(inviteListId))).singleElement().satisfies(m -> {
             assertThat(m.getUser().getId()).isEqualTo(carol.getId());
             assertThat(m.getEmail()).isEqualTo(carolEmail);
         });
-        assertThat(groupService.getMembers(groupId, ownerId)).singleElement().satisfies(m -> {
+        assertThat(inviteListService.getMembers(inviteListId, ownerId)).singleElement().satisfies(m -> {
             assertThat(m.userId()).isNull();
             assertThat(m.avatarUrl()).isNull();
             assertThat(m.email()).isEqualTo(carolEmail);
         });
         // Expanded by its stored address, so the Poll lists the address too
         Vote poll = inviteOnlyPoll(now.minusHours(1), now.plusDays(1));
-        assertThat(inviteGroup(poll, groupId, ownerId)).extracting(InviteeResponse::userId, InviteeResponse::email)
+        assertThat(inviteInviteList(poll, inviteListId, ownerId)).extracting(InviteeResponse::userId, InviteeResponse::email)
                 .containsExactly(Tuple.tuple(null, carolEmail));
     }
 
@@ -180,33 +180,33 @@ class GroupPostgresTest extends PostgresRepositoryTest {
         em.persist(carol);
         em.flush();
         // Suspended at add time, so the address stays pending; then carol is added by ID once reinstated
-        addMembers(groupId, List.of(), List.of(carolEmail), ownerId);
+        addMembers(inviteListId, List.of(), List.of(carolEmail), ownerId);
         carol.setActive(true);
         em.flush();
-        addMembers(groupId, List.of(carol.getId()), List.of(), ownerId);
+        addMembers(inviteListId, List.of(carol.getId()), List.of(), ownerId);
 
-        groupService.bindEmailMembers(carol);
+        inviteListService.bindEmailMembers(carol);
         em.clear();
 
-        assertThat(groupService.getMembers(groupId, ownerId)).singleElement()
+        assertThat(inviteListService.getMembers(inviteListId, ownerId)).singleElement()
                 .satisfies(m -> assertThat(m.userId()).isEqualTo(carol.getId().toString()));
     }
 
     @Test
-    @DisplayName("should skip a suspended member by ID when the Group is invited, instead of failing the invite")
-    void shouldSkipSuspendedMemberWhenGroupInvited() {
-        addMembers(groupId, List.of(bob.getId()), List.of(), ownerId);
+    @DisplayName("should skip a suspended member by ID when the Invite List is invited, instead of failing the invite")
+    void shouldSkipSuspendedMemberWhenInviteListInvited() {
+        addMembers(inviteListId, List.of(bob.getId()), List.of(), ownerId);
         bob.setActive(false);
         em.flush();
         Vote poll = inviteOnlyPoll(now.minusHours(1), now.plusDays(1));
 
-        assertThat(inviteGroup(poll, groupId, ownerId)).isEmpty();
+        assertThat(inviteInviteList(poll, inviteListId, ownerId)).isEmpty();
     }
 
     @Test
-    @DisplayName("should keep already-invited members as they are when an edit merges a Group into an emptied list")
-    void shouldKeepInvitedMembersWhenEditMergesGroup() {
-        addMembers(groupId, List.of(bob.getId()), List.of(), ownerId);
+    @DisplayName("should keep already-invited members as they are when an edit merges an Invite List into an emptied list")
+    void shouldKeepInvitedMembersWhenEditMergesInviteList() {
+        addMembers(inviteListId, List.of(bob.getId()), List.of(), ownerId);
         Vote scheduled = inviteOnlyPoll(now.plusDays(1), now.plusDays(2));
         em.persist(new Invitee(scheduled, bob));
         em.flush();
@@ -224,7 +224,7 @@ class GroupPostgresTest extends PostgresRepositoryTest {
         edit.setStartTime(now.plusDays(1));
         edit.setEndTime(now.plusDays(2));
         edit.setInviteeIds(List.of());
-        edit.setGroupIds(List.of(UUID.fromString(groupId)));
+        edit.setInviteListIds(List.of(UUID.fromString(inviteListId)));
         voteService.updateVote(scheduled.getId().toString(), edit, ownerId);
         em.flush();
         em.clear();

@@ -52,7 +52,7 @@ import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
 import com.vomatt.entity.VoteStatus;
 import com.vomatt.entity.VoterVisibility;
-import com.vomatt.groups.GroupService;
+import com.vomatt.invitelists.InviteListService;
 import com.vomatt.repository.TagRepository;
 import com.vomatt.repository.UserPreferenceRepository;
 import com.vomatt.repository.UserVoteRepository;
@@ -89,7 +89,7 @@ public class VoteService {
     private final InviteeRepository inviteeRepository;
     private final EmailService emailService;
     private final RedisService redisService;
-    private final GroupService groupService;
+    private final InviteListService inviteListService;
     private final UserPreferenceRepository preferenceRepository;
     private final TransactionTemplate transactionTemplate;
     private final LockTimeout lockTimeout;
@@ -115,7 +115,7 @@ public class VoteService {
 
         User creator = userRepository.findById(UUID.fromString(creatorId))
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
-        GroupService.Members groups = groupService.expand(orEmpty(request.getGroupIds()), creator.getId());
+        InviteListService.Members inviteLists = inviteListService.expand(orEmpty(request.getInviteListIds()), creator.getId());
 
         Vote vote = new Vote(request.getTitle(), request.getDescription(), creator, request.getEndTime());
         vote.setStartTime(request.getStartTime() != null ? request.getStartTime() : OffsetDateTime.now());
@@ -131,7 +131,7 @@ public class VoteService {
         addOptions(vote, request);
 
         vote = voteRepository.save(vote);
-        insertInvitees(vote, concat(request.getInviteeIds(), groups.userIds()), concat(request.getInviteeEmails(), groups.emails()));
+        insertInvitees(vote, concat(request.getInviteeIds(), inviteLists.userIds()), concat(request.getInviteeEmails(), inviteLists.emails()));
         log.info("Vote created: {} by user: {}", vote.getId(), creatorId);
 
         Set<UUID> countedTagIds = countedTagIds(vote);
@@ -158,7 +158,7 @@ public class VoteService {
         Audience oldAudience = vote.getAudience();
         Audience audience = request.getAudience() != null ? request.getAudience() : oldAudience;
         validateInviteeIds(request, audience);
-        GroupService.Members groups = groupService.expand(orEmpty(request.getGroupIds()), vote.getCreator().getId());
+        InviteListService.Members inviteLists = inviteListService.expand(orEmpty(request.getInviteListIds()), vote.getCreator().getId());
 
         vote.setTitle(request.getTitle());
         vote.setDescription(request.getDescription());
@@ -182,14 +182,14 @@ public class VoteService {
         if (oldAudience == Audience.INVITE_ONLY && audience != Audience.INVITE_ONLY) {
             replaceInvitees(vote, List.of(), List.of());
         } else if (audience == Audience.INVITE_ONLY) {
-            // Group members join the lists being set, so already-invited ones are kept rather than removed and re-added
-            List<UUID> ids = request.getInviteeIds() == null ? null : concat(request.getInviteeIds(), groups.userIds());
-            List<String> emails = request.getInviteeEmails() == null ? null : concat(request.getInviteeEmails(), groups.emails());
+            // Invite List members join the lists being set, so already-invited ones are kept rather than removed and re-added
+            List<UUID> ids = request.getInviteeIds() == null ? null : concat(request.getInviteeIds(), inviteLists.userIds());
+            List<String> emails = request.getInviteeEmails() == null ? null : concat(request.getInviteeEmails(), inviteLists.emails());
             if (ids != null || emails != null) {
                 replaceInvitees(vote, ids, emails);
             }
             // Members of a kind whose list is null are added on top of the Invitees kept
-            insertInvitees(vote, groups.userIds(), groups.emails());
+            insertInvitees(vote, inviteLists.userIds(), inviteLists.emails());
         }
 
         Set<UUID> removed = new HashSet<>(oldTagIds);
@@ -527,8 +527,8 @@ public class VoteService {
         // Exclusive lock: serializes with Invitee removal and Ballot changes, so concurrent adds cannot collide
         Vote vote = requireOwned(lockVote(UUID.fromString(voteId)), userId);
         vote.checkInviteesEditable(OffsetDateTime.now());
-        GroupService.Members groups = groupService.expand(orEmpty(request.getGroupIds()), vote.getCreator().getId());
-        insertInvitees(vote, concat(request.getUserIds(), groups.userIds()), concat(request.getEmails(), groups.emails()));
+        InviteListService.Members inviteLists = inviteListService.expand(orEmpty(request.getInviteListIds()), vote.getCreator().getId());
+        insertInvitees(vote, concat(request.getUserIds(), inviteLists.userIds()), concat(request.getEmails(), inviteLists.emails()));
         log.info("Invitees added to vote {} by creator {}", voteId, userId);
         return invitees(vote.getId());
     }
@@ -725,10 +725,10 @@ public class VoteService {
         return list == null ? List.of() : list;
     }
 
-    // Explicit Invitees plus the expanded Group members; a null explicit list counts as empty
-    private static <T> List<T> concat(List<T> explicit, List<T> fromGroups) {
+    // Explicit Invitees plus the expanded Invite List members; a null explicit list counts as empty
+    private static <T> List<T> concat(List<T> explicit, List<T> fromInviteLists) {
         List<T> all = new ArrayList<>(orEmpty(explicit));
-        all.addAll(fromGroups);
+        all.addAll(fromInviteLists);
         return all;
     }
 
@@ -926,7 +926,7 @@ public class VoteService {
 
     private static void validateInviteeIds(CreateVoteRequest request, Audience audience) {
         if (audience != Audience.INVITE_ONLY && (!orEmpty(request.getInviteeIds()).isEmpty() || !orEmpty(request.getInviteeEmails()).isEmpty()
-                || !orEmpty(request.getGroupIds()).isEmpty())) {
+                || !orEmpty(request.getInviteListIds()).isEmpty())) {
             throw ApiException.badRequest(MessageKey.VOTE_INVITEE_NOT_INVITE_ONLY);
         }
     }

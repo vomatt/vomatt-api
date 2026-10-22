@@ -11,21 +11,21 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import com.vomatt.entity.Group;
+import com.vomatt.entity.InviteList;
 
 import jakarta.persistence.LockModeType;
 
 @Repository
-public interface GroupRepository extends JpaRepository<Group, UUID> {
+public interface InviteListRepository extends JpaRepository<InviteList, UUID> {
 
-    Optional<Group> findByIdAndOwnerId(UUID id, UUID ownerId);
+    Optional<InviteList> findByIdAndOwnerId(UUID id, UUID ownerId);
 
     /** Member changes take this lock, so they serialize with each other and with email binding. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT g FROM InviteGroup g WHERE g.id = :id AND g.owner.id = :ownerId")
-    Optional<Group> findOwnedForUpdate(@Param("id") UUID id, @Param("ownerId") UUID ownerId);
+    @Query("SELECT l FROM InviteList l WHERE l.id = :id AND l.owner.id = :ownerId")
+    Optional<InviteList> findOwnedForUpdate(@Param("id") UUID id, @Param("ownerId") UUID ownerId);
 
-    List<Group> findByOwnerIdOrderByNameAscIdAsc(UUID ownerId);
+    List<InviteList> findByOwnerIdOrderByNameAscIdAsc(UUID ownerId);
 
     long countByOwnerId(UUID ownerId);
 

@@ -13,16 +13,15 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 
 /**
- * A reusable list of users and email addresses its owner keeps privately for inviting. Inviting a Group copies its
- * current members into a Poll's Invitees; later changes to the Group do not touch existing Polls.
+ * A reusable list of users and email addresses its owner keeps privately for inviting. Inviting an Invite List copies its
+ * current members into a Poll's Invitees; later changes to the Invite List do not touch existing Polls.
  */
-// GROUP is a JPQL keyword, so the entity gets another name in queries
-@Entity(name = "InviteGroup")
-@Table(name = "groups")
+@Entity
+@Table(name = "invite_lists")
 @Getter
 @NoArgsConstructor
 @ToString(exclude = "owner")
-public class Group extends AuditableEntity {
+public class InviteList extends AuditableEntity {
 
     @NotNull
     @ManyToOne(fetch = FetchType.LAZY)
@@ -32,7 +31,7 @@ public class Group extends AuditableEntity {
     @Column(name = "name", nullable = false, length = 50)
     private String name;
 
-    public Group(User owner, String name) {
+    public InviteList(User owner, String name) {
         this.owner = owner;
         this.name = name.strip();
     }

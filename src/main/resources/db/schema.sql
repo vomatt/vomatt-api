@@ -115,9 +115,9 @@ CREATE TABLE IF NOT EXISTS vomatt.vote_invitees (
     CONSTRAINT chk_vote_invitees_user_or_email CHECK (user_id IS NOT NULL OR email IS NOT NULL)
 );
 
--- Groups: an owner's private, reusable invite lists. Inviting a Group copies its current members into a Poll's
--- Invitees, so Group edits or deletion never touch existing Polls
-CREATE TABLE IF NOT EXISTS vomatt.groups (
+-- Invite Lists: an owner's private, reusable lists for inviting. Inviting an Invite List copies its current members
+-- into a Poll's Invitees, so Invite List edits or deletion never touch existing Polls
+CREATE TABLE IF NOT EXISTS vomatt.invite_lists (
     id         UUID         PRIMARY KEY,
     owner_id   UUID         NOT NULL REFERENCES vomatt.users (id) ON DELETE CASCADE,
     name       VARCHAR(50)  NOT NULL,
@@ -127,15 +127,15 @@ CREATE TABLE IF NOT EXISTS vomatt.groups (
 
 -- Same shape as vote_invitees: a member added by ID holds the user; one added by email keeps that normalized email
 -- for life and gains the user once the address belongs to an active account (at add time, or when verified)
-CREATE TABLE IF NOT EXISTS vomatt.group_members (
-    id         UUID         PRIMARY KEY,
-    group_id   UUID         NOT NULL REFERENCES vomatt.groups (id) ON DELETE CASCADE,
-    user_id    UUID         REFERENCES vomatt.users (id) ON DELETE CASCADE,
-    email      VARCHAR(254),
-    created_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    UNIQUE (group_id, user_id),
-    CONSTRAINT chk_group_members_user_or_email CHECK (user_id IS NOT NULL OR email IS NOT NULL)
+CREATE TABLE IF NOT EXISTS vomatt.invite_list_members (
+    id             UUID         PRIMARY KEY,
+    invite_list_id UUID         NOT NULL REFERENCES vomatt.invite_lists (id) ON DELETE CASCADE,
+    user_id        UUID         REFERENCES vomatt.users (id) ON DELETE CASCADE,
+    email          VARCHAR(254),
+    created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    UNIQUE (invite_list_id, user_id),
+    CONSTRAINT chk_invite_list_members_user_or_email CHECK (user_id IS NOT NULL OR email IS NOT NULL)
 );
 
 -- For RANKING / RATING poll types (Phase 2, no entity / service yet)
@@ -277,11 +277,11 @@ CREATE INDEX IF NOT EXISTS idx_user_votes_vote_created     ON vomatt.user_votes 
 -- Option FK: ON DELETE CASCADE from vote_options would otherwise seq-scan user_votes
 CREATE INDEX IF NOT EXISTS idx_user_votes_option           ON vomatt.user_votes (option_id);
 CREATE INDEX IF NOT EXISTS idx_vote_invitees_user_id       ON vomatt.vote_invitees (user_id);
-CREATE INDEX IF NOT EXISTS idx_groups_owner_id             ON vomatt.groups (owner_id);
-CREATE INDEX IF NOT EXISTS idx_group_members_user_id       ON vomatt.group_members (user_id);
--- One row per Group + email; the email index serves binding at sign-up / sign-in
-CREATE UNIQUE INDEX IF NOT EXISTS uk_group_members_group_email ON vomatt.group_members (group_id, email) WHERE email IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_group_members_email         ON vomatt.group_members (email) WHERE email IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_invite_lists_owner_id       ON vomatt.invite_lists (owner_id);
+CREATE INDEX IF NOT EXISTS idx_invite_list_members_user_id ON vomatt.invite_list_members (user_id);
+-- One row per Invite List + email; the email index serves binding at sign-up / sign-in
+CREATE UNIQUE INDEX IF NOT EXISTS uk_invite_list_members_list_email ON vomatt.invite_list_members (invite_list_id, email) WHERE email IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_invite_list_members_email   ON vomatt.invite_list_members (email) WHERE email IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_user_rankings_vote_id       ON vomatt.user_rankings (vote_id);
 -- Option FK: ON DELETE CASCADE from vote_options would otherwise seq-scan user_rankings
 CREATE INDEX IF NOT EXISTS idx_user_rankings_option        ON vomatt.user_rankings (option_id);

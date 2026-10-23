@@ -41,7 +41,7 @@ public class SecurityConfig {
     private final JwtAccessDeniedHandler accessDeniedHandler;
     private final org.springframework.core.env.Environment environment;
 
-    // In production, set to the actual frontend domains (comma-separated); wildcards are not allowed with allowCredentials
+    // In production, set to the actual frontend domains (comma-separated)
     @Value("${app.security.cors-allowed-origins}")
     private List<String> corsAllowedOrigins;
 
@@ -94,7 +94,9 @@ public class SecurityConfig {
         config.setAllowedHeaders(Arrays.asList("Content-Type", "Authorization", "Accept"));
         // Not CORS-safelisted; the frontend reads it on 429
         config.setExposedHeaders(List.of(HttpHeaders.RETRY_AFTER));
-        config.setAllowCredentials(true);
+        // Auth is a Bearer header, never a cookie: credentials mode would only matter if a cookie session appeared,
+        // and it forbids wildcard origins, which tempts people to over-widen the list
+        config.setAllowCredentials(false);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);

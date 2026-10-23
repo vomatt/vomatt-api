@@ -22,6 +22,8 @@ class SecurityConfigTest {
                 .getCorsConfiguration(new MockHttpServletRequest("GET", "/api/votes"));
 
         assertThat(cors.getExposedHeaders()).contains("Retry-After");
+        // Bearer auth needs no cookies, so browsers are not told to send them
+        assertThat(cors.getAllowCredentials()).isFalse();
     }
 
     @Test

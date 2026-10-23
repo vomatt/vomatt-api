@@ -115,9 +115,9 @@ public class EmailServiceImpl implements EmailService {
                             "verificationMessage", messageSource.getMessage(messageKey, null, locale),
                             // the email states the real OTP lifetime, rounded up to whole minutes
                             "expiryMinutes", (otpTtlSeconds + 59) / 60));
-            log.info("Verification email ({}) sent to: {}", kind, to);
+            log.info("Verification email ({}) sent to: {}", kind, TextUtil.maskEmail(to));
         } catch (MessagingException | ResendException | RuntimeException e) {
-            log.error("Failed to send verification email to: {}", to, e);
+            log.error("Failed to send verification email to: {}", TextUtil.maskEmail(to), e);
             throw new RuntimeException("Failed to send verification email", e);
         }
     }
@@ -127,9 +127,9 @@ public class EmailServiceImpl implements EmailService {
     public void sendWelcomeEmail(String to, String username, Locale locale) {
         try {
             send(to, "email.welcome.subject", "email/welcome-email", locale, Map.of("username", Objects.toString(username, "")));
-            log.info("Welcome email sent to: {} with locale: {}", to, locale);
+            log.info("Welcome email sent to: {} with locale: {}", TextUtil.maskEmail(to), locale);
         } catch (MessagingException | ResendException | RuntimeException e) {
-            log.error("Failed to send welcome email to: {}", to, e);
+            log.error("Failed to send welcome email to: {}", TextUtil.maskEmail(to), e);
         }
     }
 

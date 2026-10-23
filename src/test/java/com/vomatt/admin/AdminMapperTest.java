@@ -21,7 +21,7 @@ class AdminMapperTest {
         AdminUserResponse listed = mapper.toUserResponse(user);
 
         assertThat(listed.email()).isEqualTo("a***@example.com");
-        assertThat(listed.phoneNumber()).isEqualTo("+8869****678");
+        assertThat(listed.phoneNumber()).isEqualTo("+88****78");
         assertThat(AdminUserResponse.class.getRecordComponents())
                 .extracting(java.lang.reflect.RecordComponent::getName)
                 .doesNotContain("firstName", "lastName", "birthday");
@@ -36,6 +36,6 @@ class AdminMapperTest {
         AdminUserResponse listed = mapper.toUserResponse(phoneOnly);
 
         assertThat(listed.email()).isNull();
-        assertThat(listed.phoneNumber()).isEqualTo("+8869****678");
+        assertThat(listed.phoneNumber()).isEqualTo("+88****78");
     }
 }

@@ -11,7 +11,7 @@ public record AdminUserResponse(
         @Schema(description = "Username", example = "alice") String username,
         @Schema(description = "Display name; null when unset", example = "Alice", nullable = true) String displayName,
         @Schema(description = "Email, masked to its first character and domain; null for accounts registered by phone", example = "a***@example.com", nullable = true) String email,
-        @Schema(description = "Phone number (E.164), masked to the country code and last 3 digits; null for accounts registered by email or OAuth", example = "+8869****678", nullable = true) String phoneNumber,
+        @Schema(description = "Phone number (E.164), masked to its first 3 characters and last 2 digits; null for accounts registered by email or OAuth", example = "+88****78", nullable = true) String phoneNumber,
         @Schema(description = "How the account signs in: email_otp, phone_otp, google, line or apple", example = "email_otp", nullable = true) String authMethod,
         @Schema(description = "Roles: user, moderator, admin", example = "[\"user\"]") List<String> roles,
         @Schema(description = "False when suspended", example = "true") boolean active,

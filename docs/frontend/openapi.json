@@ -399,8 +399,8 @@
             "type" : "string"
           },
           "phoneNumber" : {
-            "description" : "Phone number (E.164), masked to the country code and last 3 digits; null for accounts registered by email or OAuth",
-            "example" : "+8869****678",
+            "description" : "Phone number (E.164), masked to its first 3 characters and last 2 digits; null for accounts registered by email or OAuth",
+            "example" : "+88****78",
             "nullable" : true,
             "type" : "string"
           },

@@ -1320,7 +1320,8 @@ class VoteServiceTest {
             List<org.assertj.core.api.ThrowableAssert.ThrowingCallable> paths = List.of(
                     () -> voteService.getInvitees(id, invitee),
                     () -> voteService.addInvitees(id, invite, invitee),
-                    () -> voteService.removeInvitee(id, invitee, invitee));
+                    () -> voteService.removeInvitee(id, invitee, invitee),
+                    () -> voteService.removeEmailInvitee(id, "dave@example.com", invitee));
             paths.forEach(path -> assertThatThrownBy(path)
                     .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_FORBIDDEN)));
         }

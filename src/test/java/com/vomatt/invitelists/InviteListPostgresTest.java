@@ -143,6 +143,7 @@ class InviteListPostgresTest extends PostgresRepositoryTest {
         assertInviteListNotFound(() -> inviteListService.deleteInviteList(inviteListId, strangerId));
         assertInviteListNotFound(() -> addMembers(inviteListId, List.of(), List.of(carolEmail), strangerId));
         assertInviteListNotFound(() -> inviteListService.removeEmailMember(inviteListId, carolEmail, strangerId));
+        assertInviteListNotFound(() -> inviteListService.removeMember(inviteListId, strangerId, strangerId));
         assertInviteListNotFound(() -> inviteInviteList(strangerPoll, inviteListId, strangerId));
         assertInviteListNotFound(() -> inviteListService.getMembers(UUID.randomUUID().toString(), ownerId));
     }

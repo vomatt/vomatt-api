@@ -106,6 +106,32 @@ class VoteCommentServiceTest {
     }
 
     @Test
+    @DisplayName("should refuse edit and delete with 403 COMMENT_FORBIDDEN when the caller is not the author")
+    void shouldForbidEditAndDeleteWhenCallerIsNotAuthor() {
+        Vote vote = new Vote();
+        ReflectionTestUtils.setField(vote, "id", voteId);
+        VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "mine");
+        when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(java.util.Optional.of(target));
+        when(voteService.findAccessibleVote(voteId, viewerId.toString())).thenReturn(vote);
+        com.vomatt.comments.dto.UpdateCommentRequest edit = new com.vomatt.comments.dto.UpdateCommentRequest();
+        edit.setText("hijacked");
+
+        assertThatThrownBy(() -> commentService.updateComment(target.getId(), viewerId.toString(), edit))
+                .isInstanceOfSatisfying(ApiException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMENT_FORBIDDEN);
+                });
+        assertThatThrownBy(() -> commentService.deleteComment(target.getId(), viewerId.toString()))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMENT_FORBIDDEN));
+
+        assertThat(target.getContent()).isEqualTo("mine");
+        assertThat(target.isDeleted()).isFalse();
+        org.mockito.Mockito.verify(commentRepository, org.mockito.Mockito.never()).save(any());
+        org.mockito.Mockito.verify(commentRepository, org.mockito.Mockito.never()).saveAndFlush(any());
+    }
+
+    @Test
     @DisplayName("should return vote.not_found when liking a Comment of a Deleted Poll")
     void shouldThrowWhenLikingCommentOfDeletedPoll() {
         Vote vote = new Vote();

@@ -23,11 +23,15 @@ public interface VoteOptionRepository extends JpaRepository<VoteOption, UUID> {
            nativeQuery = true)
     void adjustVoteCount(@Param("optionId") UUID optionId, @Param("delta") int delta);
 
-    /** Releases a user's Ballots from option counts; run before deleting the user (user_votes cascade). */
+    /**
+     * Releases a user's Ballots from option counts; run before deleting the user (user_votes cascade). Only Polls that
+     * have not Ended: an Ended Poll's result is frozen, and its sealed Anonymous Ballots (option_id NULL) could not be
+     * released from any option anyway. VoteRepository.decrementTurnoutForUserBallots applies the same rule.
+     */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query(value = """
             UPDATE vomatt.vote_options o SET vote_count = o.vote_count - 1
-            FROM vomatt.user_votes uv
+            FROM vomatt.user_votes uv JOIN vomatt.votes v ON v.id = uv.vote_id AND v.end_time > now()
             WHERE uv.option_id = o.id AND uv.user_id = :userId""", nativeQuery = true)
     void decrementForUserBallots(@Param("userId") UUID userId);
 }

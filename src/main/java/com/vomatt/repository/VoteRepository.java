@@ -44,11 +44,14 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
     @Query(value = "UPDATE vomatt.votes SET turnout = turnout + :delta WHERE id = :voteId", nativeQuery = true)
     void adjustTurnout(@Param("voteId") UUID voteId, @Param("delta") int delta);
 
-    /** Releases a user's Ballots from Turnout; run before deleting the user (user_votes cascade). */
+    /**
+     * Releases a user's Ballots from Turnout; run before deleting the user (user_votes cascade). Only Polls that have
+     * not Ended, like VoteOptionRepository.decrementForUserBallots: an Ended Poll's result stays as it closed.
+     */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query(value = """
             UPDATE vomatt.votes v SET turnout = v.turnout - 1
             FROM vomatt.user_votes uv
-            WHERE uv.vote_id = v.id AND uv.user_id = :userId""", nativeQuery = true)
+            WHERE uv.vote_id = v.id AND uv.user_id = :userId AND v.end_time > now()""", nativeQuery = true)
     void decrementTurnoutForUserBallots(@Param("userId") UUID userId);
 }

@@ -91,10 +91,16 @@ public interface InviteeRepository extends JpaRepository<Invitee, UUID> {
             SELECT :voteId, unnest(CAST(:emails AS text[])) ON CONFLICT DO NOTHING""", nativeQuery = true)
     void recordInvitationsSent(@Param("voteId") UUID voteId, @Param("emails") String[] emails);
 
-    /** Retention: an invitation's "already sent" record is only needed while the Poll's invites are still going out. */
+    /**
+     * Retention: the "already sent" records keep one Poll from mailing the same address twice, so they live as long as
+     * the Poll can still invite; they go with the unregistered Invitees once the Poll has been over for the grace period.
+     */
     @Modifying
-    @Query(value = "DELETE FROM vomatt.vote_invitation_emails WHERE sent_at < :cutoff", nativeQuery = true)
-    int deleteInvitationEmailsSentBefore(@Param("cutoff") java.time.OffsetDateTime cutoff);
+    @Query(value = """
+            DELETE FROM vomatt.vote_invitation_emails e
+              WHERE EXISTS (SELECT 1 FROM vomatt.votes v WHERE v.id = e.vote_id AND v.end_time < :cutoff)""",
+            nativeQuery = true)
+    int deleteInvitationEmailsOfPollsEndedBefore(@Param("cutoff") java.time.OffsetDateTime cutoff);
 
     /**
      * Retention: an email Invitee who never signed up is a third party's address kept only so the Poll can reach them;

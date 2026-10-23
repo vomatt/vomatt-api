@@ -22,6 +22,8 @@ import com.vomatt.repository.PostgresRepositoryTest;
 class RetentionPostgresTest extends PostgresRepositoryTest {
 
     @Autowired RetentionJob retentionJob;
+    @Autowired com.vomatt.repository.VoteRepository voteRepository;
+    @Autowired com.vomatt.repository.VoteOptionRepository voteOptionRepository;
 
     @Test
     @DisplayName("should remove expired rows and seal anonymous Ballots of Ended Polls, leaving everything else")
@@ -41,6 +43,9 @@ class RetentionPostgresTest extends PostgresRepositoryTest {
         UUID sealedOption = sealed.getOption().getId();
         UserVote keptOpen = ballot(anon, open, true);
         UserVote keptNamed = ballot(named, ended, false);
+        em.createNativeQuery("UPDATE vomatt.votes SET turnout = 2 WHERE id = :id").setParameter("id", ended.getId()).executeUpdate();
+        em.createNativeQuery("UPDATE vomatt.votes SET turnout = 1 WHERE id = :id").setParameter("id", open.getId()).executeUpdate();
+        long turnoutEnded = 2;
         // Invitees: unregistered on the old Ended Poll (goes); on the recently Ended and Open Polls, and registered (stay)
         Invitee gone = new Invitee(ended, "gone-" + tag + "@example.com");
         Invitee recent = new Invitee(recentlyEnded, "recent-" + tag + "@example.com");
@@ -57,9 +62,10 @@ class RetentionPostgresTest extends PostgresRepositoryTest {
         em.flush();
         em.createNativeQuery("UPDATE vomatt.audit_logs SET created_at = :at WHERE id = :id")
                 .setParameter("at", now.minusDays(181)).setParameter("id", old.getId()).executeUpdate();
-        // Invitation email records: one old, one fresh
-        insertInvitationEmail(ended, "old-" + tag + "@example.com", now.minusDays(8));
-        insertInvitationEmail(open, "new-" + tag + "@example.com", now.minusDays(1));
+        // Invitation email records: an old one on the long-Ended Poll goes; an old one on the Open Poll stays (it is the
+        // dedupe record, so the Poll cannot mail that address again)
+        insertInvitationEmail(ended, "old-" + tag + "@example.com", now.minusDays(45));
+        insertInvitationEmail(open, "new-" + tag + "@example.com", now.minusDays(8));
         em.clear();
 
         RetentionJob.Result first = retentionJob.run(now);
@@ -71,7 +77,8 @@ class RetentionPostgresTest extends PostgresRepositoryTest {
         assertThat(first.sealedBallots()).isGreaterThanOrEqualTo(1);
         assertThat(count("SELECT COUNT(*) FROM vomatt.audit_logs WHERE id = :p", old.getId())).isZero();
         assertThat(count("SELECT COUNT(*) FROM vomatt.audit_logs WHERE id = :p", fresh.getId())).isEqualTo(1);
-        assertThat(count("SELECT COUNT(*) FROM vomatt.vote_invitation_emails WHERE email LIKE :p", "%-" + tag + "@example.com")).isEqualTo(1);
+        assertThat(count("SELECT COUNT(*) FROM vomatt.vote_invitation_emails WHERE email = :p", "old-" + tag + "@example.com")).isZero();
+        assertThat(count("SELECT COUNT(*) FROM vomatt.vote_invitation_emails WHERE email = :p", "new-" + tag + "@example.com")).isEqualTo(1);
         assertThat(count("SELECT COUNT(*) FROM vomatt.vote_invitees WHERE id = :p", gone.getId())).isZero();
         assertThat(count("SELECT COUNT(*) FROM vomatt.vote_invitees WHERE id = :p", recent.getId())).isEqualTo(1);
         assertThat(count("SELECT COUNT(*) FROM vomatt.vote_invitees WHERE id = :p", pending.getId())).isEqualTo(1);
@@ -82,6 +89,13 @@ class RetentionPostgresTest extends PostgresRepositoryTest {
         // Idempotent, and option totals are untouched by sealing (both Ballots on the Ended Poll chose this option)
         assertThat(second.sealedBallots()).isZero();
         assertThat(count("SELECT vote_count FROM vomatt.vote_options WHERE id = :p", sealedOption)).isEqualTo(2);
+
+        // Account deletion releases Ballots of Open Polls only: the Ended Poll's result (with its sealed Ballot) stays frozen
+        voteRepository.decrementTurnoutForUserBallots(anon.getId());
+        voteOptionRepository.decrementForUserBallots(anon.getId());
+        assertThat(count("SELECT vote_count FROM vomatt.vote_options WHERE id = :p", sealedOption)).isEqualTo(2);
+        assertThat(count("SELECT turnout FROM vomatt.votes WHERE id = :p", ended.getId())).isEqualTo(turnoutEnded);
+        assertThat(count("SELECT vote_count FROM vomatt.vote_options WHERE id = :p", keptOpen.getOption().getId())).isZero();
     }
 
     private UserVote ballot(User user, Vote poll, boolean anonymous) {

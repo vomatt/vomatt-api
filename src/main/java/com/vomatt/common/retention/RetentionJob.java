@@ -16,8 +16,7 @@ import java.time.OffsetDateTime;
  * The one place data is removed on a schedule (the retention policy in code):
  * <ul>
  *   <li>audit_logs: 180 days</li>
- *   <li>vote_invitation_emails: 7 days after the invitation went out</li>
- *   <li>vote_invitees without an account: 30 days after their Poll ended</li>
+ *   <li>vote_invitation_emails and vote_invitees without an account: 30 days after their Poll ended</li>
  *   <li>Anonymous Ballots of Ended Polls: option_id set to NULL, so the link between an anonymous Participant and
  *       their choice stops existing once the Poll is over (counts live in vote_options.vote_count)</li>
  * </ul>
@@ -30,7 +29,6 @@ import java.time.OffsetDateTime;
 public class RetentionJob {
 
     static final Duration AUDIT_LOG_RETENTION = Duration.ofDays(180);
-    static final Duration INVITATION_EMAIL_RETENTION = Duration.ofDays(7);
     static final Duration UNREGISTERED_INVITEE_RETENTION = Duration.ofDays(30);
     // Arbitrary fixed key; only this job uses it
     static final long ADVISORY_LOCK_KEY = 0x766f6d617474L;
@@ -65,7 +63,7 @@ public class RetentionJob {
             }
             return new Result(
                     auditLogRepository.deleteCreatedBefore(now.minus(AUDIT_LOG_RETENTION)),
-                    inviteeRepository.deleteInvitationEmailsSentBefore(now.minus(INVITATION_EMAIL_RETENTION)),
+                    inviteeRepository.deleteInvitationEmailsOfPollsEndedBefore(now.minus(UNREGISTERED_INVITEE_RETENTION)),
                     inviteeRepository.deleteUnregisteredOfPollsEndedBefore(now.minus(UNREGISTERED_INVITEE_RETENTION)),
                     userVoteRepository.sealAnonymousBallotsOfPollsEndedBy(now));
         });

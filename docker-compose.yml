@@ -41,6 +41,7 @@ services:
       PORT: 8080
       DB_URL: jdbc:postgresql://postgres:5432/postgres
       DB_PASSWORD: postgres
+      DB_SSLMODE: disable
       REDIS_HOST: redis
       JWT_SECRET: local-dev-only-jwt-secret-0123456789abcdef
       APP_KEY: local-dev-only-app-key-0123456789abcdef

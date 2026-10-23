@@ -23,6 +23,7 @@ services:
       DB_URL: ${DB_URL:?set DB_URL in .env.staging}
       DB_USER: ${DB_USER:?set DB_USER in .env.staging}
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env.staging}
+      DB_SSLMODE: ${DB_SSLMODE:-require}
       REDIS_HOST: redis
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.staging}
       APP_KEY: ${APP_KEY:?set APP_KEY in .env.staging}

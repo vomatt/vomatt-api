@@ -10,7 +10,10 @@ spring:
     # Auth uses JWT, so the default in-memory user is not needed (faster startup, and no generated password in the log)
     exclude: org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
   datasource:
-    url: ${DB_URL}?reWriteBatchedInserts=true&prepareThreshold=0
+    # sslmode is set here, not left to DB_URL: require (default) encrypts; set DB_SSLMODE=verify-full where the server
+    # certificate can be checked (plus sslfactory=org.postgresql.ssl.DefaultJavaSSLFactory to use the JVM truststore),
+    # and disable only for the local docker compose Postgres
+    url: ${DB_URL}?reWriteBatchedInserts=true&prepareThreshold=0&sslmode=${DB_SSLMODE:require}
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver

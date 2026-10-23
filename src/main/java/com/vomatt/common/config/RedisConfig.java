@@ -14,6 +14,17 @@ import io.lettuce.core.ClientOptions.DisconnectedBehavior;
 public class RedisConfig {
 
     /**
+     * Redis holds OTP hashes, refresh tokens and lockouts; in production an unauthenticated instance must not be
+     * reachable, so a blank password fails startup (same style as the jwt.secret length check).
+     */
+    public RedisConfig(org.springframework.core.env.Environment environment,
+            @org.springframework.beans.factory.annotation.Value("${spring.data.redis.password:}") String password) {
+        if ((password == null || password.isBlank()) && environment.matchesProfiles("prod")) {
+            throw new IllegalStateException("REDIS_PASSWORD must be set in production.");
+        }
+    }
+
+    /**
      * Reject commands while disconnected instead of queueing them, so a Redis outage fails fast (503) rather than hanging.
      * Customizes Boot's own ClientOptions builder, keeping its connect timeout, timeout options and SSL settings.
      */

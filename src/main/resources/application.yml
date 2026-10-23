@@ -143,6 +143,10 @@ app:
 otp:
   ttl-seconds: ${OTP_TTL_SECONDS:180}
   resend-cooldown-seconds: ${OTP_RESEND_COOLDOWN_SECONDS:180}
+  # OTPs one identifier may be sent per UTC day; SMS costs money, so phone is tighter
+  daily-limit:
+    email: ${OTP_DAILY_LIMIT_EMAIL:20}
+    phone: ${OTP_DAILY_LIMIT_PHONE:5}
 
 jwt:
   secret: ${JWT_SECRET}

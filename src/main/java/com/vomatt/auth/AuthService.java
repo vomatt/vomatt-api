@@ -128,6 +128,12 @@ public class AuthService {
     @Value("${otp.resend-cooldown-seconds:180}")
     private long otpResendCooldownSeconds;
 
+    @Value("${otp.daily-limit.email:20}")
+    private long otpDailyLimitEmail;
+
+    @Value("${otp.daily-limit.phone:5}")
+    private long otpDailyLimitPhone;
+
     public void sendOtp(String email, String phone, String type, String clientIp) {
         String otpType = (type != null) ? type : "login";
         String code = generateOtpCode();
@@ -166,6 +172,7 @@ public class AuthService {
 
         String redisKey = redisKey(normalizedEmail);
         acquireResendCooldown(namespace, redisKey);
+        takeDailyQuota(namespace, redisKey, otpDailyLimitEmail);
         storeOtp(namespace, redisKey, attemptKey, new OtpRecord(otpHash(normalizedEmail, code), otpType, Instant.now(), 0));
 
         try {
@@ -194,6 +201,7 @@ public class AuthService {
 
         String redisKey = redisKey(phone);
         acquireResendCooldown(OTP_PHONE_NS, redisKey);
+        takeDailyQuota(OTP_PHONE_NS, redisKey, otpDailyLimitPhone);
         storeOtp(OTP_PHONE_NS, redisKey, attemptKey, new OtpRecord(otpHash(phone, code), otpType, Instant.now(), 0));
 
         try {
@@ -292,6 +300,9 @@ public class AuthService {
 
     /** Namespace suffix for the resend cooldown marker (SET NX), holding the epoch second a resend is allowed again. */
     private static final String OTP_COOLDOWN_SUFFIX = ":cooldown";
+
+    /** Namespace suffix for the per-identifier, per-UTC-day send counter (all IPs), so one address cannot be flooded. */
+    private static final String OTP_DAILY_SUFFIX = ":daily";
 
     private static final Duration OTP_LOCK_BASE = Duration.ofMinutes(5);
     // ponytail: lockout capped at 24h (5 min doubling reaches it at the 10th lockout); a longer ban needs an admin action
@@ -519,6 +530,19 @@ public class AuthService {
         long remaining = availableAt == null ? otpResendCooldownSeconds : Long.parseLong(availableAt) - Instant.now().getEpochSecond();
         remaining = Math.max(remaining, 1);
         throw ApiException.badRequest(MessageKey.AUTH_OTP_RESEND_COOLDOWN, remaining);
+    }
+
+    /**
+     * Counts this send against the identifier's daily cap, after the cooldown slot is taken so a user clicking resend
+     * during the cooldown does not burn the cap. Over it the cooldown stays set, which is harmless: no OTP is sent
+     * either way. Fails closed (RedisOperationException) like the OTP write itself.
+     */
+    private void takeDailyQuota(String namespace, String redisKey, long limit) {
+        String day = java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString();
+        long sent = redisService.incrementAndExpire(namespace + OTP_DAILY_SUFFIX, redisKey + ":" + day, Duration.ofDays(1));
+        if (sent > limit) {
+            throw ApiException.tooManyRequests(MessageKey.AUTH_OTP_DAILY_LIMIT);
+        }
     }
 
     /**

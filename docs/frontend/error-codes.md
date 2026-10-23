@@ -31,6 +31,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.otp.invalid_or_expired` | 401 | 驗證碼錯誤或已過期 | Verification code is invalid or has expired | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.otp.too_many_attempts` | 401 | 驗證次數過多，請稍後再試 | Too many attempts, please try again later | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.otp.resend_cooldown` | 400 | 請等 {0} 秒後再重新發送 | Please wait {0} seconds before resending | Show message so the user can fix the input | AuthService |
+| `auth.otp.daily_limit` | 429 | 今日驗證碼發送次數已達上限，請明天再試 | Daily verification code limit reached, please try again tomorrow | Retry after the `Retry-After` seconds | AuthService |
 | `auth.admin.forbidden` | 403 | 此帳號無管理員權限 | This account does not have admin privileges | Show a permission-denied notice | AuthService |
 | `auth.identifier.required` | 400 | 請提供 email 或手機號碼 | Please provide an email or phone number | Show message so the user can fix the input | AuthService |
 | `auth.email.send_failed` | 400 | 郵件發送失敗：{0} | Email delivery failed: {0} | Show message so the user can fix the input | AuthService |

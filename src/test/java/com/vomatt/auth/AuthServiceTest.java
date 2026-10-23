@@ -115,6 +115,8 @@ class AuthServiceTest {
         ReflectionTestUtils.setField(authService, "otpTtlSeconds", 180L);
         lenient().when(appKey.derive("otp")).thenReturn(OTP_KEY);
         ReflectionTestUtils.setField(authService, "otpResendCooldownSeconds", 180L);
+        ReflectionTestUtils.setField(authService, "otpDailyLimitEmail", 20L);
+        ReflectionTestUtils.setField(authService, "otpDailyLimitPhone", 5L);
         ReflectionTestUtils.setField(authService, "appleJwksUrl", "https://appleid.apple.com/auth/keys");
         ReflectionTestUtils.setField(authService, "appleClientId", "com.vomatt.app");
         ReflectionTestUtils.setField(authService, "googleJwksUrl", "https://www.googleapis.com/oauth2/v3/certs");
@@ -266,6 +268,36 @@ class AuthServiceTest {
                 .satisfies(ex -> {
                     assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_INVALID_OR_EXPIRED);
                 });
+    }
+
+    @Test
+    void shouldRejectSendOtpWhenDailyLimitReached() {
+        when(userRepository.existsByEmail("user@example.com")).thenReturn(true);
+        when(redisService.incrementAndExpire(eq("otp:email:daily"), startsWith(k("user@example.com") + ":"), eq(Duration.ofDays(1))))
+                .thenReturn(21L);
+
+        assertThatThrownBy(() -> authService.sendOtp("user@example.com", null, null, IP))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_DAILY_LIMIT));
+
+        verify(redisService, never()).execInTransaction(any());
+        verify(emailService, never()).sendVerificationEmail(anyString(), anyString());
+    }
+
+    @Test
+    void shouldSendPhoneOtpWhenDailyLimitNotReached() {
+        when(userRepository.existsByPhoneNumber("+886912345678")).thenReturn(true);
+        when(redisService.incrementAndExpire(eq("otp:phone:daily"), startsWith(k("+886912345678") + ":"), eq(Duration.ofDays(1))))
+                .thenReturn(5L);
+
+        authService.sendOtp(null, "0912345678", "login", IP);
+
+        verify(smsService).sendOtp(eq("+886912345678"), anyString());
+        when(redisService.incrementAndExpire(eq("otp:phone:daily"), startsWith(k("+886912345678") + ":"), eq(Duration.ofDays(1))))
+                .thenReturn(6L);
+        assertThatThrownBy(() -> authService.sendOtp(null, "0912345678", "login", IP))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_DAILY_LIMIT));
     }
 
     @Test

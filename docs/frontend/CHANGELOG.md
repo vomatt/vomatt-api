@@ -2,6 +2,10 @@
 
 Contract changes that affect the frontend. 💥 BREAKING means frontend code must change. See [openapi.json](openapi.json) for the contract snapshot and [error-codes.md](error-codes.md) for error codes.
 
+## 2026-10-23
+
+- `POST /api/auth/send-otp`, `POST /api/auth/admin/send-otp` and `POST /api/auth/phone/send-otp` now cap sends per identifier per UTC day (20 per email, 5 per phone, across all IPs): over it they return 429 `auth.otp.daily_limit`. The resend cooldown is unchanged.
+
 ## 2026-10-22
 
 - 💥 Groups are renamed to Invite Lists. Behavior, limits and response shapes are unchanged. Paths: `/api/groups` -> `/api/invite-lists` (`GET` / `POST`, `PUT` / `DELETE /{inviteListId}`, `GET` / `POST` / `DELETE /{inviteListId}/members`, `DELETE /{inviteListId}/members/{userId}`). Request field `groupIds` -> `inviteListIds` on `POST /api/votes`, `PUT /api/votes/{voteId}` and `POST /api/votes/{voteId}/invitees`. Error codes: `group.not_found` -> `invite_list.not_found`, `group.max_reached` -> `invite_list.max_reached`, `group.members.max` -> `invite_list.members.max`, `group.member.ids_invalid` -> `invite_list.member.ids_invalid`. The OpenAPI tag is `Invite List`. Deploy order: run `db/migrations/2026-10-22-invite-lists.sql` (before `schema.sql`), then release the API and vomatt-web together; the old paths and field are not kept.

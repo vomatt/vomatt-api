@@ -38,6 +38,7 @@ public enum MessageKey {
     AUTH_OTP_INVALID_OR_EXPIRED("auth.otp.invalid_or_expired"),
     AUTH_OTP_TOO_MANY_ATTEMPTS("auth.otp.too_many_attempts"),
     AUTH_OTP_RESEND_COOLDOWN("auth.otp.resend_cooldown"),
+    AUTH_OTP_DAILY_LIMIT("auth.otp.daily_limit"),
     AUTH_INVALID_CREDENTIALS("auth.invalid_credentials"),
     AUTH_USER_NOT_FOUND("auth.user.not_found"),
     AUTH_ACCOUNT_ALREADY_EXISTS("auth.account.already_exists"),

@@ -39,14 +39,20 @@ public class SecurityConfig {
     private final RateLimitFilter rateLimitFilter;
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
     private final JwtAccessDeniedHandler accessDeniedHandler;
+    private final org.springframework.core.env.Environment environment;
 
     // In production, set to the actual frontend domains (comma-separated); wildcards are not allowed with allowCredentials
     @Value("${app.security.cors-allowed-origins}")
     private List<String> corsAllowedOrigins;
 
-    // Peers allowed to set X-Forwarded-For (comma-separated CIDRs); blank keeps ClientIpResolver's default list
+    // Peers allowed to set X-Forwarded-For (comma-separated CIDRs); blank keeps ClientIpResolver's default list,
+    // except in production: the default trusts every private range, so a directly reachable port would let any client
+    // spoof its IP and sidestep rate limits and OTP lockouts
     @Value("${app.security.trusted-proxies:}")
     void setTrustedProxies(String cidrs) {
+        if ((cidrs == null || cidrs.isBlank()) && environment.matchesProfiles("prod")) {
+            throw new IllegalStateException("TRUSTED_PROXIES must be set in production: list the ingress CIDRs allowed to set X-Forwarded-For.");
+        }
         ClientIpResolver.setTrustedProxies(cidrs);
     }
 

@@ -112,12 +112,13 @@ public class AuthController {
                     **Precondition**: none; the same endpoint serves login and signup (the server picks which by whether the email is registered)
                     **Behavior**: generates a 6-digit OTP, stores it with a TTL (default 180 s) and emails it. The email is lower-cased and trimmed; a Gmail address (gmail.com / googlemail.com) also loses its +tag and dots and moves to gmail.com. \
                     The admin console signs in with `POST /api/auth/admin/send-otp` instead
-                    **Side effects**: sends an email; replaces any previous OTP for this address. A resend is refused during the cooldown (default 180 s)
+                    **Side effects**: sends an email; replaces any previous OTP for this address. A resend is refused during the cooldown (default 180 s), and at most 20 OTPs are sent to one address per UTC day
                     **Errors**:
                     - 400 `auth.identifier.required`: `email` is missing or blank
                     - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
                     - 400 `auth.email.send_failed`: the email provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
-                    - 401 `auth.otp.too_many_attempts`: this email is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected""")
+                    - 401 `auth.otp.too_many_attempts`: this email is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected
+                    - 429 `auth.otp.daily_limit`: 20 OTPs were already sent to this address today (UTC)""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> sendOtp(@Valid @RequestBody SendOtpRequest req, HttpServletRequest httpRequest) {
         authService.sendOtp(req.email(), null, null, ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
@@ -175,12 +176,13 @@ public class AuthController {
                     **Precondition**: the email belongs to an existing, active account holding the admin role
                     **Behavior**: like `POST /api/auth/send-otp` (6-digit OTP, TTL default 180 s, same email normalization), but only for admin accounts. \
                     Its OTPs, wrong-code counters, lockouts and resend cooldown are separate from the consumer login, so a code from `send-otp` does not work here and vice versa
-                    **Side effects**: sends an email; replaces any previous admin console OTP for this address. A resend is refused during the cooldown (default 180 s)
+                    **Side effects**: sends an email; replaces any previous admin console OTP for this address. A resend is refused during the cooldown (default 180 s), and at most 20 OTPs are sent to one address per UTC day
                     **Errors**:
                     - 400 `auth.identifier.required`: `email` is missing or blank
                     - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
                     - 400 `auth.email.send_failed`: the email provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
                     - 401 `auth.otp.too_many_attempts`: this email is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected
+                    - 429 `auth.otp.daily_limit`: 20 OTPs were already sent to this address today (UTC)
                     - 403 `auth.admin.forbidden`: the email is not an existing admin account
                     - 403 `auth.account_banned`: the admin is suspended (`active=false`); no OTP is sent""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> adminSendOtp(@Valid @RequestBody SendOtpRequest req, HttpServletRequest httpRequest) {
@@ -250,13 +252,14 @@ public class AuthController {
                     **Auth**: public
                     **Precondition**: for `type` "login" (the default) the phone number must already be registered
                     **Behavior**: normalizes the number to E.164 (`0912345678` and `+886912345678` are the same number), generates a 6-digit OTP, stores it with a TTL (default 180 s) and sends it by SMS. `type` is "login" or "signup"
-                    **Side effects**: sends an SMS; replaces any previous OTP for this number. A resend is refused during the cooldown (default 180 s)
+                    **Side effects**: sends an SMS; replaces any previous OTP for this number. A resend is refused during the cooldown (default 180 s), and at most 5 OTPs are sent to one number per UTC day
                     **Errors**:
                     - 400 `auth.phone.invalid`: the number is neither a Taiwan mobile number (`09` + 8 digits) nor `+` country code and number (8-15 digits)
                     - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
                     - 400 `auth.phone.not_registered`: `type` is "login" and the number is not registered
                     - 400 `auth.sms.send_failed`: the SMS provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
-                    - 401 `auth.otp.too_many_attempts`: this number is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected""")
+                    - 401 `auth.otp.too_many_attempts`: this number is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected
+                    - 429 `auth.otp.daily_limit`: 5 OTPs were already sent to this number today (UTC)""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> phoneSendOtp(@Valid @RequestBody PhoneSendOtpRequest req, HttpServletRequest httpRequest) {
         authService.sendOtp(null, req.phone(), req.type(), ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));

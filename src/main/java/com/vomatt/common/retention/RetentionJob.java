@@ -15,7 +15,8 @@ import java.time.OffsetDateTime;
 /**
  * The one place data is removed on a schedule (the retention policy in code):
  * <ul>
- *   <li>audit_logs: 180 days</li>
+ *   <li>audit_logs: 180 days; entries whose actor's account no longer exists are anonymized (the rule of account
+ *       deletion, applied again for entries that were written while that deletion was uncommitted)</li>
  *   <li>vote_invitation_emails and vote_invitees without an account: 30 days after their Poll ended</li>
  *   <li>Anonymous Ballots of Ended Polls: option_id set to NULL, so the link between an anonymous Participant and
  *       their choice stops existing once the Poll is over (counts live in vote_options.vote_count)</li>
@@ -39,22 +40,23 @@ public class RetentionJob {
     private final UserVoteRepository userVoteRepository;
 
     /** Rows touched by one run; all zero when another instance held the lock. */
-    public record Result(int auditLogs, int invitationEmails, int unregisteredInvitees, int sealedBallots) {
-        static final Result SKIPPED = new Result(0, 0, 0, 0);
+    public record Result(int auditLogs, int orphanedAuditActors, int invitationEmails, int unregisteredInvitees, int sealedBallots) {
+        static final Result SKIPPED = new Result(0, 0, 0, 0, 0);
     }
 
     @Scheduled(cron = "${app.retention.cron:0 30 4 * * *}", zone = "UTC")
     public void runDaily() {
         try {
             Result result = run(OffsetDateTime.now());
-            log.info("retention.run audit_logs={} invitation_emails={} unregistered_invitees={} sealed_ballots={}",
-                    result.auditLogs(), result.invitationEmails(), result.unregisteredInvitees(), result.sealedBallots());
+            log.info("retention.run audit_logs={} orphaned_audit_actors={} invitation_emails={} unregistered_invitees={} sealed_ballots={}",
+                    result.auditLogs(), result.orphanedAuditActors(), result.invitationEmails(), result.unregisteredInvitees(),
+                    result.sealedBallots());
         } catch (RuntimeException e) {
             log.error("retention.run failed", e);
         }
     }
 
-    /** One transaction: lock, then the four statements; returns {@link Result#SKIPPED} when the lock is held elsewhere. */
+    /** One transaction: lock, then the statements; returns {@link Result#SKIPPED} when the lock is held elsewhere. */
     public Result run(OffsetDateTime now) {
         return transactionTemplate.execute(status -> {
             if (!auditLogRepository.tryAdvisoryXactLock(ADVISORY_LOCK_KEY)) {
@@ -63,6 +65,7 @@ public class RetentionJob {
             }
             return new Result(
                     auditLogRepository.deleteCreatedBefore(now.minus(AUDIT_LOG_RETENTION)),
+                    auditLogRepository.anonymizeOrphanedActors(),
                     inviteeRepository.deleteInvitationEmailsOfPollsEndedBefore(now.minus(UNREGISTERED_INVITEE_RETENTION)),
                     inviteeRepository.deleteUnregisteredOfPollsEndedBefore(now.minus(UNREGISTERED_INVITEE_RETENTION)),
                     userVoteRepository.sealAnonymousBallotsOfPollsEndedBy(now));

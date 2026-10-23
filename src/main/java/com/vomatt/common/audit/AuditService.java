@@ -35,8 +35,7 @@ public class AuditService {
             AuditLog auditLog = new AuditLog(userId, username, action, resourceType, resourceId);
             save(auditLog);
             
-            log.debug("Audit log created: user={}, action={}, resource={}/{}", 
-                     username, action, resourceType, resourceId);
+            log.debug("Audit log created: action={}, resource={}", action, resourceType);
         } catch (Exception e) {
             log.error("Failed to create audit log", e);
         }
@@ -58,8 +57,7 @@ public class AuditService {
             auditLog.setDetails(details);
             save(auditLog);
             
-            log.debug("Detailed audit log created: user={}, action={}, resource={}/{}, from={}", 
-                     username, action, resourceType, resourceId, ipAddress);
+            log.debug("Detailed audit log created: action={}, resource={}", action, resourceType);
         } catch (Exception e) {
             log.error("Failed to create detailed audit log", e);
         }
@@ -80,7 +78,7 @@ public class AuditService {
             auditLog.setDetails(details);
             save(auditLog);
             
-            log.warn("Failed action logged: user={}, action={}, error={}", username, action, errorMessage);
+            log.warn("Failed action logged: action={}, resource={}, error={}", action, resourceType, errorMessage);
         } catch (Exception e) {
             log.error("Failed to log failed action", e);
         }
@@ -89,8 +87,10 @@ public class AuditService {
     /**
      * Resolves the actor on the writer, under the write permit so the lookup shares the audit connection budget. The
      * token carries no username, so it is read here. An actor that no longer exists (account deleted, possibly after
-     * this entry was queued) is not re-identified: id, username, IP and user agent are dropped, and when the entry is
-     * the deletion of that very account its resource id and request URI (which spell the id) go too.
+     * this entry was queued) is not re-identified: id, username, IP and user agent are dropped, and when the entry's
+     * resource is that same account (its own deletion) the resource id and request URI, which spell the id, go too.
+     * A lookup failure is not "gone": the entry keeps its id and only lacks the username. The daily RetentionJob
+     * sweep applies the same rule to entries written while the deletion was still uncommitted.
      */
     private void resolveActor(AuditLog auditLog) {
         String userId = auditLog.getUserId();
@@ -101,7 +101,8 @@ public class AuditService {
         try {
             actor = userRepository.findById(java.util.UUID.fromString(userId));
         } catch (RuntimeException e) {
-            actor = java.util.Optional.empty();
+            log.warn("Audit actor lookup failed, entry kept as given: userId={}, {}", userId, e.getMessage());
+            return;
         }
         if (actor.isPresent()) {
             if (auditLog.getUsername() == null) {
@@ -113,10 +114,18 @@ public class AuditService {
         auditLog.setUsername(null);
         auditLog.setIpAddress(null);
         auditLog.setUserAgent(null);
-        if ("DELETE".equals(auditLog.getAction()) && "USER".equals(auditLog.getResourceType())
-                && userId.equals(auditLog.getResourceId())) {
+        if (sameId(userId, auditLog.getResourceId())) {
             auditLog.setResourceId(null);
             auditLog.setRequestUri(null);
+        }
+    }
+
+    /** UUID equality independent of spelling, so "ABC-..." and "abc-..." compare as the same id. */
+    private static boolean sameId(String a, String b) {
+        try {
+            return b != null && java.util.UUID.fromString(a).equals(java.util.UUID.fromString(b));
+        } catch (IllegalArgumentException e) {
+            return false;
         }
     }
 

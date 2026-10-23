@@ -328,8 +328,8 @@ public class UserController {
     @Operation(summary = "Delete user account", description = """
             **Auth**: required (own account; an active admin signed in through the admin console may delete any account)
             **Precondition**: `userId` is the caller's own id, or the caller holds an admin console token (`POST /api/auth/admin/verify-otp`) and is an active admin in the database
-            **Behavior**: permanently deletes the account. The user's Ballots are removed and released from the stored option counts \
-            (this is a Retraction of every Ballot the user held).
+            **Behavior**: permanently deletes the account. The user's Ballots are removed; in Polls that have not Ended they are also released \
+            from the stored option counts and Turnout (a Retraction of every open Ballot), while an Ended Poll's result stays as it closed.
             **Side effects**: once the deletion commits, all refresh tokens of the user are revoked, so the client must discard its tokens and sign out; \
             the deletion is written to the audit log
             **Errors**:

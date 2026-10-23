@@ -52,7 +52,7 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
     }
 
     private void ballot(User user, Vote poll) {
-        em.persist(new UserVote(user, poll, poll.getOptions().iterator().next(), null));
+        em.persist(new UserVote(user, poll, poll.getOptions().iterator().next()));
     }
 
     private Vote invitePoll(OffsetDateTime start, OffsetDateTime end, User... invitees) {
@@ -235,7 +235,7 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
             markRead(invitee, poll); // the Invitation, so only the Ended Notification can be unread
             VoteRequest ballot = new VoteRequest();
             ballot.setOptionIds(List.of(voteService.getVote(voteId, userId).getOptions().getFirst().getId()));
-            voteService.vote(voteId, ballot, userId, null);
+            voteService.vote(voteId, ballot, userId);
         }
 
         assertThat(unread(participant)).isEqualTo(1);
@@ -253,7 +253,7 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
         String userId = participant.getId().toString();
         VoteRequest ballot = new VoteRequest();
         ballot.setOptionIds(List.of(voteService.getVote(voteId, userId).getOptions().getFirst().getId()));
-        voteService.vote(voteId, ballot, userId, null);
+        voteService.vote(voteId, ballot, userId);
         voteService.retract(voteId, userId);
 
         voteService.closeVote(voteId, owner.getId().toString());

@@ -89,10 +89,8 @@ class UserProfileVisibilityTest {
             @Override public Long getTotalPolls() { return 5L; }
             @Override public Long getTotalVotes() { return 10L; }
             @Override public Boolean getActive() { return active; }
-            @Override public String getEmail() { return "test@example.com"; }
             @Override public String getFirstName() { return "Test"; }
             @Override public String getLastName() { return "User"; }
-            @Override public LocalDate getBirthday() { return BIRTHDAY; }
             @Override public String getLocation() { return "Taipei"; }
             @Override public Integer getPoints() { return 100; }
             @Override public String getMembershipLevel() { return "SILVER"; }
@@ -124,7 +122,7 @@ class UserProfileVisibilityTest {
                     "Test", "User", BIRTHDAY, "TestDisplay", "Hello world", "bot:boba", "Taipei",
                     100, "SILVER", true, null,
                     JOINED_AT, 5, 10,
-                    Map.of("email", false, "firstName", false, "lastName", false,
+                    Map.of("firstName", false, "lastName", false,
                            "location", false, "points", false, "membershipLevel", false),
                     false
             );
@@ -146,7 +144,7 @@ class UserProfileVisibilityTest {
             assertThat(result.firstName()).isEqualTo("Test");
             assertThat(result.totalPolls()).isEqualTo(5);
             assertThat(result.totalVotes()).isEqualTo(10);
-            assertThat(result.visibilitySettings()).containsEntry("email", false);
+            assertThat(result.visibilitySettings()).containsEntry("firstName", false).doesNotContainKeys("email", "birthday");
         }
 
         @Test
@@ -165,7 +163,8 @@ class UserProfileVisibilityTest {
             // Then
             verify(userMapper).toMyProfileResponse(eq(user), eq(5), eq(10), argThat(v ->
                     Boolean.TRUE.equals(v.get("displayName")) && Boolean.TRUE.equals(v.get("bio"))
-                            && Boolean.FALSE.equals(v.get("email")) && Boolean.FALSE.equals(v.get("location"))), eq(false));
+                            && Boolean.FALSE.equals(v.get("firstName")) && Boolean.FALSE.equals(v.get("location"))
+                            && !v.containsKey("email") && !v.containsKey("birthday")), eq(false));
         }
 
         @Test
@@ -201,7 +200,7 @@ class UserProfileVisibilityTest {
             UserProfileResponse expectedResponse = new UserProfileResponse(
                     USERNAME, "TestDisplay", "Hello world", "bot:boba",
                     JOINED_AT, 5, 10,
-                    null, null, null, null, null, null, null
+                    null, null, null, null, null
             );
 
             when(userRepository.findProfileByUsername(USERNAME)).thenReturn(Optional.of(projection));
@@ -217,7 +216,6 @@ class UserProfileVisibilityTest {
             assertThat(result).isNotNull();
             assertThat(result.username()).isEqualTo(USERNAME);
             assertThat(result.displayName()).isEqualTo("TestDisplay");
-            assertThat(result.email()).isNull();
             assertThat(result.firstName()).isNull();
             assertThat(result.lastName()).isNull();
             assertThat(result.location()).isNull();
@@ -239,30 +237,32 @@ class UserProfileVisibilityTest {
         }
 
         @Test
-        @DisplayName("should show email after visibility.email=true is set")
+        @DisplayName("should show location after visibility.location=true is set, ignoring stale email rows")
         void shouldReturnVisibleFieldsWhenConfigured() {
             // Given
             UserProfileProjection projection = createTestProjection();
-            UserPreference emailPref = createPref("visibility.email", "true");
+            UserPreference locationPref = createPref("visibility.location", "true");
+            UserPreference staleEmailPref = createPref("visibility.email", "true");
 
             UserProfileResponse expectedResponse = new UserProfileResponse(
                     USERNAME, "TestDisplay", "Hello world", "bot:boba",
                     JOINED_AT, 5, 10,
-                    "test@example.com", null, null, null, null, null, null
+                    null, null, "Taipei", null, null
             );
 
             when(userRepository.findProfileByUsername(USERNAME)).thenReturn(Optional.of(projection));
             when(preferenceRepository.findByUserIdAndKeyStartingWith(USER_UUID, "visibility."))
-                    .thenReturn(List.of(emailPref));
+                    .thenReturn(List.of(locationPref, staleEmailPref));
             when(userMapper.toPublicProfileResponse(eq(projection),
-                    argThat(v -> Boolean.TRUE.equals(v.get("email")) && Boolean.FALSE.equals(v.get("firstName")))))
+                    argThat(v -> Boolean.TRUE.equals(v.get("location")) && Boolean.FALSE.equals(v.get("firstName"))
+                            && !v.containsKey("email"))))
                     .thenReturn(expectedResponse);
 
             // When
             UserProfileResponse result = userService.getUserProfile(USERNAME, false);
 
             // Then
-            assertThat(result.email()).isEqualTo("test@example.com");
+            assertThat(result.location()).isEqualTo("Taipei");
             assertThat(result.firstName()).isNull();
         }
     }
@@ -277,13 +277,12 @@ class UserProfileVisibilityTest {
         @DisplayName("should output only visibility=true fields and null for the rest")
         void shouldMaskHiddenFields() {
             UserProfileResponse result = new UserMapper().toPublicProfileResponse(
-                    createTestProjection(), Map.of("email", true, "points", true));
+                    createTestProjection(), Map.of("location", true, "points", true));
 
-            assertThat(result.email()).isEqualTo("test@example.com");
+            assertThat(result.location()).isEqualTo("Taipei");
             assertThat(result.points()).isEqualTo(100);
             assertThat(result.firstName()).isNull();
             assertThat(result.lastName()).isNull();
-            assertThat(result.location()).isNull();
             assertThat(result.membershipLevel()).isNull();
             assertThat(result.joinedAt()).isEqualTo(JOINED_AT);
         }
@@ -327,23 +326,24 @@ class UserProfileVisibilityTest {
             // Given
             User user = createTestUser();
             when(userRepository.findById(USER_UUID)).thenReturn(Optional.of(user));
-            when(preferenceRepository.findByUserIdAndKey(USER_UUID, "visibility.email"))
+            when(preferenceRepository.findByUserIdAndKey(USER_UUID, "visibility.location"))
                     .thenReturn(Optional.empty());
             when(preferenceRepository.save(any(UserPreference.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
 
             // query after update returns the new settings
-            UserPreference savedPref = createPref("visibility.email", "true");
+            UserPreference savedPref = createPref("visibility.location", "true");
             when(preferenceRepository.findByUserIdAndKeyStartingWith(USER_UUID, "visibility."))
                     .thenReturn(List.of(savedPref));
 
             // When
-            Map<String, Boolean> result = userService.updateVisibility(USER_ID, Map.of("email", true));
+            Map<String, Boolean> result = userService.updateVisibility(USER_ID, Map.of("location", true, "email", true));
 
-            // Then
-            assertThat(result).containsEntry("email", true);
+            // Then: email is no longer controllable, so only the location row is written
+            assertThat(result).containsEntry("location", true).doesNotContainKey("email");
             verify(preferenceRepository).save(argThat(p ->
-                    "visibility.email".equals(p.getKey()) && "true".equals(p.getValue()) && p.getUser() == user));
+                    "visibility.location".equals(p.getKey()) && "true".equals(p.getValue()) && p.getUser() == user));
+            verify(preferenceRepository, never()).save(argThat(p -> "visibility.email".equals(p.getKey())));
         }
 
         @Test
@@ -362,7 +362,7 @@ class UserProfileVisibilityTest {
             // Then — unknown fields are not written
             verify(preferenceRepository, never()).save(any(UserPreference.class));
             // all known fields default to false
-            assertThat(result).containsEntry("email", false);
+            assertThat(result).containsEntry("location", false);
             assertThat(result).containsEntry("firstName", false);
             assertThat(result).doesNotContainKeys("unknownField", "anotherBad");
         }
@@ -377,7 +377,7 @@ class UserProfileVisibilityTest {
         @Test
         @DisplayName("should generate preference key correctly")
         void shouldGenerateCorrectPreferenceKey() {
-            assertThat(VisibilityField.EMAIL.preferenceKey()).isEqualTo("visibility.email");
+            assertThat(VisibilityField.LOCATION.preferenceKey()).isEqualTo("visibility.location");
             assertThat(VisibilityField.FIRST_NAME.preferenceKey()).isEqualTo("visibility.firstName");
             assertThat(VisibilityField.MEMBERSHIP_LEVEL.preferenceKey()).isEqualTo("visibility.membershipLevel");
         }
@@ -385,26 +385,28 @@ class UserProfileVisibilityTest {
         @Test
         @DisplayName("should look up enum value from field name")
         void shouldFindByFieldName() {
-            assertThat(VisibilityField.fromFieldName("email")).contains(VisibilityField.EMAIL);
+            assertThat(VisibilityField.fromFieldName("location")).contains(VisibilityField.LOCATION);
             assertThat(VisibilityField.fromFieldName("unknown")).isEmpty();
+            assertThat(VisibilityField.fromFieldName("email")).isEmpty();
+            assertThat(VisibilityField.fromFieldName("birthday")).isEmpty();
         }
 
         @Test
         @DisplayName("should parse field name from preference key")
         void shouldExtractFieldName() {
-            assertThat(VisibilityField.extractFieldName("visibility.email")).isEqualTo("email");
+            assertThat(VisibilityField.extractFieldName("visibility.location")).isEqualTo("location");
             assertThat(VisibilityField.extractFieldName("noprefix")).isEqualTo("noprefix");
         }
     }
 
     @Test
-    @DisplayName("should hide birthday on the public profile until the owner makes it visible")
-    void shouldMaskBirthdayWhenNotVisible() {
-        UserMapper mapper = new UserMapper();
-        UserProfileProjection projection = createTestProjection();
-
-        assertThat(mapper.toPublicProfileResponse(projection, Map.of()).birthday()).isNull();
-        assertThat(mapper.toPublicProfileResponse(projection, Map.of("birthday", true)).birthday()).isEqualTo(BIRTHDAY);
-        assertThat(VisibilityField.BIRTHDAY.isVisibleByDefault()).isFalse();
+    @DisplayName("should never expose email or birthday on the public profile")
+    void shouldNeverExposeEmailOrBirthdayOnPublicProfile() {
+        assertThat(UserProfileResponse.class.getRecordComponents())
+                .extracting(java.lang.reflect.RecordComponent::getName)
+                .doesNotContain("email", "birthday");
+        assertThat(UserProfileProjection.class.getMethods())
+                .extracting(java.lang.reflect.Method::getName)
+                .doesNotContain("getEmail", "getBirthday");
     }
 }

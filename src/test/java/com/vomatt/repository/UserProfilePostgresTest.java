@@ -54,7 +54,7 @@ class UserProfilePostgresTest extends PostgresRepositoryTest {
         Vote inviteOnly = persistPoll(owner, now.minusHours(1), now.plusDays(1), "A", "B");
         inviteOnly.setAudience(Audience.INVITE_ONLY);
         for (Vote poll : List.of(publicPoll, unlisted, inviteOnly)) {
-            em.persist(new UserVote(voter, poll, poll.getOptions().iterator().next(), null));
+            em.persist(new UserVote(voter, poll, poll.getOptions().iterator().next()));
         }
         em.flush();
         em.clear();
@@ -76,7 +76,6 @@ class UserProfilePostgresTest extends PostgresRepositoryTest {
 
         assertThat(profile.getFirstName()).isEqualTo("Alice");
         assertThat(profile.getLastName()).isEqualTo("Chen");
-        assertThat(profile.getBirthday()).isEqualTo(java.time.LocalDate.of(1995, 4, 12));
     }
 
     @Test

@@ -45,6 +45,44 @@ class AuditAspectTest {
         RequestContextHolder.resetRequestAttributes();
     }
 
+
+    @Test
+    void shouldPassActorAndResourceThroughControllerWhenDeletingAccounts() {
+        com.vomatt.users.UserService userService = mock(com.vomatt.users.UserService.class);
+        com.vomatt.users.UserController proxied = proxied(new com.vomatt.users.UserController(userService, mock(com.vomatt.votes.VoteService.class)));
+        java.util.UUID self = java.util.UUID.randomUUID();
+        java.util.UUID other = java.util.UUID.randomUUID();
+        signIn(self, "alice");
+        try {
+            proxied.deleteUser(self.toString(), principal(self));
+            proxied.deleteUser(other.toString(), principal(self));
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+
+        // The aspect records the token's actor as is; AuditService decides on its writer whether the actor still exists
+        // (a self-deletion is anonymized there, see AuditServiceTest)
+        verify(auditService).logAction(org.mockito.ArgumentMatchers.eq(self.toString()), org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.eq("DELETE"),
+                org.mockito.ArgumentMatchers.eq("USER"), org.mockito.ArgumentMatchers.eq(self.toString()), any(), any(), any(), any(), any());
+        verify(auditService).logAction(org.mockito.ArgumentMatchers.eq(self.toString()), org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.eq("DELETE"),
+                org.mockito.ArgumentMatchers.eq("USER"), org.mockito.ArgumentMatchers.eq(other.toString()), any(), any(), any(), any(), any());
+    }
+
+    private <T> T proxied(T target) {
+        org.springframework.aop.aspectj.annotation.AspectJProxyFactory factory = new org.springframework.aop.aspectj.annotation.AspectJProxyFactory(target);
+        factory.addAspect(aspect);
+        return factory.getProxy();
+    }
+
+    private static com.vomatt.common.security.UserPrincipal principal(java.util.UUID id) {
+        return new com.vomatt.common.security.UserPrincipal(id.toString(), java.util.List.of("user"));
+    }
+
+    private void signIn(java.util.UUID id, String username) {
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(principal(id), null, java.util.List.of()));
+    }
+
     @Test
     void shouldSkipAuditWhenRateLimited() {
         aspect.logFailedAction(joinPoint, auditable,

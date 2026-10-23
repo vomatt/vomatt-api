@@ -84,10 +84,11 @@ public class AuditAspect {
         }
     }
     
+    /** {userId, username}: the token carries no username, AuditService resolves the actor on its async writer. */
     private String[] getCurrentUserInfo() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.getPrincipal() instanceof UserPrincipal principal) {
-            return new String[]{principal.userId(), principal.email()};
+            return new String[]{principal.userId(), null};
         }
         return new String[]{null, null};
     }

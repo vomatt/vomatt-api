@@ -217,7 +217,7 @@ class AdminQueryPostgresTest extends PostgresRepositoryTest {
         Vote deleted = persistPoll(owner, now.minusDays(1), now.plusDays(1), "a", "b");
         deleted.setDeletedAt(now);
         persistPoll(owner, now.plusDays(1), now.plusDays(2), "a", "b"); // Scheduled: in no Poll count
-        em.persist(new UserVote(voter, ended, ended.getOptions().iterator().next(), null));
+        em.persist(new UserVote(voter, ended, ended.getOptions().iterator().next()));
         em.flush();
 
         AdminStatsResponse after = repository.stats(now);

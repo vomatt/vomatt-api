@@ -63,6 +63,23 @@ class EmailTemplateTest {
     }
 
     @Test
+    void shouldMaskRecipientWhenLoggingSentEmails() throws Exception {
+        ch.qos.logback.classic.Logger logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(EmailServiceImpl.class);
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> logs = new ch.qos.logback.core.read.ListAppender<>();
+        logs.start();
+        logger.addAppender(logs);
+        try {
+            emailService.sendVerificationEmail("carol@example.com", "654321");
+            emailService.sendWelcomeEmail("carol@example.com", "Carol", Locale.ENGLISH);
+        } finally {
+            logger.detachAppender(logs);
+        }
+        assertThat(logs.list).isNotEmpty().extracting(ch.qos.logback.classic.spi.ILoggingEvent::getFormattedMessage)
+                .allSatisfy(m -> assertThat(m).doesNotContain("carol@example.com"))
+                .anySatisfy(m -> assertThat(m).contains("c***@example.com"));
+    }
+
+    @Test
     void shouldRenderLoginEmailWhenLocaleIsEn() throws Exception {
         LocaleContextHolder.setLocale(Locale.ENGLISH);
         emailService.sendVerificationEmail("a@example.com", "654321");
@@ -159,12 +176,6 @@ class EmailTemplateTest {
         ReflectionTestUtils.setField(emailService, "resend", resend);
         ReflectionTestUtils.setField(emailService, "logoBase64", "bG9nbw==");
         return emails;
-    }
-
-    @Test
-    void shouldMaskAddressWhenLoggingInvitation() {
-        assertThat(EmailServiceImpl.mask("carol@example.com")).isEqualTo("c***@example.com");
-        assertThat(EmailServiceImpl.mask("broken")).isEqualTo("***");
     }
 
     @Test

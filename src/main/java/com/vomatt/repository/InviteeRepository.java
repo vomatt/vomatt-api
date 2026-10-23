@@ -91,6 +91,28 @@ public interface InviteeRepository extends JpaRepository<Invitee, UUID> {
             SELECT :voteId, unnest(CAST(:emails AS text[])) ON CONFLICT DO NOTHING""", nativeQuery = true)
     void recordInvitationsSent(@Param("voteId") UUID voteId, @Param("emails") String[] emails);
 
+    /**
+     * Retention: the "already sent" records keep one Poll from mailing the same address twice, so they live as long as
+     * the Poll can still invite; they go with the unregistered Invitees once the Poll has been over for the grace period.
+     */
+    @Modifying
+    @Query(value = """
+            DELETE FROM vomatt.vote_invitation_emails e
+              WHERE EXISTS (SELECT 1 FROM vomatt.votes v WHERE v.id = e.vote_id AND v.end_time < :cutoff)""",
+            nativeQuery = true)
+    int deleteInvitationEmailsOfPollsEndedBefore(@Param("cutoff") java.time.OffsetDateTime cutoff);
+
+    /**
+     * Retention: an email Invitee who never signed up is a third party's address kept only so the Poll can reach them;
+     * once the Poll has been over for the grace period there is nothing left to reach them for.
+     */
+    @Modifying
+    @Query(value = """
+            DELETE FROM vomatt.vote_invitees i WHERE i.user_id IS NULL
+              AND EXISTS (SELECT 1 FROM vomatt.votes v WHERE v.id = i.vote_id AND v.end_time < :cutoff)""",
+            nativeQuery = true)
+    int deleteUnregisteredOfPollsEndedBefore(@Param("cutoff") java.time.OffsetDateTime cutoff);
+
     /** At least one Invitee, and none without a Ballot; an Invitee not tied to a user (NULL user_id) counts as without. */
     @Query(value = """
             SELECT EXISTS (SELECT 1 FROM vomatt.vote_invitees WHERE vote_id = :voteId)

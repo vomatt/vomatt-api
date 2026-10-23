@@ -9,4 +9,23 @@ public final class TextUtil {
     public static String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.strip();
     }
+
+    /** Today's UTC date as {@code yyyy-MM-dd}, the day boundary of per-day counters. */
+    public static String utcDay() {
+        return java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString();
+    }
+
+    /** For logs and admin lists: {@code a***@domain}; anything without a local part becomes {@code ***}. */
+    public static String maskEmail(String email) {
+        int at = email == null ? -1 : email.indexOf('@');
+        return at <= 0 ? "***" : email.charAt(0) + "***" + email.substring(at);
+    }
+
+    /** For logs and admin lists: the first 3 characters (country code) and the last 2 digits, e.g. {@code +88****78}. */
+    public static String maskPhone(String phone) {
+        if (phone == null || phone.length() < 7) {
+            return "***";
+        }
+        return phone.substring(0, 3) + "****" + phone.substring(phone.length() - 2);
+    }
 }

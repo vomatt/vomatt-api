@@ -68,11 +68,24 @@ class AuthServiceTest {
     org.springframework.web.client.RestClient restClient;
     @Mock
     RefreshTokenService refreshTokenService;
+    @Mock
+    com.vomatt.common.security.AppKey appKey;
 
     @InjectMocks
     AuthService authService;
 
     private static final String IP = "203.0.113.7";
+    private static final byte[] OTP_KEY = "auth-service-test-otp-key".getBytes();
+
+    /** Redis key part of an identifier (OTP keys never carry the identifier itself). */
+    private static String k(String identifier) {
+        return AuthService.redisKey(identifier);
+    }
+
+    /** What Redis holds for this identifier's code. */
+    private static String h(String identifier, String code) {
+        return com.vomatt.common.security.AppKey.hmacHex(OTP_KEY, identifier + ":" + code);
+    }
 
     /** Redis key of the failure counter / lock / level for this identifier guessing from {@link #IP}. */
     private static String attempt(String identifier) {
@@ -100,7 +113,10 @@ class AuthServiceTest {
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(authService, "otpTtlSeconds", 180L);
+        lenient().when(appKey.derive("otp")).thenReturn(OTP_KEY);
         ReflectionTestUtils.setField(authService, "otpResendCooldownSeconds", 180L);
+        ReflectionTestUtils.setField(authService, "otpDailyLimitEmail", 20L);
+        ReflectionTestUtils.setField(authService, "otpDailyLimitPhone", 5L);
         ReflectionTestUtils.setField(authService, "appleJwksUrl", "https://appleid.apple.com/auth/keys");
         ReflectionTestUtils.setField(authService, "appleClientId", "com.vomatt.app");
         ReflectionTestUtils.setField(authService, "googleJwksUrl", "https://www.googleapis.com/oauth2/v3/certs");
@@ -144,7 +160,7 @@ class AuthServiceTest {
 
         authService.sendOtp("new@example.com", null, null, IP);
 
-        storedOtp("otp:email", "new@example.com");
+        storedOtp("otp:email", k("new@example.com"));
         verify(emailService).sendPreSignupEmail(eq("new@example.com"), anyString());
     }
 
@@ -155,7 +171,7 @@ class AuthServiceTest {
 
         authService.sendOtp("user@example.com", null, null, IP);
 
-        storedOtp("otp:email", "user@example.com");
+        storedOtp("otp:email", k("user@example.com"));
         verify(emailService).sendVerificationEmail(eq("user@example.com"), anyString());
     }
 
@@ -171,14 +187,14 @@ class AuthServiceTest {
         verify(emailService, org.mockito.Mockito.never()).sendVerificationEmail(anyString(), anyString());
         verify(emailService, org.mockito.Mockito.never()).sendPreSignupEmail(anyString(), anyString());
         // The cooldown claimed for this send is released, so the user can retry at once
-        verify(redisService).delete("otp:email:cooldown", "user@example.com");
+        verify(redisService).delete("otp:email:cooldown", k("user@example.com"));
     }
 
     @Test
     void sendOtp_whenWithinCooldown_shouldThrowWithRemainingSeconds() {
-        when(redisService.setIfAbsent(eq("otp:email:cooldown"), eq("user@example.com"), any(), any(Duration.class)))
+        when(redisService.setIfAbsent(eq("otp:email:cooldown"), eq(k("user@example.com")), any(), any(Duration.class)))
                 .thenReturn(false);
-        when(redisService.get("otp:email:cooldown", "user@example.com", String.class))
+        when(redisService.get("otp:email:cooldown", k("user@example.com"), String.class))
                 .thenReturn(Long.toString(Instant.now().plusSeconds(30).getEpochSecond()));
 
         assertThatThrownBy(() -> authService.sendOtp("user@example.com", null, null, IP))
@@ -223,9 +239,11 @@ class AuthServiceTest {
                     assertThat(api.getMessageKey()).isEqualTo(MessageKey.AUTH_EMAIL_SEND_FAILED);
                     assertThat(api.getMessageArgs()).isNullOrEmpty();
                 });
-        verify(redisService).delete("otp:email", "user@example.com");
-        verify(redisService).set(eq("otp:email:cooldown"), eq("user@example.com"), anyString(), eq(Duration.ofSeconds(30)));
-        verify(redisService, never()).delete("otp:email:cooldown", "user@example.com");
+        verify(redisService).delete("otp:email", k("user@example.com"));
+        verify(redisService).set(eq("otp:email:cooldown"), eq(k("user@example.com")), anyString(), eq(Duration.ofSeconds(30)));
+        verify(redisService, never()).delete("otp:email:cooldown", k("user@example.com"));
+        // The failed send gives its daily-quota slot back
+        verify(redisService).incrementAndExpire(eq("otp:email:daily"), startsWith(k("user@example.com") + ":"), eq(-1L), eq(Duration.ofDays(1)));
     }
 
     @Test
@@ -236,16 +254,16 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.sendOtp(null, "+886912345678", "signup", IP))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_SMS_SEND_FAILED));
-        verify(redisService).delete("otp:phone", "+886912345678");
-        verify(redisService).set(eq("otp:phone:cooldown"), eq("+886912345678"), anyString(), eq(Duration.ofSeconds(30)));
-        verify(redisService, never()).delete("otp:phone:cooldown", "+886912345678");
+        verify(redisService).delete("otp:phone", k("+886912345678"));
+        verify(redisService).set(eq("otp:phone:cooldown"), eq(k("+886912345678")), anyString(), eq(Duration.ofSeconds(30)));
+        verify(redisService, never()).delete("otp:phone:cooldown", k("+886912345678"));
     }
 
     // ── verifyOtp ────────────────────────────────────────────────────
 
     @Test
     void verifyOtp_withInvalidCode_shouldThrow() {
-        when(redisService.get(eq("otp:email"), eq("user@example.com"), eq(OtpRecord.class))).thenReturn(null);
+        when(redisService.get(eq("otp:email"), eq(k("user@example.com")), eq(OtpRecord.class))).thenReturn(null);
 
         assertThatThrownBy(() -> authService.verifyOtp("user@example.com", null, "000000", IP))
                 .isInstanceOf(ApiException.class)
@@ -255,10 +273,52 @@ class AuthServiceTest {
     }
 
     @Test
+    void shouldStillRefundQuotaAndReportSendFailureWhenRedisCleanupFails() {
+        when(userRepository.existsByEmail("user@example.com")).thenReturn(true);
+        org.mockito.Mockito.doThrow(new RuntimeException("smtp down")).when(emailService).sendVerificationEmail(anyString(), anyString());
+        when(redisService.delete("otp:email", k("user@example.com"))).thenThrow(new com.vomatt.common.redis.RedisOperationException("redis down", null));
+
+        assertThatThrownBy(() -> authService.sendOtp("user@example.com", null, null, IP))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_EMAIL_SEND_FAILED));
+        verify(redisService).incrementAndExpire(eq("otp:email:daily"), startsWith(k("user@example.com") + ":"), eq(-1L), eq(Duration.ofDays(1)));
+    }
+
+    @Test
+    void shouldRejectSendOtpWhenDailyLimitReached() {
+        when(userRepository.existsByEmail("user@example.com")).thenReturn(true);
+        when(redisService.incrementAndExpire(eq("otp:email:daily"), startsWith(k("user@example.com") + ":"), eq(Duration.ofDays(1))))
+                .thenReturn(21L);
+
+        assertThatThrownBy(() -> authService.sendOtp("user@example.com", null, null, IP))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_DAILY_LIMIT));
+
+        verify(redisService, never()).execInTransaction(any());
+        verify(emailService, never()).sendVerificationEmail(anyString(), anyString());
+    }
+
+    @Test
+    void shouldSendPhoneOtpWhenDailyLimitNotReached() {
+        when(userRepository.existsByPhoneNumber("+886912345678")).thenReturn(true);
+        when(redisService.incrementAndExpire(eq("otp:phone:daily"), startsWith(k("+886912345678") + ":"), eq(Duration.ofDays(1))))
+                .thenReturn(5L);
+
+        authService.sendOtp(null, "0912345678", "login", IP);
+
+        verify(smsService).sendOtp(eq("+886912345678"), anyString());
+        when(redisService.incrementAndExpire(eq("otp:phone:daily"), startsWith(k("+886912345678") + ":"), eq(Duration.ofDays(1))))
+                .thenReturn(6L);
+        assertThatThrownBy(() -> authService.sendOtp(null, "0912345678", "login", IP))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_DAILY_LIMIT));
+    }
+
+    @Test
     void verifyOtp_withWrongCode_shouldIncrementAtomicFailCounter() {
         // P1-#7: failure count uses atomic INCR (separate counter) to prevent concurrent bypass of the 3-attempt limit
-        OtpRecord otpRecord = new OtpRecord("123456", "login", Instant.now(), 0);
-        when(redisService.get(eq("otp:email"), eq("user@example.com"), eq(OtpRecord.class))).thenReturn(otpRecord);
+        OtpRecord otpRecord = new OtpRecord(h("user@example.com", "123456"), "login", Instant.now(), 0);
+        when(redisService.get(eq("otp:email"), eq(k("user@example.com")), eq(OtpRecord.class))).thenReturn(otpRecord);
         when(redisService.incrementAndExpire(eq("otp:email:fail"), eq(attempt("user@example.com")), any(Duration.class)))
                 .thenReturn(1L);
 
@@ -270,12 +330,12 @@ class AuthServiceTest {
     }
 
     private void stubWrongCodeAttempt(long attempts) {
-        OtpRecord otpRecord = new OtpRecord("123456", "login", Instant.now(), 0);
-        when(redisService.get(eq("otp:email"), eq("user@example.com"), eq(OtpRecord.class))).thenReturn(otpRecord);
+        OtpRecord otpRecord = new OtpRecord(h("user@example.com", "123456"), "login", Instant.now(), 0);
+        when(redisService.get(eq("otp:email"), eq(k("user@example.com")), eq(OtpRecord.class))).thenReturn(otpRecord);
         when(redisService.incrementAndExpire(eq("otp:email:fail"), eq(attempt("user@example.com")), any(Duration.class)))
                 .thenReturn(attempts);
         // First guess on this OTP across all IPs, unless a test says otherwise
-        lenient().when(redisService.incrementAndExpire(eq("otp:email:guesses"), startsWith("user@example.com:"), any(Duration.class)))
+        lenient().when(redisService.incrementAndExpire(eq("otp:email:guesses"), startsWith(k("user@example.com") + ":"), any(Duration.class)))
                 .thenReturn(1L);
     }
 
@@ -298,7 +358,7 @@ class AuthServiceTest {
         verify(redisService).expire("otp:email:level", attempt("user@example.com"), Duration.ofMinutes(5).plusHours(24));
         // The counter is kept so in-flight guesses cannot escalate again; the OTP stays valid for the real user on other IPs
         verify(redisService, never()).delete(eq("otp:email:fail"), anyString());
-        verify(redisService, never()).delete("otp:email", "user@example.com");
+        verify(redisService, never()).delete("otp:email", k("user@example.com"));
     }
 
     @Test
@@ -337,7 +397,7 @@ class AuthServiceTest {
     }
 
     private void stubGuesses(long guesses) {
-        when(redisService.incrementAndExpire(eq("otp:email:guesses"), startsWith("user@example.com:"), any(Duration.class)))
+        when(redisService.incrementAndExpire(eq("otp:email:guesses"), startsWith(k("user@example.com") + ":"), any(Duration.class)))
                 .thenReturn(guesses);
     }
 
@@ -350,9 +410,9 @@ class AuthServiceTest {
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_INVALID_OTP));
 
-        verify(redisService).set(eq("otp:email:cooldown"), eq("user@example.com"), anyString(), eq(Duration.ofMinutes(15)));
+        verify(redisService).set(eq("otp:email:cooldown"), eq(k("user@example.com")), anyString(), eq(Duration.ofMinutes(15)));
         // Never deletes by identifier: a stale request must not remove an OTP resent meanwhile
-        verify(redisService, never()).delete("otp:email", "user@example.com");
+        verify(redisService, never()).delete("otp:email", k("user@example.com"));
     }
 
     @Test
@@ -364,7 +424,7 @@ class AuthServiceTest {
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_INVALID_OR_EXPIRED));
 
-        verify(redisService, never()).delete("otp:email", "user@example.com");
+        verify(redisService, never()).delete("otp:email", k("user@example.com"));
         verify(redisService, never()).getAndDelete(anyString(), anyString(), any());
         verify(userRepository, never()).findByEmail(anyString());
     }
@@ -372,7 +432,7 @@ class AuthServiceTest {
     @Test
     void shouldRejectCorrectCodeWhenConcurrentRequestAlreadyConsumedOtp() {
         stubWrongCodeAttempt(1L);
-        when(redisService.getAndDelete("otp:email", "user@example.com", OtpRecord.class)).thenReturn(null);
+        when(redisService.getAndDelete("otp:email", k("user@example.com"), OtpRecord.class)).thenReturn(null);
 
         assertThatThrownBy(() -> authService.verifyOtp("user@example.com", null, "123456", IP))
                 .isInstanceOf(ApiException.class)
@@ -383,14 +443,14 @@ class AuthServiceTest {
     @Test
     void shouldRestoreResentOtpWhenOldCodeArrivesDuringResend() {
         stubWrongCodeAttempt(1L);
-        OtpRecord resent = new OtpRecord("777777", "login", Instant.now().plusSeconds(1), 0);
-        when(redisService.getAndDelete("otp:email", "user@example.com", OtpRecord.class)).thenReturn(resent);
+        OtpRecord resent = new OtpRecord(h("user@example.com", "777777"), "login", Instant.now().plusSeconds(1), 0);
+        when(redisService.getAndDelete("otp:email", k("user@example.com"), OtpRecord.class)).thenReturn(resent);
 
         assertThatThrownBy(() -> authService.verifyOtp("user@example.com", null, "123456", IP))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_INVALID_OR_EXPIRED));
 
-        verify(redisService).set(eq("otp:email"), eq("user@example.com"), eq(resent), any(Duration.class));
+        verify(redisService).set(eq("otp:email"), eq(k("user@example.com")), eq(resent), any(Duration.class));
         verify(userRepository, never()).findByEmail(anyString());
     }
 
@@ -429,15 +489,15 @@ class AuthServiceTest {
 
     @Test
     void verifyOtp_withValidCode_shouldReturnTokenAndDeleteOtp() {
-        OtpRecord otpRecord = new OtpRecord("123456", "login", Instant.now(), 0);
+        OtpRecord otpRecord = new OtpRecord(h("user@example.com", "123456"), "login", Instant.now(), 0);
         User user = User.builder().id(UUID.randomUUID()).email("user@example.com").displayName("Test User")
                 .roles(new String[] { "user" }).build();
 
-        when(redisService.get(eq("otp:email"), eq("user@example.com"), eq(OtpRecord.class))).thenReturn(otpRecord);
-        when(redisService.getAndDelete("otp:email", "user@example.com", OtpRecord.class)).thenReturn(otpRecord);
+        when(redisService.get(eq("otp:email"), eq(k("user@example.com")), eq(OtpRecord.class))).thenReturn(otpRecord);
+        when(redisService.getAndDelete("otp:email", k("user@example.com"), OtpRecord.class)).thenReturn(otpRecord);
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
-        when(jwtUtil.generateToken(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-token");
-        when(refreshTokenService.generate(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
 
         AuthResponse response = authService.verifyOtp("user@example.com", null, "123456", IP);
 
@@ -497,14 +557,14 @@ class AuthServiceTest {
     @Test
     void shouldIssueAdminScopeFromAdminNamespaceWhenAdminLoginSucceeds() {
         // The admin OTP lives in its own namespace, so a consumer-login code cannot be redeemed here
-        OtpRecord otpRecord = new OtpRecord("123456", "login", Instant.now(), 0);
+        OtpRecord otpRecord = new OtpRecord(h("admin@example.com", "123456"), "login", Instant.now(), 0);
         User admin = User.builder().id(UUID.randomUUID()).email("admin@example.com")
                 .displayName("Admin").roles(new String[] { "user", "admin" }).active(true).build();
         when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
-        when(redisService.get(eq("otp:admin-email"), eq("admin@example.com"), eq(OtpRecord.class))).thenReturn(otpRecord);
-        when(redisService.getAndDelete("otp:admin-email", "admin@example.com", OtpRecord.class)).thenReturn(otpRecord);
-        when(jwtUtil.generateToken(anyString(), anyString(), any(), eq(true))).thenReturn("admin-token");
-        when(refreshTokenService.generate(anyString(), anyString(), any(), eq(true))).thenReturn("admin-refresh");
+        when(redisService.get(eq("otp:admin-email"), eq(k("admin@example.com")), eq(OtpRecord.class))).thenReturn(otpRecord);
+        when(redisService.getAndDelete("otp:admin-email", k("admin@example.com"), OtpRecord.class)).thenReturn(otpRecord);
+        when(jwtUtil.generateToken(anyString(), any(), eq(true))).thenReturn("admin-token");
+        when(refreshTokenService.generate(anyString(), any(), eq(true))).thenReturn("admin-refresh");
 
         AuthResponse response = authService.verifyAdminOtp("admin@example.com", "123456", IP);
 
@@ -514,14 +574,14 @@ class AuthServiceTest {
 
     @Test
     void shouldIssueUserScopeWhenAdminSignsInThroughConsumerLogin() {
-        OtpRecord otpRecord = new OtpRecord("123456", "login", Instant.now(), 0);
+        OtpRecord otpRecord = new OtpRecord(h("admin@example.com", "123456"), "login", Instant.now(), 0);
         User admin = User.builder().id(UUID.randomUUID()).email("admin@example.com")
                 .displayName("Admin").roles(new String[] { "user", "admin" }).active(true).build();
-        when(redisService.get(eq("otp:email"), eq("admin@example.com"), eq(OtpRecord.class))).thenReturn(otpRecord);
-        when(redisService.getAndDelete("otp:email", "admin@example.com", OtpRecord.class)).thenReturn(otpRecord);
+        when(redisService.get(eq("otp:email"), eq(k("admin@example.com")), eq(OtpRecord.class))).thenReturn(otpRecord);
+        when(redisService.getAndDelete("otp:email", k("admin@example.com"), OtpRecord.class)).thenReturn(otpRecord);
         when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
-        when(jwtUtil.generateToken(anyString(), anyString(), any(), eq(false))).thenReturn("user-token");
-        when(refreshTokenService.generate(anyString(), anyString(), any(), eq(false))).thenReturn("user-refresh");
+        when(jwtUtil.generateToken(anyString(), any(), eq(false))).thenReturn("user-token");
+        when(refreshTokenService.generate(anyString(), any(), eq(false))).thenReturn("user-refresh");
 
         AuthResponse response = authService.verifyOtp("admin@example.com", null, "123456", IP);
 
@@ -532,8 +592,8 @@ class AuthServiceTest {
 
     @Test
     void shouldIndexAttemptKeyWhenCodeIsWrong() {
-        OtpRecord otpRecord = new OtpRecord("123456", "login", Instant.now(), 0);
-        when(redisService.get(eq("otp:email"), eq("user@example.com"), eq(OtpRecord.class))).thenReturn(otpRecord);
+        OtpRecord otpRecord = new OtpRecord(h("user@example.com", "123456"), "login", Instant.now(), 0);
+        when(redisService.get(eq("otp:email"), eq(k("user@example.com")), eq(OtpRecord.class))).thenReturn(otpRecord);
         when(redisService.incrementAndExpire(eq("otp:email:fail"), eq(attempt("user@example.com")), any(Duration.class)))
                 .thenReturn(1L);
 
@@ -541,8 +601,8 @@ class AuthServiceTest {
                 .isInstanceOf(ApiException.class);
 
         verify(redisService).execInTransaction(List.of(
-                RedisService.RedisWrite.hput("otp:email:attempt-idx", "user@example.com", attempt("user@example.com"), "1"),
-                RedisService.RedisWrite.expire("otp:email:attempt-idx", "user@example.com", Duration.ofHours(48))));
+                RedisService.RedisWrite.hput("otp:email:attempt-idx", k("user@example.com"), attempt("user@example.com"), "1"),
+                RedisService.RedisWrite.expire("otp:email:attempt-idx", k("user@example.com"), Duration.ofHours(48))));
     }
 
     @Test
@@ -550,8 +610,8 @@ class AuthServiceTest {
         Instant created = Instant.now();
         List<String> key = List.of(attempt("user@example.com"));
         when(redisService.deleteAll(anyString(), any())).thenReturn(1L);
-        when(redisService.getAndDelete("otp:email", "user@example.com", OtpRecord.class))
-                .thenReturn(new OtpRecord("123456", "login", created, 0));
+        when(redisService.getAndDelete("otp:email", k("user@example.com"), OtpRecord.class))
+                .thenReturn(new OtpRecord(h("user@example.com", "123456"), "login", created, 0));
 
         int cleared = authService.unlockLogin("email", "user@example.com", IP, Set.of("lock", "attempts", "cooldown"));
 
@@ -560,16 +620,16 @@ class AuthServiceTest {
         verify(redisService).deleteAll("otp:email:lock", key);
         verify(redisService).deleteAll("otp:email:level", key);
         verify(redisService).deleteAll("otp:email:fail", key);
-        verify(redisService).deleteAll("otp:email:guesses", List.of("user@example.com:" + created.toEpochMilli()));
-        verify(redisService).deleteAll("otp:email:cooldown", List.of("user@example.com"));
-        verify(redisService).hDelete("otp:email:attempt-idx", "user@example.com", key.get(0));
+        verify(redisService).deleteAll("otp:email:guesses", List.of(k("user@example.com") + ":" + created.toEpochMilli()));
+        verify(redisService).deleteAll("otp:email:cooldown", List.of(k("user@example.com")));
+        verify(redisService).hDelete("otp:email:attempt-idx", k("user@example.com"), key.get(0));
         verify(redisService, never()).hGetAll(anyString(), anyString());
     }
 
     @Test
     void shouldAlsoClearCounterWhenUnlockClearsOnlyLock() {
         // A lock removed with its counter still at 3 would keep refusing the right code
-        when(redisService.hGetAll("otp:phone:attempt-idx", "+886912345678"))
+        when(redisService.hGetAll("otp:phone:attempt-idx", k("+886912345678")))
                 .thenReturn(java.util.Map.of("k1", "1", "k2", "1"));
         when(redisService.deleteAll(anyString(), any())).thenReturn(2L);
 
@@ -581,7 +641,7 @@ class AuthServiceTest {
         // The OTP and its guess budget are left alone: only `attempts` discards them
         verify(redisService, never()).getAndDelete(eq("otp:phone"), anyString(), any());
         verify(redisService, never()).deleteAll(eq("otp:phone:cooldown"), any());
-        verify(redisService).delete("otp:phone:attempt-idx", "+886912345678");
+        verify(redisService).delete("otp:phone:attempt-idx", k("+886912345678"));
     }
 
     @Test
@@ -619,7 +679,7 @@ class AuthServiceTest {
         User admin = User.builder().id(UUID.randomUUID()).email("admin@example.com")
                 .roles(new String[] { "admin" }).active(true).build();
         when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
-        when(redisService.setIfAbsent(eq("otp:admin-email:cooldown"), eq("admin@example.com"), any(), any())).thenReturn(true);
+        when(redisService.setIfAbsent(eq("otp:admin-email:cooldown"), eq(k("admin@example.com")), any(), any())).thenReturn(true);
 
         authService.sendAdminOtp("admin@example.com", IP);
 
@@ -632,8 +692,8 @@ class AuthServiceTest {
     @Test
     void verifyOtp_wrongCodeSameLength_shouldRejectViaConstantTimeCompare() {
         // Wrong code of the same length is still rejected (constant-time comparison does not affect correctness)
-        OtpRecord otpRecord = new OtpRecord("123456", "login", Instant.now(), 0);
-        when(redisService.get(eq("otp:email"), eq("user@example.com"), eq(OtpRecord.class))).thenReturn(otpRecord);
+        OtpRecord otpRecord = new OtpRecord(h("user@example.com", "123456"), "login", Instant.now(), 0);
+        when(redisService.get(eq("otp:email"), eq(k("user@example.com")), eq(OtpRecord.class))).thenReturn(otpRecord);
         when(redisService.incrementAndExpire(eq("otp:email:fail"), eq(attempt("user@example.com")), any(Duration.class)))
                 .thenReturn(1L);
 
@@ -642,7 +702,7 @@ class AuthServiceTest {
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_INVALID_OTP));
 
         // A wrong code must not delete the OTP (retries still allowed within the limit)
-        verify(redisService, org.mockito.Mockito.never()).delete("otp:email", "user@example.com");
+        verify(redisService, org.mockito.Mockito.never()).delete("otp:email", k("user@example.com"));
     }
 
     // ── refresh ──────────────────────────────────────────────────────
@@ -650,7 +710,7 @@ class AuthServiceTest {
     @Test
     void refresh_returnsAccessAndRefreshTokenFromRotateResult() {
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
-                "user-x", "x@example.com", List.of("user"), "session-1", false);
+                "user-x", List.of("user"), "session-1", false);
         RefreshTokenService.RotateResult rotateResult = new RefreshTokenService.RotateResult(
                 "new-access", "new-refresh", data);
         when(refreshTokenService.rotate("old-refresh")).thenReturn(rotateResult);
@@ -660,7 +720,7 @@ class AuthServiceTest {
         assertThat(response.token()).isEqualTo("new-access");
         assertThat(response.refreshToken()).isEqualTo("new-refresh");
         // AuthService.refresh must not sign the access token itself; it comes from RotateResult
-        verify(jwtUtil, org.mockito.Mockito.never()).generateToken(anyString(), anyString(), any(), anyBoolean());
+        verify(jwtUtil, org.mockito.Mockito.never()).generateToken(anyString(), any(), anyBoolean());
     }
 
     @Test
@@ -719,7 +779,7 @@ class AuthServiceTest {
                 .displayName("User").roles(new String[] { "user" }).build();
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(existing));
 
-        User result = authService.findOrCreateUserByEmail("user@example.com", "User", "google", true);
+        User result = authService.findOrCreateUserByEmail("user@example.com", "User", "google", true).user();
 
         assertThat(result).isSameAs(existing);
         verify(userRepository, org.mockito.Mockito.never()).save(any());
@@ -731,7 +791,7 @@ class AuthServiceTest {
         when(userRepository.findByEmail("fresh@example.com")).thenReturn(Optional.empty());
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        User result = authService.findOrCreateUserByEmail("fresh@example.com", "Fresh", "google", true);
+        User result = authService.findOrCreateUserByEmail("fresh@example.com", "Fresh", "google", true).user();
 
         assertThat(result).isNotNull();
         assertThat(result.getEmail()).isEqualTo("fresh@example.com");
@@ -754,7 +814,7 @@ class AuthServiceTest {
         when(userRepository.existsByUsername(anyString())).thenReturn(true, false);
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        User result = authService.findOrCreateUserByEmail("fresh@example.com", null, "email_otp", true);
+        User result = authService.findOrCreateUserByEmail("fresh@example.com", null, "email_otp", true).user();
 
         verify(userRepository, org.mockito.Mockito.times(2)).existsByUsername(anyString());
         assertThat(result.getUsername()).matches("fresh_\\d{4}");
@@ -767,7 +827,7 @@ class AuthServiceTest {
         when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.empty());
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        User result = authService.findOrCreateUserByEmail("admin@example.com", null, "email_otp", true);
+        User result = authService.findOrCreateUserByEmail("admin@example.com", null, "email_otp", true).user();
 
         assertThat(result.getUsername()).matches("admin_\\d{4}");
         assertThat(ReservedUsernames.contains(result.getUsername())).isFalse();
@@ -777,9 +837,9 @@ class AuthServiceTest {
 
     @Test
     void shouldBindEmailInviteesWhenEmailOtpVerified() {
-        OtpRecord otpRecord = new OtpRecord("123456", "signup", Instant.now(), 0);
-        when(redisService.get(eq("otp:email"), eq("carol@example.com"), eq(OtpRecord.class))).thenReturn(otpRecord);
-        when(redisService.getAndDelete("otp:email", "carol@example.com", OtpRecord.class)).thenReturn(otpRecord);
+        OtpRecord otpRecord = new OtpRecord(h("carol@example.com", "123456"), "signup", Instant.now(), 0);
+        when(redisService.get(eq("otp:email"), eq(k("carol@example.com")), eq(OtpRecord.class))).thenReturn(otpRecord);
+        when(redisService.getAndDelete("otp:email", k("carol@example.com"), OtpRecord.class)).thenReturn(otpRecord);
         when(userRepository.findByEmail("carol@example.com")).thenReturn(Optional.empty());
         UUID carolId = UUID.randomUUID();
         when(userRepository.save(any(User.class))).thenAnswer(inv -> {
@@ -787,10 +847,10 @@ class AuthServiceTest {
             ReflectionTestUtils.setField(saved, "id", carolId);
             return saved;
         });
-        when(jwtUtil.generateToken(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-token");
-        when(refreshTokenService.generate(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
 
-        authService.verifyOtp(" Carol@Example.com", null, "123456", IP);
+        assertThat(authService.verifyOtp(" Carol@Example.com", null, "123456", IP).isNewUser()).isTrue();
 
         var order = inOrder(userRepository, voteService, inviteListService);
         order.verify(userRepository).save(any(User.class));
@@ -804,12 +864,12 @@ class AuthServiceTest {
     void shouldResolveSameAccountWhenGmailVariantVerifiesOtp() {
         User existing = User.builder().id(UUID.randomUUID()).email("ab@gmail.com")
                 .roles(new String[] { "user" }).build();
-        OtpRecord gmailOtp = new OtpRecord("123456", "login", Instant.now(), 0);
-        when(redisService.get(eq("otp:email"), eq("ab@gmail.com"), eq(OtpRecord.class))).thenReturn(gmailOtp);
-        when(redisService.getAndDelete(eq("otp:email"), eq("ab@gmail.com"), eq(OtpRecord.class))).thenReturn(gmailOtp);
+        OtpRecord gmailOtp = new OtpRecord(h("ab@gmail.com", "123456"), "login", Instant.now(), 0);
+        when(redisService.get(eq("otp:email"), eq(k("ab@gmail.com")), eq(OtpRecord.class))).thenReturn(gmailOtp);
+        when(redisService.getAndDelete(eq("otp:email"), eq(k("ab@gmail.com")), eq(OtpRecord.class))).thenReturn(gmailOtp);
         when(userRepository.findByEmail("ab@gmail.com")).thenReturn(Optional.of(existing));
-        when(jwtUtil.generateToken(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-token");
-        when(refreshTokenService.generate(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
 
         AuthResponse response = authService.verifyOtp("A.B+x@gmail.com", null, "123456", IP);
 
@@ -824,8 +884,8 @@ class AuthServiceTest {
         User carol = User.builder().id(UUID.randomUUID()).email("carol@example.com").displayName("Carol")
                 .roles(new String[] { "user" }).build();
         when(userRepository.findByEmail("carol@example.com")).thenReturn(Optional.of(carol));
-        when(jwtUtil.generateToken(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-token");
-        when(refreshTokenService.generate(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
 
         authService.googleLogin(idToken);
 
@@ -842,8 +902,8 @@ class AuthServiceTest {
         User carol = User.builder().id(UUID.randomUUID()).email("carol@example.com").displayName("Carol")
                 .roles(new String[] { "user" }).build();
         when(userRepository.findByEmail("carol@example.com")).thenReturn(Optional.of(carol));
-        when(jwtUtil.generateToken(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-token");
-        when(refreshTokenService.generate(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
 
         authService.googleLogin(idToken);
 
@@ -949,7 +1009,7 @@ class AuthServiceTest {
         String idToken = base64Url("{\"alg\":\"none\",\"kid\":\"k1\"}") + "."
                 + base64Url("{\"iss\":\"https://appleid.apple.com\"}") + ".c2ln";
 
-        assertThatThrownBy(() -> authService.appleLogin(idToken, null))
+        assertThatThrownBy(() -> authService.appleLogin(idToken, null, "raw-nonce"))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_APPLE_INVALID_TOKEN));
     }
@@ -958,8 +1018,8 @@ class AuthServiceTest {
         User carol = User.builder().id(UUID.randomUUID()).email("carol@example.com").displayName("Carol")
                 .roles(new String[] { "user" }).build();
         when(userRepository.findByEmail("carol@example.com")).thenReturn(Optional.of(carol));
-        when(jwtUtil.generateToken(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-token");
-        when(refreshTokenService.generate(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
     }
 
     @SuppressWarnings("unchecked")
@@ -988,6 +1048,52 @@ class AuthServiceTest {
                     assertThat(((ApiException) ex).getMessageKey()).isEqualTo(expected);
                 });
         verify(userRepository, never()).findByEmail(anyString());
+    }
+
+    @Test
+    void shouldRejectGoogleTokenWhenPresentedTwice() throws Exception {
+        ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
+        String idToken = signedGoogleToken(googlePayload("carol@example.com", true));
+        when(redisService.setIfAbsent(eq("oauth:used"), eq(com.vomatt.common.security.AppKey.sha256Hex(idToken)), eq("1"), any(Duration.class)))
+                .thenReturn(false);
+
+        assertGoogleRejected(idToken, MessageKey.AUTH_OAUTH_TOKEN_REPLAYED);
+        verify(userRepository, never()).findByEmail(anyString());
+    }
+
+    @Test
+    void shouldRejectAppleTokenWhenNonceDoesNotMatch() throws Exception {
+        java.security.KeyPair kp = rsaKeyPair();
+        stubJwksFetch(jwksOf((java.security.interfaces.RSAPublicKey) kp.getPublic()), null);
+        java.util.Map<String, Object> claims = new java.util.HashMap<>();
+        claims.put("iss", "https://appleid.apple.com");
+        claims.put("aud", "com.vomatt.app");
+        claims.put("exp", Instant.now().plusSeconds(600).getEpochSecond());
+        claims.put("email", "carol@example.com");
+        claims.put("email_verified", "true");
+        claims.put("nonce", com.vomatt.common.security.AppKey.sha256Hex("raw-nonce"));
+        String idToken = signGoogleToken(claims, kp);
+
+        assertThatThrownBy(() -> authService.appleLogin(idToken, null, "another-nonce"))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_APPLE_INVALID_NONCE));
+        // A missing claim is a mismatch too
+        claims.remove("nonce");
+        String noNonce = signGoogleToken(claims, kp);
+        assertThatThrownBy(() -> authService.appleLogin(noNonce, null, "raw-nonce"))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_APPLE_INVALID_NONCE));
+        verify(redisService, never()).setIfAbsent(eq("oauth:used"), anyString(), any(), any(Duration.class));
+
+        // Matching nonce: signs in, and the token is consumed
+        User carol = User.builder().id(UUID.randomUUID()).email("carol@example.com").roles(new String[] { "user" }).build();
+        when(userRepository.findByEmail("carol@example.com")).thenReturn(Optional.of(carol));
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
+        assertThat(authService.appleLogin(idToken, null, "raw-nonce").token()).isEqualTo("mock-token");
+        // The marker outlives the token: exp (600 s) plus the 60 s clock skew
+        verify(redisService).setIfAbsent(eq("oauth:used"), eq(com.vomatt.common.security.AppKey.sha256Hex(idToken)), eq("1"),
+                argThat((Duration ttl) -> ttl.compareTo(Duration.ofMinutes(10)) > 0 && ttl.compareTo(Duration.ofMinutes(11)) <= 0));
     }
 
     private static java.util.Map<String, Object> googlePayload(String email, boolean emailVerified) {
@@ -1035,7 +1141,7 @@ class AuthServiceTest {
         when(userRepository.findByPhoneNumber("+886912345678")).thenReturn(Optional.empty());
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        User result = authService.findOrCreateUserByPhone("0912345678");
+        User result = authService.findOrCreateUserByPhone("0912345678").user();
 
         assertThat(result.getPhoneNumber()).isEqualTo("+886912345678");
         assertThat(result.getEmail()).isNull();
@@ -1055,19 +1161,21 @@ class AuthServiceTest {
 
         authService.sendOtp(null, "0912345678", "login", IP);
 
-        OtpRecord sent = storedOtp("otp:phone", "+886912345678");
-        verify(smsService).sendOtp(eq("+886912345678"), eq(sent.code()));
+        OtpRecord sent = storedOtp("otp:phone", k("+886912345678"));
+        org.mockito.ArgumentCaptor<String> code = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(smsService).sendOtp(eq("+886912345678"), code.capture());
+        assertThat(sent.codeHash()).isEqualTo(h("+886912345678", code.getValue()));
 
-        when(redisService.get(eq("otp:phone"), eq("+886912345678"), eq(OtpRecord.class))).thenReturn(sent);
-        when(redisService.getAndDelete("otp:phone", "+886912345678", OtpRecord.class)).thenReturn(sent);
-        when(jwtUtil.generateToken(anyString(), any(), any(), anyBoolean())).thenReturn("access-token");
-        when(refreshTokenService.generate(anyString(), any(), any(), anyBoolean())).thenReturn("refresh-token");
+        when(redisService.get(eq("otp:phone"), eq(k("+886912345678")), eq(OtpRecord.class))).thenReturn(sent);
+        when(redisService.getAndDelete("otp:phone", k("+886912345678"), OtpRecord.class)).thenReturn(sent);
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("access-token");
+        when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("refresh-token");
 
-        AuthResponse response = authService.verifyOtp(null, "+886912345678", sent.code(), IP);
+        AuthResponse response = authService.verifyOtp(null, "+886912345678", code.getValue(), IP);
 
         assertThat(response.user().id()).isEqualTo(existing.getId().toString());
         assertThat(response.user().phoneNumber()).isEqualTo("+886912345678");
-        assertThat(authService.findOrCreateUserByPhone("0912345678")).isSameAs(existing);
+        assertThat(authService.findOrCreateUserByPhone("0912345678").user()).isSameAs(existing);
     }
 
     // ── buildAuthResponse: active=false (suspended) check ───────────────────────────
@@ -1082,7 +1190,7 @@ class AuthServiceTest {
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey())
                         .isEqualTo(MessageKey.AUTH_ACCOUNT_BANNED));
 
-        verify(jwtUtil, org.mockito.Mockito.never()).generateToken(anyString(), anyString(), any(), anyBoolean());
+        verify(jwtUtil, org.mockito.Mockito.never()).generateToken(anyString(), any(), anyBoolean());
         verify(userRepository, org.mockito.Mockito.never()).save(any());
     }
 
@@ -1091,8 +1199,8 @@ class AuthServiceTest {
         User user = User.builder().id(UUID.randomUUID()).email("ok@example.com").username("ok_user")
                 .displayName("OK User").roles(new String[] { "user" }).active(true)
                 .build();
-        when(jwtUtil.generateToken(anyString(), anyString(), any(), anyBoolean())).thenReturn("ok-token");
-        when(refreshTokenService.generate(anyString(), anyString(), any(), anyBoolean())).thenReturn("ok-refresh");
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("ok-token");
+        when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("ok-refresh");
 
         AuthResponse response = authService.buildAuthResponse(user);
 
@@ -1101,8 +1209,9 @@ class AuthServiceTest {
         assertThat(response.user().email()).isEqualTo("ok@example.com");
         assertThat(response.user().username()).isEqualTo("ok_user");
         assertThat(response.user().roles()).containsExactly("user");
-        // Successful login updates lastLoginAt
+        // Successful login updates lastLoginAt; an existing account is never reported as new
         assertThat(user.getLastLoginAt()).isNotNull();
+        assertThat(response.isNewUser()).isFalse();
         verify(userRepository).save(user);
     }
 
@@ -1113,7 +1222,7 @@ class AuthServiceTest {
         // JWKS response body is null -> treated as an upstream error -> 503, not a misleading 401 login failure
         stubJwksFetch(null, null);
 
-        assertThatThrownBy(() -> authService.appleLogin("a.b.c", null))
+        assertThatThrownBy(() -> authService.appleLogin("a.b.c", null, "raw-nonce"))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> {
                     assertThat(((ApiException) ex).getStatus())
@@ -1128,7 +1237,7 @@ class AuthServiceTest {
         // Body not null but keys is null -> also an upstream error -> 503
         stubJwksFetch(java.util.Map.of("foo", "bar"), null);
 
-        assertThatThrownBy(() -> authService.appleLogin("a.b.c", null))
+        assertThatThrownBy(() -> authService.appleLogin("a.b.c", null, "raw-nonce"))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getStatus())
                         .isEqualTo(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE));
@@ -1141,7 +1250,7 @@ class AuthServiceTest {
                 org.springframework.http.HttpStatus.BAD_GATEWAY);
         stubJwksFetch(null, serverError);
 
-        assertThatThrownBy(() -> authService.appleLogin("a.b.c", null))
+        assertThatThrownBy(() -> authService.appleLogin("a.b.c", null, "raw-nonce"))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> {
                     assertThat(((ApiException) ex).getStatus())
@@ -1157,7 +1266,7 @@ class AuthServiceTest {
         var ioError = new org.springframework.web.client.ResourceAccessException("connect timed out");
         stubJwksFetch(null, ioError);
 
-        assertThatThrownBy(() -> authService.appleLogin("a.b.c", null))
+        assertThatThrownBy(() -> authService.appleLogin("a.b.c", null, "raw-nonce"))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getStatus())
                         .isEqualTo(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE));
@@ -1174,7 +1283,7 @@ class AuthServiceTest {
         String payload = base64Url("{\"iss\":\"https://appleid.apple.com\"}");
         String idToken = header + "." + payload + ".c2ln";
 
-        assertThatThrownBy(() -> authService.appleLogin(idToken, null))
+        assertThatThrownBy(() -> authService.appleLogin(idToken, null, "raw-nonce"))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> {
                     assertThat(((ApiException) ex).getStatus())
@@ -1197,8 +1306,8 @@ class AuthServiceTest {
         String payload = base64Url("{\"iss\":\"https://appleid.apple.com\"}");
         String idToken = header + "." + payload + ".c2ln";
 
-        assertThatThrownBy(() -> authService.appleLogin(idToken, null)).isInstanceOf(ApiException.class);
-        assertThatThrownBy(() -> authService.appleLogin(idToken, null)).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> authService.appleLogin(idToken, null, "raw-nonce")).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> authService.appleLogin(idToken, null, "raw-nonce")).isInstanceOf(ApiException.class);
 
         // JWKS fetched only once (second call hits the cache)
         verify(restClient, org.mockito.Mockito.times(1)).get();
@@ -1208,7 +1317,7 @@ class AuthServiceTest {
     void shouldThrowNotConfiguredWhenAppleClientIdIsBlank() {
         ReflectionTestUtils.setField(authService, "appleClientId", "");
 
-        assertThatThrownBy(() -> authService.appleLogin("a.b.c", null))
+        assertThatThrownBy(() -> authService.appleLogin("a.b.c", null, "raw-nonce"))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_APPLE_NOT_CONFIGURED));
         verify(restClient, never()).get();
@@ -1233,7 +1342,7 @@ class AuthServiceTest {
         sig.update(signingInput.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         String idToken = signingInput + "." + enc.encodeToString(sig.sign());
 
-        assertThatThrownBy(() -> authService.appleLogin(idToken, null))
+        assertThatThrownBy(() -> authService.appleLogin(idToken, null, "raw-nonce"))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_APPLE_TOKEN_EXPIRED));
         verify(userRepository, never()).findByEmail(anyString());

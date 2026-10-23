@@ -7,9 +7,7 @@ import com.vomatt.common.email.EmailService;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.i18n.MessageKey;
 import java.time.Duration;
-import java.time.LocalDate;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -96,15 +94,6 @@ public class VoteService {
 
     private static final String INVITATION_COUNTER_NS = "email:invitation";
     private static final String BALLOT_RATE_LIMIT_NS = "rate:limit:ballot";
-
-    /**
-     * k-anonymity floor for the voter list: an Ended Poll holding 1 to K-1 Anonymous Ballots hides its voter list.
-     * Otherwise the owner of an Invite-only Poll could subtract the named voters from the Invitees holding a Ballot
-     * and, with the per-option counts, recover who voted anonymously and for what. With K or more Anonymous Ballots
-     * the owner still learns which Invitees voted anonymously and how many anonymous Ballots each option got, so if
-     * all of them chose the same option their choice is still inferable.
-     */
-    static final int ANONYMOUS_BALLOT_K = 3;
 
     @Value("${app.email.invitation-daily-limit:200}")
     private int invitationDailyLimit;
@@ -308,13 +297,13 @@ public class VoteService {
      * The response is built after the locked write commits, so the Poll-row lock covers only the write.
      */
     @Transactional(propagation = Propagation.SUPPORTS)
-    public VoteResponse vote(String voteId, VoteRequest request, String userId, String ipAddress) {
+    public VoteResponse vote(String voteId, VoteRequest request, String userId) {
         checkBallotRateLimit(userId);
-        UUID optionUuid = transactionTemplate.execute(s -> castBallot(voteId, request, userId, ipAddress));
+        UUID optionUuid = transactionTemplate.execute(s -> castBallot(voteId, request, userId));
         return transactionTemplate.execute(s -> ballotResponse(UUID.fromString(voteId), userId, optionUuid));
     }
 
-    private UUID castBallot(String voteId, VoteRequest request, String userId, String ipAddress) {
+    private UUID castBallot(String voteId, VoteRequest request, String userId) {
         UUID voteUuid = UUID.fromString(voteId);
         UUID userUuid = UUID.fromString(userId);
         Vote vote = lockOpenVote(voteUuid, userId);
@@ -341,7 +330,7 @@ public class VoteService {
             previous.get().setAnonymous(anonymous);
         } else {
             Optional<UUID> releasedOptionId = previous.map(this::deleteBallot);
-            UserVote ballot = new UserVote(user, vote, option, ipAddress);
+            UserVote ballot = new UserVote(user, vote, option);
             ballot.setAnonymous(anonymous);
             userVoteRepository.saveAndFlush(ballot);
             // Before the count updates below: each clears the persistence context, detaching the locked Poll, and the
@@ -352,12 +341,9 @@ public class VoteService {
             if (previous.isEmpty()) {
                 voteRepository.adjustTurnout(voteUuid, 1);
             }
-            // The option of an Anonymous Ballot stays out of the logs
-            if (anonymous) {
-                log.info("User {} cast anonymous ballot on vote {}", userId, voteId);
-            } else {
-                log.info("User {} cast ballot on vote {} for option {}", userId, voteId, optionUuid);
-            }
+            // Ballot logs name only the Poll and the event: never who voted nor what they chose, so log platforms
+            // (looser access than the DB, long retention) cannot rebuild Ballots
+            log.info("ballot.cast vote={} anonymous={}", voteId, anonymous);
         }
         return optionUuid;
     }
@@ -371,7 +357,7 @@ public class VoteService {
             lockOpenVote(voteUuid, userId);
             userVoteRepository.findByUserIdAndVoteId(UUID.fromString(userId), voteUuid)
                 .ifPresent(this::releaseBallot);
-            log.info("User {} retracted ballot in vote {}", userId, voteId);
+            log.info("ballot.retract vote={}", voteId);
             return null;
         });
         return transactionTemplate.execute(s -> ballotResponse(voteUuid, userId, null));
@@ -388,8 +374,7 @@ public class VoteService {
             userVoteRepository.findByUserIdAndVoteIdAndOptionId(userUuid, voteUuid, UUID.fromString(optionId))
                 .ifPresent(ballot -> {
                     releaseBallot(ballot);
-                    log.info("User {} removed vote from {} in vote {}", userId,
-                        ballot.isAnonymous() ? "an anonymous ballot" : "option " + optionId, voteId);
+                    log.info("ballot.retract vote={}", voteId);
                 });
             return null;
         });
@@ -412,8 +397,9 @@ public class VoteService {
     }
 
     /**
-     * Who chose what in an Ended Poll, as allowed by its Voter Visibility; oldest Ballot first.
-     * Hidden while the Poll holds 1 to {@link #ANONYMOUS_BALLOT_K}-1 Anonymous Ballots other than the caller's.
+     * Who took part in an Ended Poll, as allowed by its Voter Visibility; oldest Ballot first. Anonymous Ballots are
+     * left out, and while the Poll holds any (other than the caller's own) no option is named at all: with the named
+     * voters' options and the per-option totals, subtraction would otherwise tell what the anonymous ones chose.
      */
     @Transactional(readOnly = true)
     public CursorResponse<VoterResponse> getVoters(String voteId, String userId, String cursor, Integer limit) {
@@ -431,19 +417,16 @@ public class VoteService {
             throw ApiException.forbidden(MessageKey.VOTE_VOTERS_HIDDEN);
         }
         // The caller's own Anonymous Ballot does not count: they know its option, so it hides no one else's.
-        // ponytail: Ballots of other accounts the caller controls (invited sock puppets) still count; no count-based gate can tell them apart.
-        // An account deletion can drop Ballots between pages; the gate is re-checked on every page, so it only ever hides more.
-        long anonymousBallots = userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(vote.getId(), UUID.fromString(userId));
-        if (anonymousBallots > 0 && anonymousBallots < ANONYMOUS_BALLOT_K) {
-            throw ApiException.forbidden(MessageKey.VOTE_VOTERS_HIDDEN);
-        }
+        // ponytail: Ballots of other accounts the caller controls (invited sock puppets) still count; no count-based rule can tell them apart.
+        // Re-checked on every page: an account deletion can drop Ballots between pages, so this only ever hides more.
+        boolean withOptions = userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(vote.getId(), UUID.fromString(userId)) == 0;
 
         int size = CursorResponse.limit(limit);
         Cursor after = Cursor.decode(cursor, Cursor.Scope.VOTERS);
         List<UserVote> rows = userVoteRepository.findVoterPage(vote.getId(),
             after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
         return CursorResponse.of(rows, size, Cursor.Scope.VOTERS, ballot -> Cursor.of(ballot.getCreatedAt(), ballot.getId()),
-            page -> page.stream().map(voteMapper::toVoterResponse).toList());
+            page -> page.stream().map(ballot -> voteMapper.toVoterResponse(ballot, withOptions)).toList());
     }
 
     @Transactional(readOnly = true)
@@ -457,6 +440,8 @@ public class VoteService {
         findAccessibleVote(UUID.fromString(voteId), userId);
         return userVoteRepository.findByUserIdAndVoteId(UUID.fromString(userId), UUID.fromString(voteId))
             .stream()
+            // A sealed Anonymous Ballot (Ended Poll) has no option any more
+            .filter(mv -> mv.getOption() != null)
             .map(mv -> mv.getOption().getId().toString())
             .toList();
     }
@@ -691,7 +676,7 @@ public class VoteService {
      */
     private int takeInvitationQuota(UUID ownerId, int n) {
         try {
-            String day = LocalDate.now(ZoneOffset.UTC).toString();
+            String day = TextUtil.utcDay();
             long count = redisService.incrementAndExpire(INVITATION_COUNTER_NS, ownerId + ":" + day, n, Duration.ofDays(1));
             return Math.clamp(invitationDailyLimit - (count - n), 0, n);
         } catch (RuntimeException e) {
@@ -828,7 +813,8 @@ public class VoteService {
         return votes.stream().map(vote -> {
             VoteResponse response = voteMapper.toResponse(vote, sortedOptions(vote));
             BallotSelection mine = selections.get(vote.getId());
-            response.setMyOptionId(mine == null ? null : mine.getOptionId().toString());
+            // A sealed Anonymous Ballot (Ended Poll) has no option any more; the Ballot itself is still the caller's
+            response.setMyOptionId(mine == null || mine.getOptionId() == null ? null : mine.getOptionId().toString());
             response.setMyBallotAnonymous(mine == null ? null : mine.isAnonymous());
             response.setCommentCount(commentCounts.getOrDefault(vote.getId(), 0L));
             if (vote.getAudience() == Audience.INVITE_ONLY) {

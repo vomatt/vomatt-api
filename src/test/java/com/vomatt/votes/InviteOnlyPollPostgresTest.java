@@ -142,7 +142,7 @@ class InviteOnlyPollPostgresTest extends PostgresRepositoryTest {
         VoteResponse seen = voteService.getVote(id, inviteeId);
         assertThat(seen.getAudience()).isEqualTo(Audience.INVITE_ONLY);
         assertThat(seen.getInviteeCount()).isEqualTo(1L);
-        assertThat(voteService.vote(id, ballotFor(id, inviteeId), inviteeId, null).getParticipantCount()).isEqualTo(1);
+        assertThat(voteService.vote(id, ballotFor(id, inviteeId), inviteeId).getParticipantCount()).isEqualTo(1);
         CreateCommentRequest comment = new CreateCommentRequest();
         comment.setText("hi");
         commentService.createComment(id, inviteeId, comment);
@@ -165,7 +165,7 @@ class InviteOnlyPollPostgresTest extends PostgresRepositoryTest {
         add.setUserIds(List.of(stranger.getId(), stranger.getId(), invitee.getId()));
         voteService.addInvitees(id, add, ownerId);
         // voted after the add: a lone Invitee's Ballot would End the Poll
-        voteService.vote(id, ballotFor(id, inviteeId), inviteeId, null);
+        voteService.vote(id, ballotFor(id, inviteeId), inviteeId);
 
         List<InviteeResponse> invitees = voteService.getInvitees(id, ownerId);
         assertThat(invitees).extracting(InviteeResponse::username, InviteeResponse::hasBallot)
@@ -195,15 +195,15 @@ class InviteOnlyPollPostgresTest extends PostgresRepositoryTest {
         String inviteeId = invitee.getId().toString();
         OffsetDateTime deadline = voteService.getVote(id, ownerId).getDeadline();
 
-        voteService.vote(id, ballotFor(id, ownerId), ownerId, null);
+        voteService.vote(id, ballotFor(id, ownerId), ownerId);
         assertThat(ended(id)).as("the owner's Ballot never counts").isFalse();
 
-        VoteResponse last = voteService.vote(id, ballotFor(id, inviteeId), inviteeId, null);
+        VoteResponse last = voteService.vote(id, ballotFor(id, inviteeId), inviteeId);
         assertThat(last.getOptions()).allSatisfy(o -> assertThat(o.getVotes()).isNotNull());
         assertThat(last.getEndTime()).isBefore(deadline);
         assertThat(last.getDeadline()).isEqualTo(deadline);
         assertThat(voteService.getVoteResults(id, inviteeId).getTotalVotes()).isEqualTo(2);
-        assertThatThrownBy(() -> voteService.vote(id, ballotFor(id, ownerId), ownerId, null))
+        assertThatThrownBy(() -> voteService.vote(id, ballotFor(id, ownerId), ownerId))
                 .isInstanceOfSatisfying(ApiException.class,
                         ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_ENDED));
     }
@@ -217,7 +217,7 @@ class InviteOnlyPollPostgresTest extends PostgresRepositoryTest {
         InviteesRequest add = new InviteesRequest();
         add.setUserIds(List.of(stranger.getId()));
         voteService.addInvitees(id, add, ownerId);
-        voteService.vote(id, ballotFor(id, inviteeId), inviteeId, null);
+        voteService.vote(id, ballotFor(id, inviteeId), inviteeId);
         assertThat(ended(id)).as("stranger still holds no Ballot").isFalse();
 
         voteService.removeInvitee(id, stranger.getId().toString(), ownerId);
@@ -232,7 +232,7 @@ class InviteOnlyPollPostgresTest extends PostgresRepositoryTest {
         String ownerId = owner.getId().toString();
 
         voteService.removeInvitee(id, invitee.getId().toString(), ownerId);
-        voteService.vote(id, ballotFor(id, ownerId), ownerId, null);
+        voteService.vote(id, ballotFor(id, ownerId), ownerId);
 
         assertThat(ended(id)).isFalse();
     }
@@ -248,7 +248,7 @@ class InviteOnlyPollPostgresTest extends PostgresRepositoryTest {
         request.setAudience(Audience.INVITE_ONLY);
         String id = voteService.createVote(request, ownerId).getId();
 
-        voteService.vote(id, ballotFor(id, ownerId), ownerId, null);
+        voteService.vote(id, ballotFor(id, ownerId), ownerId);
 
         assertThat(ended(id)).isFalse();
     }

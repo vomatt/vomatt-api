@@ -10,18 +10,24 @@ import com.vomatt.admin.dto.AdminUserDetail;
 import com.vomatt.admin.dto.AdminUserResponse;
 import com.vomatt.admin.dto.AuditLogResponse;
 import com.vomatt.common.audit.AuditLog;
+import com.vomatt.common.util.TextUtil;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserBlock;
 import com.vomatt.entity.VoteComment;
 
-/** Back-office views; unlike the public mappers nothing is masked (deleted Comments keep author and text). */
+/**
+ * Back-office views; unlike the public mappers nothing is masked (deleted Comments keep author and text), except the
+ * user list: an admin session that leaks must not hand over every email and phone number in one request, so the list
+ * masks contact details and the detail view (audited per lookup) holds the full record.
+ */
 @Component
 public class AdminMapper {
 
     public AdminUserResponse toUserResponse(User user) {
         return new AdminUserResponse(user.getId().toString(), user.getUsername(), user.getDisplayName(),
-                user.getFirstName(), user.getLastName(), user.getBirthday(), user.getEmail(),
-                user.getPhoneNumber(), user.getAuthMethod(), List.of(user.getRoles()), user.isActive(),
+                user.getEmail() == null ? null : TextUtil.maskEmail(user.getEmail()),
+                user.getPhoneNumber() == null ? null : TextUtil.maskPhone(user.getPhoneNumber()),
+                user.getAuthMethod(), List.of(user.getRoles()), user.isActive(),
                 user.getLastLoginAt(), user.getCreatedAt());
     }
 

@@ -78,7 +78,7 @@ class AdminTagControllerTest {
 
     /** JwtAuthFilter maps the roles claim to ROLE_<UPPER> authorities */
     private static void authenticateAs(String role) {
-        UserPrincipal principal = new UserPrincipal(role + "-id", role + "@test.com", List.of(role));
+        UserPrincipal principal = new UserPrincipal(role + "-id", List.of(role));
         Authentication auth = new UsernamePasswordAuthenticationToken(principal, null,
                 AuthorityUtils.createAuthorityList("ROLE_" + role.toUpperCase()));
         SecurityContextHolder.getContext().setAuthentication(auth);

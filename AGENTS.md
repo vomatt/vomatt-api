@@ -11,7 +11,7 @@ docker compose up -d --build         # full stack (API + Postgres + Redis) for f
 docker compose up -d postgres redis  # DB only, pair with ./mvnw spring-boot:run; db/schema.sql is applied on first start
                                      # an existing volume does not rerun it: apply new db/migrations/* by hand (psql) or docker compose down -v
 cp .env.example .env                 # fill in JWT_SECRET etc.
-./mvnw spring-boot:run               # with EMAIL_ENABLED=false, read the OTP from Redis: redis-cli GET otp:email:<email>
+./mvnw spring-boot:run               # with EMAIL_ENABLED=false, the OTP is printed in the app log as [EMAIL-NOOP] (Redis holds only a hash)
 ./mvnw clean package -DskipTests
 ./mvnw test
 ./mvnw test -Dtest=VoteServiceTest   # single test class; -Dtest=VoteServiceTest#shouldXxx runs a single method
@@ -27,7 +27,7 @@ Swagger UI: <http://localhost:8080/swagger-ui.html>. `*PostgresTest` and `OpenAp
 - Code and API paths keep the `Vote` naming; business terms follow `CONTEXT.md` (Poll, Ballot, Selection, Participant, Sealed, Turnout, Support...). Renaming would break the contract, so it is not renamed.
 - Poll status is not stored in a column; it is derived from time: `Vote.statusAt()`, with Ended taking precedence over Scheduled. Cancelled is an Ended Poll with `endTime < startTime`.
 - Result sealing (Sealed) is handled in one place only, `VoteMapper`: while a Poll is not Ended, every option's vote count is null. Any new path that returns `VoteResponse` must go through the mapper.
-- Anonymous Ballots (`user_votes.anonymous`) are excluded from the voter list (`GET /api/votes/{voteId}/voters`), which is fully hidden while other users hold fewer than `VoteService.ANONYMOUS_BALLOT_K` of them. Any new query that exposes who chose what must exclude them and apply the same k-gate: exclusion alone leaks, because per-option counts minus named voters reveal what the anonymous ones chose. Even past the gate, Anonymous Ballots that all chose the same option stay inferable (see the `ANONYMOUS_BALLOT_K` Javadoc).
+- Anonymous Ballots (`user_votes.anonymous`) are excluded from the voter list (`GET /api/votes/{voteId}/voters`), and while a Poll holds any (other than the caller's own) the list names no option for anyone (`VoterResponse.optionId` null). Any new query that exposes who chose what must do the same: exclusion alone leaks, because per-option counts minus named voters reveal what the anonymous ones chose. Once a Poll has Ended, `RetentionJob` seals its Anonymous Ballots (`option_id` NULL), so code reading a Ballot's option must allow null.
 - The Poll-level `votes.is_anonymous` (`anonymous` in the API) is deprecated and hides nothing on its own: `VoteService.applyVoterVisibility` keeps it equal to "Voter Visibility is NOBODY", and the response derives it the same way. Sent without `voterVisibility`, true sets NOBODY and false turns NOBODY back into OWNER (`CreateVoteRequest.resolveVoterVisibility`). Use `voterVisibility`.
 - Option vote counts are stored in `vote_options.vote_count` and maintained with atomic increments/decrements; `db/reconcile-vote-counts.sql` can be used to reconcile them.
 - Public lists use cursor pagination (`CursorResponse` / `Cursor`, `limit` defaults to 20, max 50); keyset queries live in `VoteListRepository`. Title and description search uses a custom bigram GIN index; `q` needs at least 2 characters.

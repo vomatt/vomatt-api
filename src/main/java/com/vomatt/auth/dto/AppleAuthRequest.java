@@ -14,6 +14,11 @@ public record AppleAuthRequest(
                 example = "eyJraWQiOiJZdXl1eVoxIiwiYWxnIjoiUlMyNTYifQ...")
         @NotBlank String idToken,
 
+        @Schema(description = "The raw nonce this sign-in started with. The client sends its SHA-256 hex to Apple and the raw value here; "
+                + "the server checks the token's `nonce` claim against it, so a captured token cannot be replayed from another session",
+                requiredMode = Schema.RequiredMode.REQUIRED, example = "f3a9c2b4e1d8...")
+        @NotBlank String nonce,
+
         @Schema(description = "Full name, used only when a new user is created. Apple provides the name on the first authorization only, so send it then; null or ignored afterwards",
                 example = "Ming Wang", nullable = true)
         String fullName

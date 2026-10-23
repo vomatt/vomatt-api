@@ -99,7 +99,8 @@ public class AdminUserController {
             description = """
                     **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
                     **Precondition**: caller holds role ADMIN
-                    **Behavior**: offset page of every account, suspended included, newest first. `q` matches (case-insensitive contains) username, email, phone number, display name, first name, last name or full name (`firstName lastName`, `lastName firstName`, or `lastNamefirstName` with no space); `status` is `active` or `suspended`; `role` is `user`, `moderator` or `admin`. All filters are optional and combine with AND. `page` is 1-based (default 1), `limit` 1-50 (default 20)
+                    **Behavior**: offset page of every account, suspended included, newest first. `q` matches (case-insensitive contains) username, email, phone number, display name, first name, last name or full name (`firstName lastName`, `lastName firstName`, or `lastNamefirstName` with no space); `status` is `active` or `suspended`; `role` is `user`, `moderator` or `admin`. All filters are optional and combine with AND. `page` is 1-based (default 1), `limit` 1-50 (default 20). \
+                    Items carry masked `email` / `phoneNumber` and no names or birthday: open `GET /api/admin/users/{userId}` for the full record
                     **Side effects**: none
                     **Errors**:
                     - 400 `common.invalid_status`: `status` is neither `active` nor `suspended`
@@ -114,10 +115,7 @@ public class AdminUserController {
                             "id": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
                             "username": "alice",
                             "displayName": "Alice",
-                            "firstName": "Alice",
-                            "lastName": "Chen",
-                            "birthday": "1995-04-12",
-                            "email": "alice@example.com",
+                            "email": "a***@example.com",
                             "phoneNumber": null,
                             "authMethod": "email_otp",
                             "roles": ["user"],
@@ -173,13 +171,14 @@ public class AdminUserController {
     }
 
     @GetMapping("/{userId}")
+    @Auditable(action = "VIEW", resourceType = "USER", resourceIdIndex = 0)
     @CommonApiResponses
     @Operation(summary = "Get User",
             description = """
                     **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
                     **Precondition**: caller holds role ADMIN
-                    **Behavior**: returns the account with sign-in details, points and counts of Polls created (any Audience, Deleted included), Ballots held, Comments written (deleted included), users this user blocks (`blockingCount`) and users who block them (`blockedByCount`)
-                    **Side effects**: none
+                    **Behavior**: returns the account with full contact details, names, birthday, sign-in details, points and counts of Polls created (any Audience, Deleted included), Ballots held, Comments written (deleted included), users this user blocks (`blockingCount`) and users who block them (`blockedByCount`)
+                    **Side effects**: the lookup is written to the audit log (action `VIEW`, resource `USER`), since it reveals personal data
                     **Errors**:
                     - 400 `common.type_mismatch`: `userId` is not a valid UUID
                     - 404 `user.not_found`: no account with this ID""")

@@ -454,7 +454,7 @@ class VoteServiceTest {
             VoteRequest request = new VoteRequest();
             request.setOptionIds(List.of(UUID.randomUUID().toString()));
 
-            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1"))
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
         }
 
@@ -468,7 +468,7 @@ class VoteServiceTest {
             VoteRequest request = new VoteRequest();
             request.setOptionIds(List.of(UUID.randomUUID().toString(), UUID.randomUUID().toString()));
 
-            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1"))
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_MULTIPLE_NOT_ALLOWED));
 
             verify(userVoteRepository, never()).save(any());
@@ -488,7 +488,7 @@ class VoteServiceTest {
             VoteRequest request = new VoteRequest();
             request.setOptionIds(List.of(optionId.toString()));
 
-            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1"))
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_OPTION_NOT_IN_VOTE));
 
             verify(userVoteRepository, never()).save(any());
@@ -503,13 +503,13 @@ class VoteServiceTest {
             request.setOptionIds(List.of(UUID.randomUUID().toString()));
 
             // GlobalExceptionHandler maps it to 409 common.conflict
-            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1"))
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString()))
                     .isInstanceOf(PessimisticLockingFailureException.class);
         }
 
         @Test
-        @DisplayName("should log the option only when the Ballot is not Anonymous")
-        void shouldOmitOptionFromLogWhenBallotIsAnonymous() {
+        @DisplayName("should log neither the voter nor the option for any Ballot event")
+        void shouldKeepUserAndOptionOutOfLogsWhenBallotCastOrRetracted() {
             vote.setStartTime(OffsetDateTime.now().minusHours(1));
             vote.setEndTime(OffsetDateTime.now().plusDays(1));
             UUID optionId = UUID.randomUUID();
@@ -525,12 +525,19 @@ class VoteServiceTest {
             try {
                 VoteRequest request = new VoteRequest();
                 request.setOptionIds(List.of(optionId.toString()));
+                request.setAnonymous(false);
+                voteService.vote(voteId.toString(), request, userId.toString());
                 request.setAnonymous(true);
-                voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1");
+                voteService.vote(voteId.toString(), request, userId.toString());
+                voteService.retract(voteId.toString(), userId.toString());
+                voteService.removeVote(voteId.toString(), optionId.toString(), userId.toString());
 
                 assertThat(logs.list).extracting(ILoggingEvent::getFormattedMessage)
-                        .anySatisfy(m -> assertThat(m).contains("anonymous ballot"))
-                        .noneSatisfy(m -> assertThat(m).contains(optionId.toString()));
+                        .anySatisfy(m -> assertThat(m).contains("ballot.cast").contains("anonymous=false"))
+                        .anySatisfy(m -> assertThat(m).contains("anonymous=true"))
+                        .anySatisfy(m -> assertThat(m).contains("ballot.retract"))
+                        .allSatisfy(m -> assertThat(m).contains(voteId.toString())
+                                .doesNotContain(userId.toString()).doesNotContain(optionId.toString()));
             } finally {
                 serviceLogger.detachAppender(logs);
             }
@@ -553,7 +560,7 @@ class VoteServiceTest {
             VoteRequest request = new VoteRequest();
             request.setOptionIds(List.of(UUID.randomUUID().toString()));
 
-            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1"))
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.TOO_MANY_REQUESTS, MessageKey.COMMON_RATE_LIMITED));
             verify(voteRepository, never()).findByIdForUpdate(any());
         }
@@ -613,7 +620,7 @@ class VoteServiceTest {
             vote.setEndTime(OffsetDateTime.now().minusMinutes(1));
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
 
-            assertThatThrownBy(() -> voteService.vote(voteId.toString(), singleOption(), userId.toString(), "127.0.0.1"))
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), singleOption(), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_ENDED));
             verify(userVoteRepository, never()).save(any());
         }
@@ -625,7 +632,7 @@ class VoteServiceTest {
             vote.setEndTime(OffsetDateTime.now().plusDays(1));
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
 
-            assertThatThrownBy(() -> voteService.vote(voteId.toString(), singleOption(), userId.toString(), "127.0.0.1"))
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), singleOption(), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_NOT_ALLOWED));
         }
 
@@ -769,23 +776,21 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("should hide voters when the Poll holds fewer than K Anonymous Ballots")
-        void shouldHideVotersWhenAnonymousBallotsBelowK() {
+        @DisplayName("should list voters without options while the Poll holds an Anonymous Ballot of someone else")
+        void shouldDropOptionsWhenAnonymousBallotsExist() {
             endedWith(VoterVisibility.OWNER);
+            com.vomatt.entity.UserVote named = new com.vomatt.entity.UserVote(user, vote, option);
+            setId(option, UUID.randomUUID());
             when(userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn(1L);
+            when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of(named));
 
-            assertHidden(userId.toString());
-            verify(userVoteRepository, never()).findVoterPage(any(), any(), any(), any());
-        }
+            assertThat(voteService.getVoters(voteId.toString(), userId.toString(), null, null).items())
+                    .singleElement().satisfies(v -> assertThat(v.optionId()).isNull());
+            verify(voteMapper).toVoterResponse(named, false);
 
-        @Test
-        @DisplayName("should show voters when the Poll holds K Anonymous Ballots")
-        void shouldShowVotersWhenAnonymousBallotsReachK() {
-            endedWith(VoterVisibility.OWNER);
-            when(userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn((long) VoteService.ANONYMOUS_BALLOT_K);
-            when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of());
-
-            assertThat(voteService.getVoters(voteId.toString(), userId.toString(), null, null).items()).isEmpty();
+            when(userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn(0L);
+            assertThat(voteService.getVoters(voteId.toString(), userId.toString(), null, null).items())
+                    .singleElement().satisfies(v -> assertThat(v.optionId()).isEqualTo(option.getId().toString()));
         }
 
         @Test
@@ -1258,7 +1263,7 @@ class VoteServiceTest {
             List<org.assertj.core.api.ThrowableAssert.ThrowingCallable> paths = List.of(
                     () -> voteService.getVote(id, null),
                     () -> voteService.getVote(id, stranger),
-                    () -> voteService.vote(id, ballot, stranger, null),
+                    () -> voteService.vote(id, ballot, stranger),
                     () -> voteService.retract(id, stranger),
                     () -> voteService.getVoteResults(id, stranger),
                     () -> voteService.getVoters(id, stranger, null, null),
@@ -1313,7 +1318,8 @@ class VoteServiceTest {
             List<org.assertj.core.api.ThrowableAssert.ThrowingCallable> paths = List.of(
                     () -> voteService.getInvitees(id, invitee),
                     () -> voteService.addInvitees(id, invite, invitee),
-                    () -> voteService.removeInvitee(id, invitee, invitee));
+                    () -> voteService.removeInvitee(id, invitee, invitee),
+                    () -> voteService.removeEmailInvitee(id, "dave@example.com", invitee));
             paths.forEach(path -> assertThatThrownBy(path)
                     .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_FORBIDDEN)));
         }
@@ -1360,7 +1366,7 @@ class VoteServiceTest {
             stubConvertToVoteResponse(vote);
             VoteRequest request = new VoteRequest();
             request.setOptionIds(List.of(optionId.toString()));
-            return voteService.vote(voteId.toString(), request, inviteeId.toString(), "127.0.0.1");
+            return voteService.vote(voteId.toString(), request, inviteeId.toString());
         }
 
         @Test

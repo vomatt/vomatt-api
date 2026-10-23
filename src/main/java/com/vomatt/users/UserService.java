@@ -23,6 +23,7 @@ import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.VoteRepository;
 import com.vomatt.repository.LockTimeout;
 import com.vomatt.common.util.AfterCommit;
+import com.vomatt.common.util.TextUtil;
 import com.vomatt.common.util.UUIDv7Generator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -49,11 +50,21 @@ public class UserService {
     private final VoteOptionRepository voteOptionRepository;
     private final VoteRepository voteRepository;
     private final LockTimeout lockTimeout;
+    private final com.vomatt.common.audit.AuditLogRepository auditLogRepository;
+    private final com.vomatt.repository.UserVoteRepository userVoteRepository;
+    private final com.vomatt.repository.VoteCommentRepository voteCommentRepository;
+    private final com.vomatt.common.redis.RedisService redisService;
+
+    /** One export per user per UTC day: the response is the account's whole footprint and is not cheap to build. */
+    private static final String EXPORT_COUNTER_NS = "export:daily";
 
     /**
      * The user themself or an active admin can delete the account; deletion also revokes all of the user's refresh tokens.
      * Deleting someone else needs both an admin-scope token (admin console login) and an active admin in the database,
      * so neither a consumer-app session of an admin nor a demoted or suspended admin's stale token can do it.
+     * <p>Rows that reference the user cascade in the database; audit_logs has no FK, so the user's entries are
+     * anonymized here in the same transaction. Redis keys other than refresh tokens (OTP, rate limits, lockouts, used
+     * id_tokens) carry no account data and are left to expire with their TTL.</p>
      */
     @Transactional
     public void deleteUser(String userId, UserPrincipal principal) {
@@ -70,6 +81,7 @@ public class UserService {
         // Poll rows before option rows, the same lock order as a Ballot, so a concurrent Ballot cannot deadlock it
         voteRepository.decrementTurnoutForUserBallots(user.getId());
         voteOptionRepository.decrementForUserBallots(user.getId());
+        auditLogRepository.anonymizeByUserId(userId);
         userRepository.delete(user);
         log.info("User {} deleted by {}", userId, principal.userId());
     }
@@ -197,6 +209,41 @@ public class UserService {
         );
     }
 
+    /** Data portability: everything stored about the caller, nothing about anyone else. Fails closed when Redis is down. */
+    @Transactional(readOnly = true)
+    public com.vomatt.users.dto.UserDataExportResponse exportMyData(String userId) {
+        String day = TextUtil.utcDay();
+        // Checked first so a spent quota costs nothing, counted only once the document is built, so a failure
+        // (DB error, missing account) does not spend the day's export
+        if (redisService.get(EXPORT_COUNTER_NS, userId + ":" + day, Long.class) != null) {
+            throw ApiException.tooManyRequests(MessageKey.COMMON_RATE_LIMITED);
+        }
+        UUID userUuid = UUID.fromString(userId);
+        MyProfileResponse profile = getMyProfile(userId);
+        Map<String, String> preferences = preferenceRepository.findByUserId(userUuid).stream()
+                .collect(Collectors.toMap(UserPreference::getKey, UserPreference::getValue, (a, b) -> a, java.util.TreeMap::new));
+        List<com.vomatt.users.dto.UserDataExportResponse.PollExport> polls = voteRepository.findByCreatorIdOrderByCreatedAtDesc(userUuid).stream()
+                .map(v -> new com.vomatt.users.dto.UserDataExportResponse.PollExport(v.getId().toString(), v.getTitle(), v.getDescription(),
+                        v.getAudience().name(), v.getStartTime(), v.getEndTime(), v.getCreatedAt(), v.getDeletedAt() != null,
+                        v.getOptions().stream().sorted(java.util.Comparator.comparing(o -> o.getDisplayOrder() == null ? 0 : o.getDisplayOrder()))
+                                .map(o -> o.getText()).toList()))
+                .toList();
+        List<com.vomatt.users.dto.UserDataExportResponse.CommentExport> comments = voteCommentRepository.findByUserId(userUuid).stream()
+                .map(c -> new com.vomatt.users.dto.UserDataExportResponse.CommentExport(c.getId().toString(), c.getVote().getId().toString(),
+                        c.getContent(), c.getCreatedAt()))
+                .toList();
+        List<com.vomatt.users.dto.UserDataExportResponse.BallotExport> ballots = userVoteRepository.findByUserIdWithVoteAndOption(userUuid).stream()
+                .map(b -> new com.vomatt.users.dto.UserDataExportResponse.BallotExport(b.getVote().getId().toString(), b.getVote().getTitle(),
+                        b.getOption() == null ? null : b.getOption().getId().toString(), b.getOption() == null ? null : b.getOption().getText(),
+                        b.isAnonymous(), b.getCreatedAt()))
+                .toList();
+        if (redisService.incrementAndExpire(EXPORT_COUNTER_NS, userId + ":" + day, java.time.Duration.ofDays(1)) > 1) {
+            throw ApiException.tooManyRequests(MessageKey.COMMON_RATE_LIMITED);
+        }
+        log.info("Data export produced for user {}", userId);
+        return new com.vomatt.users.dto.UserDataExportResponse(java.time.OffsetDateTime.now(), profile, preferences, polls, comments, ballots);
+    }
+
     @Transactional
     public Map<String, Boolean> updateVisibility(String userId, Map<String, Boolean> visibility) {
         User user = findUserById(userId);
@@ -270,7 +317,10 @@ public class UserService {
                 .findByUserIdAndKeyStartingWith(userId, VisibilityField.getPreferencePrefix());
         for (UserPreference pref : prefs) {
             String fieldName = VisibilityField.extractFieldName(pref.getKey());
-            settings.put(fieldName, Boolean.parseBoolean(pref.getValue()));
+            // Rows for fields that are no longer controllable (visibility.email, visibility.birthday) are ignored
+            if (VisibilityField.fromFieldName(fieldName).isPresent()) {
+                settings.put(fieldName, Boolean.parseBoolean(pref.getValue()));
+            }
         }
 
         return settings;

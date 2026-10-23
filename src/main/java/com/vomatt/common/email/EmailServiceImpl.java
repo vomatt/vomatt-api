@@ -1,6 +1,7 @@
 package com.vomatt.common.email;
 
 import com.resend.Resend;
+import com.vomatt.common.util.TextUtil;
 import com.resend.core.exception.ResendException;
 import com.resend.services.emails.model.Attachment;
 import com.resend.services.emails.model.CreateEmailOptions;
@@ -114,9 +115,9 @@ public class EmailServiceImpl implements EmailService {
                             "verificationMessage", messageSource.getMessage(messageKey, null, locale),
                             // the email states the real OTP lifetime, rounded up to whole minutes
                             "expiryMinutes", (otpTtlSeconds + 59) / 60));
-            log.info("Verification email ({}) sent to: {}", kind, to);
+            log.info("Verification email ({}) sent to: {}", kind, TextUtil.maskEmail(to));
         } catch (MessagingException | ResendException | RuntimeException e) {
-            log.error("Failed to send verification email to: {}", to, e);
+            log.error("Failed to send verification email to: {}", TextUtil.maskEmail(to), e);
             throw new RuntimeException("Failed to send verification email", e);
         }
     }
@@ -126,9 +127,9 @@ public class EmailServiceImpl implements EmailService {
     public void sendWelcomeEmail(String to, String username, Locale locale) {
         try {
             send(to, "email.welcome.subject", "email/welcome-email", locale, Map.of("username", Objects.toString(username, "")));
-            log.info("Welcome email sent to: {} with locale: {}", to, locale);
+            log.info("Welcome email sent to: {} with locale: {}", TextUtil.maskEmail(to), locale);
         } catch (MessagingException | ResendException | RuntimeException e) {
-            log.error("Failed to send welcome email to: {}", to, e);
+            log.error("Failed to send welcome email to: {}", TextUtil.maskEmail(to), e);
         }
     }
 
@@ -163,16 +164,10 @@ public class EmailServiceImpl implements EmailService {
                     Map.of("inviterName", Objects.toString(inviterName, ""),
                             "pollTitle", pollTitle,
                             "pollUrl", siteUrl + pollPath.replace("{voteId}", pollId.toString())));
-            log.info("Invitation email for vote {} sent to: {}", pollId, mask(to));
+            log.info("Invitation email for vote {} sent to: {}", pollId, TextUtil.maskEmail(to));
         } catch (MessagingException | ResendException | RuntimeException e) {
-            log.error("Failed to send invitation email for vote {} to: {}", pollId, mask(to), e);
+            log.error("Failed to send invitation email for vote {} to: {}", pollId, TextUtil.maskEmail(to), e);
         }
-    }
-
-    // The invitee has no account yet, so their address stays out of the logs: a***@domain
-    static String mask(String email) {
-        int at = email.indexOf('@');
-        return at <= 0 ? "***" : email.charAt(0) + "***" + email.substring(at);
     }
 
     private void send(String to, String subjectKey, String template, Locale locale, Map<String, Object> variables)

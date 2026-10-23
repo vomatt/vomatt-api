@@ -53,6 +53,10 @@ class UserServiceTest {
     @Mock RefreshTokenService refreshTokenService;
     @Mock VoteOptionRepository voteOptionRepository;
     @Mock VoteRepository voteRepository;
+    @Mock com.vomatt.common.audit.AuditLogRepository auditLogRepository;
+    @Mock com.vomatt.repository.UserVoteRepository userVoteRepository;
+    @Mock com.vomatt.repository.VoteCommentRepository voteCommentRepository;
+    @Mock com.vomatt.common.redis.RedisService redisService;
     @Spy com.vomatt.repository.LockTimeout lockTimeout = new com.vomatt.repository.LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @InjectMocks UserService userService;
 
@@ -68,17 +72,57 @@ class UserServiceTest {
     }
 
     @Test
+    @DisplayName("should export the caller's own data once per day")
+    void shouldExportOwnDataOncePerDay() {
+        UUID id = UUID.randomUUID();
+        User user = User.builder().id(id).username("alice").email("alice@example.com").roles(new String[] { "user" }).build();
+        com.vomatt.entity.Vote poll = new com.vomatt.entity.Vote("Lunch?", null, user, java.time.OffsetDateTime.now().plusDays(1));
+        org.springframework.test.util.ReflectionTestUtils.setField(poll, "id", UUID.randomUUID());
+        com.vomatt.entity.VoteOption option = new com.vomatt.entity.VoteOption("Ramen", null, poll);
+        org.springframework.test.util.ReflectionTestUtils.setField(option, "id", UUID.randomUUID());
+        poll.addOption(option);
+        com.vomatt.entity.UserVote sealed = new com.vomatt.entity.UserVote(user, poll, null);
+        sealed.setAnonymous(true);
+        when(redisService.get(eq("export:daily"), org.mockito.ArgumentMatchers.startsWith(id + ":"), eq(Long.class))).thenReturn(null, 1L);
+        when(redisService.incrementAndExpire(eq("export:daily"), org.mockito.ArgumentMatchers.startsWith(id + ":"), eq(java.time.Duration.ofDays(1))))
+                .thenReturn(1L);
+        when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        com.vomatt.repository.UserProfileProjection projection = org.mockito.Mockito.mock(com.vomatt.repository.UserProfileProjection.class);
+        when(projection.getTotalPolls()).thenReturn(1L);
+        when(projection.getTotalVotes()).thenReturn(1L);
+        when(userRepository.findProfileByUsername("alice")).thenReturn(Optional.of(projection));
+        when(preferenceRepository.findByUserId(id)).thenReturn(List.of());
+        when(voteRepository.findByCreatorIdOrderByCreatedAtDesc(id)).thenReturn(List.of(poll));
+        when(voteCommentRepository.findByUserId(id)).thenReturn(List.of());
+        when(userVoteRepository.findByUserIdWithVoteAndOption(id)).thenReturn(List.of(sealed));
+
+        com.vomatt.users.dto.UserDataExportResponse export = userService.exportMyData(id.toString());
+
+        assertThat(export.polls()).singleElement().satisfies(p -> {
+            assertThat(p.title()).isEqualTo("Lunch?");
+            assertThat(p.options()).containsExactly("Ramen");
+        });
+        assertThat(export.ballots()).singleElement().satisfies(b -> {
+            assertThat(b.optionId()).isNull();
+            assertThat(b.anonymous()).isTrue();
+        });
+        assertThatThrownBy(() -> userService.exportMyData(id.toString()))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getStatus()).isEqualTo(org.springframework.http.HttpStatus.TOO_MANY_REQUESTS));
+    }
+
+    @Test
     @DisplayName("should release user's Ballot from option counts and Turnout before deleting account")
     void shouldReleaseBallotCountsBeforeDeletingUser() {
         UUID id = UUID.randomUUID();
         User user = User.builder().id(id).username("u").build();
         when(userRepository.findById(id)).thenReturn(Optional.of(user));
 
-        userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), "u@test.local", List.of("user")));
+        userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), List.of("user")));
 
-        InOrder order = inOrder(voteOptionRepository, voteRepository, userRepository);
+        InOrder order = inOrder(voteOptionRepository, voteRepository, auditLogRepository, userRepository);
         order.verify(voteRepository).decrementTurnoutForUserBallots(id);
         order.verify(voteOptionRepository).decrementForUserBallots(id);
+        order.verify(auditLogRepository).anonymizeByUserId(id.toString());
         order.verify(userRepository).delete(user);
     }
 
@@ -89,7 +133,7 @@ class UserServiceTest {
         when(userRepository.findById(id)).thenReturn(Optional.of(admin));
         when(userRepository.lockActiveAdminIds()).thenReturn(List.of(id));
 
-        assertThatThrownBy(() -> userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), "r@test.local", List.of("admin"))))
+        assertThatThrownBy(() -> userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), List.of("admin"))))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.ADMIN_LAST_ADMIN));
         verify(userRepository, never()).delete(any());
@@ -103,7 +147,7 @@ class UserServiceTest {
         when(userRepository.findById(id)).thenReturn(Optional.of(admin));
         when(userRepository.lockActiveAdminIds()).thenReturn(List.of(id, UUID.randomUUID()));
 
-        userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), "r@test.local", List.of("admin")));
+        userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), List.of("admin")));
 
         verify(userRepository).delete(admin);
     }
@@ -115,7 +159,7 @@ class UserServiceTest {
         when(userRepository.isActiveAdmin(callerId)).thenReturn(false);
 
         assertThatThrownBy(() -> userService.deleteUser(targetId.toString(),
-                new UserPrincipal(callerId.toString(), "c@test.local", List.of("user", "admin"))))
+                new UserPrincipal(callerId.toString(), List.of("user", "admin"))))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_DELETE_FORBIDDEN));
         verify(userRepository, never()).delete(any());
@@ -128,7 +172,7 @@ class UserServiceTest {
 
         // A consumer-app token of an admin carries no admin role (JwtUtil drops it), so the DB is never consulted
         assertThatThrownBy(() -> userService.deleteUser(targetId.toString(),
-                new UserPrincipal(callerId.toString(), "c@test.local", List.of("user"))))
+                new UserPrincipal(callerId.toString(), List.of("user"))))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_DELETE_FORBIDDEN));
         verify(userRepository, never()).isActiveAdmin(any());
@@ -143,7 +187,7 @@ class UserServiceTest {
         when(userRepository.isActiveAdmin(callerId)).thenReturn(true);
         when(userRepository.findById(targetId)).thenReturn(Optional.of(target));
 
-        userService.deleteUser(targetId.toString(), new UserPrincipal(callerId.toString(), "c@test.local", List.of("admin")));
+        userService.deleteUser(targetId.toString(), new UserPrincipal(callerId.toString(), List.of("admin")));
 
         verify(userRepository).delete(target);
     }
@@ -178,7 +222,7 @@ class UserServiceTest {
         when(userRepository.findById(id)).thenReturn(Optional.of(user));
         TransactionSynchronizationManager.initSynchronization();
         try {
-            userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), "u@test.local", List.of("user")));
+            userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), List.of("user")));
 
             verify(refreshTokenService, never()).revokeAllForUser(any());
             TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);

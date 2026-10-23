@@ -108,8 +108,9 @@ public class VoteMapper {
         return result;
     }
 
-    public VoterResponse toVoterResponse(UserVote ballot) {
+    /** @param withOption false while the Poll holds Anonymous Ballots: then nobody's option is named (see VoteService.getVoters) */
+    public VoterResponse toVoterResponse(UserVote ballot, boolean withOption) {
         return new VoterResponse(ballot.getUser().getId().toString(), ballot.getUser().getUsername(), ballot.getUser().getAvatarUrl(),
-                ballot.getOption().getId().toString(), ballot.getCreatedAt());
+                withOption ? ballot.getOption().getId().toString() : null, ballot.getCreatedAt());
     }
 }

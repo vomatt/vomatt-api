@@ -27,21 +27,18 @@ The same endpoints handle both login and signup: the server decides based on whe
 sequenceDiagram
     participant App
     participant API
-    App->>API: POST /api/auth/check-email (optional)
-    API-->>App: { exists }
     App->>API: POST /api/auth/send-otp { email }
     API-->>App: 200 { success: true }
     Note over App: User reads the email, enters the 6-digit code
     App->>API: POST /api/auth/verify-otp { email, code }
-    API-->>App: 200 { token, refreshToken, user }
-    Note over App: Store both tokens, go to signed-in state
+    API-->>App: 200 { token, refreshToken, user, isNewUser }
+    Note over App: Store both tokens, go to signed-in state (show signup wording when isNewUser)
 ```
 
 | Step | API | Notes |
 |------|-----|------|
-| 1 (optional) | `POST /api/auth/check-email` | Only used to decide whether the copy says "Log in" or "Sign up" |
-| 2 | `POST /api/auth/send-otp` | OTP is valid for 180 seconds by default; resending to the same email has a cooldown (default 180 seconds) |
-| 3 | `POST /api/auth/verify-otp` | Success consumes the OTP; a new email automatically creates an account |
+| 1 | `POST /api/auth/send-otp` | OTP is valid for 180 seconds by default; resending to the same email has a cooldown (default 180 seconds). The response is the same whether or not the email is registered |
+| 2 | `POST /api/auth/verify-otp` | Success consumes the OTP; a new email automatically creates an account and the response says so with `isNewUser: true` |
 
 Wrong codes are limited per email (or phone, §3) **and client IP**:
 
@@ -97,7 +94,7 @@ sequenceDiagram
 |----------|----------------|------|
 | Google | `idToken` | The audience must be this project's Google client ID |
 | LINE | `code` + `redirectUri` | `redirectUri` must match the one used during authorization; if LINE provides no email, the backend uses `line_<userId>@line.oauth` instead, so `user.email` is never `null` |
-| Apple | `idToken` + `fullName` | Apple only provides the name on the **first authorization**, so send `fullName` that time; if Apple's key endpoint is down the backend returns 503, which can be retried |
+| Apple | `idToken` + `fullName` + `nonce` | Generate a random `nonce` per sign-in, give Apple its SHA-256 hex and send the raw value in `nonce`; the backend rejects a token whose `nonce` claim does not match (401 `auth.apple.invalid_nonce`). Apple and Google tokens sign in once each (401 `auth.oauth.token_replayed` on reuse). Apple only provides the name on the **first authorization**, so send `fullName` that time; if Apple's key endpoint is down the backend returns 503, which can be retried |
 
 ## 5. Logout
 

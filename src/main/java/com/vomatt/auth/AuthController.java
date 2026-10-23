@@ -1,9 +1,7 @@
 package com.vomatt.auth;
 
 import com.vomatt.auth.dto.AppleAuthRequest;
-import com.vomatt.auth.dto.AuthEmailExistsResponse;
 import com.vomatt.auth.dto.AuthResponse;
-import com.vomatt.auth.dto.CheckEmailRequest;
 import com.vomatt.auth.dto.GoogleAuthRequest;
 import com.vomatt.auth.dto.LineAuthRequest;
 import com.vomatt.auth.dto.PhoneSendOtpRequest;
@@ -54,7 +52,8 @@ public class AuthController {
                   "roles": ["user"],
                   "avatarUrl": "bot:boba",
                   "phoneNumber": null
-                }
+                },
+                "isNewUser": false
               },
               "message": null,
               "errorCode": null,
@@ -67,7 +66,8 @@ public class AuthController {
               "data": {
                 "token": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTkwYThiMi0xMjM0LTc4OTAtYWJjZC1lZjAxMjM0NTY3ODkifQ.sig",
                 "refreshToken": "2f9d1c6e-7b3a-4c58-9e10-a4b5c6d7e8f9",
-                "user": null
+                "user": null,
+                "isNewUser": null
               },
               "message": null,
               "errorCode": null,
@@ -88,7 +88,8 @@ public class AuthController {
                   "roles": ["user", "admin"],
                   "avatarUrl": "bot:boba",
                   "phoneNumber": null
-                }
+                },
+                "isNewUser": false
               },
               "message": null,
               "errorCode": null,
@@ -112,12 +113,13 @@ public class AuthController {
                     **Precondition**: none; the same endpoint serves login and signup (the server picks which by whether the email is registered)
                     **Behavior**: generates a 6-digit OTP, stores it with a TTL (default 180 s) and emails it. The email is lower-cased and trimmed; a Gmail address (gmail.com / googlemail.com) also loses its +tag and dots and moves to gmail.com. \
                     The admin console signs in with `POST /api/auth/admin/send-otp` instead
-                    **Side effects**: sends an email; replaces any previous OTP for this address. A resend is refused during the cooldown (default 180 s)
+                    **Side effects**: sends an email; replaces any previous OTP for this address. A resend is refused during the cooldown (default 180 s), and at most 20 OTPs are sent to one address per UTC day
                     **Errors**:
                     - 400 `auth.identifier.required`: `email` is missing or blank
                     - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
                     - 400 `auth.email.send_failed`: the email provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
-                    - 401 `auth.otp.too_many_attempts`: this email is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected""")
+                    - 401 `auth.otp.too_many_attempts`: this email is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected
+                    - 429 `auth.otp.daily_limit`: 20 OTPs were already sent to this address today (UTC)""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> sendOtp(@Valid @RequestBody SendOtpRequest req, HttpServletRequest httpRequest) {
         authService.sendOtp(req.email(), null, null, ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
@@ -142,7 +144,7 @@ public class AuthController {
                     **Auth**: public
                     **Precondition**: an OTP was sent to this email via `POST /api/auth/send-otp` and has not expired
                     **Behavior**: consumes the OTP and returns an access token and refresh token. Creates the user if the email is new (signup), \
-                    otherwise signs the existing user in. The tokens never grant the admin role, even for an admin account: the admin console signs in with `POST /api/auth/admin/verify-otp`
+                    otherwise signs the existing user in; `isNewUser` tells which, so the client needs no separate registration check. The tokens never grant the admin role, even for an admin account: the admin console signs in with `POST /api/auth/admin/verify-otp`
                     **Side effects**: the OTP is consumed on success; a new user (with a random bot avatar) is created and a welcome email sent on signup; `lastLoginAt` is updated. \
                     Wrong codes are counted per email and client IP; resending does not reset the count. \
                     The 3rd wrong code locks this email for the caller's IP for 5 minutes, doubling on each further lockout (10, 20, 40 minutes...) up to 24 hours; \
@@ -175,12 +177,13 @@ public class AuthController {
                     **Precondition**: the email belongs to an existing, active account holding the admin role
                     **Behavior**: like `POST /api/auth/send-otp` (6-digit OTP, TTL default 180 s, same email normalization), but only for admin accounts. \
                     Its OTPs, wrong-code counters, lockouts and resend cooldown are separate from the consumer login, so a code from `send-otp` does not work here and vice versa
-                    **Side effects**: sends an email; replaces any previous admin console OTP for this address. A resend is refused during the cooldown (default 180 s)
+                    **Side effects**: sends an email; replaces any previous admin console OTP for this address. A resend is refused during the cooldown (default 180 s), and at most 20 OTPs are sent to one address per UTC day
                     **Errors**:
                     - 400 `auth.identifier.required`: `email` is missing or blank
                     - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
                     - 400 `auth.email.send_failed`: the email provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
                     - 401 `auth.otp.too_many_attempts`: this email is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected
+                    - 429 `auth.otp.daily_limit`: 20 OTPs were already sent to this address today (UTC)
                     - 403 `auth.admin.forbidden`: the email is not an existing admin account
                     - 403 `auth.account_banned`: the admin is suspended (`active=false`); no OTP is sent""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> adminSendOtp(@Valid @RequestBody SendOtpRequest req, HttpServletRequest httpRequest) {
@@ -219,25 +222,6 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.ok(authService.verifyAdminOtp(req.email(), req.code(), ClientIpResolver.resolve(httpRequest))));
     }
 
-    @PostMapping("/check-email")
-    @PublicApiResponse
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
-            content = @Content(examples = @ExampleObject(value = """
-                    {"success": true, "data": {"exists": true}, "message": null, "errorCode": null, "error": null}""")))
-    @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
-                    {"email": "user@example.com"}""")))
-    @Operation(summary = "Check whether an email is registered",
-            description = """
-                    **Auth**: public
-                    **Precondition**: none
-                    **Behavior**: returns whether a user with this email exists (case-insensitive). Lets the client choose between login and signup wording
-                    **Side effects**: none
-                    **Errors**:
-                    - 400 `common.validation_failed`: `email` is blank or not a valid email""")
-    public ResponseEntity<ApiResponse<AuthEmailExistsResponse>> checkEmail(@Valid @RequestBody CheckEmailRequest req) {
-        boolean exists = authService.checkEmailExists(req.email());
-        return ResponseEntity.ok(ApiResponse.ok(new AuthEmailExistsResponse(exists)));
-    }
 
     @PostMapping("/phone/send-otp")
     @PublicApiResponse
@@ -250,13 +234,14 @@ public class AuthController {
                     **Auth**: public
                     **Precondition**: for `type` "login" (the default) the phone number must already be registered
                     **Behavior**: normalizes the number to E.164 (`0912345678` and `+886912345678` are the same number), generates a 6-digit OTP, stores it with a TTL (default 180 s) and sends it by SMS. `type` is "login" or "signup"
-                    **Side effects**: sends an SMS; replaces any previous OTP for this number. A resend is refused during the cooldown (default 180 s)
+                    **Side effects**: sends an SMS; replaces any previous OTP for this number. A resend is refused during the cooldown (default 180 s), and at most 5 OTPs are sent to one number per UTC day
                     **Errors**:
                     - 400 `auth.phone.invalid`: the number is neither a Taiwan mobile number (`09` + 8 digits) nor `+` country code and number (8-15 digits)
                     - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
                     - 400 `auth.phone.not_registered`: `type` is "login" and the number is not registered
                     - 400 `auth.sms.send_failed`: the SMS provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
-                    - 401 `auth.otp.too_many_attempts`: this number is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected""")
+                    - 401 `auth.otp.too_many_attempts`: this number is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected
+                    - 429 `auth.otp.daily_limit`: 5 OTPs were already sent to this number today (UTC)""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> phoneSendOtp(@Valid @RequestBody PhoneSendOtpRequest req, HttpServletRequest httpRequest) {
         authService.sendOtp(null, req.phone(), req.type(), ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
@@ -319,13 +304,14 @@ public class AuthController {
             description = """
                     **Auth**: public
                     **Precondition**: the client obtained a Google ID token (Google Sign-In)
-                    **Behavior**: verifies the ID token signature against Google's public keys, then its issuer, audience and expiry. Signs in the user with that email, creating the user if new. \
-                    An existing account with the same email is reused only when Google reports the email as verified
-                    **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated
+                    **Behavior**: verifies the ID token signature against Google's public keys, then its issuer, audience and expiry. Each ID token signs in once; presenting it again is refused. \
+                    Signs in the user with that email, creating the user if new. An existing account with the same email is reused only when Google reports the email as verified
+                    **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated; the token is marked used for 15 minutes
                     **Errors**:
                     - 400 `auth.google.not_configured`: Google login is not configured on the server
                     - 401 `auth.google.no_email`: the token is invalid (malformed, bad signature, wrong issuer, expired) or carries no email
                     - 401 `auth.google.invalid_audience`: the token was issued for a different client ID
+                    - 401 `auth.oauth.token_replayed`: this ID token was already used to sign in
                     - 401 `auth.email_not_verified`: Google reports the email as unverified
                     - 403 `auth.account_banned`: the user is suspended (`active=false`)
                     - 503 `common.service_unavailable`: Google's key endpoint is unreachable""")
@@ -368,7 +354,7 @@ public class AuthController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = OK_AUTH)))
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
-                    {"idToken": "eyJraWQiOiJZdXl1eVoxIiwiYWxnIjoiUlMyNTYifQ...", "fullName": "Ming Wang"}""")))
+                    {"idToken": "eyJraWQiOiJZdXl1eVoxIiwiYWxnIjoiUlMyNTYifQ...", "fullName": "Ming Wang", "nonce": "f3a9c2b4e1d8a7c6b5e4d3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
             description = "Apple identity token rejected (malformed, bad signature, wrong issuer/audience, expired, no email, or unverified email)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
@@ -384,10 +370,11 @@ public class AuthController {
     @Operation(summary = "Sign in with Apple",
             description = """
                     **Auth**: public
-                    **Precondition**: the client obtained an Apple identity token (Sign in with Apple)
-                    **Behavior**: verifies the token signature against Apple's public keys, then its issuer, audience and expiry. Signs in the user with the token's email, creating it if new. \
+                    **Precondition**: the client generated a random `nonce`, passed its SHA-256 hex to Apple when starting Sign in with Apple, and obtained an identity token
+                    **Behavior**: verifies the token signature against Apple's public keys, then its issuer, audience, expiry and that its `nonce` claim equals SHA-256 of the given `nonce`. \
+                    Each identity token signs in once; presenting it again is refused. Signs in the user with the token's email, creating it if new. \
                     `fullName` is used only when a new user is created. An existing account with the same email is reused only when Apple reports the email as verified
-                    **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated
+                    **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated; the token is marked used for 15 minutes
                     **Errors**:
                     - 400 `auth.apple.not_configured`: Apple login is not configured on the server
                     - 401 `auth.apple.invalid_token`: the token is malformed or has no key ID
@@ -396,13 +383,15 @@ public class AuthController {
                     - 401 `auth.apple.invalid_issuer`: the issuer is not Apple
                     - 401 `auth.apple.invalid_audience`: the token was issued for a different client ID
                     - 401 `auth.apple.token_expired`: the token has expired
+                    - 401 `auth.apple.invalid_nonce`: the token's `nonce` claim is missing or is not SHA-256 of the given `nonce`
+                    - 401 `auth.oauth.token_replayed`: this identity token was already used to sign in
                     - 401 `auth.apple.no_email`: the token carries no email
                     - 401 `auth.email_not_verified`: Apple reports the email as unverified
                     - 401 `auth.apple.login_failed`: any other failure while processing the token
                     - 403 `auth.account_banned`: the user is suspended (`active=false`)
                     - 503 `common.service_unavailable`: Apple's key endpoint failed or returned an unusable response""")
     public ResponseEntity<ApiResponse<AuthResponse>> appleLogin(@Valid @RequestBody AppleAuthRequest req) {
-        return ResponseEntity.ok(ApiResponse.ok(authService.appleLogin(req.idToken(), req.fullName())));
+        return ResponseEntity.ok(ApiResponse.ok(authService.appleLogin(req.idToken(), req.fullName(), req.nonce())));
     }
 
     @PostMapping("/refresh")

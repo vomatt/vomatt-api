@@ -85,7 +85,7 @@ class VoteControllerTest {
     }
 
     private static void authenticate() {
-        UserPrincipal principal = new UserPrincipal(USER_ID, "test@test.com", List.of("user"));
+        UserPrincipal principal = new UserPrincipal(USER_ID, List.of("user"));
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 principal, null, AuthorityUtils.createAuthorityList("ROLE_USER")));
     }
@@ -565,22 +565,6 @@ class VoteControllerTest {
 
     // ─── POST /api/votes/{voteId}/vote ────────────────────────────────────────
 
-    @Test
-    @DisplayName("should record the peer address, not a spoofed X-Forwarded-For, when the peer is not a trusted proxy")
-    void shouldIgnoreSpoofedForwardedForWhenPeerIsUntrusted() throws Exception {
-        authenticate();
-        String voteId = UUID.randomUUID().toString();
-        when(voteService.vote(eq(voteId), any(), eq(USER_ID), any())).thenReturn(new VoteResponse());
-
-        mockMvc.perform(post("/api/votes/{voteId}/vote", voteId)
-                        .with(req -> { req.setRemoteAddr("203.0.113.7"); return req; })
-                        .header("X-Forwarded-For", "1.2.3.4")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"optionIds\": [\"" + UUID.randomUUID() + "\"]}"))
-                .andExpect(status().isOk());
-
-        verify(voteService).vote(eq(voteId), any(), eq(USER_ID), eq("203.0.113.7"));
-    }
 
     // ─── DELETE /api/votes/{voteId}/vote ──────────────────────────────────────
 

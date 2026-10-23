@@ -85,7 +85,7 @@ class BallotPostgresTest extends PostgresRepositoryTest {
         VoteRequest request = new VoteRequest();
         request.setOptionIds(List.of(optionId.toString()));
         request.setAnonymous(anonymous);
-        return voteService.vote(poll.getId().toString(), request, user.getId().toString(), "127.0.0.1");
+        return voteService.vote(poll.getId().toString(), request, user.getId().toString());
     }
 
     private boolean storedAnonymous(User user) {

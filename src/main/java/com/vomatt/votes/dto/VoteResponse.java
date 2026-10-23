@@ -99,7 +99,8 @@ public class VoteResponse {
     private Boolean unread;
 
     @Schema(description = "ID of the option in the caller's Ballot. Null when the caller is not signed in, holds no Ballot in this Poll, "
-            + "or on the create response", example = "0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813", nullable = true)
+            + "on the create response, or when the caller's Anonymous Ballot was sealed after the Poll Ended (within a day of the end; "
+            + "`myBallotAnonymous` still says the caller took part)", example = "0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813", nullable = true)
     private String myOptionId;
 
     @Schema(description = "Whether the caller's Ballot is Anonymous. Null whenever `myOptionId` is null", example = "false", nullable = true)

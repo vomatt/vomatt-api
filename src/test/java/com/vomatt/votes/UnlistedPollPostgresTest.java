@@ -132,7 +132,7 @@ class UnlistedPollPostgresTest extends PostgresRepositoryTest {
 
         VoteRequest ballot = new VoteRequest();
         ballot.setOptionIds(List.of(signedOut.getOptions().getFirst().getId()));
-        assertThat(voteService.vote(id, ballot, viewerId, null).getMyOptionId())
+        assertThat(voteService.vote(id, ballot, viewerId).getMyOptionId())
                 .isEqualTo(signedOut.getOptions().getFirst().getId());
 
         CreateCommentRequest comment = new CreateCommentRequest();

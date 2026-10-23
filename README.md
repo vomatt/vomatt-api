@@ -13,8 +13,8 @@ Vomatt polling community backend. The architecture follows sachmis-api (domain-d
 
 0. Just need a running API (frontend integration): `docker compose up -d --build`; see [docs/frontend/README.md](docs/frontend/README.md)
 1. `docker compose up -d postgres redis`: local Postgres + Redis; `src/main/resources/db/schema.sql` is applied automatically on first start
-2. `cp .env.example .env` and fill in JWT_SECRET and other variables (the DB / Redis defaults match docker-compose)
-3. Run: `./mvnw spring-boot:run`; with `EMAIL_ENABLED=false` no OTP email is sent, read it from Redis: `docker compose exec redis redis-cli GET otp:email:<email>`
+2. `cp .env.example .env` and fill in APP_KEY, JWT_SECRET and other variables (the DB / Redis defaults match docker-compose)
+3. Run: `./mvnw spring-boot:run`; with `EMAIL_ENABLED=false` no OTP email is sent; read it from the app log line `[EMAIL-NOOP] ... OTP <code>` (Redis holds only a hash)
 4. Swagger UI: <http://localhost:8080/swagger-ui.html>
 
 ## Features

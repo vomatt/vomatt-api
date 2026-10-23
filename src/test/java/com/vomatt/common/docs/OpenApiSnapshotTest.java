@@ -31,7 +31,8 @@ import tools.jackson.databind.json.JsonMapper;
         "spring.profiles.active=dev",
         "app.openapi.dev-url=http://localhost:8080",
         "app.openapi.prod-url=https://api.example.com",
-        "jwt.secret=openapi-snapshot-test-secret-0123456789-0123456789"
+        "jwt.secret=openapi-snapshot-test-secret-0123456789-0123456789",
+        "app.key=openapi-snapshot-test-app-key-0123456789-0123456789"
 })
 class OpenApiSnapshotTest {
 

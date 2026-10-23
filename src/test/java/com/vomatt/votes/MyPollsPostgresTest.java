@@ -43,7 +43,7 @@ class MyPollsPostgresTest extends PostgresRepositoryTest {
     }
 
     private void voteIn(Vote poll) {
-        em.persist(new UserVote(me, poll, poll.getOptions().iterator().next(), null));
+        em.persist(new UserVote(me, poll, poll.getOptions().iterator().next()));
     }
 
     private List<String> titles(String status) {

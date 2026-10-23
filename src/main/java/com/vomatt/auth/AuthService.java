@@ -5,8 +5,10 @@ import com.vomatt.common.constant.ReservedUsernames;
 import com.vomatt.common.email.EmailService;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.redis.RedisService;
+import com.vomatt.common.security.AppKey;
 import com.vomatt.common.security.JwtUtil;
 import com.vomatt.common.security.RefreshTokenService;
+import com.vomatt.common.util.TextUtil;
 import com.vomatt.common.sms.SmsService;
 import com.vomatt.entity.User;
 import com.vomatt.invitelists.InviteListService;
@@ -63,6 +65,9 @@ public class AuthService {
 
     private static final java.util.Set<String> GOOGLE_ISSUERS = java.util.Set.of("accounts.google.com", "https://accounts.google.com");
 
+    /** Hashes of Apple / Google id_tokens already exchanged: each one signs in once (LINE codes are single-use at LINE). */
+    private static final String OAUTH_USED_NS = "oauth:used";
+
     /** JWKS cache holder: keys is the parsed public key list, fetchedAt is the fetch time. */
     private record JwksCache(List<java.util.Map<String, Object>> keys, Instant fetchedAt) {
         boolean isYoungerThan(Duration age) {
@@ -82,6 +87,7 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final RestClient restClient;
     private final RefreshTokenService refreshTokenService;
+    private final AppKey appKey;
 
     @Value("${google.client-id:}")
     private String googleClientId;
@@ -112,6 +118,10 @@ public class AuthService {
 
     // ── OTP ──────────────────────────────────────────────────────────
 
+    /**
+     * OTP keys are {@code <namespace>:<SHA-256(identifier)>} and hold only an HMAC of the code (see {@link #otpHash}),
+     * so neither a key listing nor a value dump of Redis yields an email, a phone number or a code that signs in.
+     */
     private static final String OTP_EMAIL_NS = "otp:email";
     private static final String OTP_PHONE_NS = "otp:phone";
     private static final String OTP_ADMIN_EMAIL_NS = "otp:admin-email";
@@ -121,6 +131,12 @@ public class AuthService {
 
     @Value("${otp.resend-cooldown-seconds:180}")
     private long otpResendCooldownSeconds;
+
+    @Value("${otp.daily-limit.email:20}")
+    private long otpDailyLimitEmail;
+
+    @Value("${otp.daily-limit.phone:5}")
+    private long otpDailyLimitPhone;
 
     public void sendOtp(String email, String phone, String type, String clientIp) {
         String otpType = (type != null) ? type : "login";
@@ -158,8 +174,12 @@ public class AuthService {
         String attemptKey = attemptKey(normalizedEmail, clientIp);
         rejectIfLocked(namespace, attemptKey);
 
-        acquireResendCooldown(namespace, normalizedEmail);
-        storeOtp(namespace, normalizedEmail, attemptKey, new OtpRecord(code, otpType, Instant.now(), 0));
+        String redisKey = redisKey(normalizedEmail);
+        acquireResendCooldown(namespace, redisKey);
+        // Computed once: the refund on failure must hit the same day's key even across UTC midnight
+        String quotaKey = redisKey + ":" + TextUtil.utcDay();
+        takeDailyQuota(namespace, quotaKey, otpDailyLimitEmail);
+        storeOtp(namespace, redisKey, quotaKey, attemptKey, new OtpRecord(otpHash(normalizedEmail, code), otpType, Instant.now(), 0));
 
         try {
             if (OTP_ADMIN_EMAIL_NS.equals(namespace)) {
@@ -171,7 +191,7 @@ public class AuthService {
             }
         } catch (Exception ex) {
             // The code never reached the user: drop it and shorten the cooldown so a retry is possible soon
-            releaseUndeliveredOtp(namespace, normalizedEmail);
+            releaseUndeliveredOtp(namespace, redisKey, quotaKey);
             log.warn("Failed to send OTP email: {}", ex.getMessage());
             throw ApiException.badRequest(MessageKey.AUTH_EMAIL_SEND_FAILED);
         }
@@ -185,13 +205,16 @@ public class AuthService {
             throw ApiException.badRequest(MessageKey.AUTH_PHONE_NOT_REGISTERED);
         }
 
-        acquireResendCooldown(OTP_PHONE_NS, phone);
-        storeOtp(OTP_PHONE_NS, phone, attemptKey, new OtpRecord(code, otpType, Instant.now(), 0));
+        String redisKey = redisKey(phone);
+        acquireResendCooldown(OTP_PHONE_NS, redisKey);
+        String quotaKey = redisKey + ":" + TextUtil.utcDay();
+        takeDailyQuota(OTP_PHONE_NS, quotaKey, otpDailyLimitPhone);
+        storeOtp(OTP_PHONE_NS, redisKey, quotaKey, attemptKey, new OtpRecord(otpHash(phone, code), otpType, Instant.now(), 0));
 
         try {
             smsService.sendOtp(phone, code);
         } catch (Exception ex) {
-            releaseUndeliveredOtp(OTP_PHONE_NS, phone);
+            releaseUndeliveredOtp(OTP_PHONE_NS, redisKey, quotaKey);
             log.warn("Failed to send OTP SMS: {}", ex.getMessage());
             throw ApiException.badRequest(MessageKey.AUTH_SMS_SEND_FAILED);
         }
@@ -214,7 +237,7 @@ public class AuthService {
         // P5-#13: the role check runs before the OTP is consumed, so a non-admin or suspended attempt burns nothing
         User user = requireExistingAdminByEmail(normalizedEmail);
         consumeOtp(OTP_ADMIN_EMAIL_NS, normalizedEmail, code, clientIp);
-        return buildAuthResponse(user, true);
+        return buildAuthResponse(user, true, false);
     }
 
     private static String requireEmail(String email) {
@@ -240,9 +263,10 @@ public class AuthService {
 
         String defaultName = "signup".equals(otp.type()) ? normalizedEmail.split("@")[0] : "";
         // The user proved ownership of the email via OTP -> treat as verified
-        User user = findOrCreateUserByEmail(normalizedEmail, defaultName, "email_otp", true);
+        FoundUser found = findOrCreateUserByEmail(normalizedEmail, defaultName, "email_otp", true);
+        User user = found.user();
 
-        AuthResponse response = buildAuthResponse(user);
+        AuthResponse response = buildAuthResponse(user, false, found.created());
         if ("signup".equals(otp.type())) {
             // Sent only after the login succeeded, in the background so SMTP latency does not delay the response
             emailService.sendWelcomeEmail(normalizedEmail, user.getDisplayName(), LocaleContextHolder.getLocale());
@@ -252,8 +276,8 @@ public class AuthService {
 
     private AuthResponse verifyPhoneOtp(String phone, String code, String clientIp) {
         consumeOtp(OTP_PHONE_NS, phone, code, clientIp);
-        User user = findOrCreateUserByPhone(phone);
-        return buildAuthResponse(user);
+        FoundUser found = findOrCreateUserByPhone(phone);
+        return buildAuthResponse(found.user(), false, found.created());
     }
 
     private static final int MAX_OTP_ATTEMPTS = 3;
@@ -285,6 +309,9 @@ public class AuthService {
     /** Namespace suffix for the resend cooldown marker (SET NX), holding the epoch second a resend is allowed again. */
     private static final String OTP_COOLDOWN_SUFFIX = ":cooldown";
 
+    /** Namespace suffix for the per-identifier, per-UTC-day send counter (all IPs), so one address cannot be flooded. */
+    private static final String OTP_DAILY_SUFFIX = ":daily";
+
     private static final Duration OTP_LOCK_BASE = Duration.ofMinutes(5);
     // ponytail: lockout capped at 24h (5 min doubling reaches it at the 10th lockout); a longer ban needs an admin action
     private static final Duration OTP_LOCK_MAX = Duration.ofHours(24);
@@ -302,10 +329,11 @@ public class AuthService {
     /** Cooldown kept after a failed delivery, so a script cannot hammer the paid SMS / email provider. */
     private static final Duration OTP_FAILED_SEND_COOLDOWN = Duration.ofSeconds(30);
 
-    private OtpRecord consumeOtp(String namespace, String key, String code, String clientIp) {
-        String attemptKey = attemptKey(key, clientIp);
+    private OtpRecord consumeOtp(String namespace, String identifier, String code, String clientIp) {
+        String attemptKey = attemptKey(identifier, clientIp);
         rejectIfLocked(namespace, attemptKey);
 
+        String key = redisKey(identifier);
         OtpRecord rec = redisService.get(namespace, key, OtpRecord.class);
 
         if (rec == null) {
@@ -329,11 +357,10 @@ public class AuthService {
             throw ApiException.unauthorized(MessageKey.AUTH_OTP_INVALID_OR_EXPIRED);
         }
 
-        // P5-#19: constant-time comparison so a short-circuit does not leak the OTP prefix via a timing side-channel.
-        // MessageDigest.isEqual compares every byte without early exit when lengths match; it exits early on a length mismatch, but the OTP is always 6 digits.
+        // P5-#19: constant-time comparison of the two hashes (equal length), so no timing side-channel leaks a prefix
         boolean codeMatches = MessageDigest.isEqual(
-                rec.code().getBytes(StandardCharsets.UTF_8),
-                code.getBytes(StandardCharsets.UTF_8));
+                rec.codeHash().getBytes(StandardCharsets.UTF_8),
+                otpHash(identifier, code).getBytes(StandardCharsets.UTF_8));
         if (!codeMatches) {
             // The OTP's last guess was wrong: it is dead, and the next one can be requested only after the longer cooldown
             if (guesses == MAX_OTP_GUESSES) {
@@ -423,8 +450,9 @@ public class AuthService {
             default -> throw new IllegalArgumentException("Unknown login channel: " + channel);
         };
         String indexNs = namespace + OTP_ATTEMPT_IDX_SUFFIX;
+        String key = redisKey(identifier);
         Collection<String> attemptKeys = clientIp != null ? List.of(attemptKey(identifier, clientIp))
-                : redisService.hGetAll(indexNs, identifier).keySet();
+                : redisService.hGetAll(indexNs, key).keySet();
         boolean lock = targets.contains(LoginUnlock.TARGET_LOCK);
         boolean attempts = targets.contains(LoginUnlock.TARGET_ATTEMPTS);
         long removed = 0;
@@ -436,21 +464,21 @@ public class AuthService {
             removed += redisService.deleteAll(namespace + OTP_FAIL_SUFFIX, attemptKeys);
         }
         if (attempts) {
-            OtpRecord otp = redisService.getAndDelete(namespace, identifier, OtpRecord.class);
+            OtpRecord otp = redisService.getAndDelete(namespace, key, OtpRecord.class);
             if (otp != null) {
                 removed += 1 + redisService.deleteAll(namespace + OTP_GUESS_SUFFIX,
-                        List.of(identifier + ":" + otp.createdAt().toEpochMilli()));
+                        List.of(key + ":" + otp.createdAt().toEpochMilli()));
             }
         }
         if (targets.contains(LoginUnlock.TARGET_COOLDOWN)) {
-            removed += redisService.deleteAll(namespace + OTP_COOLDOWN_SUFFIX, List.of(identifier));
+            removed += redisService.deleteAll(namespace + OTP_COOLDOWN_SUFFIX, List.of(key));
         }
         // Lock and counter are both gone for these keys, so the index has nothing left to point at
         if (lock) {
             if (clientIp == null) {
-                redisService.delete(indexNs, identifier);
+                redisService.delete(indexNs, key);
             } else {
-                redisService.hDelete(indexNs, identifier, attemptKeys.iterator().next());
+                redisService.hDelete(indexNs, key, attemptKeys.iterator().next());
             }
         }
         return (int) removed;
@@ -468,14 +496,24 @@ public class AuthService {
      * is canonicalized first, so an admin unlocking "2001:DB8::1" hits the key the server wrote for "2001:db8:0:0:0:0:0:1".
      */
     static String attemptKey(String identifier, String clientIp) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest((identifier + "\n" + canonicalIp(clientIp)).getBytes(StandardCharsets.UTF_8));
-            return java.util.HexFormat.of().formatHex(digest);
-        } catch (java.security.NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 not available", e);
-        }
+        return AppKey.sha256Hex(identifier + "\n" + canonicalIp(clientIp));
     }
+
+    /** Redis key part for one identifier: a hash, so OTP keys never list emails or phone numbers. */
+    static String redisKey(String identifier) {
+        return AppKey.sha256Hex(identifier);
+    }
+
+    /**
+     * What is stored for an OTP instead of the code: {@code HMAC(derive("otp"), identifier:code)}. A Redis dump cannot be
+     * used to sign in, and without the key no table of the 10^6 codes can be precomputed; the identifier keeps two
+     * users' equal codes from hashing alike.
+     */
+    private String otpHash(String identifier, String code) {
+        return AppKey.hmacHex(appKey.derive(OTP_KEY_LABEL), identifier + ":" + code);
+    }
+
+    private static final String OTP_KEY_LABEL = "otp";
 
     /** An IP literal in one spelling (InetAddress.ofLiteral never does DNS); anything else is kept as is. */
     static String canonicalIp(String ip) {
@@ -503,17 +541,44 @@ public class AuthService {
     }
 
     /**
+     * Counts this send against the identifier's daily cap, after the cooldown slot is taken so a user clicking resend
+     * during the cooldown does not burn the cap. Over it the cooldown stays set, which is harmless: no OTP is sent
+     * either way. Fails closed (RedisOperationException) like the OTP write itself.
+     */
+    private void takeDailyQuota(String namespace, String quotaKey, long limit) {
+        long sent = redisService.incrementAndExpire(namespace + OTP_DAILY_SUFFIX, quotaKey, Duration.ofDays(1));
+        if (sent > limit) {
+            throw ApiException.tooManyRequests(MessageKey.AUTH_OTP_DAILY_LIMIT);
+        }
+    }
+
+    /** Gives back the slot taken by {@link #takeDailyQuota} when no OTP went out. Fail-soft: it must not mask the real failure. */
+    private void refundDailyQuota(String namespace, String quotaKey) {
+        try {
+            redisService.incrementAndExpire(namespace + OTP_DAILY_SUFFIX, quotaKey, -1, Duration.ofDays(1));
+        } catch (RuntimeException ex) {
+            log.warn("Failed to refund OTP daily quota: {}", ex.getMessage());
+        }
+    }
+
+    /**
      * Stores the OTP and, in the same transaction, extends this identifier + IP's failure counter to outlive it, so a
      * resend never grants fresh guesses (the counter is not reset). If that fails, releases the cooldown just claimed.
      */
-    private void storeOtp(String namespace, String key, String attemptKey, OtpRecord record) {
+    private void storeOtp(String namespace, String key, String quotaKey, String attemptKey, OtpRecord record) {
         Duration ttl = Duration.ofSeconds(otpTtlSeconds);
         try {
             redisService.execInTransaction(List.of(
                     RedisService.RedisWrite.set(namespace, key, record, ttl),
                     RedisService.RedisWrite.expire(namespace + OTP_FAIL_SUFFIX, attemptKey, ttl)));
         } catch (RuntimeException ex) {
-            redisService.delete(namespace + OTP_COOLDOWN_SUFFIX, key);
+            // Every cleanup is fail-soft and runs in full: Redis is likely down, and the store failure is the one to report
+            refundDailyQuota(namespace, quotaKey);
+            try {
+                redisService.delete(namespace + OTP_COOLDOWN_SUFFIX, key);
+            } catch (RuntimeException cleanup) {
+                log.warn("Failed to release OTP cooldown after store failure: {}", cleanup.getMessage());
+            }
             throw ex;
         }
     }
@@ -522,17 +587,20 @@ public class AuthService {
      * Drops an OTP whose delivery failed and shortens its cooldown to {@link #OTP_FAILED_SEND_COOLDOWN}, so the user can
      * retry soon but a failing provider is not hit on every request. Fail-soft: a Redis error must not mask the send failure.
      */
-    private void releaseUndeliveredOtp(String namespace, String key) {
-        redisService.delete(namespace, key);
-        redisService.set(namespace + OTP_COOLDOWN_SUFFIX, key, availableAt(OTP_FAILED_SEND_COOLDOWN), OTP_FAILED_SEND_COOLDOWN);
+    private void releaseUndeliveredOtp(String namespace, String key, String quotaKey) {
+        refundDailyQuota(namespace, quotaKey);
+        try {
+            // Cooldown first: if the delete then fails, the user can at least retry soon; the other order could leave a
+            // full-length cooldown with no OTP behind it
+            redisService.set(namespace + OTP_COOLDOWN_SUFFIX, key, availableAt(OTP_FAILED_SEND_COOLDOWN), OTP_FAILED_SEND_COOLDOWN);
+            redisService.delete(namespace, key);
+        } catch (RuntimeException cleanup) {
+            log.warn("Failed to release undelivered OTP: {}", cleanup.getMessage());
+        }
     }
 
     private static String availableAt(Duration cooldown) {
         return Long.toString(Instant.now().plus(cooldown).getEpochSecond());
-    }
-
-    public boolean checkEmailExists(String email) {
-        return userRepository.existsByEmail(User.normalizeEmail(email));
     }
 
     // ── Google OAuth ──────────────────────────────────────────────────
@@ -547,10 +615,11 @@ public class AuthService {
         String email;
         String name;
         boolean emailVerified;
+        java.util.Map<String, Object> payload;
         try {
             // Every local verification failure maps to auth.google.no_email ("token invalid"), except a wrong audience
             java.util.function.Supplier<ApiException> invalid = () -> ApiException.unauthorized(MessageKey.AUTH_GOOGLE_NO_EMAIL);
-            var payload = verifyRs256(idToken, keys, googleJwksUrl, "Google", invalid, invalid, invalid);
+            payload = verifyRs256(idToken, keys, googleJwksUrl, "Google", invalid, invalid, invalid);
             if (!GOOGLE_ISSUERS.contains(payload.get("iss"))) {
                 throw invalid.get();
             }
@@ -576,10 +645,11 @@ public class AuthService {
             log.warn("Google id_token verification error: {}", ex.getMessage());
             throw ApiException.unauthorized(MessageKey.AUTH_GOOGLE_NO_EMAIL);
         }
+        consumeIdToken(idToken, payload.get("exp"));
 
         // Outside the try: DB / Redis failures must surface as themselves, not as an invalid-token 401
-        User user = findOrCreateUserByEmail(User.normalizeEmail(email), name, "google", emailVerified);
-        return buildAuthResponse(user);
+        FoundUser found = findOrCreateUserByEmail(User.normalizeEmail(email), name, "google", emailVerified);
+        return buildAuthResponse(found.user(), false, found.created());
     }
 
     // ── LINE OAuth ────────────────────────────────────────────────────
@@ -646,14 +716,14 @@ public class AuthService {
 
         // LINE's verify endpoint only returns the email when it is verified; otherwise the synthesized
         // line_<userId>@line.oauth is unique and cannot be set by an attacker to a victim's real email -> both cases are safely treated as verified
-        User user = findOrCreateUserByEmail(User.normalizeEmail(email), displayName, "line", true);
-        return buildAuthResponse(user);
+        FoundUser found = findOrCreateUserByEmail(User.normalizeEmail(email), displayName, "line", true);
+        return buildAuthResponse(found.user(), false, found.created());
     }
 
     // ── Apple OAuth ───────────────────────────────────────────────────
 
     @SuppressWarnings("unchecked")
-    public AuthResponse appleLogin(String idToken, String fullName) {
+    public AuthResponse appleLogin(String idToken, String fullName, String nonce) {
         // Without a configured client id the audience cannot be checked, so a token minted for any app would pass
         if (appleClientId == null || appleClientId.isBlank()) {
             throw ApiException.badRequest(MessageKey.AUTH_APPLE_NOT_CONFIGURED);
@@ -678,15 +748,13 @@ public class AuthService {
                 throw ApiException.unauthorized(MessageKey.AUTH_APPLE_TOKEN_EXPIRED);
             }
 
-            // TODO(apple-nonce): full anti-replay needs "backend issues nonce -> store in Redis -> client passes it to Apple
-            //   -> Apple returns the nonce in id_token -> backend compares and consumes it here". The controller/DTO has no
-            //   nonce issuing flow yet, and the nonce store infrastructure is out of scope for this batch. This is a placeholder
-            //   check: if the payload contains a nonce, log it; enforce the comparison once the client and nonce store are ready.
-            //   This batch relies on email_verified as the actual fix.
-            Object nonce = payload.get("nonce");
-            if (nonce != null) {
-                log.debug("Apple id_token contains a nonce; it will be checked once the nonce store is ready (placeholder only)");
+            // The token's nonce claim is SHA-256(raw nonce) sent to Apple by this very sign-in; a token captured from
+            // another session or app carries a different one. Checked before the token is consumed, so a mismatch
+            // burns nothing.
+            if (!(payload.get("nonce") instanceof String n) || !n.equalsIgnoreCase(AppKey.sha256Hex(nonce))) {
+                throw ApiException.unauthorized(MessageKey.AUTH_APPLE_INVALID_NONCE);
             }
+            consumeIdToken(idToken, payload.get("exp"));
 
             String email = (String) payload.get("email");
             if (email == null)
@@ -695,9 +763,9 @@ public class AuthService {
             // Apple id_token usually returns email_verified as the string "true", occasionally as boolean true; parse defensively
             boolean emailVerified = "true".equals(String.valueOf(payload.get("email_verified")));
 
-            User user = findOrCreateUserByEmail(User.normalizeEmail(email),
+            FoundUser found = findOrCreateUserByEmail(User.normalizeEmail(email),
                     fullName != null ? fullName : "", "apple", emailVerified);
-            return buildAuthResponse(user);
+            return buildAuthResponse(found.user(), false, found.created());
 
         } catch (ApiException ex) {
             throw ex;
@@ -756,6 +824,24 @@ public class AuthService {
 
         byte[] payloadBytes = java.util.Base64.getUrlDecoder().decode(parts[1]);
         return JSON_MAPPER.readValue(payloadBytes, java.util.Map.class);
+    }
+
+    /**
+     * Marks a verified id_token as used, refusing it the second time: a token captured in transit or pasted elsewhere
+     * signs in at most once. The marker lives as long as the token is still accepted (its exp plus the clock skew),
+     * so it cannot expire before the token does. Keyed by the token's hash so Redis never holds the token itself.
+     *
+     * @param exp the token's exp claim, already checked by {@link #isExpired}
+     */
+    private void consumeIdToken(String idToken, Object exp) {
+        Instant acceptedUntil = Instant.ofEpochSecond(((Number) exp).longValue()).plus(ID_TOKEN_CLOCK_SKEW);
+        Duration ttl = Duration.between(Instant.now(), acceptedUntil);
+        if (ttl.compareTo(Duration.ofSeconds(1)) < 0) {
+            ttl = Duration.ofSeconds(1);
+        }
+        if (!redisService.setIfAbsent(OAUTH_USED_NS, AppKey.sha256Hex(idToken), "1", ttl)) {
+            throw ApiException.unauthorized(MessageKey.AUTH_OAUTH_TOKEN_REPLAYED);
+        }
     }
 
     private static java.util.Map<String, Object> findKey(List<java.util.Map<String, Object>> keys, String kid) {
@@ -830,13 +916,17 @@ public class AuthService {
      * <p>This is the only place an email is proven to be the user's, so pending email Invitees and Invite List members of it are
      * tied to the user here, in the same transaction as the find-or-create (Polls locked before Invite Lists); rerunning it binds nothing new.</p>
      */
-    User findOrCreateUserByEmail(String email, String fullName, String authMethod, boolean emailVerified) {
+    /** A find-or-create outcome: {@code created} is true when this call made the account (the sign-in is a signup). */
+    record FoundUser(User user, boolean created) {}
+
+    FoundUser findOrCreateUserByEmail(String email, String fullName, String authMethod, boolean emailVerified) {
         if (!emailVerified) {
             // Email not verified by the provider -> refuse to merge or create, preventing account takeover
             throw ApiException.unauthorized(MessageKey.AUTH_EMAIL_NOT_VERIFIED);
         }
         // Programmatic transaction: callers are in this class, so @Transactional here would be skipped
         return transactionTemplate.execute(status -> {
+            boolean[] created = { false };
             User user = userRepository.findByEmail(email).orElseGet(() -> {
                 User newUser = User.builder()
                         .email(email)
@@ -845,17 +935,18 @@ public class AuthService {
                         .authMethod(authMethod)
                         .avatarUrl(BotAvatar.random())
                         .build();
+                created[0] = true;
                 return userRepository.save(newUser);
             });
             voteService.bindEmailInvitees(user);
             inviteListService.bindEmailMembers(user);
-            return user;
+            return new FoundUser(user, created[0]);
         });
     }
 
-    User findOrCreateUserByPhone(String phone) {
+    FoundUser findOrCreateUserByPhone(String phone) {
         String normalizedPhone = User.normalizePhone(phone);
-        return userRepository.findByPhoneNumber(normalizedPhone).orElseGet(() -> {
+        return userRepository.findByPhoneNumber(normalizedPhone).map(u -> new FoundUser(u, false)).orElseGet(() -> {
             User newUser = User.builder()
                     .phoneNumber(normalizedPhone)
                     .username(generateUsername("user"))
@@ -863,7 +954,7 @@ public class AuthService {
                     .authMethod("phone_otp")
                     .avatarUrl(BotAvatar.random())
                     .build();
-            return userRepository.save(newUser);
+            return new FoundUser(userRepository.save(newUser), true);
         });
     }
 
@@ -882,10 +973,11 @@ public class AuthService {
     }
 
     public AuthResponse buildAuthResponse(User user) {
-        return buildAuthResponse(user, false);
+        return buildAuthResponse(user, false, false);
     }
 
-    private AuthResponse buildAuthResponse(User user, boolean adminScope) {
+    /** @param isNewUser whether the account was created by this very sign-in (reported to the client, see AuthResponse) */
+    private AuthResponse buildAuthResponse(User user, boolean adminScope, boolean isNewUser) {
         // Ban check: all login paths (OTP/Google/LINE/Apple, phone) funnel through here, so they are blocked in one place
         if (!user.isActive()) {
             throw ApiException.forbidden(MessageKey.AUTH_ACCOUNT_BANNED);
@@ -893,11 +985,11 @@ public class AuthService {
         user.setLastLoginAt(java.time.OffsetDateTime.now());
         userRepository.save(user);
         List<String> roles = List.of(user.getRoles());
-        String token = jwtUtil.generateToken(user.getId().toString(), user.getEmail(), roles, adminScope);
-        String refreshToken = refreshTokenService.generate(user.getId().toString(), user.getEmail(), roles, adminScope);
+        String token = jwtUtil.generateToken(user.getId().toString(), roles, adminScope);
+        String refreshToken = refreshTokenService.generate(user.getId().toString(), roles, adminScope);
         return new AuthResponse(token, refreshToken,
                 new AuthResponse.UserInfo(user.getId().toString(), user.getEmail(), user.getUsername(),
-                        user.getDisplayName(), roles, user.getAvatarUrl(), user.getPhoneNumber()));
+                        user.getDisplayName(), roles, user.getAvatarUrl(), user.getPhoneNumber()), isNewUser);
     }
 
     public AuthResponse refresh(String refreshToken) {
@@ -906,7 +998,7 @@ public class AuthService {
             if (result == null) {
                 throw ApiException.unauthorized(MessageKey.AUTH_REFRESH_TOKEN_INVALID);
             }
-            return new AuthResponse(result.newAccessToken(), result.newRefreshToken(), null);
+            return new AuthResponse(result.newAccessToken(), result.newRefreshToken(), null, null);
         } catch (com.vomatt.common.security.RefreshTokenReuseException e) {
             throw ApiException.unauthorized(MessageKey.AUTH_SUSPICIOUS_LOGIN);
         }

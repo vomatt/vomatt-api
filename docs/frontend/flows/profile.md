@@ -35,11 +35,11 @@ sequenceDiagram
 | 6 | `DELETE /api/users/{userId}` | Self or admin; on success all refresh tokens of that account become invalid |
 
 ## State and UI mapping
-Fields controlled by visibility settings: `email`, `firstName`, `lastName`, `location`, `points`, `membershipLevel` (**hidden** by default), and `displayName`, `bio` (**public** by default).
+Fields controlled by visibility settings: `firstName`, `lastName`, `location`, `points`, `membershipLevel` (**hidden** by default), and `displayName`, `bio` (**public** by default). `email` and `birthday` are never on the public page; only `GET /api/users/me` returns them.
 
 | Field (public page `UserProfileResponse`) | When `null` | UI |
 |------|------|-----|
-| `email`, `firstName`, `lastName`, `location`, `points`, `membershipLevel` | Owner has not made it public (default), or it has no value | Hide the whole row; do not infer anything beyond "hidden" |
+| `firstName`, `lastName`, `location`, `points`, `membershipLevel` | Owner has not made it public (default), or it has no value | Hide the whole row; do not infer anything beyond "hidden" |
 | `displayName`, `bio` | Owner turned off public visibility, or the user never set it (public by default) | When `displayName` is `null`, use `username` as the display name |
 | `username`, `avatarUrl`, `joinedAt`, `totalPolls`, `totalVotes` | Always present (`avatarUrl` is `null` when never set) | — |
 

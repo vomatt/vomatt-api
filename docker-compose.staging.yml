@@ -25,6 +25,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env.staging}
       REDIS_HOST: redis
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.staging}
+      APP_KEY: ${APP_KEY:?set APP_KEY in .env.staging}
       # Real email when .env.staging sets EMAIL_ENABLED=true plus MAIL_*; otherwise read the OTP from Redis
       EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
       EMAIL_FROM: ${EMAIL_FROM:-noreply@vomatt.com}

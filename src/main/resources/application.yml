@@ -104,6 +104,8 @@ springdoc:
   default-produces-media-type: application/json
 
 app:
+  # Root secret: purpose-specific keys (OTP hashing...) are derived from it, see AppKey. At least 32 characters
+  key: ${APP_KEY}
   openapi:
     dev-url: ${OPENAPI_DEV_URL:http://localhost:8080}
     prod-url: ${OPENAPI_PROD_URL:https://localhost:8080}

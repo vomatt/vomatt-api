@@ -43,6 +43,7 @@ services:
       DB_PASSWORD: postgres
       REDIS_HOST: redis
       JWT_SECRET: local-dev-only-jwt-secret-0123456789abcdef
+      APP_KEY: local-dev-only-app-key-0123456789abcdef
       EMAIL_ENABLED: "false"
       SWAGGER_ENABLED: "true"
       # No SMTP locally; mail health would keep /actuator/health DOWN

@@ -18,7 +18,7 @@ COPY --from=build /app ./
 # Vercel cold starts get little CPU: C1-only JIT + AOT cache (JEP 514) shorten startup
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
 # AOT cache training: exits once the context refreshes; startup does not connect to DB / Redis, so placeholder env vars are enough
-RUN DB_URL=jdbc:postgresql://localhost/x DB_PASSWORD=x JWT_SECRET=aot-training-placeholder-secret-0123456789 \
+RUN DB_URL=jdbc:postgresql://localhost/x DB_PASSWORD=x JWT_SECRET=aot-training-placeholder-secret-0123456789 APP_KEY=aot-training-placeholder-secret-0123456789 \
     java -XX:AOTCacheOutput=app.aot -Dspring.context.exit=onRefresh -jar vomatt-api-0.0.1-SNAPSHOT.jar
 # Vercel routes traffic to port 80 by default; override with the project env var PORT
 CMD ["sh", "-c", "exec java -XX:AOTCache=app.aot -Dserver.port=${PORT:-80} -jar vomatt-api-0.0.1-SNAPSHOT.jar"]

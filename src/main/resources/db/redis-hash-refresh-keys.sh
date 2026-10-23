@@ -2,8 +2,9 @@
 # One-time migration, run once right after deploying the release that hashes refresh token keys
 # (RefreshTokenService.keyOf): keys refresh:<token> and refresh:consumed:<token>, and the fields of
 # refresh:idx:<userId>, become SHA-256(token). Re-runnable: already-hashed entries are skipped. The 10 s
-# refresh:grace:* entries are left to expire. There is no fallback in the app, so sessions not migrated
-# here must sign in again.
+# refresh:grace:* entries are left to expire. There is no fallback in the app: between the deploy and this run,
+# every POST /api/auth/refresh answers 401 (the client signs in again), and sessions whose refresh token was spent
+# in that window are not recoverable. Run it right after the deploy, in a low-traffic window.
 #
 # Usage: REDIS_URL=redis://:password@host:6379/0 ./redis-hash-refresh-keys.sh
 set -euo pipefail

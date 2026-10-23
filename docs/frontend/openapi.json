@@ -4659,7 +4659,7 @@
     },
     "/api/admin/feedback" : {
       "get" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: offset page of feedback from all users, newest first; `userId` narrows it to one sender. `page` is 1-based (default 1), `limit` 1-50 (default 20)\n**Side effects**: none\n**Errors**:\n- 400 `common.type_mismatch`: `userId` is not a valid UUID",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: offset page of feedback from all users, newest first; `userId` narrows it to one sender. `page` is 1-based (default 1), `limit` 1-50 (default 20)\n**Side effects**: written to the audit log (action `VIEW`, resource `FEEDBACK`, resource id = `userId` when given), since feedback text may hold personal data\n**Errors**:\n- 400 `common.type_mismatch`: `userId` is not a valid UUID",
         "operationId" : "listFeedback",
         "parameters" : [ {
           "description" : "Only feedback from this user (UUID)",
@@ -9070,7 +9070,7 @@
     },
     "/api/feedback" : {
       "post" : {
-        "description" : "**Auth**: required\n**Precondition**: under the daily feedback limit (UTC day; 10 unless an admin set lookup `config` / `feedback_daily_limit`)\n**Behavior**: stores the text as feedback from the caller. Responds 201 with the new feedback id\n**Side effects**: the submission is written to the audit log\n**Errors**:\n- 400 `common.validation_failed`: `content` is blank or longer than 2000 characters\n- 404 `user.not_found`: the signed-in user no longer exists\n- 429 `common.rate_limited`: daily feedback limit reached, or too many write requests from this IP",
+        "description" : "**Auth**: required\n**Precondition**: under the daily feedback limit (UTC day; 10 unless an admin set lookup `config` / `feedback_daily_limit`, a positive number or numeric string)\n**Behavior**: stores the text as feedback from the caller. Responds 201 with the new feedback id\n**Side effects**: counts toward the caller's daily feedback limit (only once stored)\n**Errors**:\n- 400 `common.validation_failed`: `content` is blank or longer than 2000 characters\n- 404 `user.not_found`: the signed-in user no longer exists\n- 429 `common.rate_limited`: daily feedback limit reached, or too many write requests from this IP",
         "operationId" : "createFeedback",
         "requestBody" : {
           "content" : {

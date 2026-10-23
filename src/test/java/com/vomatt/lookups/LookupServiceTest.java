@@ -312,4 +312,38 @@ class LookupServiceTest {
             verifyNoInteractions(redisService);
         }
     }
+
+    // ─── configInt ────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("configInt")
+    class ConfigIntTests {
+
+        private int configIntFor(Object value) {
+            when(redisService.get(eq(com.vomatt.common.redis.CacheNamespaces.LOOKUP_BY_TYPE), eq("config"), any(TypeReference.class)))
+                    .thenReturn(java.util.List.of(new LookupDto(LOOKUP_ID.toString(), "config", "k", value, 0, null, null, true, null, false)));
+            return lookupService.configInt("k", 10);
+        }
+
+        @Test
+        void shouldReadOverrideWhenNumberOrNumericString() {
+            assertThat(configIntFor(20)).isEqualTo(20);
+            assertThat(configIntFor(" 20 ")).isEqualTo(20);
+        }
+
+        @Test
+        void shouldFallBackWhenValueInvalid() {
+            assertThat(configIntFor("lots")).isEqualTo(10);
+            assertThat(configIntFor(0)).isEqualTo(10);
+            assertThat(configIntFor(3_000_000_000L)).isEqualTo(10);
+            assertThat(configIntFor(2.5)).isEqualTo(10);
+        }
+
+        @Test
+        void shouldFallBackWhenKeyMissing() {
+            when(redisService.get(eq(com.vomatt.common.redis.CacheNamespaces.LOOKUP_BY_TYPE), eq("config"), any(TypeReference.class)))
+                    .thenReturn(java.util.List.of());
+            assertThat(lookupService.configInt("k", 10)).isEqualTo(10);
+        }
+    }
 }

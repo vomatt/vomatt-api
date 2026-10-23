@@ -9,7 +9,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.vomatt.common.annotation.CommonApiResponses;
-import com.vomatt.common.audit.Auditable;
 import com.vomatt.common.config.OpenAPIConfig;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.SimpleResultResponse;
@@ -33,7 +32,6 @@ public class FeedbackController {
     private final FeedbackService feedbackService;
 
     @PostMapping
-    @Auditable(action = "CREATE", resourceType = "FEEDBACK")
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Feedback stored; `id` is the new feedback id",
             content = @Content(examples = @ExampleObject(value = """
@@ -48,9 +46,9 @@ public class FeedbackController {
                             {"success":false,"data":null,"message":"Too many requests, please try again later","errorCode":"common.rate_limited","error":"Too many requests, please try again later"}""")))
     @Operation(summary = "Send feedback", description = """
             **Auth**: required
-            **Precondition**: under the daily feedback limit (UTC day; 10 unless an admin set lookup `config` / `feedback_daily_limit`)
+            **Precondition**: under the daily feedback limit (UTC day; 10 unless an admin set lookup `config` / `feedback_daily_limit`, a positive number or numeric string)
             **Behavior**: stores the text as feedback from the caller. Responds 201 with the new feedback id
-            **Side effects**: the submission is written to the audit log
+            **Side effects**: counts toward the caller's daily feedback limit (only once stored)
             **Errors**:
             - 400 `common.validation_failed`: `content` is blank or longer than 2000 characters
             - 404 `user.not_found`: the signed-in user no longer exists

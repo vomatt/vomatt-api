@@ -51,6 +51,29 @@ public class LookupService {
         return lookupRepository.findForAdmin(lookupType, includeInactive).stream().map(lookupMapper::toDto).toList();
     }
 
+    /** Lookup type holding admin-tunable backend settings; never set frontendUsing on these. */
+    public static final String CONFIG_TYPE = "config";
+
+    /**
+     * Admin override of a positive int setting: the active {@code config / key} item, as a JSON number or numeric string.
+     * Missing, inactive, non-numeric, non-positive or out-of-int-range values fall back to {@code defaultValue}.
+     */
+    public int configInt(String key, int defaultValue) {
+        return getActiveByType(CONFIG_TYPE).stream()
+                .filter(l -> key.equals(l.lookupKey()) && l.lookupValue() != null)
+                .findFirst()
+                .map(l -> {
+                    try {
+                        long v = new java.math.BigDecimal(l.lookupValue().toString().trim()).longValueExact();
+                        return v > 0 && v <= Integer.MAX_VALUE ? (int) v : null;
+                    } catch (NumberFormatException | ArithmeticException e) {
+                        log.warn("Ignoring invalid config lookup {}: {}", key, l.lookupValue());
+                        return null;
+                    }
+                })
+                .orElse(defaultValue);
+    }
+
     @Transactional(readOnly = true)
     public LookupDto getByTypeAndKey(String lookupType, String lookupKey) {
         return lookupRepository.findByLookupTypeAndLookupKey(lookupType, lookupKey)

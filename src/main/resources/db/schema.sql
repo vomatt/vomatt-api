@@ -305,7 +305,9 @@ CREATE INDEX IF NOT EXISTS idx_notification_reads_vote     ON vomatt.notificatio
 CREATE INDEX IF NOT EXISTS idx_user_blocks_blocked         ON vomatt.user_blocks (blocked_id);
 -- Block list page (UserBlockRepository.findPage)
 CREATE INDEX IF NOT EXISTS idx_user_blocks_blocker_created ON vomatt.user_blocks (blocker_id, created_at DESC, id DESC);
-CREATE INDEX IF NOT EXISTS idx_feedback_user_id           ON vomatt.feedback (user_id);
+-- Admin feedback list, newest first (FeedbackRepository.findPage), all users or one; the second also serves the user FK cascade
+CREATE INDEX IF NOT EXISTS idx_feedback_created            ON vomatt.feedback (created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_feedback_user_created       ON vomatt.feedback (user_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_tags_usage_count            ON vomatt.tags (usage_count DESC);
 CREATE INDEX IF NOT EXISTS idx_vote_tags_tag_id            ON vomatt.vote_tags (tag_id);
 CREATE INDEX IF NOT EXISTS idx_lookup_type_active          ON vomatt.lookup (lookup_type, is_active);

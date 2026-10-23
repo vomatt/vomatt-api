@@ -26,13 +26,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.vomatt.admin.dto.AdminFeedbackResponse;
 import com.vomatt.common.i18n.LocalizedMessageService;
 import com.vomatt.common.response.PageResponse;
-import com.vomatt.feedback.FeedbackService;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AdminFeedbackController")
 class AdminFeedbackControllerTest {
 
-    @Mock FeedbackService feedbackService;
+    @Mock AdminFeedbackService feedbackService;
     @Mock LocalizedMessageService messageService;
     MockMvc mockMvc;
 

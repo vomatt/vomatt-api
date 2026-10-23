@@ -3421,10 +3421,10 @@
             "type" : "boolean"
           },
           "selectedOptions" : {
-            "description" : "Option IDs of the caller's Selection. Polls are single-choice, so it holds exactly one ID when `hasVoted` is true and is empty otherwise",
+            "description" : "Option IDs of the caller's Selection. Polls are single-choice, so it holds exactly one ID when `hasVoted` is true and is empty otherwise. Also empty for an Anonymous Ballot once its Poll has Ended and the Ballot was sealed (within a day of the end)",
             "example" : [ "0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813" ],
             "items" : {
-              "description" : "Option IDs of the caller's Selection. Polls are single-choice, so it holds exactly one ID when `hasVoted` is true and is empty otherwise",
+              "description" : "Option IDs of the caller's Selection. Polls are single-choice, so it holds exactly one ID when `hasVoted` is true and is empty otherwise. Also empty for an Anonymous Ballot once its Poll has Ended and the Ballot was sealed (within a day of the end)",
               "example" : "[\"0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813\"]",
               "type" : "string"
             },
@@ -3695,7 +3695,7 @@
             "type" : "boolean"
           },
           "myOptionId" : {
-            "description" : "ID of the option in the caller's Ballot. Null when the caller is not signed in, holds no Ballot in this Poll, or on the create response",
+            "description" : "ID of the option in the caller's Ballot. Null when the caller is not signed in, holds no Ballot in this Poll, on the create response, or when the caller's Anonymous Ballot was sealed after the Poll Ended (within a day of the end; `myBallotAnonymous` still says the caller took part)",
             "example" : "0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813",
             "nullable" : true,
             "type" : "string"
@@ -13889,7 +13889,7 @@
     "/api/votes/{voteId}/my-vote-status" : {
       "get" : {
         "deprecated" : true,
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: deprecated, use `myOptionId` in `GET /api/votes/{voteId}`. Tells whether the caller holds a Ballot in the Poll and which option it chose. Works in any Poll state.\n**Side effects**: none\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee\n",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: deprecated, use `myOptionId` in `GET /api/votes/{voteId}`. Tells whether the caller holds a Ballot in the Poll and which option it chose. Works in any Poll state; an Anonymous Ballot of an Ended Poll is sealed within a day of the end, after which `hasVoted` stays true but `selectedOptions` is empty.\n**Side effects**: none\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee\n",
         "operationId" : "getMyVoteStatus",
         "parameters" : [ {
           "description" : "Poll ID",

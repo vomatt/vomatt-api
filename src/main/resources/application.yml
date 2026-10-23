@@ -142,6 +142,9 @@ app:
       window: ${VOTE_BALLOT_RATE_LIMIT_WINDOW:PT60S}
   audit:
     enabled: ${AUDIT_ENABLED:true}
+  retention:
+    # Daily data retention run (RetentionJob), UTC; one instance does the work, the others skip via advisory lock
+    cron: ${RETENTION_CRON:0 30 4 * * *}
 
 otp:
   ttl-seconds: ${OTP_TTL_SECONDS:180}

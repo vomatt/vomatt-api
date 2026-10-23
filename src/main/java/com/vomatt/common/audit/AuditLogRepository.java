@@ -36,4 +36,16 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
     @org.springframework.data.jpa.repository.Modifying
     @Query("UPDATE AuditLog al SET al.userId = NULL, al.username = NULL, al.ipAddress = NULL, al.userAgent = NULL WHERE al.userId = :userId")
     int anonymizeByUserId(@Param("userId") String userId);
+
+    /** Retention: entries older than the cutoff are dropped. */
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("DELETE FROM AuditLog al WHERE al.createdAt < :cutoff")
+    int deleteCreatedBefore(@Param("cutoff") OffsetDateTime cutoff);
+
+    /**
+     * Transaction-scoped advisory lock, released at commit: lets one instance run a job while the others skip it.
+     * On this repository only because the retention job starts here; the lock itself is per key, not per table.
+     */
+    @Query(value = "SELECT pg_try_advisory_xact_lock(:key)", nativeQuery = true)
+    boolean tryAdvisoryXactLock(@Param("key") long key);
 }

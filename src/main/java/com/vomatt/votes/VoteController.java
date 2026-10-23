@@ -540,7 +540,8 @@ public class VoteController {
     @Operation(summary = "Get my Ballot status", deprecated = true, description = """
             **Auth**: required
             **Precondition**: none
-            **Behavior**: deprecated, use `myOptionId` in `GET /api/votes/{voteId}`. Tells whether the caller holds a Ballot in the Poll and which option it chose. Works in any Poll state.
+            **Behavior**: deprecated, use `myOptionId` in `GET /api/votes/{voteId}`. Tells whether the caller holds a Ballot in the Poll and which option it chose. Works in any Poll state; \
+            an Anonymous Ballot of an Ended Poll is sealed within a day of the end, after which `hasVoted` stays true but `selectedOptions` is empty.
             **Side effects**: none
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee

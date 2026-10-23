@@ -4,6 +4,7 @@ Contract changes that affect the frontend. 💥 BREAKING means frontend code mus
 
 ## 2026-10-23
 
+- Data retention runs daily: audit log entries older than 180 days are removed, and an Anonymous Ballot of an Ended Poll is sealed within a day of the end. After sealing, `myOptionId` on the Poll (and `selectedOptions` on the deprecated `my-vote-status`) is `null` / empty for that Ballot while `myBallotAnonymous` and `hasVoted` still say the caller took part; option totals are unchanged.
 - 💥 `POST /api/auth/check-email` is removed (it let anyone enumerate registered emails). Every sign-in response (`verify-otp`, `phone/verify-otp`, `google`, `line`, `apple`) now carries `isNewUser` (`true` when the account was created by this sign-in; `null` on `refresh`), so the client shows login or signup wording after the fact instead of asking first.
 - 💥 `POST /api/auth/apple` requires `nonce`: the raw random value whose SHA-256 hex the client passed to Apple when starting the sign-in. A missing or mismatching nonce is 401 `auth.apple.invalid_nonce`. Apple and Google ID tokens now sign in once each: presenting the same token again is 401 `auth.oauth.token_replayed`. Release the frontend together with the API.
 - Access tokens no longer carry an `email` claim (payload is `sub`, `roles`, `scope`, `jti`, `iat`, `exp`); read the email from the login response or `GET /api/users/me`. Audit log entries (`GET /api/admin/audit-logs`) now record the acting user's `username` instead of the email.

@@ -453,6 +453,8 @@ public class VoteService {
         findAccessibleVote(UUID.fromString(voteId), userId);
         return userVoteRepository.findByUserIdAndVoteId(UUID.fromString(userId), UUID.fromString(voteId))
             .stream()
+            // A sealed Anonymous Ballot (Ended Poll) has no option any more
+            .filter(mv -> mv.getOption() != null)
             .map(mv -> mv.getOption().getId().toString())
             .toList();
     }
@@ -824,7 +826,8 @@ public class VoteService {
         return votes.stream().map(vote -> {
             VoteResponse response = voteMapper.toResponse(vote, sortedOptions(vote));
             BallotSelection mine = selections.get(vote.getId());
-            response.setMyOptionId(mine == null ? null : mine.getOptionId().toString());
+            // A sealed Anonymous Ballot (Ended Poll) has no option any more; the Ballot itself is still the caller's
+            response.setMyOptionId(mine == null || mine.getOptionId() == null ? null : mine.getOptionId().toString());
             response.setMyBallotAnonymous(mine == null ? null : mine.isAnonymous());
             response.setCommentCount(commentCounts.getOrDefault(vote.getId(), 0L));
             if (vote.getAudience() == Audience.INVITE_ONLY) {

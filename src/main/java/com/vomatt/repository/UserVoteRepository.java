@@ -8,6 +8,7 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -42,5 +43,21 @@ public interface UserVoteRepository extends JpaRepository<UserVote, UUID> {
 
     /** Anonymous Ballots in a Poll; the voter list's k-anonymity gate. */
     long countByVoteIdAndAnonymousTrueAndUserIdNot(UUID voteId, UUID userId);
+
+    /** Whether the Poll holds any Anonymous Ballot at all; while it does, the voter list must not name options (see VoteMapper). */
+    boolean existsByVoteIdAndAnonymousTrue(UUID voteId);
+
+    /**
+     * Seals the Anonymous Ballots of Polls Ended by {@code now}: the option is dropped from the row, so the database
+     * can no longer say what an anonymous Participant chose (per-option totals stay in vote_options.vote_count).
+     * Irreversible by design; a Cancelled Poll (end before start) counts as Ended too.
+     */
+    @Modifying
+    @Query(value = """
+            UPDATE vomatt.user_votes uv SET option_id = NULL
+            WHERE uv.anonymous AND uv.option_id IS NOT NULL
+              AND EXISTS (SELECT 1 FROM vomatt.votes v WHERE v.id = uv.vote_id AND v.end_time <= :now)""",
+            nativeQuery = true)
+    int sealAnonymousBallotsOfPollsEndedBy(@Param("now") OffsetDateTime now);
 
 }

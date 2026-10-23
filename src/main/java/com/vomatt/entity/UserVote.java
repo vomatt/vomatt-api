@@ -35,7 +35,7 @@ public class UserVote extends AuditableEntity {
     @JoinColumn(name = "vote_id")
     private Vote vote;
 
-    @NotNull
+    /** Null once the Ballot is sealed: an Anonymous Ballot of an Ended Poll loses its option (RetentionJob). */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "option_id")
     private VoteOption option;

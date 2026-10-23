@@ -936,8 +936,8 @@ public class AuthService {
         user.setLastLoginAt(java.time.OffsetDateTime.now());
         userRepository.save(user);
         List<String> roles = List.of(user.getRoles());
-        String token = jwtUtil.generateToken(user.getId().toString(), user.getEmail(), roles, adminScope);
-        String refreshToken = refreshTokenService.generate(user.getId().toString(), user.getEmail(), roles, adminScope);
+        String token = jwtUtil.generateToken(user.getId().toString(), roles, adminScope);
+        String refreshToken = refreshTokenService.generate(user.getId().toString(), roles, adminScope);
         return new AuthResponse(token, refreshToken,
                 new AuthResponse.UserInfo(user.getId().toString(), user.getEmail(), user.getUsername(),
                         user.getDisplayName(), roles, user.getAvatarUrl(), user.getPhoneNumber()));

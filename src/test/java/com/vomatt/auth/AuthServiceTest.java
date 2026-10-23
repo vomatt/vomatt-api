@@ -482,8 +482,8 @@ class AuthServiceTest {
         when(redisService.get(eq("otp:email"), eq(k("user@example.com")), eq(OtpRecord.class))).thenReturn(otpRecord);
         when(redisService.getAndDelete("otp:email", k("user@example.com"), OtpRecord.class)).thenReturn(otpRecord);
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
-        when(jwtUtil.generateToken(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-token");
-        when(refreshTokenService.generate(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
 
         AuthResponse response = authService.verifyOtp("user@example.com", null, "123456", IP);
 
@@ -549,8 +549,8 @@ class AuthServiceTest {
         when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
         when(redisService.get(eq("otp:admin-email"), eq(k("admin@example.com")), eq(OtpRecord.class))).thenReturn(otpRecord);
         when(redisService.getAndDelete("otp:admin-email", k("admin@example.com"), OtpRecord.class)).thenReturn(otpRecord);
-        when(jwtUtil.generateToken(anyString(), anyString(), any(), eq(true))).thenReturn("admin-token");
-        when(refreshTokenService.generate(anyString(), anyString(), any(), eq(true))).thenReturn("admin-refresh");
+        when(jwtUtil.generateToken(anyString(), any(), eq(true))).thenReturn("admin-token");
+        when(refreshTokenService.generate(anyString(), any(), eq(true))).thenReturn("admin-refresh");
 
         AuthResponse response = authService.verifyAdminOtp("admin@example.com", "123456", IP);
 
@@ -566,8 +566,8 @@ class AuthServiceTest {
         when(redisService.get(eq("otp:email"), eq(k("admin@example.com")), eq(OtpRecord.class))).thenReturn(otpRecord);
         when(redisService.getAndDelete("otp:email", k("admin@example.com"), OtpRecord.class)).thenReturn(otpRecord);
         when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
-        when(jwtUtil.generateToken(anyString(), anyString(), any(), eq(false))).thenReturn("user-token");
-        when(refreshTokenService.generate(anyString(), anyString(), any(), eq(false))).thenReturn("user-refresh");
+        when(jwtUtil.generateToken(anyString(), any(), eq(false))).thenReturn("user-token");
+        when(refreshTokenService.generate(anyString(), any(), eq(false))).thenReturn("user-refresh");
 
         AuthResponse response = authService.verifyOtp("admin@example.com", null, "123456", IP);
 
@@ -696,7 +696,7 @@ class AuthServiceTest {
     @Test
     void refresh_returnsAccessAndRefreshTokenFromRotateResult() {
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
-                "user-x", "x@example.com", List.of("user"), "session-1", false);
+                "user-x", List.of("user"), "session-1", false);
         RefreshTokenService.RotateResult rotateResult = new RefreshTokenService.RotateResult(
                 "new-access", "new-refresh", data);
         when(refreshTokenService.rotate("old-refresh")).thenReturn(rotateResult);
@@ -706,7 +706,7 @@ class AuthServiceTest {
         assertThat(response.token()).isEqualTo("new-access");
         assertThat(response.refreshToken()).isEqualTo("new-refresh");
         // AuthService.refresh must not sign the access token itself; it comes from RotateResult
-        verify(jwtUtil, org.mockito.Mockito.never()).generateToken(anyString(), anyString(), any(), anyBoolean());
+        verify(jwtUtil, org.mockito.Mockito.never()).generateToken(anyString(), any(), anyBoolean());
     }
 
     @Test
@@ -833,8 +833,8 @@ class AuthServiceTest {
             ReflectionTestUtils.setField(saved, "id", carolId);
             return saved;
         });
-        when(jwtUtil.generateToken(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-token");
-        when(refreshTokenService.generate(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
 
         authService.verifyOtp(" Carol@Example.com", null, "123456", IP);
 
@@ -854,8 +854,8 @@ class AuthServiceTest {
         when(redisService.get(eq("otp:email"), eq(k("ab@gmail.com")), eq(OtpRecord.class))).thenReturn(gmailOtp);
         when(redisService.getAndDelete(eq("otp:email"), eq(k("ab@gmail.com")), eq(OtpRecord.class))).thenReturn(gmailOtp);
         when(userRepository.findByEmail("ab@gmail.com")).thenReturn(Optional.of(existing));
-        when(jwtUtil.generateToken(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-token");
-        when(refreshTokenService.generate(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
 
         AuthResponse response = authService.verifyOtp("A.B+x@gmail.com", null, "123456", IP);
 
@@ -870,8 +870,8 @@ class AuthServiceTest {
         User carol = User.builder().id(UUID.randomUUID()).email("carol@example.com").displayName("Carol")
                 .roles(new String[] { "user" }).build();
         when(userRepository.findByEmail("carol@example.com")).thenReturn(Optional.of(carol));
-        when(jwtUtil.generateToken(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-token");
-        when(refreshTokenService.generate(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
 
         authService.googleLogin(idToken);
 
@@ -888,8 +888,8 @@ class AuthServiceTest {
         User carol = User.builder().id(UUID.randomUUID()).email("carol@example.com").displayName("Carol")
                 .roles(new String[] { "user" }).build();
         when(userRepository.findByEmail("carol@example.com")).thenReturn(Optional.of(carol));
-        when(jwtUtil.generateToken(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-token");
-        when(refreshTokenService.generate(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
 
         authService.googleLogin(idToken);
 
@@ -1004,8 +1004,8 @@ class AuthServiceTest {
         User carol = User.builder().id(UUID.randomUUID()).email("carol@example.com").displayName("Carol")
                 .roles(new String[] { "user" }).build();
         when(userRepository.findByEmail("carol@example.com")).thenReturn(Optional.of(carol));
-        when(jwtUtil.generateToken(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-token");
-        when(refreshTokenService.generate(anyString(), anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
     }
 
     @SuppressWarnings("unchecked")
@@ -1108,8 +1108,8 @@ class AuthServiceTest {
 
         when(redisService.get(eq("otp:phone"), eq(k("+886912345678")), eq(OtpRecord.class))).thenReturn(sent);
         when(redisService.getAndDelete("otp:phone", k("+886912345678"), OtpRecord.class)).thenReturn(sent);
-        when(jwtUtil.generateToken(anyString(), any(), any(), anyBoolean())).thenReturn("access-token");
-        when(refreshTokenService.generate(anyString(), any(), any(), anyBoolean())).thenReturn("refresh-token");
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("access-token");
+        when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("refresh-token");
 
         AuthResponse response = authService.verifyOtp(null, "+886912345678", code.getValue(), IP);
 
@@ -1130,7 +1130,7 @@ class AuthServiceTest {
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey())
                         .isEqualTo(MessageKey.AUTH_ACCOUNT_BANNED));
 
-        verify(jwtUtil, org.mockito.Mockito.never()).generateToken(anyString(), anyString(), any(), anyBoolean());
+        verify(jwtUtil, org.mockito.Mockito.never()).generateToken(anyString(), any(), anyBoolean());
         verify(userRepository, org.mockito.Mockito.never()).save(any());
     }
 
@@ -1139,8 +1139,8 @@ class AuthServiceTest {
         User user = User.builder().id(UUID.randomUUID()).email("ok@example.com").username("ok_user")
                 .displayName("OK User").roles(new String[] { "user" }).active(true)
                 .build();
-        when(jwtUtil.generateToken(anyString(), anyString(), any(), anyBoolean())).thenReturn("ok-token");
-        when(refreshTokenService.generate(anyString(), anyString(), any(), anyBoolean())).thenReturn("ok-refresh");
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("ok-token");
+        when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("ok-refresh");
 
         AuthResponse response = authService.buildAuthResponse(user);
 

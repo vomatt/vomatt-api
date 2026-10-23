@@ -8,7 +8,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record AuditLogResponse(
         @Schema(description = "Entry ID (UUIDv7)", example = "0199f4c0-1a2b-7c3d-8e4f-5a6b7c8d9e0f") String id,
         @Schema(description = "Acting user's ID; null for unauthenticated requests", example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47", nullable = true) String userId,
-        @Schema(description = "Acting user's email at the time; null when unknown", example = "admin@example.com", nullable = true) String username,
+        @Schema(description = "Acting user's username at the time; null when unknown (entries before 2026-10-23 hold the email)", example = "admin", nullable = true) String username,
         @Schema(description = "Action, e.g. CREATE, DELETE, SUSPEND, FORCE_CLOSE", example = "SUSPEND") String action,
         @Schema(description = "Resource type, e.g. VOTE, COMMENT, USER", example = "USER") String resourceType,
         @Schema(description = "Affected resource ID; null when not recorded", example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47", nullable = true) String resourceId,

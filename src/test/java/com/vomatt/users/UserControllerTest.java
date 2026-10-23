@@ -73,7 +73,7 @@ class UserControllerTest {
 
     private void signIn(String userId) {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                new UserPrincipal(userId, "alice@example.com", List.of("user")), null,
+                new UserPrincipal(userId, List.of("user")), null,
                 AuthorityUtils.createAuthorityList("ROLE_USER")));
     }
 

@@ -47,7 +47,7 @@ public class RefreshTokenService {
      * {@code adminScope} is fixed at sign-in (admin console login only) and kept across rotations, so refreshing a
      * consumer-app session never yields an admin token; null on tokens issued before it existed (read as false).
      */
-    public record RefreshTokenData(String userId, String email, List<String> roles, String sessionId, Boolean adminScope) {
+    public record RefreshTokenData(String userId, List<String> roles, String sessionId, Boolean adminScope) {
         public boolean grantsAdmin() {
             return Boolean.TRUE.equals(adminScope);
         }
@@ -58,10 +58,10 @@ public class RefreshTokenService {
     /**
      * Generates a refresh token, stores it in Redis and indexes it under the user
      */
-    public String generate(String userId, String email, List<String> roles, boolean adminScope) {
+    public String generate(String userId, List<String> roles, boolean adminScope) {
         String token = UUID.randomUUID().toString();
         String key = keyOf(token);
-        RefreshTokenData data = new RefreshTokenData(userId, email, roles, UUID.randomUUID().toString(), adminScope);
+        RefreshTokenData data = new RefreshTokenData(userId, roles, UUID.randomUUID().toString(), adminScope);
         Duration ttl = Duration.ofDays(refreshExpirationDays);
         // Renew the index TTL on every issue (as rotate does), so the index never expires before a token it lists
         redisService.execInTransaction(List.of(
@@ -140,13 +140,11 @@ public class RefreshTokenService {
         List<String> freshRoles = List.of(user.getRoles());
         // Tokens issued before session ids existed start a session on their next rotation
         String sessionId = data.sessionId() != null ? data.sessionId() : UUID.randomUUID().toString();
-        RefreshTokenData freshData = new RefreshTokenData(data.userId(), data.email(), freshRoles, sessionId,
-                data.grantsAdmin());
+        RefreshTokenData freshData = new RefreshTokenData(data.userId(), freshRoles, sessionId, data.grantsAdmin());
 
         String newRefreshToken = UUID.randomUUID().toString();
         String newKey = keyOf(newRefreshToken);
-        String newAccessToken = jwtUtil.generateToken(freshData.userId(), freshData.email(), freshRoles,
-                freshData.grantsAdmin());
+        String newAccessToken = jwtUtil.generateToken(freshData.userId(), freshRoles, freshData.grantsAdmin());
         RotateResult result = new RotateResult(newAccessToken, newRefreshToken, freshData);
 
         Duration refreshTtl = Duration.ofDays(refreshExpirationDays);

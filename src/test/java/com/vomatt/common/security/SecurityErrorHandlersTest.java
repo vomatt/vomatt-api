@@ -111,7 +111,7 @@ class SecurityErrorHandlersTest {
 
     @Test
     void shouldNotSetErrorAttributeWhenTokenValid() throws Exception {
-        String token = jwtUtil.generateToken("u1", "a@b.c", List.of("user"), false);
+        String token = jwtUtil.generateToken("u1", List.of("user"), false);
 
         assertThat(requestWithBearer(token).getAttribute(JwtAuthFilter.AUTH_ERROR_ATTR)).isNull();
     }
@@ -119,7 +119,7 @@ class SecurityErrorHandlersTest {
     private MockHttpServletResponse filterAs(UUID userId, String method, String uri, FilterChain chain)
             throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest(method, uri);
-        request.addHeader("Authorization", "Bearer " + jwtUtil.generateToken(userId.toString(), "a@b.c", List.of("user"), false));
+        request.addHeader("Authorization", "Bearer " + jwtUtil.generateToken(userId.toString(), List.of("user"), false));
         MockHttpServletResponse response = new MockHttpServletResponse();
         jwtAuthFilter.doFilter(request, response, chain);
         SecurityContextHolder.clearContext();
@@ -165,8 +165,8 @@ class SecurityErrorHandlersTest {
 
     @Test
     void shouldDropAdminRoleWhenTokenLacksAdminScope() {
-        String userToken = jwtUtil.generateToken("u1", "a@b.c", List.of("user", "admin"), false);
-        String adminToken = jwtUtil.generateToken("u1", "a@b.c", List.of("user", "admin"), true);
+        String userToken = jwtUtil.generateToken("u1", List.of("user", "admin"), false);
+        String adminToken = jwtUtil.generateToken("u1", List.of("user", "admin"), true);
 
         assertThat(jwtUtil.parseToken(userToken).roles()).containsExactly("user");
         assertThat(jwtUtil.parseToken(adminToken).roles()).containsExactly("user", "admin");
@@ -174,7 +174,7 @@ class SecurityErrorHandlersTest {
 
     private MockHttpServletResponse filterAsAdmin(UUID userId, String method, String uri, FilterChain chain) throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest(method, uri);
-        request.addHeader("Authorization", "Bearer " + jwtUtil.generateToken(userId.toString(), "a@b.c", List.of("user", "admin"), true));
+        request.addHeader("Authorization", "Bearer " + jwtUtil.generateToken(userId.toString(), List.of("user", "admin"), true));
         MockHttpServletResponse response = new MockHttpServletResponse();
         jwtAuthFilter.doFilter(request, response, chain);
         SecurityContextHolder.clearContext();
@@ -248,7 +248,7 @@ class SecurityErrorHandlersTest {
         UUID userId = UUID.randomUUID();
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/admin/users");
         // "ADMIN" still maps to ROLE_ADMIN, so it must go through the database check too
-        request.addHeader("Authorization", "Bearer " + jwtUtil.generateToken(userId.toString(), "a@b.c", List.of("ADMIN"), true));
+        request.addHeader("Authorization", "Bearer " + jwtUtil.generateToken(userId.toString(), List.of("ADMIN"), true));
         MockHttpServletResponse response = new MockHttpServletResponse();
         FilterChain chain = mock(FilterChain.class);
 

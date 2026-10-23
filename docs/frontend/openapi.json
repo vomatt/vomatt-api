@@ -1758,8 +1758,8 @@
             "type" : "string"
           },
           "username" : {
-            "description" : "Acting user's email at the time; null when unknown",
-            "example" : "admin@example.com",
+            "description" : "Acting user's username at the time; null when unknown (entries before 2026-10-23 hold the email)",
+            "example" : "admin",
             "nullable" : true,
             "type" : "string"
           }

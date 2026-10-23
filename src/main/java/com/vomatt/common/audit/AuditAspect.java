@@ -26,6 +26,7 @@ import lombok.extern.slf4j.Slf4j;
 public class AuditAspect {
     
     private final AuditService auditService;
+    private final com.vomatt.repository.UserRepository userRepository;
     
     @AfterReturning("@annotation(auditable)")
     public void logSuccessfulAction(JoinPoint joinPoint, Auditable auditable) {
@@ -84,10 +85,13 @@ public class AuditAspect {
         }
     }
     
+    /** {userId, username}: the token carries no email any more, so the username is read from the database. */
     private String[] getCurrentUserInfo() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.getPrincipal() instanceof UserPrincipal principal) {
-            return new String[]{principal.userId(), principal.email()};
+            String username = userRepository.findById(java.util.UUID.fromString(principal.userId()))
+                    .map(com.vomatt.entity.User::getUsername).orElse(null);
+            return new String[]{principal.userId(), username};
         }
         return new String[]{null, null};
     }

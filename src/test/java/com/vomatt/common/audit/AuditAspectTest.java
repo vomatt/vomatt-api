@@ -21,7 +21,8 @@ import com.vomatt.common.i18n.MessageKey;
 class AuditAspectTest {
 
     private final AuditService auditService = mock(AuditService.class);
-    private final AuditAspect aspect = new AuditAspect(auditService);
+    private final com.vomatt.repository.UserRepository userRepository = mock(com.vomatt.repository.UserRepository.class);
+    private final AuditAspect aspect = new AuditAspect(auditService, userRepository);
     private final JoinPoint joinPoint = mock(JoinPoint.class);
     private Auditable auditable;
 
@@ -43,6 +44,24 @@ class AuditAspectTest {
     @AfterEach
     void tearDown() {
         RequestContextHolder.resetRequestAttributes();
+    }
+
+    @Test
+    void shouldRecordUsernameFromDatabaseWhenCallerIsAuthenticated() {
+        java.util.UUID id = java.util.UUID.randomUUID();
+        var principal = new com.vomatt.common.security.UserPrincipal(id.toString(), java.util.List.of("user"));
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(principal, null, java.util.List.of()));
+        when(userRepository.findById(id)).thenReturn(java.util.Optional.of(
+                com.vomatt.entity.User.builder().id(id).username("alice").email("alice@example.com").build()));
+        try {
+            aspect.logFailedAction(joinPoint, auditable, new IllegalStateException("boom"));
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+
+        verify(auditService).logFailedAction(org.mockito.ArgumentMatchers.eq(id.toString()), org.mockito.ArgumentMatchers.eq("alice"),
+                any(), any(), any(), any(), any(), any());
     }
 
     @Test

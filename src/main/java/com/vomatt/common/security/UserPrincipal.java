@@ -4,7 +4,8 @@ import com.vomatt.common.constant.UserRole;
 
 import java.util.List;
 
-public record UserPrincipal(String userId, String email, List<String> roles) {
+/** What the access token says about the caller: only the id and the roles it grants (see {@link JwtUtil}). */
+public record UserPrincipal(String userId, List<String> roles) {
 
     /** Whether this token grants the admin role; only admin-scope tokens keep it (see {@link JwtUtil#parseToken}). */
     public boolean grantsAdmin() {

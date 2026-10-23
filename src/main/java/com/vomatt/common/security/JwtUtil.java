@@ -52,9 +52,11 @@ public class JwtUtil {
      * @param adminScope true only for tokens issued by the admin console login; other tokens never grant the admin
      *                   role, even when the account holds it
      */
-    public String generateToken(String userId, String email, List<String> roles, boolean adminScope) {
+    public String generateToken(String userId, List<String> roles, boolean adminScope) {
         long nowMs = System.currentTimeMillis();
-        return Jwts.builder().subject(userId).claim("email", email).claim("roles", roles)
+        // Payload is sub / roles / scope / jti only: no email, since the token transits proxies, APM and browser
+        // storage that no PII should reach; jti gives a future revocation list something to key on
+        return Jwts.builder().subject(userId).id(java.util.UUID.randomUUID().toString()).claim("roles", roles)
                 .claim(SCOPE_CLAIM, adminScope ? SCOPE_ADMIN : SCOPE_USER).issuedAt(new Date(nowMs))
                 .expiration(new Date(nowMs + expirationSeconds * 1000)).signWith(key).compact();
     }
@@ -68,7 +70,7 @@ public class JwtUtil {
         if (roles != null && !SCOPE_ADMIN.equals(claims.get(SCOPE_CLAIM, String.class))) {
             roles = roles.stream().filter(r -> !UserRole.isAdmin(r)).toList();
         }
-        return new UserPrincipal(claims.getSubject(), claims.get("email", String.class), roles);
+        return new UserPrincipal(claims.getSubject(), roles);
     }
 
     public boolean validateJwtToken(String authToken) {

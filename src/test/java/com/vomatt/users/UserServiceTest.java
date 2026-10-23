@@ -74,7 +74,7 @@ class UserServiceTest {
         User user = User.builder().id(id).username("u").build();
         when(userRepository.findById(id)).thenReturn(Optional.of(user));
 
-        userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), "u@test.local", List.of("user")));
+        userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), List.of("user")));
 
         InOrder order = inOrder(voteOptionRepository, voteRepository, userRepository);
         order.verify(voteRepository).decrementTurnoutForUserBallots(id);
@@ -89,7 +89,7 @@ class UserServiceTest {
         when(userRepository.findById(id)).thenReturn(Optional.of(admin));
         when(userRepository.lockActiveAdminIds()).thenReturn(List.of(id));
 
-        assertThatThrownBy(() -> userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), "r@test.local", List.of("admin"))))
+        assertThatThrownBy(() -> userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), List.of("admin"))))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.ADMIN_LAST_ADMIN));
         verify(userRepository, never()).delete(any());
@@ -103,7 +103,7 @@ class UserServiceTest {
         when(userRepository.findById(id)).thenReturn(Optional.of(admin));
         when(userRepository.lockActiveAdminIds()).thenReturn(List.of(id, UUID.randomUUID()));
 
-        userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), "r@test.local", List.of("admin")));
+        userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), List.of("admin")));
 
         verify(userRepository).delete(admin);
     }
@@ -115,7 +115,7 @@ class UserServiceTest {
         when(userRepository.isActiveAdmin(callerId)).thenReturn(false);
 
         assertThatThrownBy(() -> userService.deleteUser(targetId.toString(),
-                new UserPrincipal(callerId.toString(), "c@test.local", List.of("user", "admin"))))
+                new UserPrincipal(callerId.toString(), List.of("user", "admin"))))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_DELETE_FORBIDDEN));
         verify(userRepository, never()).delete(any());
@@ -128,7 +128,7 @@ class UserServiceTest {
 
         // A consumer-app token of an admin carries no admin role (JwtUtil drops it), so the DB is never consulted
         assertThatThrownBy(() -> userService.deleteUser(targetId.toString(),
-                new UserPrincipal(callerId.toString(), "c@test.local", List.of("user"))))
+                new UserPrincipal(callerId.toString(), List.of("user"))))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_DELETE_FORBIDDEN));
         verify(userRepository, never()).isActiveAdmin(any());
@@ -143,7 +143,7 @@ class UserServiceTest {
         when(userRepository.isActiveAdmin(callerId)).thenReturn(true);
         when(userRepository.findById(targetId)).thenReturn(Optional.of(target));
 
-        userService.deleteUser(targetId.toString(), new UserPrincipal(callerId.toString(), "c@test.local", List.of("admin")));
+        userService.deleteUser(targetId.toString(), new UserPrincipal(callerId.toString(), List.of("admin")));
 
         verify(userRepository).delete(target);
     }
@@ -178,7 +178,7 @@ class UserServiceTest {
         when(userRepository.findById(id)).thenReturn(Optional.of(user));
         TransactionSynchronizationManager.initSynchronization();
         try {
-            userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), "u@test.local", List.of("user")));
+            userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), List.of("user")));
 
             verify(refreshTokenService, never()).revokeAllForUser(any());
             TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);

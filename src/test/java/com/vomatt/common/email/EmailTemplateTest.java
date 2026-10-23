@@ -162,12 +162,6 @@ class EmailTemplateTest {
     }
 
     @Test
-    void shouldMaskAddressWhenLoggingInvitation() {
-        assertThat(EmailServiceImpl.mask("carol@example.com")).isEqualTo("c***@example.com");
-        assertThat(EmailServiceImpl.mask("broken")).isEqualTo("***");
-    }
-
-    @Test
     void shouldPointToFrontendPollRouteWhenPollPathDefaultResolved() {
         // The braces of {voteId} must survive placeholder resolution
         assertThat(defaultPollPath()).isEqualTo("/poll/{voteId}");

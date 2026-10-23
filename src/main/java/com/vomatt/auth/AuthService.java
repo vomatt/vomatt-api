@@ -5,6 +5,7 @@ import com.vomatt.common.constant.ReservedUsernames;
 import com.vomatt.common.email.EmailService;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.redis.RedisService;
+import com.vomatt.common.security.AppKey;
 import com.vomatt.common.security.JwtUtil;
 import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.sms.SmsService;
@@ -82,6 +83,7 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final RestClient restClient;
     private final RefreshTokenService refreshTokenService;
+    private final AppKey appKey;
 
     @Value("${google.client-id:}")
     private String googleClientId;
@@ -112,6 +114,10 @@ public class AuthService {
 
     // ── OTP ──────────────────────────────────────────────────────────
 
+    /**
+     * OTP keys are {@code <namespace>:<SHA-256(identifier)>} and hold only an HMAC of the code (see {@link #otpHash}),
+     * so neither a key listing nor a value dump of Redis yields an email, a phone number or a code that signs in.
+     */
     private static final String OTP_EMAIL_NS = "otp:email";
     private static final String OTP_PHONE_NS = "otp:phone";
     private static final String OTP_ADMIN_EMAIL_NS = "otp:admin-email";
@@ -158,8 +164,9 @@ public class AuthService {
         String attemptKey = attemptKey(normalizedEmail, clientIp);
         rejectIfLocked(namespace, attemptKey);
 
-        acquireResendCooldown(namespace, normalizedEmail);
-        storeOtp(namespace, normalizedEmail, attemptKey, new OtpRecord(code, otpType, Instant.now(), 0));
+        String redisKey = redisKey(normalizedEmail);
+        acquireResendCooldown(namespace, redisKey);
+        storeOtp(namespace, redisKey, attemptKey, new OtpRecord(otpHash(normalizedEmail, code), otpType, Instant.now(), 0));
 
         try {
             if (OTP_ADMIN_EMAIL_NS.equals(namespace)) {
@@ -171,7 +178,7 @@ public class AuthService {
             }
         } catch (Exception ex) {
             // The code never reached the user: drop it and shorten the cooldown so a retry is possible soon
-            releaseUndeliveredOtp(namespace, normalizedEmail);
+            releaseUndeliveredOtp(namespace, redisKey);
             log.warn("Failed to send OTP email: {}", ex.getMessage());
             throw ApiException.badRequest(MessageKey.AUTH_EMAIL_SEND_FAILED);
         }
@@ -185,13 +192,14 @@ public class AuthService {
             throw ApiException.badRequest(MessageKey.AUTH_PHONE_NOT_REGISTERED);
         }
 
-        acquireResendCooldown(OTP_PHONE_NS, phone);
-        storeOtp(OTP_PHONE_NS, phone, attemptKey, new OtpRecord(code, otpType, Instant.now(), 0));
+        String redisKey = redisKey(phone);
+        acquireResendCooldown(OTP_PHONE_NS, redisKey);
+        storeOtp(OTP_PHONE_NS, redisKey, attemptKey, new OtpRecord(otpHash(phone, code), otpType, Instant.now(), 0));
 
         try {
             smsService.sendOtp(phone, code);
         } catch (Exception ex) {
-            releaseUndeliveredOtp(OTP_PHONE_NS, phone);
+            releaseUndeliveredOtp(OTP_PHONE_NS, redisKey);
             log.warn("Failed to send OTP SMS: {}", ex.getMessage());
             throw ApiException.badRequest(MessageKey.AUTH_SMS_SEND_FAILED);
         }
@@ -302,10 +310,11 @@ public class AuthService {
     /** Cooldown kept after a failed delivery, so a script cannot hammer the paid SMS / email provider. */
     private static final Duration OTP_FAILED_SEND_COOLDOWN = Duration.ofSeconds(30);
 
-    private OtpRecord consumeOtp(String namespace, String key, String code, String clientIp) {
-        String attemptKey = attemptKey(key, clientIp);
+    private OtpRecord consumeOtp(String namespace, String identifier, String code, String clientIp) {
+        String attemptKey = attemptKey(identifier, clientIp);
         rejectIfLocked(namespace, attemptKey);
 
+        String key = redisKey(identifier);
         OtpRecord rec = redisService.get(namespace, key, OtpRecord.class);
 
         if (rec == null) {
@@ -329,11 +338,10 @@ public class AuthService {
             throw ApiException.unauthorized(MessageKey.AUTH_OTP_INVALID_OR_EXPIRED);
         }
 
-        // P5-#19: constant-time comparison so a short-circuit does not leak the OTP prefix via a timing side-channel.
-        // MessageDigest.isEqual compares every byte without early exit when lengths match; it exits early on a length mismatch, but the OTP is always 6 digits.
+        // P5-#19: constant-time comparison of the two hashes (equal length), so no timing side-channel leaks a prefix
         boolean codeMatches = MessageDigest.isEqual(
-                rec.code().getBytes(StandardCharsets.UTF_8),
-                code.getBytes(StandardCharsets.UTF_8));
+                rec.codeHash().getBytes(StandardCharsets.UTF_8),
+                otpHash(identifier, code).getBytes(StandardCharsets.UTF_8));
         if (!codeMatches) {
             // The OTP's last guess was wrong: it is dead, and the next one can be requested only after the longer cooldown
             if (guesses == MAX_OTP_GUESSES) {
@@ -423,8 +431,9 @@ public class AuthService {
             default -> throw new IllegalArgumentException("Unknown login channel: " + channel);
         };
         String indexNs = namespace + OTP_ATTEMPT_IDX_SUFFIX;
+        String key = redisKey(identifier);
         Collection<String> attemptKeys = clientIp != null ? List.of(attemptKey(identifier, clientIp))
-                : redisService.hGetAll(indexNs, identifier).keySet();
+                : redisService.hGetAll(indexNs, key).keySet();
         boolean lock = targets.contains(LoginUnlock.TARGET_LOCK);
         boolean attempts = targets.contains(LoginUnlock.TARGET_ATTEMPTS);
         long removed = 0;
@@ -436,21 +445,21 @@ public class AuthService {
             removed += redisService.deleteAll(namespace + OTP_FAIL_SUFFIX, attemptKeys);
         }
         if (attempts) {
-            OtpRecord otp = redisService.getAndDelete(namespace, identifier, OtpRecord.class);
+            OtpRecord otp = redisService.getAndDelete(namespace, key, OtpRecord.class);
             if (otp != null) {
                 removed += 1 + redisService.deleteAll(namespace + OTP_GUESS_SUFFIX,
-                        List.of(identifier + ":" + otp.createdAt().toEpochMilli()));
+                        List.of(key + ":" + otp.createdAt().toEpochMilli()));
             }
         }
         if (targets.contains(LoginUnlock.TARGET_COOLDOWN)) {
-            removed += redisService.deleteAll(namespace + OTP_COOLDOWN_SUFFIX, List.of(identifier));
+            removed += redisService.deleteAll(namespace + OTP_COOLDOWN_SUFFIX, List.of(key));
         }
         // Lock and counter are both gone for these keys, so the index has nothing left to point at
         if (lock) {
             if (clientIp == null) {
-                redisService.delete(indexNs, identifier);
+                redisService.delete(indexNs, key);
             } else {
-                redisService.hDelete(indexNs, identifier, attemptKeys.iterator().next());
+                redisService.hDelete(indexNs, key, attemptKeys.iterator().next());
             }
         }
         return (int) removed;
@@ -468,14 +477,24 @@ public class AuthService {
      * is canonicalized first, so an admin unlocking "2001:DB8::1" hits the key the server wrote for "2001:db8:0:0:0:0:0:1".
      */
     static String attemptKey(String identifier, String clientIp) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest((identifier + "\n" + canonicalIp(clientIp)).getBytes(StandardCharsets.UTF_8));
-            return java.util.HexFormat.of().formatHex(digest);
-        } catch (java.security.NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 not available", e);
-        }
+        return AppKey.sha256Hex(identifier + "\n" + canonicalIp(clientIp));
     }
+
+    /** Redis key part for one identifier: a hash, so OTP keys never list emails or phone numbers. */
+    static String redisKey(String identifier) {
+        return AppKey.sha256Hex(identifier);
+    }
+
+    /**
+     * What is stored for an OTP instead of the code: {@code HMAC(derive("otp"), identifier:code)}. A Redis dump cannot be
+     * used to sign in, and without the key no table of the 10^6 codes can be precomputed; the identifier keeps two
+     * users' equal codes from hashing alike.
+     */
+    private String otpHash(String identifier, String code) {
+        return AppKey.hmacHex(appKey.derive(OTP_KEY_LABEL), identifier + ":" + code);
+    }
+
+    private static final String OTP_KEY_LABEL = "otp";
 
     /** An IP literal in one spelling (InetAddress.ofLiteral never does DNS); anything else is kept as is. */
     static String canonicalIp(String ip) {

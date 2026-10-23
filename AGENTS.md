@@ -11,7 +11,7 @@ docker compose up -d --build         # full stack (API + Postgres + Redis) for f
 docker compose up -d postgres redis  # DB only, pair with ./mvnw spring-boot:run; db/schema.sql is applied on first start
                                      # an existing volume does not rerun it: apply new db/migrations/* by hand (psql) or docker compose down -v
 cp .env.example .env                 # fill in JWT_SECRET etc.
-./mvnw spring-boot:run               # with EMAIL_ENABLED=false, read the OTP from Redis: redis-cli GET otp:email:<email>
+./mvnw spring-boot:run               # with EMAIL_ENABLED=false, the OTP is printed in the app log as [EMAIL-NOOP] (Redis holds only a hash)
 ./mvnw clean package -DskipTests
 ./mvnw test
 ./mvnw test -Dtest=VoteServiceTest   # single test class; -Dtest=VoteServiceTest#shouldXxx runs a single method

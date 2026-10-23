@@ -21,8 +21,7 @@ import com.vomatt.common.i18n.MessageKey;
 class AuditAspectTest {
 
     private final AuditService auditService = mock(AuditService.class);
-    private final com.vomatt.repository.UserRepository userRepository = mock(com.vomatt.repository.UserRepository.class);
-    private final AuditAspect aspect = new AuditAspect(auditService, userRepository);
+    private final AuditAspect aspect = new AuditAspect(auditService);
     private final JoinPoint joinPoint = mock(JoinPoint.class);
     private Auditable auditable;
 
@@ -46,22 +45,43 @@ class AuditAspectTest {
         RequestContextHolder.resetRequestAttributes();
     }
 
+
     @Test
-    void shouldRecordUsernameFromDatabaseWhenCallerIsAuthenticated() {
-        java.util.UUID id = java.util.UUID.randomUUID();
-        var principal = new com.vomatt.common.security.UserPrincipal(id.toString(), java.util.List.of("user"));
-        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
-                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(principal, null, java.util.List.of()));
-        when(userRepository.findById(id)).thenReturn(java.util.Optional.of(
-                com.vomatt.entity.User.builder().id(id).username("alice").email("alice@example.com").build()));
+    void shouldNotIdentifyUserWhenDeletingOwnAccountThroughController() {
+        com.vomatt.users.UserService userService = mock(com.vomatt.users.UserService.class);
+        com.vomatt.users.UserController proxied = proxied(new com.vomatt.users.UserController(userService, mock(com.vomatt.votes.VoteService.class)));
+        java.util.UUID self = java.util.UUID.randomUUID();
+        java.util.UUID other = java.util.UUID.randomUUID();
+        signIn(self, "alice");
         try {
-            aspect.logFailedAction(joinPoint, auditable, new IllegalStateException("boom"));
+            proxied.deleteUser(self.toString(), principal(self));
+            proxied.deleteUser(other.toString(), principal(self));
         } finally {
             org.springframework.security.core.context.SecurityContextHolder.clearContext();
         }
 
-        verify(auditService).logFailedAction(org.mockito.ArgumentMatchers.eq(id.toString()), org.mockito.ArgumentMatchers.eq("alice"),
-                any(), any(), any(), any(), any(), any());
+        // Own account: the entry says an account was deleted, not who (the service anonymized the rest already)
+        verify(auditService).logAction(org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.eq("DELETE"),
+                org.mockito.ArgumentMatchers.eq("USER"), org.mockito.ArgumentMatchers.eq(self.toString()), org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.isNull(), any(), any(), any());
+        // Someone else's account (admin): the actor stays on record (username resolved later by AuditService)
+        verify(auditService).logAction(org.mockito.ArgumentMatchers.eq(self.toString()), org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.eq("DELETE"),
+                org.mockito.ArgumentMatchers.eq("USER"), org.mockito.ArgumentMatchers.eq(other.toString()), any(), any(), any(), any(), any());
+    }
+
+    private <T> T proxied(T target) {
+        org.springframework.aop.aspectj.annotation.AspectJProxyFactory factory = new org.springframework.aop.aspectj.annotation.AspectJProxyFactory(target);
+        factory.addAspect(aspect);
+        return factory.getProxy();
+    }
+
+    private static com.vomatt.common.security.UserPrincipal principal(java.util.UUID id) {
+        return new com.vomatt.common.security.UserPrincipal(id.toString(), java.util.List.of("user"));
+    }
+
+    private void signIn(java.util.UUID id, String username) {
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(principal(id), null, java.util.List.of()));
     }
 
     @Test

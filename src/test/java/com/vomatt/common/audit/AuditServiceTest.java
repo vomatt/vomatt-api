@@ -22,9 +22,31 @@ class AuditServiceTest {
 
     @Mock
     AuditLogRepository auditLogRepository;
+    @Mock
+    com.vomatt.repository.UserRepository userRepository;
 
     @InjectMocks
     AuditService auditService;
+
+    @Test
+    @DisplayName("should resolve the actor's username on the writer and leave a deleted account unnamed")
+    void shouldResolveUsernameWhenWritingDetailedEntry() {
+        ReflectionTestUtils.setField(auditService, "auditEnabled", true);
+        java.util.UUID id = java.util.UUID.randomUUID();
+        java.util.UUID gone = java.util.UUID.randomUUID();
+        when(userRepository.findById(id)).thenReturn(java.util.Optional.of(com.vomatt.entity.User.builder().id(id).username("alice").build()));
+        when(userRepository.findById(gone)).thenReturn(java.util.Optional.empty());
+        when(auditLogRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        auditService.logAction(id.toString(), null, "VIEW", "USER", "r", "203.0.113.7", "ua", "/x", "GET", null);
+        auditService.logAction(gone.toString(), null, "VIEW", "USER", "r", "203.0.113.7", "ua", "/x", "GET", null);
+        auditService.logAction(null, null, "DELETE", "USER", "r", null, null, "/x", "DELETE", null);
+
+        org.mockito.ArgumentCaptor<AuditLog> saved = org.mockito.ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository, times(3)).save(saved.capture());
+        assertThat(saved.getAllValues()).extracting(AuditLog::getUsername).containsExactly("alice", null, null);
+        verify(userRepository, times(2)).findById(any());
+    }
 
     @Test
     @DisplayName("should drop the audit write when both writers stay busy")

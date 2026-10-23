@@ -41,11 +41,8 @@ public interface UserVoteRepository extends JpaRepository<UserVote, UUID> {
     List<UserVote> findVoterPage(@Param("voteId") UUID voteId, @Param("afterTime") OffsetDateTime afterTime,
                                  @Param("afterId") UUID afterId, Limit limit);
 
-    /** Anonymous Ballots in a Poll; the voter list's k-anonymity gate. */
+    /** Anonymous Ballots in a Poll other than the caller's; while there are any, the voter list names no options. */
     long countByVoteIdAndAnonymousTrueAndUserIdNot(UUID voteId, UUID userId);
-
-    /** Whether the Poll holds any Anonymous Ballot at all; while it does, the voter list must not name options (see VoteMapper). */
-    boolean existsByVoteIdAndAnonymousTrue(UUID voteId);
 
     /**
      * Seals the Anonymous Ballots of Polls Ended by {@code now}: the option is dropped from the row, so the database

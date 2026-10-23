@@ -97,15 +97,6 @@ public class VoteService {
     private static final String INVITATION_COUNTER_NS = "email:invitation";
     private static final String BALLOT_RATE_LIMIT_NS = "rate:limit:ballot";
 
-    /**
-     * k-anonymity floor for the voter list: an Ended Poll holding 1 to K-1 Anonymous Ballots hides its voter list.
-     * Otherwise the owner of an Invite-only Poll could subtract the named voters from the Invitees holding a Ballot
-     * and, with the per-option counts, recover who voted anonymously and for what. With K or more Anonymous Ballots
-     * the owner still learns which Invitees voted anonymously and how many anonymous Ballots each option got, so if
-     * all of them chose the same option their choice is still inferable.
-     */
-    static final int ANONYMOUS_BALLOT_K = 3;
-
     @Value("${app.email.invitation-daily-limit:200}")
     private int invitationDailyLimit;
 
@@ -408,8 +399,9 @@ public class VoteService {
     }
 
     /**
-     * Who chose what in an Ended Poll, as allowed by its Voter Visibility; oldest Ballot first.
-     * Hidden while the Poll holds 1 to {@link #ANONYMOUS_BALLOT_K}-1 Anonymous Ballots other than the caller's.
+     * Who took part in an Ended Poll, as allowed by its Voter Visibility; oldest Ballot first. Anonymous Ballots are
+     * left out, and while the Poll holds any (other than the caller's own) no option is named at all: with the named
+     * voters' options and the per-option totals, subtraction would otherwise tell what the anonymous ones chose.
      */
     @Transactional(readOnly = true)
     public CursorResponse<VoterResponse> getVoters(String voteId, String userId, String cursor, Integer limit) {
@@ -427,19 +419,16 @@ public class VoteService {
             throw ApiException.forbidden(MessageKey.VOTE_VOTERS_HIDDEN);
         }
         // The caller's own Anonymous Ballot does not count: they know its option, so it hides no one else's.
-        // ponytail: Ballots of other accounts the caller controls (invited sock puppets) still count; no count-based gate can tell them apart.
-        // An account deletion can drop Ballots between pages; the gate is re-checked on every page, so it only ever hides more.
-        long anonymousBallots = userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(vote.getId(), UUID.fromString(userId));
-        if (anonymousBallots > 0 && anonymousBallots < ANONYMOUS_BALLOT_K) {
-            throw ApiException.forbidden(MessageKey.VOTE_VOTERS_HIDDEN);
-        }
+        // ponytail: Ballots of other accounts the caller controls (invited sock puppets) still count; no count-based rule can tell them apart.
+        // Re-checked on every page: an account deletion can drop Ballots between pages, so this only ever hides more.
+        boolean withOptions = userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(vote.getId(), UUID.fromString(userId)) == 0;
 
         int size = CursorResponse.limit(limit);
         Cursor after = Cursor.decode(cursor, Cursor.Scope.VOTERS);
         List<UserVote> rows = userVoteRepository.findVoterPage(vote.getId(),
             after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
         return CursorResponse.of(rows, size, Cursor.Scope.VOTERS, ballot -> Cursor.of(ballot.getCreatedAt(), ballot.getId()),
-            page -> page.stream().map(voteMapper::toVoterResponse).toList());
+            page -> page.stream().map(ballot -> voteMapper.toVoterResponse(ballot, withOptions)).toList());
     }
 
     @Transactional(readOnly = true)

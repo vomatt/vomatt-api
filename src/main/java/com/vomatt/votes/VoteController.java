@@ -501,14 +501,15 @@ public class VoteController {
     @Operation(summary = "List Participants of an Ended Poll", description = """
             **Auth**: required
             **Precondition**: the Poll has Ended, and its Voter Visibility allows the caller: NOBODY allows no one (not even the owner), OWNER allows only the owner, SIGNED_IN allows anyone who can see the Poll (for INVITE_ONLY: the owner and Invitees)
-            **Behavior**: cursor-paged list of who chose which option, oldest Ballot first. Anonymous Ballots are left out, so the list can be shorter than `participantCount`. \
-            To keep them anonymous, the whole list is hidden (403 `vote.voters.hidden`) while the Poll holds 1 or 2 Anonymous Ballots other than the caller's own; with none, or with 3 or more, it is shown. \
+            **Behavior**: cursor-paged list of who took part, oldest Ballot first. Anonymous Ballots are left out, so the list can be shorter than `participantCount`. \
+            `optionId` is present only when the Poll holds no Anonymous Ballot other than the caller's own; otherwise it is null for every Participant, \
+            so the anonymous choices cannot be worked out from the named ones and the option totals. \
             `nextCursor` null means the last page; `limit` is clamped to 1-50 (default 20).
             **Side effects**: none
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
             - 403 `vote.results.sealed`: the Poll is still Scheduled or Open
-            - 403 `vote.voters.hidden`: Voter Visibility does not allow the caller, or the Poll holds 1 or 2 Anonymous Ballots other than the caller's own
+            - 403 `vote.voters.hidden`: Voter Visibility does not allow the caller
             - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list or another ordering of this list
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of Participants",

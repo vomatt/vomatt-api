@@ -81,8 +81,8 @@ class VoterListPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("should hide the voter list while 1 to K-1 Anonymous Ballots exist and leave them out from K on")
-    void shouldGateVoterListWhenAnonymousBallotsBelowK() {
+    @DisplayName("should list named Participants without any option while another user's Anonymous Ballot exists")
+    void shouldDropOptionsFromVoterListWhenAnonymousBallotsExist() {
         User owner = persistUser("vl-anon-owner");
         OffsetDateTime now = OffsetDateTime.now();
         Vote poll = persistPoll(owner, now.minusDays(2), now.minusDays(1), "A", "B");
@@ -91,42 +91,27 @@ class VoterListPostgresTest extends PostgresRepositoryTest {
         persistAnonymousBallot(persistUser("vl-anon-hidden-0"), poll, option);
         em.flush();
         em.clear();
-        String pollId = poll.getId().toString();
-        String ownerId = owner.getId().toString();
 
-        assertThatThrownBy(() -> voteService.getVoters(pollId, ownerId, null, null))
-                .isInstanceOfSatisfying(ApiException.class,
-                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_VOTERS_HIDDEN));
-
-        Vote reloaded = em.find(Vote.class, poll.getId());
-        VoteOption reloadedOption = em.find(VoteOption.class, option.getId());
-        for (int i = 1; i < VoteService.ANONYMOUS_BALLOT_K; i++) {
-            persistAnonymousBallot(persistUser("vl-anon-hidden-" + i), reloaded, reloadedOption);
-        }
-        em.flush();
-        em.clear();
-
-        assertThat(voteService.getVoters(pollId, ownerId, null, null).items())
-                .extracting(VoterResponse::username).containsExactly("vl-anon-named");
+        assertThat(voteService.getVoters(poll.getId().toString(), owner.getId().toString(), null, null).items())
+                .extracting(VoterResponse::username, VoterResponse::optionId)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("vl-anon-named", null));
     }
 
     @Test
-    @DisplayName("should keep the voter list hidden when the owner's own Anonymous Ballot would reach K")
-    void shouldHideVotersWhenOnlyTheCallersAnonymousBallotReachesK() {
+    @DisplayName("should name options when the only Anonymous Ballot is the caller's own")
+    void shouldKeepOptionsWhenOnlyTheCallersBallotIsAnonymous() {
         User owner = persistUser("vl-self-owner");
         OffsetDateTime now = OffsetDateTime.now();
         Vote poll = persistPoll(owner, now.minusDays(2), now.minusDays(1), "A", "B");
         VoteOption option = poll.getOptions().iterator().next();
         persistAnonymousBallot(owner, poll, option);
-        for (int i = 1; i < VoteService.ANONYMOUS_BALLOT_K; i++) {
-            persistAnonymousBallot(persistUser("vl-self-hidden-" + i), poll, option);
-        }
+        em.persist(new UserVote(persistUser("vl-self-named"), poll, option));
         em.flush();
         em.clear();
 
-        assertThatThrownBy(() -> voteService.getVoters(poll.getId().toString(), owner.getId().toString(), null, null))
-                .isInstanceOfSatisfying(ApiException.class,
-                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_VOTERS_HIDDEN));
+        assertThat(voteService.getVoters(poll.getId().toString(), owner.getId().toString(), null, null).items())
+                .extracting(VoterResponse::username, VoterResponse::optionId)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("vl-self-named", option.getId().toString()));
     }
 
     private void persistAnonymousBallot(User user, Vote poll, VoteOption option) {

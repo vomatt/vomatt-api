@@ -776,23 +776,21 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("should hide voters when the Poll holds fewer than K Anonymous Ballots")
-        void shouldHideVotersWhenAnonymousBallotsBelowK() {
+        @DisplayName("should list voters without options while the Poll holds an Anonymous Ballot of someone else")
+        void shouldDropOptionsWhenAnonymousBallotsExist() {
             endedWith(VoterVisibility.OWNER);
+            com.vomatt.entity.UserVote named = new com.vomatt.entity.UserVote(user, vote, option);
+            setId(option, UUID.randomUUID());
             when(userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn(1L);
+            when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of(named));
 
-            assertHidden(userId.toString());
-            verify(userVoteRepository, never()).findVoterPage(any(), any(), any(), any());
-        }
+            assertThat(voteService.getVoters(voteId.toString(), userId.toString(), null, null).items())
+                    .singleElement().satisfies(v -> assertThat(v.optionId()).isNull());
+            verify(voteMapper).toVoterResponse(named, false);
 
-        @Test
-        @DisplayName("should show voters when the Poll holds K Anonymous Ballots")
-        void shouldShowVotersWhenAnonymousBallotsReachK() {
-            endedWith(VoterVisibility.OWNER);
-            when(userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn((long) VoteService.ANONYMOUS_BALLOT_K);
-            when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of());
-
-            assertThat(voteService.getVoters(voteId.toString(), userId.toString(), null, null).items()).isEmpty();
+            when(userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn(0L);
+            assertThat(voteService.getVoters(voteId.toString(), userId.toString(), null, null).items())
+                    .singleElement().satisfies(v -> assertThat(v.optionId()).isEqualTo(option.getId().toString()));
         }
 
         @Test

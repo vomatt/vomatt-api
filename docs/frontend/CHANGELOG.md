@@ -4,6 +4,8 @@ Contract changes that affect the frontend. 💥 BREAKING means frontend code mus
 
 ## 2026-10-23
 
+- New `POST /api/feedback` (sign-in required): body `{ "content": "..." }` (not blank, max 2000 characters) stores product feedback and responds 201 with `data.id`. Blank or too long content is 400 `common.validation_failed`; over the daily limit per user (UTC day; default 10) is 429 `common.rate_limited`. `GET /api/users/me/export` adds a `feedback` list (`id`, `content`, `createdAt`, oldest first).
+- Admin: new `GET /api/admin/feedback` (offset-paged, newest first, optional `userId`; items `{ id, userId, username, content, createdAt }`). The daily feedback limit is set with a dictionary item via `/api/admin/lookups`: `lookupType` `config`, `lookupKey` `feedback_daily_limit`, `lookupValue` a positive number (e.g. `20`). Without an active item, or with an invalid value, the limit is 10.
 - OpenAPI only: request fields that were already required non-blank now declare `minLength: 1` (strings) or `minItems: 1` (arrays) in `openapi.json`. Validation behavior is unchanged.
 - New `GET /api/users/me/export`: one JSON document with the caller's profile, preferences, Polls created, Comments and Ballots (data portability). Once per UTC day; a second call is 429 `common.rate_limited`.
 - 💥 Admin: `GET /api/admin/users` items no longer carry `firstName`, `lastName` and `birthday`, and `email` / `phoneNumber` are masked (`a***@example.com`, `+88****78`). `GET /api/admin/users/{userId}` still returns everything and is now recorded in the audit log (action `VIEW`, resource `USER`). `q` still searches the full values.

@@ -56,6 +56,7 @@ class UserServiceTest {
     @Mock com.vomatt.common.audit.AuditLogRepository auditLogRepository;
     @Mock com.vomatt.repository.UserVoteRepository userVoteRepository;
     @Mock com.vomatt.repository.VoteCommentRepository voteCommentRepository;
+    @Mock com.vomatt.repository.FeedbackRepository feedbackRepository;
     @Mock com.vomatt.common.redis.RedisService redisService;
     @Spy com.vomatt.repository.LockTimeout lockTimeout = new com.vomatt.repository.LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @InjectMocks UserService userService;
@@ -95,6 +96,10 @@ class UserServiceTest {
         when(voteRepository.findByCreatorIdOrderByCreatedAtDesc(id)).thenReturn(List.of(poll));
         when(voteCommentRepository.findByUserId(id)).thenReturn(List.of());
         when(userVoteRepository.findByUserIdWithVoteAndOption(id)).thenReturn(List.of(sealed));
+        com.vomatt.entity.Feedback feedback = org.mockito.Mockito.mock(com.vomatt.entity.Feedback.class);
+        when(feedback.getId()).thenReturn(UUID.randomUUID());
+        when(feedback.getContent()).thenReturn("Please add dark mode.");
+        when(feedbackRepository.findByUserIdOrderByCreatedAt(id)).thenReturn(List.of(feedback));
 
         com.vomatt.users.dto.UserDataExportResponse export = userService.exportMyData(id.toString());
 
@@ -106,6 +111,7 @@ class UserServiceTest {
             assertThat(b.optionId()).isNull();
             assertThat(b.anonymous()).isTrue();
         });
+        assertThat(export.feedback()).extracting(f -> f.content()).containsExactly("Please add dark mode.");
         assertThatThrownBy(() -> userService.exportMyData(id.toString()))
                 .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getStatus()).isEqualTo(org.springframework.http.HttpStatus.TOO_MANY_REQUESTS));
     }

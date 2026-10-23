@@ -322,13 +322,14 @@ public class AuthController {
             description = """
                     **Auth**: public
                     **Precondition**: the client obtained a Google ID token (Google Sign-In)
-                    **Behavior**: verifies the ID token signature against Google's public keys, then its issuer, audience and expiry. Signs in the user with that email, creating the user if new. \
-                    An existing account with the same email is reused only when Google reports the email as verified
-                    **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated
+                    **Behavior**: verifies the ID token signature against Google's public keys, then its issuer, audience and expiry. Each ID token signs in once; presenting it again is refused. \
+                    Signs in the user with that email, creating the user if new. An existing account with the same email is reused only when Google reports the email as verified
+                    **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated; the token is marked used for 15 minutes
                     **Errors**:
                     - 400 `auth.google.not_configured`: Google login is not configured on the server
                     - 401 `auth.google.no_email`: the token is invalid (malformed, bad signature, wrong issuer, expired) or carries no email
                     - 401 `auth.google.invalid_audience`: the token was issued for a different client ID
+                    - 401 `auth.oauth.token_replayed`: this ID token was already used to sign in
                     - 401 `auth.email_not_verified`: Google reports the email as unverified
                     - 403 `auth.account_banned`: the user is suspended (`active=false`)
                     - 503 `common.service_unavailable`: Google's key endpoint is unreachable""")
@@ -371,7 +372,7 @@ public class AuthController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = OK_AUTH)))
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
-                    {"idToken": "eyJraWQiOiJZdXl1eVoxIiwiYWxnIjoiUlMyNTYifQ...", "fullName": "Ming Wang"}""")))
+                    {"idToken": "eyJraWQiOiJZdXl1eVoxIiwiYWxnIjoiUlMyNTYifQ...", "fullName": "Ming Wang", "nonce": "f3a9c2b4e1d8a7c6b5e4d3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
             description = "Apple identity token rejected (malformed, bad signature, wrong issuer/audience, expired, no email, or unverified email)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
@@ -387,10 +388,11 @@ public class AuthController {
     @Operation(summary = "Sign in with Apple",
             description = """
                     **Auth**: public
-                    **Precondition**: the client obtained an Apple identity token (Sign in with Apple)
-                    **Behavior**: verifies the token signature against Apple's public keys, then its issuer, audience and expiry. Signs in the user with the token's email, creating it if new. \
+                    **Precondition**: the client generated a random `nonce`, passed its SHA-256 hex to Apple when starting Sign in with Apple, and obtained an identity token
+                    **Behavior**: verifies the token signature against Apple's public keys, then its issuer, audience, expiry and that its `nonce` claim equals SHA-256 of the given `nonce`. \
+                    Each identity token signs in once; presenting it again is refused. Signs in the user with the token's email, creating it if new. \
                     `fullName` is used only when a new user is created. An existing account with the same email is reused only when Apple reports the email as verified
-                    **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated
+                    **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated; the token is marked used for 15 minutes
                     **Errors**:
                     - 400 `auth.apple.not_configured`: Apple login is not configured on the server
                     - 401 `auth.apple.invalid_token`: the token is malformed or has no key ID
@@ -399,13 +401,15 @@ public class AuthController {
                     - 401 `auth.apple.invalid_issuer`: the issuer is not Apple
                     - 401 `auth.apple.invalid_audience`: the token was issued for a different client ID
                     - 401 `auth.apple.token_expired`: the token has expired
+                    - 401 `auth.apple.invalid_nonce`: the token's `nonce` claim is missing or is not SHA-256 of the given `nonce`
+                    - 401 `auth.oauth.token_replayed`: this identity token was already used to sign in
                     - 401 `auth.apple.no_email`: the token carries no email
                     - 401 `auth.email_not_verified`: Apple reports the email as unverified
                     - 401 `auth.apple.login_failed`: any other failure while processing the token
                     - 403 `auth.account_banned`: the user is suspended (`active=false`)
                     - 503 `common.service_unavailable`: Apple's key endpoint failed or returned an unusable response""")
     public ResponseEntity<ApiResponse<AuthResponse>> appleLogin(@Valid @RequestBody AppleAuthRequest req) {
-        return ResponseEntity.ok(ApiResponse.ok(authService.appleLogin(req.idToken(), req.fullName())));
+        return ResponseEntity.ok(ApiResponse.ok(authService.appleLogin(req.idToken(), req.fullName(), req.nonce())));
     }
 
     @PostMapping("/refresh")

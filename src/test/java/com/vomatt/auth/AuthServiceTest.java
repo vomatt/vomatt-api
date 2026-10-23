@@ -995,7 +995,7 @@ class AuthServiceTest {
         String idToken = base64Url("{\"alg\":\"none\",\"kid\":\"k1\"}") + "."
                 + base64Url("{\"iss\":\"https://appleid.apple.com\"}") + ".c2ln";
 
-        assertThatThrownBy(() -> authService.appleLogin(idToken, null))
+        assertThatThrownBy(() -> authService.appleLogin(idToken, null, "raw-nonce"))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_APPLE_INVALID_TOKEN));
     }
@@ -1034,6 +1034,50 @@ class AuthServiceTest {
                     assertThat(((ApiException) ex).getMessageKey()).isEqualTo(expected);
                 });
         verify(userRepository, never()).findByEmail(anyString());
+    }
+
+    @Test
+    void shouldRejectGoogleTokenWhenPresentedTwice() throws Exception {
+        ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
+        String idToken = signedGoogleToken(googlePayload("carol@example.com", true));
+        when(redisService.setIfAbsent(eq("oauth:used"), eq(com.vomatt.common.security.AppKey.sha256Hex(idToken)), eq("1"), eq(Duration.ofMinutes(15))))
+                .thenReturn(false);
+
+        assertGoogleRejected(idToken, MessageKey.AUTH_OAUTH_TOKEN_REPLAYED);
+        verify(userRepository, never()).findByEmail(anyString());
+    }
+
+    @Test
+    void shouldRejectAppleTokenWhenNonceDoesNotMatch() throws Exception {
+        java.security.KeyPair kp = rsaKeyPair();
+        stubJwksFetch(jwksOf((java.security.interfaces.RSAPublicKey) kp.getPublic()), null);
+        java.util.Map<String, Object> claims = new java.util.HashMap<>();
+        claims.put("iss", "https://appleid.apple.com");
+        claims.put("aud", "com.vomatt.app");
+        claims.put("exp", Instant.now().plusSeconds(600).getEpochSecond());
+        claims.put("email", "carol@example.com");
+        claims.put("email_verified", "true");
+        claims.put("nonce", com.vomatt.common.security.AppKey.sha256Hex("raw-nonce"));
+        String idToken = signGoogleToken(claims, kp);
+
+        assertThatThrownBy(() -> authService.appleLogin(idToken, null, "another-nonce"))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_APPLE_INVALID_NONCE));
+        // A missing claim is a mismatch too
+        claims.remove("nonce");
+        String noNonce = signGoogleToken(claims, kp);
+        assertThatThrownBy(() -> authService.appleLogin(noNonce, null, "raw-nonce"))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_APPLE_INVALID_NONCE));
+        verify(redisService, never()).setIfAbsent(eq("oauth:used"), anyString(), any(), any(Duration.class));
+
+        // Matching nonce: signs in, and the token is consumed
+        User carol = User.builder().id(UUID.randomUUID()).email("carol@example.com").roles(new String[] { "user" }).build();
+        when(userRepository.findByEmail("carol@example.com")).thenReturn(Optional.of(carol));
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
+        assertThat(authService.appleLogin(idToken, null, "raw-nonce").token()).isEqualTo("mock-token");
+        verify(redisService).setIfAbsent("oauth:used", com.vomatt.common.security.AppKey.sha256Hex(idToken), "1", Duration.ofMinutes(15));
     }
 
     private static java.util.Map<String, Object> googlePayload(String email, boolean emailVerified) {
@@ -1161,7 +1205,7 @@ class AuthServiceTest {
         // JWKS response body is null -> treated as an upstream error -> 503, not a misleading 401 login failure
         stubJwksFetch(null, null);
 
-        assertThatThrownBy(() -> authService.appleLogin("a.b.c", null))
+        assertThatThrownBy(() -> authService.appleLogin("a.b.c", null, "raw-nonce"))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> {
                     assertThat(((ApiException) ex).getStatus())
@@ -1176,7 +1220,7 @@ class AuthServiceTest {
         // Body not null but keys is null -> also an upstream error -> 503
         stubJwksFetch(java.util.Map.of("foo", "bar"), null);
 
-        assertThatThrownBy(() -> authService.appleLogin("a.b.c", null))
+        assertThatThrownBy(() -> authService.appleLogin("a.b.c", null, "raw-nonce"))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getStatus())
                         .isEqualTo(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE));
@@ -1189,7 +1233,7 @@ class AuthServiceTest {
                 org.springframework.http.HttpStatus.BAD_GATEWAY);
         stubJwksFetch(null, serverError);
 
-        assertThatThrownBy(() -> authService.appleLogin("a.b.c", null))
+        assertThatThrownBy(() -> authService.appleLogin("a.b.c", null, "raw-nonce"))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> {
                     assertThat(((ApiException) ex).getStatus())
@@ -1205,7 +1249,7 @@ class AuthServiceTest {
         var ioError = new org.springframework.web.client.ResourceAccessException("connect timed out");
         stubJwksFetch(null, ioError);
 
-        assertThatThrownBy(() -> authService.appleLogin("a.b.c", null))
+        assertThatThrownBy(() -> authService.appleLogin("a.b.c", null, "raw-nonce"))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getStatus())
                         .isEqualTo(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE));
@@ -1222,7 +1266,7 @@ class AuthServiceTest {
         String payload = base64Url("{\"iss\":\"https://appleid.apple.com\"}");
         String idToken = header + "." + payload + ".c2ln";
 
-        assertThatThrownBy(() -> authService.appleLogin(idToken, null))
+        assertThatThrownBy(() -> authService.appleLogin(idToken, null, "raw-nonce"))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> {
                     assertThat(((ApiException) ex).getStatus())
@@ -1245,8 +1289,8 @@ class AuthServiceTest {
         String payload = base64Url("{\"iss\":\"https://appleid.apple.com\"}");
         String idToken = header + "." + payload + ".c2ln";
 
-        assertThatThrownBy(() -> authService.appleLogin(idToken, null)).isInstanceOf(ApiException.class);
-        assertThatThrownBy(() -> authService.appleLogin(idToken, null)).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> authService.appleLogin(idToken, null, "raw-nonce")).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> authService.appleLogin(idToken, null, "raw-nonce")).isInstanceOf(ApiException.class);
 
         // JWKS fetched only once (second call hits the cache)
         verify(restClient, org.mockito.Mockito.times(1)).get();
@@ -1256,7 +1300,7 @@ class AuthServiceTest {
     void shouldThrowNotConfiguredWhenAppleClientIdIsBlank() {
         ReflectionTestUtils.setField(authService, "appleClientId", "");
 
-        assertThatThrownBy(() -> authService.appleLogin("a.b.c", null))
+        assertThatThrownBy(() -> authService.appleLogin("a.b.c", null, "raw-nonce"))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_APPLE_NOT_CONFIGURED));
         verify(restClient, never()).get();
@@ -1281,7 +1325,7 @@ class AuthServiceTest {
         sig.update(signingInput.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         String idToken = signingInput + "." + enc.encodeToString(sig.sign());
 
-        assertThatThrownBy(() -> authService.appleLogin(idToken, null))
+        assertThatThrownBy(() -> authService.appleLogin(idToken, null, "raw-nonce"))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_APPLE_TOKEN_EXPIRED));
         verify(userRepository, never()).findByEmail(anyString());

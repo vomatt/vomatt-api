@@ -54,6 +54,8 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.apple.token_expired` | 401 | Apple 驗證失敗：token 已過期 | Apple verification failed: token has expired | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.apple.no_email` | 401 | Apple 驗證失敗：無法取得用戶信箱 | Apple verification failed: unable to retrieve email | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.apple.login_failed` | 401 | Apple 登入失敗 | Apple login failed | See [auth-flow.md](auth-flow.md) | AuthService |
+| `auth.apple.invalid_nonce` | 401 | Apple 驗證失敗：nonce 不符 | Apple verification failed: nonce mismatch | See [auth-flow.md](auth-flow.md) | AuthService |
+| `auth.oauth.token_replayed` | 401 | 此登入憑證已使用過，請重新登入 | This sign-in token was already used, please sign in again | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.apple.not_configured` | 400 | Apple 登入尚未設定 | Apple Sign In is not configured | Show message so the user can fix the input | AuthService |
 | `auth.email_not_verified` | 401 | 此 OAuth 帳號的 email 尚未驗證，無法登入或合併既有帳號 | This OAuth account's email is not verified; cannot sign in or merge an existing account | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.account_banned` | 403 | 此帳號已被停權，無法登入 | This account has been banned and cannot sign in | Show a permission-denied notice | AuthService, JwtAuthFilter |

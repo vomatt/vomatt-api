@@ -65,6 +65,8 @@ public enum MessageKey {
     AUTH_APPLE_TOKEN_EXPIRED("auth.apple.token_expired"),
     AUTH_APPLE_NO_EMAIL("auth.apple.no_email"),
     AUTH_APPLE_LOGIN_FAILED("auth.apple.login_failed"),
+    AUTH_APPLE_INVALID_NONCE("auth.apple.invalid_nonce"),
+    AUTH_OAUTH_TOKEN_REPLAYED("auth.oauth.token_replayed"),
     AUTH_APPLE_NOT_CONFIGURED("auth.apple.not_configured"),
     AUTH_EMAIL_NOT_VERIFIED("auth.email_not_verified"),
     AUTH_ACCOUNT_BANNED("auth.account_banned"),

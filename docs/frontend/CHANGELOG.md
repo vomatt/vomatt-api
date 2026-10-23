@@ -4,6 +4,7 @@ Contract changes that affect the frontend. 💥 BREAKING means frontend code mus
 
 ## 2026-10-23
 
+- 💥 `POST /api/auth/apple` requires `nonce`: the raw random value whose SHA-256 hex the client passed to Apple when starting the sign-in. A missing or mismatching nonce is 401 `auth.apple.invalid_nonce`. Apple and Google ID tokens now sign in once each: presenting the same token again is 401 `auth.oauth.token_replayed`. Release the frontend together with the API.
 - Access tokens no longer carry an `email` claim (payload is `sub`, `roles`, `scope`, `jti`, `iat`, `exp`); read the email from the login response or `GET /api/users/me`. Audit log entries (`GET /api/admin/audit-logs`) now record the acting user's `username` instead of the email.
 - 💥 `GET /api/users/{username}` and the `PATCH /api/users/me` response (`UserProfileResponse`) no longer carry `email` and `birthday`: they are never public, whatever the owner's settings. `visibilitySettings` on `GET /api/users/me` and `PATCH /api/users/me/visibility` drops the `email` and `birthday` keys, and sending them is ignored like any unknown key. Read your own email and birthday from `GET /api/users/me`.
 - `POST /api/auth/send-otp`, `POST /api/auth/admin/send-otp` and `POST /api/auth/phone/send-otp` now cap sends per identifier per UTC day (20 per email, 5 per phone, across all IPs): over it they return 429 `auth.otp.daily_limit`. The resend cooldown is unchanged.

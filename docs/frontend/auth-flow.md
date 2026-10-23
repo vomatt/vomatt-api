@@ -97,7 +97,7 @@ sequenceDiagram
 |----------|----------------|------|
 | Google | `idToken` | The audience must be this project's Google client ID |
 | LINE | `code` + `redirectUri` | `redirectUri` must match the one used during authorization; if LINE provides no email, the backend uses `line_<userId>@line.oauth` instead, so `user.email` is never `null` |
-| Apple | `idToken` + `fullName` | Apple only provides the name on the **first authorization**, so send `fullName` that time; if Apple's key endpoint is down the backend returns 503, which can be retried |
+| Apple | `idToken` + `fullName` + `nonce` | Generate a random `nonce` per sign-in, give Apple its SHA-256 hex and send the raw value in `nonce`; the backend rejects a token whose `nonce` claim does not match (401 `auth.apple.invalid_nonce`). Apple and Google tokens sign in once each (401 `auth.oauth.token_replayed` on reuse). Apple only provides the name on the **first authorization**, so send `fullName` that time; if Apple's key endpoint is down the backend returns 503, which can be retried |
 
 ## 5. Logout
 

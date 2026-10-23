@@ -64,6 +64,11 @@ public class AuthService {
 
     private static final java.util.Set<String> GOOGLE_ISSUERS = java.util.Set.of("accounts.google.com", "https://accounts.google.com");
 
+    /** Hashes of Apple / Google id_tokens already exchanged: each one signs in once (LINE codes are single-use at LINE). */
+    private static final String OAUTH_USED_NS = "oauth:used";
+    // Longer than any id_token lifetime plus the accepted clock skew, so a token is never replayable after the marker expires
+    private static final Duration OAUTH_USED_TTL = Duration.ofMinutes(15);
+
     /** JWKS cache holder: keys is the parsed public key list, fetchedAt is the fetch time. */
     private record JwksCache(List<java.util.Map<String, Object>> keys, Instant fetchedAt) {
         boolean isYoungerThan(Duration age) {
@@ -619,6 +624,7 @@ public class AuthService {
             log.warn("Google id_token verification error: {}", ex.getMessage());
             throw ApiException.unauthorized(MessageKey.AUTH_GOOGLE_NO_EMAIL);
         }
+        consumeIdToken(idToken);
 
         // Outside the try: DB / Redis failures must surface as themselves, not as an invalid-token 401
         User user = findOrCreateUserByEmail(User.normalizeEmail(email), name, "google", emailVerified);
@@ -696,7 +702,7 @@ public class AuthService {
     // ── Apple OAuth ───────────────────────────────────────────────────
 
     @SuppressWarnings("unchecked")
-    public AuthResponse appleLogin(String idToken, String fullName) {
+    public AuthResponse appleLogin(String idToken, String fullName, String nonce) {
         // Without a configured client id the audience cannot be checked, so a token minted for any app would pass
         if (appleClientId == null || appleClientId.isBlank()) {
             throw ApiException.badRequest(MessageKey.AUTH_APPLE_NOT_CONFIGURED);
@@ -721,15 +727,13 @@ public class AuthService {
                 throw ApiException.unauthorized(MessageKey.AUTH_APPLE_TOKEN_EXPIRED);
             }
 
-            // TODO(apple-nonce): full anti-replay needs "backend issues nonce -> store in Redis -> client passes it to Apple
-            //   -> Apple returns the nonce in id_token -> backend compares and consumes it here". The controller/DTO has no
-            //   nonce issuing flow yet, and the nonce store infrastructure is out of scope for this batch. This is a placeholder
-            //   check: if the payload contains a nonce, log it; enforce the comparison once the client and nonce store are ready.
-            //   This batch relies on email_verified as the actual fix.
-            Object nonce = payload.get("nonce");
-            if (nonce != null) {
-                log.debug("Apple id_token contains a nonce; it will be checked once the nonce store is ready (placeholder only)");
+            // The token's nonce claim is SHA-256(raw nonce) sent to Apple by this very sign-in; a token captured from
+            // another session or app carries a different one. Checked before the token is consumed, so a mismatch
+            // burns nothing.
+            if (!(payload.get("nonce") instanceof String n) || !n.equalsIgnoreCase(AppKey.sha256Hex(nonce))) {
+                throw ApiException.unauthorized(MessageKey.AUTH_APPLE_INVALID_NONCE);
             }
+            consumeIdToken(idToken);
 
             String email = (String) payload.get("email");
             if (email == null)
@@ -799,6 +803,16 @@ public class AuthService {
 
         byte[] payloadBytes = java.util.Base64.getUrlDecoder().decode(parts[1]);
         return JSON_MAPPER.readValue(payloadBytes, java.util.Map.class);
+    }
+
+    /**
+     * Marks a verified id_token as used, refusing it the second time: a token captured in transit or pasted elsewhere
+     * signs in at most once, within its lifetime. Keyed by the token's hash so Redis never holds the token itself.
+     */
+    private void consumeIdToken(String idToken) {
+        if (!redisService.setIfAbsent(OAUTH_USED_NS, AppKey.sha256Hex(idToken), "1", OAUTH_USED_TTL)) {
+            throw ApiException.unauthorized(MessageKey.AUTH_OAUTH_TOKEN_REPLAYED);
+        }
     }
 
     private static java.util.Map<String, Object> findKey(List<java.util.Map<String, Object>> keys, String kid) {

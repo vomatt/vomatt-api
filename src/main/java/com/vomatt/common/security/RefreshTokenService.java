@@ -8,11 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -26,6 +22,8 @@ public class RefreshTokenService {
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
 
+    // Every key and index field below is keyOf(token) = SHA-256(token), never the token itself: a Redis dump cannot
+    // mint access tokens, and the client-held value alone is what the server never stores
     private static final String NAMESPACE = "refresh";
     // Consumed (rotated) token -> its session id, used for reuse detection; kept as long as the refresh token
     // itself could have lived, so a stolen token replayed at any point in its lifetime still trips the detector
@@ -62,12 +60,13 @@ public class RefreshTokenService {
      */
     public String generate(String userId, String email, List<String> roles, boolean adminScope) {
         String token = UUID.randomUUID().toString();
+        String key = keyOf(token);
         RefreshTokenData data = new RefreshTokenData(userId, email, roles, UUID.randomUUID().toString(), adminScope);
         Duration ttl = Duration.ofDays(refreshExpirationDays);
         // Renew the index TTL on every issue (as rotate does), so the index never expires before a token it lists
         redisService.execInTransaction(List.of(
-                RedisService.RedisWrite.set(NAMESPACE, token, data, ttl),
-                RedisService.RedisWrite.hput(USER_IDX_NS, userId, token, "1"),
+                RedisService.RedisWrite.set(NAMESPACE, key, data, ttl),
+                RedisService.RedisWrite.hput(USER_IDX_NS, userId, key, "1"),
                 RedisService.RedisWrite.expire(USER_IDX_NS, userId, ttl)
         ));
         log.debug("Refresh token generated for userId={}", userId);
@@ -88,18 +87,19 @@ public class RefreshTokenService {
      * Returns null if the token is invalid or expired (not reused).
      */
     public RotateResult rotate(String oldToken) {
+        String oldKey = keyOf(oldToken);
         // Step 1: return on grace cache hit (must come before the reuse detector)
-        RotateResult cached = redisService.get(GRACE_NS, oldToken, RotateResult.class);
+        RotateResult cached = redisService.get(GRACE_NS, oldKey, RotateResult.class);
         if (cached != null) {
-            log.info("refresh.cache_hit refreshToken_sha={}", sha256Prefix(oldToken, SHA_PREFIX_LEN));
+            log.info("refresh.cache_hit refreshToken_sha={}", oldKey.substring(0, SHA_PREFIX_LEN));
             return cached;
         }
 
         // Step 2: atomic GETDEL so two instances cannot both get the data
-        RefreshTokenData data = redisService.getAndDelete(NAMESPACE, oldToken, RefreshTokenData.class);
+        RefreshTokenData data = redisService.getAndDelete(NAMESPACE, oldKey, RefreshTokenData.class);
         if (data == null) {
             // Step 3: reuse detection
-            String sessionId = redisService.get(CONSUMED_NS, oldToken, String.class);
+            String sessionId = redisService.get(CONSUMED_NS, oldKey, String.class);
             if (sessionId != null) {
                 // Markers written before 2026-10-17 hold the userId instead of a session id: fall back to revoking all.
                 // Remove after 2026-11-16, when the last of them has expired with its refresh lifetime.
@@ -110,7 +110,7 @@ public class RefreshTokenService {
                     // A flag rather than deleting the live token: it holds even if the session rotates at this very moment
                     redisService.setOrThrow(REVOKED_SESSION_NS, sessionId, "1", Duration.ofDays(refreshExpirationDays));
                     log.warn("SECURITY_BREACH: Refresh token reuse detected, revoked its session refreshToken_sha={}",
-                            sha256Prefix(oldToken, SHA_PREFIX_LEN));
+                            oldKey.substring(0, SHA_PREFIX_LEN));
                 }
                 throw new RefreshTokenReuseException("Refresh token reuse detected");
             }
@@ -119,7 +119,7 @@ public class RefreshTokenService {
 
         // Step 3b: the session was ended by reuse detection; fails closed so a Redis error cannot revive it
         if (data.sessionId() != null && redisService.hasKeyOrThrow(REVOKED_SESSION_NS, data.sessionId())) {
-            redisService.hDelete(USER_IDX_NS, data.userId(), oldToken);
+            redisService.hDelete(USER_IDX_NS, data.userId(), oldKey);
             log.warn("Refresh rotation rejected (session revoked after reuse) userId={}", data.userId());
             return null;
         }
@@ -144,6 +144,7 @@ public class RefreshTokenService {
                 data.grantsAdmin());
 
         String newRefreshToken = UUID.randomUUID().toString();
+        String newKey = keyOf(newRefreshToken);
         String newAccessToken = jwtUtil.generateToken(freshData.userId(), freshData.email(), freshRoles,
                 freshData.grantsAdmin());
         RotateResult result = new RotateResult(newAccessToken, newRefreshToken, freshData);
@@ -153,17 +154,17 @@ public class RefreshTokenService {
 
         // Order: grace first (where both sides of a race meet) -> then atomically write the remaining correctness-critical items.
         // GRACE is an optimization for cross-instance races; if it fails the reuse detector takes over (fail-safe), so it stays fail-soft and is written separately.
-        redisService.set(GRACE_NS, oldToken, result, graceTtl);
+        redisService.set(GRACE_NS, oldKey, result, graceTtl);
 
         // P1-#17: CONSUMED (reuse detection), NAMESPACE (the new token), USER_IDX (revocation index + TTL refresh + old token removal)
         // are correctness-critical and used to take one round-trip each. They are now applied atomically in a single MULTI/EXEC: one round-trip,
         // fully atomic (no intermediate "partially written then threw" state), and a connection failure throws for the whole batch (fail-fast, no weaker than the old per-write throwing).
         redisService.execInTransaction(List.of(
-                RedisService.RedisWrite.set(CONSUMED_NS, oldToken, sessionId, refreshTtl),
-                RedisService.RedisWrite.set(NAMESPACE, newRefreshToken, freshData, refreshTtl),
-                RedisService.RedisWrite.hput(USER_IDX_NS, freshData.userId(), newRefreshToken, "1"),
+                RedisService.RedisWrite.set(CONSUMED_NS, oldKey, sessionId, refreshTtl),
+                RedisService.RedisWrite.set(NAMESPACE, newKey, freshData, refreshTtl),
+                RedisService.RedisWrite.hput(USER_IDX_NS, freshData.userId(), newKey, "1"),
                 RedisService.RedisWrite.expire(USER_IDX_NS, freshData.userId(), refreshTtl),
-                RedisService.RedisWrite.hdelete(USER_IDX_NS, freshData.userId(), oldToken)
+                RedisService.RedisWrite.hdelete(USER_IDX_NS, freshData.userId(), oldKey)
         ));
 
         log.debug("Refresh token rotated for userId={}", freshData.userId());
@@ -174,9 +175,10 @@ public class RefreshTokenService {
      * Invalidates a refresh token (logout)
      */
     public void revoke(String token) {
-        RefreshTokenData data = redisService.getAndDelete(NAMESPACE, token, RefreshTokenData.class);
+        String key = keyOf(token);
+        RefreshTokenData data = redisService.getAndDelete(NAMESPACE, key, RefreshTokenData.class);
         if (data != null) {
-            redisService.hDelete(USER_IDX_NS, data.userId(), token);
+            redisService.hDelete(USER_IDX_NS, data.userId(), key);
         }
         log.debug("Refresh token revoked, found={}", data != null);
     }
@@ -187,24 +189,17 @@ public class RefreshTokenService {
     public void revokeAllForUser(String userId) {
         Map<String, Object> userTokens = redisService.hGetAll(USER_IDX_NS, userId);
         int count = 0;
-        for (String token : userTokens.keySet()) {
-            redisService.delete(NAMESPACE, token);
+        // Index fields are already keyOf(token)
+        for (String key : userTokens.keySet()) {
+            redisService.delete(NAMESPACE, key);
             count++;
         }
         redisService.delete(USER_IDX_NS, userId);
         log.warn("Revoked {} refresh tokens for userId={}", count, userId);
     }
 
-    /**
-     * Computes the first N characters of the token's SHA-256 hex digest, to identify it in logs without exposing the token
-     */
-    private String sha256Prefix(String token, int prefixLen) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest).substring(0, prefixLen);
-        } catch (NoSuchAlgorithmException e) {
-            // SHA-256 is guaranteed to exist in the JVM; this path should never happen
-            return "unknown";
-        }
+    /** Redis key of a token: its SHA-256 hex. The same digest is what db/redis-hash-refresh-keys.sh wrote on migration. */
+    static String keyOf(String token) {
+        return AppKey.sha256Hex(token);
     }
 }

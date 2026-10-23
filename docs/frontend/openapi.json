@@ -355,7 +355,7 @@
         "type" : "object"
       },
       "AdminUserResponse" : {
-        "description" : "An account as listed in the back office",
+        "description" : "An account as listed in the back office. Contact details are masked and names and birthday left out: the list is for finding an account, `GET /api/admin/users/{userId}` holds the full record",
         "properties" : {
           "active" : {
             "description" : "False when suspended",
@@ -365,13 +365,6 @@
           "authMethod" : {
             "description" : "How the account signs in: email_otp, phone_otp, google, line or apple",
             "example" : "email_otp",
-            "nullable" : true,
-            "type" : "string"
-          },
-          "birthday" : {
-            "description" : "Birthday (ISO date), shown regardless of the user's visibility settings; null when unset",
-            "example" : "1995-04-12",
-            "format" : "date",
             "nullable" : true,
             "type" : "string"
           },
@@ -388,14 +381,8 @@
             "type" : "string"
           },
           "email" : {
-            "description" : "Email; null for accounts registered by phone",
-            "example" : "alice@example.com",
-            "nullable" : true,
-            "type" : "string"
-          },
-          "firstName" : {
-            "description" : "First name; null when unset",
-            "example" : "Alice",
+            "description" : "Email, masked to its first character and domain; null for accounts registered by phone",
+            "example" : "a***@example.com",
             "nullable" : true,
             "type" : "string"
           },
@@ -411,15 +398,9 @@
             "nullable" : true,
             "type" : "string"
           },
-          "lastName" : {
-            "description" : "Last name; null when unset",
-            "example" : "Chen",
-            "nullable" : true,
-            "type" : "string"
-          },
           "phoneNumber" : {
-            "description" : "Phone number (E.164); null for accounts registered by email or OAuth",
-            "example" : "+886912345678",
+            "description" : "Phone number (E.164), masked to the country code and last 3 digits; null for accounts registered by email or OAuth",
+            "example" : "+8869****678",
             "nullable" : true,
             "type" : "string"
           },
@@ -5595,7 +5576,7 @@
     },
     "/api/admin/users" : {
       "get" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: offset page of every account, suspended included, newest first. `q` matches (case-insensitive contains) username, email, phone number, display name, first name, last name or full name (`firstName lastName`, `lastName firstName`, or `lastNamefirstName` with no space); `status` is `active` or `suspended`; `role` is `user`, `moderator` or `admin`. All filters are optional and combine with AND. `page` is 1-based (default 1), `limit` 1-50 (default 20)\n**Side effects**: none\n**Errors**:\n- 400 `common.invalid_status`: `status` is neither `active` nor `suspended`\n- 400 `common.validation_failed`: `role` is not `user`, `moderator` or `admin`",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: offset page of every account, suspended included, newest first. `q` matches (case-insensitive contains) username, email, phone number, display name, first name, last name or full name (`firstName lastName`, `lastName firstName`, or `lastNamefirstName` with no space); `status` is `active` or `suspended`; `role` is `user`, `moderator` or `admin`. All filters are optional and combine with AND. `page` is 1-based (default 1), `limit` 1-50 (default 20). Items carry masked `email` / `phoneNumber` and no names or birthday: open `GET /api/admin/users/{userId}` for the full record\n**Side effects**: none\n**Errors**:\n- 400 `common.invalid_status`: `status` is neither `active` nor `suspended`\n- 400 `common.validation_failed`: `role` is not `user`, `moderator` or `admin`",
         "operationId" : "listUsers",
         "parameters" : [ {
           "description" : "Text matched against username, email, phone number, display name, first name, last name and full name",
@@ -5655,14 +5636,11 @@
                         "content" : [ {
                           "active" : true,
                           "authMethod" : "email_otp",
-                          "birthday" : "1995-04-12",
                           "createdAt" : "2026-09-01T10:00:00+08:00",
                           "displayName" : "Alice",
-                          "email" : "alice@example.com",
-                          "firstName" : "Alice",
+                          "email" : "a***@example.com",
                           "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
                           "lastLoginAt" : "2026-10-16T21:04:11+08:00",
-                          "lastName" : "Chen",
                           "phoneNumber" : null,
                           "roles" : [ "user" ],
                           "username" : "alice"
@@ -5816,7 +5794,7 @@
     },
     "/api/admin/users/{userId}" : {
       "get" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: returns the account with sign-in details, points and counts of Polls created (any Audience, Deleted included), Ballots held, Comments written (deleted included), users this user blocks (`blockingCount`) and users who block them (`blockedByCount`)\n**Side effects**: none\n**Errors**:\n- 400 `common.type_mismatch`: `userId` is not a valid UUID\n- 404 `user.not_found`: no account with this ID",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: returns the account with full contact details, names, birthday, sign-in details, points and counts of Polls created (any Audience, Deleted included), Ballots held, Comments written (deleted included), users this user blocks (`blockingCount`) and users who block them (`blockedByCount`)\n**Side effects**: the lookup is written to the audit log (action `VIEW`, resource `USER`), since it reveals personal data\n**Errors**:\n- 400 `common.type_mismatch`: `userId` is not a valid UUID\n- 404 `user.not_found`: no account with this ID",
         "operationId" : "getUser",
         "parameters" : [ {
           "description" : "User ID (UUIDv7)",

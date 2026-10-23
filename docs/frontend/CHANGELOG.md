@@ -4,6 +4,7 @@ Contract changes that affect the frontend. 💥 BREAKING means frontend code mus
 
 ## 2026-10-23
 
+- 💥 Admin: `GET /api/admin/users` items no longer carry `firstName`, `lastName` and `birthday`, and `email` / `phoneNumber` are masked (`a***@example.com`, `+8869****678`). `GET /api/admin/users/{userId}` still returns everything and is now recorded in the audit log (action `VIEW`, resource `USER`). `q` still searches the full values.
 - 💥 `GET /api/votes/{voteId}/voters`: the list is no longer hidden (403 `vote.voters.hidden`) when a Poll holds 1 or 2 Anonymous Ballots. Instead, whenever the Poll holds any Anonymous Ballot other than the caller's own, `optionId` is `null` for every Participant (the list still says who took part). `vote.voters.hidden` now only means Voter Visibility does not allow the caller.
 - Data retention runs daily: audit log entries older than 180 days are removed, and an Anonymous Ballot of an Ended Poll is sealed within a day of the end. After sealing, `myOptionId` on the Poll (and `selectedOptions` on the deprecated `my-vote-status`) is `null` / empty for that Ballot while `myBallotAnonymous` and `hasVoted` still say the caller took part; option totals are unchanged.
 - 💥 `POST /api/auth/check-email` is removed (it let anyone enumerate registered emails). Every sign-in response (`verify-otp`, `phone/verify-otp`, `google`, `line`, `apple`) now carries `isNewUser` (`true` when the account was created by this sign-in; `null` on `refresh`), so the client shows login or signup wording after the fact instead of asking first.

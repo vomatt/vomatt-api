@@ -67,7 +67,7 @@ class AdminUserControllerTest {
     void shouldReturnPageWhenAdminListsUsers() throws Exception {
         authenticateAs("admin");
         when(adminUserService.listUsers("ali", "active", null, 1, 20)).thenReturn(PageResponse.of(List.of(
-                new AdminUserResponse(userId.toString(), "alice", null, null, null, null, null, null, null, List.of("user"), true, null, null)),
+                new AdminUserResponse(userId.toString(), "alice", null, null, null, null, List.of("user"), true, null, null)),
                 1, 1, 20));
 
         mockMvc.perform(get("/api/admin/users").param("q", "ali").param("status", "active").param("page", "1").param("limit", "20"))

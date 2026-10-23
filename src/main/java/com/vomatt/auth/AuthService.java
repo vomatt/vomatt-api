@@ -175,8 +175,10 @@ public class AuthService {
 
         String redisKey = redisKey(normalizedEmail);
         acquireResendCooldown(namespace, redisKey);
-        takeDailyQuota(namespace, redisKey, otpDailyLimitEmail);
-        storeOtp(namespace, redisKey, attemptKey, new OtpRecord(otpHash(normalizedEmail, code), otpType, Instant.now(), 0));
+        // Computed once: the refund on failure must hit the same day's key even across UTC midnight
+        String quotaKey = dailyQuotaKey(redisKey);
+        takeDailyQuota(namespace, quotaKey, otpDailyLimitEmail);
+        storeOtp(namespace, redisKey, quotaKey, attemptKey, new OtpRecord(otpHash(normalizedEmail, code), otpType, Instant.now(), 0));
 
         try {
             if (OTP_ADMIN_EMAIL_NS.equals(namespace)) {
@@ -188,7 +190,7 @@ public class AuthService {
             }
         } catch (Exception ex) {
             // The code never reached the user: drop it and shorten the cooldown so a retry is possible soon
-            releaseUndeliveredOtp(namespace, redisKey);
+            releaseUndeliveredOtp(namespace, redisKey, quotaKey);
             log.warn("Failed to send OTP email: {}", ex.getMessage());
             throw ApiException.badRequest(MessageKey.AUTH_EMAIL_SEND_FAILED);
         }
@@ -204,13 +206,14 @@ public class AuthService {
 
         String redisKey = redisKey(phone);
         acquireResendCooldown(OTP_PHONE_NS, redisKey);
-        takeDailyQuota(OTP_PHONE_NS, redisKey, otpDailyLimitPhone);
-        storeOtp(OTP_PHONE_NS, redisKey, attemptKey, new OtpRecord(otpHash(phone, code), otpType, Instant.now(), 0));
+        String quotaKey = dailyQuotaKey(redisKey);
+        takeDailyQuota(OTP_PHONE_NS, quotaKey, otpDailyLimitPhone);
+        storeOtp(OTP_PHONE_NS, redisKey, quotaKey, attemptKey, new OtpRecord(otpHash(phone, code), otpType, Instant.now(), 0));
 
         try {
             smsService.sendOtp(phone, code);
         } catch (Exception ex) {
-            releaseUndeliveredOtp(OTP_PHONE_NS, redisKey);
+            releaseUndeliveredOtp(OTP_PHONE_NS, redisKey, quotaKey);
             log.warn("Failed to send OTP SMS: {}", ex.getMessage());
             throw ApiException.badRequest(MessageKey.AUTH_SMS_SEND_FAILED);
         }
@@ -541,39 +544,44 @@ public class AuthService {
      * during the cooldown does not burn the cap. Over it the cooldown stays set, which is harmless: no OTP is sent
      * either way. Fails closed (RedisOperationException) like the OTP write itself.
      */
-    private void takeDailyQuota(String namespace, String redisKey, long limit) {
-        long sent = redisService.incrementAndExpire(namespace + OTP_DAILY_SUFFIX, dailyQuotaKey(redisKey), Duration.ofDays(1));
+    private void takeDailyQuota(String namespace, String quotaKey, long limit) {
+        long sent = redisService.incrementAndExpire(namespace + OTP_DAILY_SUFFIX, quotaKey, Duration.ofDays(1));
         if (sent > limit) {
             throw ApiException.tooManyRequests(MessageKey.AUTH_OTP_DAILY_LIMIT);
         }
     }
 
     /** Gives back the slot taken by {@link #takeDailyQuota} when no OTP went out. Fail-soft: it must not mask the real failure. */
-    private void refundDailyQuota(String namespace, String redisKey) {
+    private void refundDailyQuota(String namespace, String quotaKey) {
         try {
-            redisService.incrementAndExpire(namespace + OTP_DAILY_SUFFIX, dailyQuotaKey(redisKey), -1, Duration.ofDays(1));
+            redisService.incrementAndExpire(namespace + OTP_DAILY_SUFFIX, quotaKey, -1, Duration.ofDays(1));
         } catch (RuntimeException ex) {
             log.warn("Failed to refund OTP daily quota: {}", ex.getMessage());
         }
     }
 
     private static String dailyQuotaKey(String redisKey) {
-        return redisKey + ":" + java.time.LocalDate.now(java.time.ZoneOffset.UTC);
+        return redisKey + ":" + com.vomatt.common.util.TextUtil.utcDay();
     }
 
     /**
      * Stores the OTP and, in the same transaction, extends this identifier + IP's failure counter to outlive it, so a
      * resend never grants fresh guesses (the counter is not reset). If that fails, releases the cooldown just claimed.
      */
-    private void storeOtp(String namespace, String key, String attemptKey, OtpRecord record) {
+    private void storeOtp(String namespace, String key, String quotaKey, String attemptKey, OtpRecord record) {
         Duration ttl = Duration.ofSeconds(otpTtlSeconds);
         try {
             redisService.execInTransaction(List.of(
                     RedisService.RedisWrite.set(namespace, key, record, ttl),
                     RedisService.RedisWrite.expire(namespace + OTP_FAIL_SUFFIX, attemptKey, ttl)));
         } catch (RuntimeException ex) {
-            redisService.delete(namespace + OTP_COOLDOWN_SUFFIX, key);
-            refundDailyQuota(namespace, key);
+            // Every cleanup is fail-soft and runs in full: Redis is likely down, and the store failure is the one to report
+            refundDailyQuota(namespace, quotaKey);
+            try {
+                redisService.delete(namespace + OTP_COOLDOWN_SUFFIX, key);
+            } catch (RuntimeException cleanup) {
+                log.warn("Failed to release OTP cooldown after store failure: {}", cleanup.getMessage());
+            }
             throw ex;
         }
     }
@@ -582,10 +590,14 @@ public class AuthService {
      * Drops an OTP whose delivery failed and shortens its cooldown to {@link #OTP_FAILED_SEND_COOLDOWN}, so the user can
      * retry soon but a failing provider is not hit on every request. Fail-soft: a Redis error must not mask the send failure.
      */
-    private void releaseUndeliveredOtp(String namespace, String key) {
-        redisService.delete(namespace, key);
-        redisService.set(namespace + OTP_COOLDOWN_SUFFIX, key, availableAt(OTP_FAILED_SEND_COOLDOWN), OTP_FAILED_SEND_COOLDOWN);
-        refundDailyQuota(namespace, key);
+    private void releaseUndeliveredOtp(String namespace, String key, String quotaKey) {
+        refundDailyQuota(namespace, quotaKey);
+        try {
+            redisService.delete(namespace, key);
+            redisService.set(namespace + OTP_COOLDOWN_SUFFIX, key, availableAt(OTP_FAILED_SEND_COOLDOWN), OTP_FAILED_SEND_COOLDOWN);
+        } catch (RuntimeException cleanup) {
+            log.warn("Failed to release undelivered OTP: {}", cleanup.getMessage());
+        }
     }
 
     private static String availableAt(Duration cooldown) {

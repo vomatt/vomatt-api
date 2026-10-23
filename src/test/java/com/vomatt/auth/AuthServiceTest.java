@@ -273,6 +273,18 @@ class AuthServiceTest {
     }
 
     @Test
+    void shouldStillRefundQuotaAndReportSendFailureWhenRedisCleanupFails() {
+        when(userRepository.existsByEmail("user@example.com")).thenReturn(true);
+        org.mockito.Mockito.doThrow(new RuntimeException("smtp down")).when(emailService).sendVerificationEmail(anyString(), anyString());
+        when(redisService.delete("otp:email", k("user@example.com"))).thenThrow(new com.vomatt.common.redis.RedisOperationException("redis down", null));
+
+        assertThatThrownBy(() -> authService.sendOtp("user@example.com", null, null, IP))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.AUTH_EMAIL_SEND_FAILED));
+        verify(redisService).incrementAndExpire(eq("otp:email:daily"), startsWith(k("user@example.com") + ":"), eq(-1L), eq(Duration.ofDays(1)));
+    }
+
+    @Test
     void shouldRejectSendOtpWhenDailyLimitReached() {
         when(userRepository.existsByEmail("user@example.com")).thenReturn(true);
         when(redisService.incrementAndExpire(eq("otp:email:daily"), startsWith(k("user@example.com") + ":"), eq(Duration.ofDays(1))))

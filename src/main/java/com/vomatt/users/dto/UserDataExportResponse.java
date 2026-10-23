@@ -7,14 +7,15 @@ import java.util.List;
 import java.util.Map;
 
 /** Everything the service holds about the caller, for a data-portability request; never includes other users' data. */
-@Schema(description = "Export of the caller's own data: profile, preferences, Polls created, Comments written and Ballots cast")
+@Schema(description = "Export of the caller's own data: profile, preferences, Polls created, Comments written, Ballots cast and feedback sent")
 public record UserDataExportResponse(
         @Schema(description = "When the export was produced", example = "2026-10-23T10:00:00+08:00") OffsetDateTime exportedAt,
         @Schema(description = "The profile as returned by GET /api/users/me") MyProfileResponse profile,
         @Schema(description = "Stored preferences by key (visibility settings, Ballot default)", example = "{\"visibility.location\": \"true\"}") Map<String, String> preferences,
         @Schema(description = "Polls the caller created, newest first, Deleted ones included") List<PollExport> polls,
         @Schema(description = "Comments the caller wrote that are not deleted") List<CommentExport> comments,
-        @Schema(description = "Ballots the caller holds, oldest first") List<BallotExport> ballots
+        @Schema(description = "Ballots the caller holds, oldest first") List<BallotExport> ballots,
+        @Schema(description = "Feedback the caller sent, oldest first") List<FeedbackExport> feedback
 ) {
     @Schema(description = "A Poll the caller created")
     public record PollExport(
@@ -45,5 +46,12 @@ public record UserDataExportResponse(
             @Schema(nullable = true) String optionText,
             boolean anonymous,
             OffsetDateTime castAt
+    ) {}
+
+    @Schema(description = "Feedback the caller sent")
+    public record FeedbackExport(
+            @Schema(example = "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70") String id,
+            @Schema(example = "Please add dark mode.") String content,
+            OffsetDateTime createdAt
     ) {}
 }

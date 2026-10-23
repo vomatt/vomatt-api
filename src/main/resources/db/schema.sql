@@ -196,6 +196,16 @@ CREATE TABLE IF NOT EXISTS vomatt.user_blocks (
 );
 
 -- =============================================================================
+-- FEEDBACK: free-text product feedback from signed-in users; read straight from the database
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS vomatt.feedback (
+    id         UUID        PRIMARY KEY,
+    user_id    UUID        NOT NULL REFERENCES vomatt.users (id) ON DELETE CASCADE,
+    content    TEXT        NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- =============================================================================
 -- NOTIFICATIONS: "Poll ended" notifications are derived at read time; only read state is stored (ADR 0003)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS vomatt.notification_reads (
@@ -295,6 +305,9 @@ CREATE INDEX IF NOT EXISTS idx_notification_reads_vote     ON vomatt.notificatio
 CREATE INDEX IF NOT EXISTS idx_user_blocks_blocked         ON vomatt.user_blocks (blocked_id);
 -- Block list page (UserBlockRepository.findPage)
 CREATE INDEX IF NOT EXISTS idx_user_blocks_blocker_created ON vomatt.user_blocks (blocker_id, created_at DESC, id DESC);
+-- Admin feedback list, newest first (FeedbackRepository.findPage), all users or one; the second also serves the user FK cascade
+CREATE INDEX IF NOT EXISTS idx_feedback_created            ON vomatt.feedback (created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_feedback_user_created       ON vomatt.feedback (user_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_tags_usage_count            ON vomatt.tags (usage_count DESC);
 CREATE INDEX IF NOT EXISTS idx_vote_tags_tag_id            ON vomatt.vote_tags (tag_id);
 CREATE INDEX IF NOT EXISTS idx_lookup_type_active          ON vomatt.lookup (lookup_type, is_active);

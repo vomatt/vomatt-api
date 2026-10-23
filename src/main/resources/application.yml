@@ -196,3 +196,4 @@ rate-limit:
     # writes only (GET/HEAD/OPTIONS skipped outside /api/auth); separate per-IP bucket from auth
     - /api/votes/**
     - /api/users/**
+    - /api/feedback/**

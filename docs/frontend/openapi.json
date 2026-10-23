@@ -106,6 +106,38 @@
         },
         "type" : "object"
       },
+      "AdminFeedbackResponse" : {
+        "description" : "Feedback as seen in the back office",
+        "properties" : {
+          "content" : {
+            "description" : "Feedback text",
+            "example" : "Please add dark mode.",
+            "type" : "string"
+          },
+          "createdAt" : {
+            "description" : "When it was sent",
+            "example" : "2026-10-23T10:00:00+08:00",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "id" : {
+            "description" : "Feedback ID (UUIDv7)",
+            "example" : "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70",
+            "type" : "string"
+          },
+          "userId" : {
+            "description" : "Sender's user ID",
+            "example" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
+            "type" : "string"
+          },
+          "username" : {
+            "description" : "Sender's username",
+            "example" : "alice",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "AdminStatsResponse" : {
         "description" : "Back-office dashboard counts. Poll counts exclude Deleted Polls except `pollsDeleted`",
         "nullable" : true,
@@ -1196,6 +1228,38 @@
         },
         "type" : "object"
       },
+      "ApiResponsePageResponseAdminFeedbackResponse" : {
+        "description" : "Envelope of every API response, success or error",
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/PageResponseAdminFeedbackResponse"
+          },
+          "error" : {
+            "description" : "Legacy duplicate of `message` on errors; null on success. Use `message` instead",
+            "example" : "Poll not found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "errorCode" : {
+            "description" : "Stable machine-readable error code (lowercase, dot-separated); branch on this, not on `message`. Null on success",
+            "example" : "vote.not_found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "message" : {
+            "description" : "Localized text following Accept-Language. On success it is usually null, except operations that attach a toast-ready text; on error it is the error message",
+            "example" : "Operation completed",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "success" : {
+            "description" : "true on success, false on error",
+            "example" : true,
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponsePageResponseAdminUserBlockResponse" : {
         "description" : "Envelope of every API response, success or error",
         "properties" : {
@@ -1938,6 +2002,19 @@
         "required" : [ "text" ],
         "type" : "object"
       },
+      "CreateFeedbackRequest" : {
+        "properties" : {
+          "content" : {
+            "description" : "Feedback text, not blank, max 2000 characters",
+            "example" : "Please add dark mode.",
+            "maxLength" : 2000,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "content" ],
+        "type" : "object"
+      },
       "CreateLookupRequest" : {
         "description" : "Create a dictionary item; new items are always active",
         "properties" : {
@@ -2291,6 +2368,24 @@
             "description" : "Always false for errors",
             "example" : false,
             "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "FeedbackExport" : {
+        "description" : "Feedback the caller sent",
+        "properties" : {
+          "content" : {
+            "example" : "Please add dark mode.",
+            "type" : "string"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "id" : {
+            "example" : "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70",
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -2741,6 +2836,38 @@
             "description" : "Items of this page",
             "items" : {
               "$ref" : "#/components/schemas/AdminCommentResponse"
+            },
+            "type" : "array"
+          },
+          "limit" : {
+            "description" : "Page size",
+            "example" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "page" : {
+            "description" : "Current page number (1-based)",
+            "example" : 1,
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "total" : {
+            "description" : "Total number of items across all pages",
+            "example" : 123,
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "PageResponseAdminFeedbackResponse" : {
+        "description" : "Offset-style page container (page number and total count); most list endpoints use CursorResponse instead",
+        "nullable" : true,
+        "properties" : {
+          "content" : {
+            "description" : "Items of this page",
+            "items" : {
+              "$ref" : "#/components/schemas/AdminFeedbackResponse"
             },
             "type" : "array"
           },
@@ -3375,7 +3502,7 @@
         "type" : "object"
       },
       "UserDataExportResponse" : {
-        "description" : "Export of the caller's own data: profile, preferences, Polls created, Comments written and Ballots cast",
+        "description" : "Export of the caller's own data: profile, preferences, Polls created, Comments written, Ballots cast and feedback sent",
         "nullable" : true,
         "properties" : {
           "ballots" : {
@@ -3397,6 +3524,13 @@
             "example" : "2026-10-23T10:00:00+08:00",
             "format" : "date-time",
             "type" : "string"
+          },
+          "feedback" : {
+            "description" : "Feedback the caller sent, oldest first",
+            "items" : {
+              "$ref" : "#/components/schemas/FeedbackExport"
+            },
+            "type" : "array"
           },
           "polls" : {
             "description" : "Polls the caller created, newest first, Deleted ones included",
@@ -4521,6 +4655,121 @@
         },
         "summary" : "Delete Comment",
         "tags" : [ "Admin - Comment" ]
+      }
+    },
+    "/api/admin/feedback" : {
+      "get" : {
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: offset page of feedback from all users, newest first; `userId` narrows it to one sender. `page` is 1-based (default 1), `limit` 1-50 (default 20)\n**Side effects**: written to the audit log (action `VIEW`, resource `FEEDBACK`, resource id = `userId` when given), since feedback text may hold personal data\n**Errors**:\n- 400 `common.type_mismatch`: `userId` is not a valid UUID",
+        "operationId" : "listFeedback",
+        "parameters" : [ {
+          "description" : "Only feedback from this user (UUID)",
+          "in" : "query",
+          "name" : "userId",
+          "required" : false,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        }, {
+          "description" : "Page number, 1-based (default 1)",
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "description" : "Page size (1-50, default 20)",
+          "in" : "query",
+          "name" : "limit",
+          "required" : false,
+          "schema" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "Feedback" : {
+                    "description" : "Feedback",
+                    "value" : {
+                      "data" : {
+                        "content" : [ {
+                          "content" : "Please add dark mode.",
+                          "createdAt" : "2026-10-23T10:00:00+08:00",
+                          "id" : "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70",
+                          "userId" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
+                          "username" : "alice"
+                        } ],
+                        "limit" : 20,
+                        "page" : 1,
+                        "total" : 1
+                      },
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePageResponseAdminFeedbackResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "List feedback",
+        "tags" : [ "Admin - Feedback" ]
       }
     },
     "/api/admin/lookups" : {
@@ -8819,6 +9068,112 @@
         "tags" : [ "Auth" ]
       }
     },
+    "/api/feedback" : {
+      "post" : {
+        "description" : "**Auth**: required\n**Precondition**: under the daily feedback limit (UTC day; 10 unless an admin set lookup `config` / `feedback_daily_limit`, a positive number or numeric string)\n**Behavior**: stores the text as feedback from the caller. Responds 201 with the new feedback id\n**Side effects**: counts toward the caller's daily feedback limit (only once stored)\n**Errors**:\n- 400 `common.validation_failed`: `content` is blank or longer than 2000 characters\n- 404 `user.not_found`: the signed-in user no longer exists\n- 429 `common.rate_limited`: daily feedback limit reached, or too many write requests from this IP",
+        "operationId" : "createFeedback",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "example" : {
+                "content" : "Please add dark mode."
+              },
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateFeedbackRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : {
+                    "id" : "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70",
+                    "message" : null,
+                    "status" : null,
+                    "success" : true
+                  },
+                  "error" : null,
+                  "errorCode" : null,
+                  "message" : null,
+                  "success" : true
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseSimpleResultResponse"
+                }
+              }
+            },
+            "description" : "Feedback stored; `id` is the new feedback id"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : null,
+                  "error" : "User not found",
+                  "errorCode" : "user.not_found",
+                  "message" : "User not found",
+                  "success" : false
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Current user not found (errorCode `user.not_found`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Send feedback",
+        "tags" : [ "Feedback" ]
+      }
+    },
     "/api/invite-lists" : {
       "get" : {
         "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: the caller's Invite Lists by name, each with its member count. Nobody else ever sees them, members included.\n**Side effects**: none\n**Errors**: none\n",
@@ -11054,7 +11409,7 @@
     },
     "/api/users/me/export" : {
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: not exported yet today (UTC)\n**Behavior**: returns everything stored about the caller in one JSON document: the profile (as `GET /api/users/me`), stored preferences, Polls the caller created (Deleted included, with option texts), Comments written (not deleted) and Ballots cast (with the chosen option; an Anonymous Ballot of an Ended Poll has no option once sealed). Nothing about other users is included.\n**Side effects**: none; counted toward the one export per UTC day\n**Errors**:\n- 404 `user.not_found`: the account no longer exists\n- 429 `common.rate_limited`: an export was already produced today",
+        "description" : "**Auth**: required\n**Precondition**: not exported yet today (UTC)\n**Behavior**: returns everything stored about the caller in one JSON document: the profile (as `GET /api/users/me`), stored preferences, Polls the caller created (Deleted included, with option texts), Comments written (not deleted), Ballots cast (with the chosen option; an Anonymous Ballot of an Ended Poll has no option once sealed) and feedback sent. Nothing about other users is included.\n**Side effects**: none; counted toward the one export per UTC day\n**Errors**:\n- 404 `user.not_found`: the account no longer exists\n- 429 `common.rate_limited`: an export was already produced today",
         "operationId" : "exportMyData",
         "responses" : {
           "200" : {
@@ -11077,6 +11432,11 @@
                       "voteId" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05"
                     } ],
                     "exportedAt" : "2026-10-23T10:00:00+08:00",
+                    "feedback" : [ {
+                      "content" : "Please add dark mode.",
+                      "createdAt" : "2026-10-03T10:00:00+08:00",
+                      "id" : "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70"
+                    } ],
                     "polls" : [ {
                       "audience" : "PUBLIC",
                       "createdAt" : "2026-10-01T12:00:00+08:00",
@@ -15100,10 +15460,16 @@
     "description" : "Poll moderation APIs (Admin)",
     "name" : "Admin - Poll"
   }, {
+    "description" : "Product feedback from signed-in users",
+    "name" : "Feedback"
+  }, {
     "description" : "Authentication: email OTP, phone OTP, Google / LINE / Apple login, admin console login, token refresh and logout. See docs/frontend/auth-flow.md for the end-to-end flows.",
     "name" : "Auth"
   }, {
     "description" : "Dashboard and audit log APIs (Admin)",
     "name" : "Admin - Overview"
+  }, {
+    "description" : "Reading user feedback (Admin)",
+    "name" : "Admin - Feedback"
   } ]
 }

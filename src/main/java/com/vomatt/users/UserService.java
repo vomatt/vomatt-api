@@ -53,6 +53,7 @@ public class UserService {
     private final com.vomatt.common.audit.AuditLogRepository auditLogRepository;
     private final com.vomatt.repository.UserVoteRepository userVoteRepository;
     private final com.vomatt.repository.VoteCommentRepository voteCommentRepository;
+    private final com.vomatt.repository.FeedbackRepository feedbackRepository;
     private final com.vomatt.common.redis.RedisService redisService;
 
     /** One export per user per UTC day: the response is the account's whole footprint and is not cheap to build. */
@@ -237,11 +238,14 @@ public class UserService {
                         b.getOption() == null ? null : b.getOption().getId().toString(), b.getOption() == null ? null : b.getOption().getText(),
                         b.isAnonymous(), b.getCreatedAt()))
                 .toList();
+        List<com.vomatt.users.dto.UserDataExportResponse.FeedbackExport> feedback = feedbackRepository.findByUserIdOrderByCreatedAt(userUuid).stream()
+                .map(f -> new com.vomatt.users.dto.UserDataExportResponse.FeedbackExport(f.getId().toString(), f.getContent(), f.getCreatedAt()))
+                .toList();
         if (redisService.incrementAndExpire(EXPORT_COUNTER_NS, userId + ":" + day, java.time.Duration.ofDays(1)) > 1) {
             throw ApiException.tooManyRequests(MessageKey.COMMON_RATE_LIMITED);
         }
         log.info("Data export produced for user {}", userId);
-        return new com.vomatt.users.dto.UserDataExportResponse(java.time.OffsetDateTime.now(), profile, preferences, polls, comments, ballots);
+        return new com.vomatt.users.dto.UserDataExportResponse(java.time.OffsetDateTime.now(), profile, preferences, polls, comments, ballots, feedback);
     }
 
     @Transactional

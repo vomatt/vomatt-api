@@ -5,12 +5,14 @@ import java.util.List;
 import org.springframework.stereotype.Component;
 
 import com.vomatt.admin.dto.AdminCommentResponse;
+import com.vomatt.admin.dto.AdminFeedbackResponse;
 import com.vomatt.admin.dto.AdminUserBlockResponse;
 import com.vomatt.admin.dto.AdminUserDetail;
 import com.vomatt.admin.dto.AdminUserResponse;
 import com.vomatt.admin.dto.AuditLogResponse;
 import com.vomatt.common.audit.AuditLog;
 import com.vomatt.common.util.TextUtil;
+import com.vomatt.entity.Feedback;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserBlock;
 import com.vomatt.entity.VoteComment;
@@ -51,6 +53,11 @@ public class AdminMapper {
                 comment.getVote().getTitle(), comment.getParent() == null ? null : comment.getParent().getId().toString(),
                 comment.getUser().getId().toString(), comment.getUser().getUsername(), comment.getContent(),
                 comment.isDeleted(), comment.getCreatedAt(), comment.getUpdatedAt());
+    }
+
+    public AdminFeedbackResponse toFeedbackResponse(Feedback feedback) {
+        return new AdminFeedbackResponse(feedback.getId().toString(), feedback.getUser().getId().toString(),
+                feedback.getUser().getUsername(), feedback.getContent(), feedback.getCreatedAt());
     }
 
     public AuditLogResponse toAuditLogResponse(AuditLog log) {

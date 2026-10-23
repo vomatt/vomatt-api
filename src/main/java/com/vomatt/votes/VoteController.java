@@ -341,7 +341,6 @@ public class VoteController {
     }
 
     @PostMapping("/{voteId}/vote")
-    @Auditable(action = "VOTE", resourceType = "VOTE", resourceIdIndex = 0)
     @CommonApiResponses
     @Operation(summary = "Cast a Ballot", description = """
             **Auth**: required
@@ -395,7 +394,6 @@ public class VoteController {
     }
 
     @DeleteMapping("/{voteId}/vote")
-    @Auditable(action = "RETRACT", resourceType = "VOTE", resourceIdIndex = 0)
     @CommonApiResponses
     @Operation(summary = "Retract a Ballot", description = """
             **Auth**: required

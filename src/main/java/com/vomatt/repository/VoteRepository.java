@@ -1,5 +1,6 @@
 package com.vomatt.repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -19,6 +20,9 @@ import jakarta.persistence.LockModeType;
 public interface VoteRepository extends JpaRepository<Vote, UUID> {
 
     long countByCreatorId(UUID creatorId);
+
+    /** Every Poll the user created, Deleted ones included (data export). */
+    List<Vote> findByCreatorIdOrderByCreatedAtDesc(UUID creatorId);
 
     @Query("SELECT v FROM Vote v LEFT JOIN FETCH v.options WHERE v.id = :id")
     Optional<Vote> findByIdWithOptions(@Param("id") UUID id);

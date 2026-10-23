@@ -17,6 +17,8 @@ public interface UserPreferenceRepository extends JpaRepository<UserPreference, 
      */
     List<UserPreference> findByUserIdAndKeyStartingWith(UUID userId, String keyPrefix);
 
+    List<UserPreference> findByUserId(UUID userId);
+
     /**
      * Fetch a single preference
      */

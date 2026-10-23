@@ -1452,6 +1452,38 @@
         },
         "type" : "object"
       },
+      "ApiResponseUserDataExportResponse" : {
+        "description" : "Envelope of every API response, success or error",
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/UserDataExportResponse"
+          },
+          "error" : {
+            "description" : "Legacy duplicate of `message` on errors; null on success. Use `message` instead",
+            "example" : "Poll not found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "errorCode" : {
+            "description" : "Stable machine-readable error code (lowercase, dot-separated); branch on this, not on `message`. Null on success",
+            "example" : "vote.not_found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "message" : {
+            "description" : "Localized text following Accept-Language. On success it is usually null, except operations that attach a toast-ready text; on error it is the error message",
+            "example" : "Operation completed",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "success" : {
+            "description" : "true on success, false on error",
+            "example" : true,
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseUserProfileResponse" : {
         "description" : "Envelope of every API response, success or error",
         "properties" : {
@@ -1746,6 +1778,36 @@
         },
         "type" : "object"
       },
+      "BallotExport" : {
+        "description" : "A Ballot the caller cast",
+        "properties" : {
+          "anonymous" : {
+            "type" : "boolean"
+          },
+          "castAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "optionId" : {
+            "description" : "Chosen option; null once an Anonymous Ballot of an Ended Poll was sealed",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "optionText" : {
+            "nullable" : true,
+            "type" : "string"
+          },
+          "voteId" : {
+            "example" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05",
+            "type" : "string"
+          },
+          "voteTitle" : {
+            "example" : "Lunch?",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "CommentDto" : {
         "description" : "A Comment (top-level) or a Reply (parentId set) on a Poll",
         "nullable" : true,
@@ -1827,6 +1889,28 @@
           "voteId" : {
             "description" : "ID of the Poll this Comment belongs to",
             "example" : "0199c2f0-4d3a-7e8b-b6c2-1a9f0e7d5c33",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "CommentExport" : {
+        "description" : "A Comment the caller wrote",
+        "properties" : {
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "id" : {
+            "example" : "0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b",
+            "type" : "string"
+          },
+          "text" : {
+            "type" : "string"
+          },
+          "voteId" : {
+            "description" : "Poll the Comment belongs to",
+            "example" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05",
             "type" : "string"
           }
         },
@@ -2513,7 +2597,6 @@
       },
       "MyProfileResponse" : {
         "description" : "The caller's own profile; every field is returned regardless of visibility settings",
-        "nullable" : true,
         "properties" : {
           "active" : {
             "description" : "False when the account is suspended",
@@ -2838,6 +2921,55 @@
           }
         },
         "required" : [ "code", "phone" ],
+        "type" : "object"
+      },
+      "PollExport" : {
+        "description" : "A Poll the caller created",
+        "properties" : {
+          "audience" : {
+            "description" : "PUBLIC, UNLISTED or INVITE_ONLY",
+            "example" : "PUBLIC",
+            "type" : "string"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "deleted" : {
+            "description" : "Whether the caller deleted it",
+            "type" : "boolean"
+          },
+          "description" : {
+            "nullable" : true,
+            "type" : "string"
+          },
+          "endTime" : {
+            "format" : "date-time",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "id" : {
+            "example" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05",
+            "type" : "string"
+          },
+          "options" : {
+            "description" : "Option texts in display order",
+            "items" : {
+              "description" : "Option texts in display order",
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "startTime" : {
+            "format" : "date-time",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "title" : {
+            "example" : "Lunch?",
+            "type" : "string"
+          }
+        },
         "type" : "object"
       },
       "RefreshRequest" : {
@@ -3230,6 +3362,55 @@
           }
         },
         "required" : [ "visibility" ],
+        "type" : "object"
+      },
+      "UserDataExportResponse" : {
+        "description" : "Export of the caller's own data: profile, preferences, Polls created, Comments written and Ballots cast",
+        "nullable" : true,
+        "properties" : {
+          "ballots" : {
+            "description" : "Ballots the caller holds, oldest first",
+            "items" : {
+              "$ref" : "#/components/schemas/BallotExport"
+            },
+            "type" : "array"
+          },
+          "comments" : {
+            "description" : "Comments the caller wrote that are not deleted",
+            "items" : {
+              "$ref" : "#/components/schemas/CommentExport"
+            },
+            "type" : "array"
+          },
+          "exportedAt" : {
+            "description" : "When the export was produced",
+            "example" : "2026-10-23T10:00:00+08:00",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "polls" : {
+            "description" : "Polls the caller created, newest first, Deleted ones included",
+            "items" : {
+              "$ref" : "#/components/schemas/PollExport"
+            },
+            "type" : "array"
+          },
+          "preferences" : {
+            "additionalProperties" : {
+              "description" : "Stored preferences by key (visibility settings, Ballot default)",
+              "example" : "{\"visibility.location\":\"true\"}",
+              "type" : "string"
+            },
+            "description" : "Stored preferences by key (visibility settings, Ballot default)",
+            "example" : {
+              "visibility.location" : "true"
+            },
+            "type" : "object"
+          },
+          "profile" : {
+            "$ref" : "#/components/schemas/MyProfileResponse"
+          }
+        },
         "type" : "object"
       },
       "UserDto" : {
@@ -10856,6 +11037,137 @@
           }
         },
         "summary" : "Block a user",
+        "tags" : [ "User" ]
+      }
+    },
+    "/api/users/me/export" : {
+      "get" : {
+        "description" : "**Auth**: required\n**Precondition**: not exported yet today (UTC)\n**Behavior**: returns everything stored about the caller in one JSON document: the profile (as `GET /api/users/me`), stored preferences, Polls the caller created (Deleted included, with option texts), Comments written (not deleted) and Ballots cast (with the chosen option; an Anonymous Ballot of an Ended Poll has no option once sealed). Nothing about other users is included.\n**Side effects**: none; counted toward the one export per UTC day\n**Errors**:\n- 404 `user.not_found`: the account no longer exists\n- 429 `common.rate_limited`: an export was already produced today",
+        "operationId" : "exportMyData",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : {
+                    "ballots" : [ {
+                      "anonymous" : false,
+                      "castAt" : "2026-10-02T08:30:00+08:00",
+                      "optionId" : "0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813",
+                      "optionText" : "Ramen",
+                      "voteId" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05",
+                      "voteTitle" : "Lunch?"
+                    } ],
+                    "comments" : [ {
+                      "createdAt" : "2026-10-02T09:00:00+08:00",
+                      "id" : "0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b",
+                      "text" : "Ramen!",
+                      "voteId" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05"
+                    } ],
+                    "exportedAt" : "2026-10-23T10:00:00+08:00",
+                    "polls" : [ {
+                      "audience" : "PUBLIC",
+                      "createdAt" : "2026-10-01T12:00:00+08:00",
+                      "deleted" : false,
+                      "description" : null,
+                      "endTime" : "2026-10-08T12:00:00+08:00",
+                      "id" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05",
+                      "options" : [ "Ramen", "Sushi" ],
+                      "startTime" : "2026-10-01T12:00:00+08:00",
+                      "title" : "Lunch?"
+                    } ],
+                    "preferences" : {
+                      "visibility.location" : "true"
+                    },
+                    "profile" : {
+                      "active" : true,
+                      "anonymousBallotByDefault" : false,
+                      "avatarUrl" : "bot:boba",
+                      "bio" : "Poll enthusiast",
+                      "birthday" : "1995-04-12",
+                      "displayName" : "Alice",
+                      "email" : "alice@example.com",
+                      "firstName" : "Alice",
+                      "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
+                      "joinedAt" : "2026-08-01T10:00:00+08:00",
+                      "lastLoginAt" : "2026-10-09T09:15:00+08:00",
+                      "lastName" : "Chen",
+                      "location" : "Taipei",
+                      "membershipLevel" : "basic",
+                      "phoneNumber" : null,
+                      "points" : 120,
+                      "totalPolls" : 1,
+                      "totalVotes" : 1,
+                      "username" : "alice",
+                      "visibilitySettings" : {
+                        "bio" : true,
+                        "displayName" : true,
+                        "firstName" : false,
+                        "lastName" : false,
+                        "location" : true,
+                        "membershipLevel" : false,
+                        "points" : false
+                      }
+                    }
+                  },
+                  "error" : null,
+                  "errorCode" : null,
+                  "message" : null,
+                  "success" : true
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseUserDataExportResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Export my data",
         "tags" : [ "User" ]
       }
     },

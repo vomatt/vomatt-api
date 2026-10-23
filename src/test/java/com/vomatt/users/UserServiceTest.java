@@ -54,6 +54,9 @@ class UserServiceTest {
     @Mock VoteOptionRepository voteOptionRepository;
     @Mock VoteRepository voteRepository;
     @Mock com.vomatt.common.audit.AuditLogRepository auditLogRepository;
+    @Mock com.vomatt.repository.UserVoteRepository userVoteRepository;
+    @Mock com.vomatt.repository.VoteCommentRepository voteCommentRepository;
+    @Mock com.vomatt.common.redis.RedisService redisService;
     @Spy com.vomatt.repository.LockTimeout lockTimeout = new com.vomatt.repository.LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @InjectMocks UserService userService;
 
@@ -66,6 +69,44 @@ class UserServiceTest {
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_BLOCK_SELF));
         verify(blockRepository, never()).insertIfAbsent(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("should export the caller's own data once per day")
+    void shouldExportOwnDataOncePerDay() {
+        UUID id = UUID.randomUUID();
+        User user = User.builder().id(id).username("alice").email("alice@example.com").roles(new String[] { "user" }).build();
+        com.vomatt.entity.Vote poll = new com.vomatt.entity.Vote("Lunch?", null, user, java.time.OffsetDateTime.now().plusDays(1));
+        org.springframework.test.util.ReflectionTestUtils.setField(poll, "id", UUID.randomUUID());
+        com.vomatt.entity.VoteOption option = new com.vomatt.entity.VoteOption("Ramen", null, poll);
+        org.springframework.test.util.ReflectionTestUtils.setField(option, "id", UUID.randomUUID());
+        poll.addOption(option);
+        com.vomatt.entity.UserVote sealed = new com.vomatt.entity.UserVote(user, poll, null);
+        sealed.setAnonymous(true);
+        when(redisService.incrementAndExpire(eq("export:daily"), org.mockito.ArgumentMatchers.startsWith(id + ":"), eq(java.time.Duration.ofDays(1))))
+                .thenReturn(1L, 2L);
+        when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        com.vomatt.repository.UserProfileProjection projection = org.mockito.Mockito.mock(com.vomatt.repository.UserProfileProjection.class);
+        when(projection.getTotalPolls()).thenReturn(1L);
+        when(projection.getTotalVotes()).thenReturn(1L);
+        when(userRepository.findProfileByUsername("alice")).thenReturn(Optional.of(projection));
+        when(preferenceRepository.findByUserId(id)).thenReturn(List.of());
+        when(voteRepository.findByCreatorIdOrderByCreatedAtDesc(id)).thenReturn(List.of(poll));
+        when(voteCommentRepository.findByUserId(id)).thenReturn(List.of());
+        when(userVoteRepository.findByUserIdWithVoteAndOption(id)).thenReturn(List.of(sealed));
+
+        com.vomatt.users.dto.UserDataExportResponse export = userService.exportMyData(id.toString());
+
+        assertThat(export.polls()).singleElement().satisfies(p -> {
+            assertThat(p.title()).isEqualTo("Lunch?");
+            assertThat(p.options()).containsExactly("Ramen");
+        });
+        assertThat(export.ballots()).singleElement().satisfies(b -> {
+            assertThat(b.optionId()).isNull();
+            assertThat(b.anonymous()).isTrue();
+        });
+        assertThatThrownBy(() -> userService.exportMyData(id.toString()))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getStatus()).isEqualTo(org.springframework.http.HttpStatus.TOO_MANY_REQUESTS));
     }
 
     @Test

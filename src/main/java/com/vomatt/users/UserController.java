@@ -71,6 +71,29 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.ok(profile));
     }
 
+    @GetMapping("/me/export")
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
+            content = @Content(examples = @ExampleObject(value = """
+                    {"success":true,"data":{"exportedAt":"2026-10-23T10:00:00+08:00","profile":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":null,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","points":120,"membershipLevel":"basic","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":1,"totalVotes":1,"visibilitySettings":{"firstName":false,"lastName":false,"location":true,"points":false,"displayName":true,"bio":true,"membershipLevel":false},"anonymousBallotByDefault":false},"preferences":{"visibility.location":"true"},"polls":[{"id":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","title":"Lunch?","description":null,"audience":"PUBLIC","startTime":"2026-10-01T12:00:00+08:00","endTime":"2026-10-08T12:00:00+08:00","createdAt":"2026-10-01T12:00:00+08:00","deleted":false,"options":["Ramen","Sushi"]}],"comments":[{"id":"0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b","voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","text":"Ramen!","createdAt":"2026-10-02T09:00:00+08:00"}],"ballots":[{"voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","voteTitle":"Lunch?","optionId":"0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813","optionText":"Ramen","anonymous":false,"castAt":"2026-10-02T08:30:00+08:00"}]},"message":null,"errorCode":null,"error":null}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "Already exported today (`common.rate_limited`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(value = """
+                            {"success":false,"data":null,"message":"Too many requests, please try again later","errorCode":"common.rate_limited","error":"Too many requests, please try again later"}""")))
+    @Operation(summary = "Export my data", description = """
+            **Auth**: required
+            **Precondition**: not exported yet today (UTC)
+            **Behavior**: returns everything stored about the caller in one JSON document: the profile (as `GET /api/users/me`), stored preferences, \
+            Polls the caller created (Deleted included, with option texts), Comments written (not deleted) and Ballots cast (with the chosen option; \
+            an Anonymous Ballot of an Ended Poll has no option once sealed). Nothing about other users is included.
+            **Side effects**: none; counted toward the one export per UTC day
+            **Errors**:
+            - 404 `user.not_found`: the account no longer exists
+            - 429 `common.rate_limited`: an export was already produced today""")
+    public ResponseEntity<ApiResponse<com.vomatt.users.dto.UserDataExportResponse>> exportMyData(@AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(userService.exportMyData(principal.userId())));
+    }
+
     @PatchMapping("/me/visibility")
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",

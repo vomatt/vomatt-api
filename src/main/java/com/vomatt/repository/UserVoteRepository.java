@@ -26,6 +26,10 @@ public interface UserVoteRepository extends JpaRepository<UserVote, UUID> {
 
     Optional<UserVote> findByUserIdAndVoteIdAndOptionId(UUID userId, UUID voteId, UUID optionId);
 
+    /** Every Ballot of the user with its Poll and option (null once sealed), oldest first (data export). */
+    @Query("SELECT uv FROM UserVote uv JOIN FETCH uv.vote LEFT JOIN FETCH uv.option WHERE uv.user.id = :userId ORDER BY uv.createdAt")
+    List<UserVote> findByUserIdWithVoteAndOption(@Param("userId") UUID userId);
+
     /** The user's Selection in each of a page of Polls. */
     @Query("SELECT uv.vote.id AS voteId, uv.option.id AS optionId, uv.anonymous AS anonymous FROM UserVote uv "
             + "WHERE uv.user.id = :userId AND uv.vote.id IN :voteIds")

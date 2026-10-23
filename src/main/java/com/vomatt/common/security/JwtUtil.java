@@ -22,29 +22,50 @@ import java.util.List;
 @Slf4j
 public class JwtUtil {
 
-    private final SecretKey key;
+    // The first configured secret signs; every configured secret verifies, picked by the token's kid header
+    private final SecretKey signingKey;
+    private final String signingKid;
+    private final java.util.Map<String, SecretKey> keysByKid;
     // JwtParser is immutable and thread-safe; build it once instead of per request
     private final JwtParser parser;
     private final long expirationSeconds;
 
     // HS256 needs a key of >= 256 bits (32 bytes); matches the JWT_SECRET >= 32 characters rule
     private static final int MIN_SECRET_BYTES = 32;
+    private static final int KID_LENGTH = 8;
 
     private static final String SCOPE_CLAIM = "scope";
     private static final String SCOPE_ADMIN = "admin";
     private static final String SCOPE_USER = "user";
 
+    /**
+     * @param secret one or more HS256 secrets, comma-separated. The first one signs new tokens and all of them verify,
+     *               so a key is rotated without a cut: prepend the new secret, deploy, wait out
+     *               {@code jwt.expiration-seconds}, then drop the old one and deploy again. Each key is named by
+     *               {@code kid = SHA-256(secret)[0..8)} in the token header; a token without kid (issued before kids
+     *               existed) is checked against the signing key only.
+     */
     public JwtUtil(@Value("${jwt.secret}") String secret, @Value("${jwt.expiration-seconds}") long expirationSeconds) {
-        // Validate the key length at startup (bean creation) to fail fast on misconfiguration,
+        // Validate the key lengths at startup (bean creation) to fail fast on misconfiguration,
         // instead of JJWT failing implicitly on the first token sign/verify
-        byte[] secretBytes = secret == null ? new byte[0] : secret.getBytes(StandardCharsets.UTF_8);
-        if (secretBytes.length < MIN_SECRET_BYTES) {
-            throw new IllegalStateException(
-                    "jwt.secret is too short: HS256 needs at least " + MIN_SECRET_BYTES + " bytes (256 bits), got only "
-                            + secretBytes.length + " bytes. Set a long enough JWT_SECRET (>= 32 characters).");
+        java.util.Map<String, SecretKey> keys = new java.util.LinkedHashMap<>();
+        for (String one : (secret == null ? "" : secret).split(",")) {
+            byte[] secretBytes = one.strip().getBytes(StandardCharsets.UTF_8);
+            if (secretBytes.length < MIN_SECRET_BYTES) {
+                throw new IllegalStateException(
+                        "jwt.secret is too short: HS256 needs at least " + MIN_SECRET_BYTES + " bytes (256 bits), got only "
+                                + secretBytes.length + " bytes. Set a long enough JWT_SECRET (>= 32 characters per key).");
+            }
+            keys.put(AppKey.sha256Hex(one.strip()).substring(0, KID_LENGTH), Keys.hmacShaKeyFor(secretBytes));
         }
-        this.key = Keys.hmacShaKeyFor(secretBytes);
-        this.parser = Jwts.parser().verifyWith(key).build();
+        this.keysByKid = java.util.Map.copyOf(keys);
+        this.signingKid = keys.keySet().iterator().next();
+        this.signingKey = keys.get(signingKid);
+        this.parser = Jwts.parser().keyLocator(header -> {
+            String kid = header instanceof io.jsonwebtoken.ProtectedHeader p ? p.getKeyId() : null;
+            // Unknown kid -> null -> JJWT refuses the token
+            return kid == null ? signingKey : keysByKid.get(kid);
+        }).build();
         this.expirationSeconds = expirationSeconds;
     }
 
@@ -56,9 +77,10 @@ public class JwtUtil {
         long nowMs = System.currentTimeMillis();
         // Payload is sub / roles / scope / jti only: no email, since the token transits proxies, APM and browser
         // storage that no PII should reach; jti gives a future revocation list something to key on
-        return Jwts.builder().subject(userId).id(java.util.UUID.randomUUID().toString()).claim("roles", roles)
+        return Jwts.builder().header().keyId(signingKid).and()
+                .subject(userId).id(java.util.UUID.randomUUID().toString()).claim("roles", roles)
                 .claim(SCOPE_CLAIM, adminScope ? SCOPE_ADMIN : SCOPE_USER).issuedAt(new Date(nowMs))
-                .expiration(new Date(nowMs + expirationSeconds * 1000)).signWith(key).compact();
+                .expiration(new Date(nowMs + expirationSeconds * 1000)).signWith(signingKey).compact();
     }
 
     @SuppressWarnings("unchecked")

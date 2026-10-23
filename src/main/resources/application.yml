@@ -155,6 +155,7 @@ otp:
     phone: ${OTP_DAILY_LIMIT_PHONE:5}
 
 jwt:
+  # Comma-separated: the first key signs, every key verifies (see JwtUtil for the rotation steps)
   secret: ${JWT_SECRET}
   expiration-seconds: ${JWT_EXPIRATION_SECONDS:900}
   refresh-expiration-days: ${JWT_REFRESH_EXPIRATION_DAYS:30}

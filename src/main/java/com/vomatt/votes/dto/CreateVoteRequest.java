@@ -33,7 +33,7 @@ public class CreateVoteRequest {
     private String description;
     
     @NotEmpty(message = "At least one option is required")
-    @Schema(description = "Options of the Poll; the number of options must be between 2 and 10 (`vote.options.min` / `vote.options.max`)",
+    @Schema(description = "Options of the Poll; the number of options must be between 2 and the limit (default 10, admin-configurable) (`vote.options.min` / `vote.options.max`)",
             requiredMode = Schema.RequiredMode.REQUIRED)
     private List<@Valid VoteOptionRequest> options;
     
@@ -44,7 +44,7 @@ public class CreateVoteRequest {
 
     @NotNull(message = "End time is required")
     @Schema(description = "When the Poll ends (ISO-8601 with offset); also sets the Deadline. Required; must be in the future, after `startTime`, "
-            + "and at most 365 days after the start time",
+            + "and at most the maximum duration (default 365 days, admin-configurable) after the start time",
             example = "2026-10-19T09:00:00+08:00", requiredMode = Schema.RequiredMode.REQUIRED)
     private OffsetDateTime endTime;
 

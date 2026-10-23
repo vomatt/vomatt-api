@@ -9,6 +9,7 @@ import com.vomatt.entity.Lookup;
 import com.vomatt.repository.LookupRepository;
 import com.vomatt.common.redis.CacheNamespaces;
 import com.vomatt.common.redis.RedisService;
+import com.vomatt.common.util.AfterCommit;
 import tools.jackson.core.type.TypeReference;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -59,19 +60,30 @@ public class LookupService {
      * Missing, inactive, non-numeric, non-positive or out-of-int-range values fall back to {@code defaultValue}.
      */
     public int configInt(String key, int defaultValue) {
+        Integer value = configOverride(key);
+        return value != null ? value : defaultValue;
+    }
+
+    /** {@link #configInt} for a duration stored as a count of {@code unit}; without a valid override, {@code defaultValue} as is. */
+    public Duration configDuration(String key, java.time.temporal.ChronoUnit unit, Duration defaultValue) {
+        Integer value = configOverride(key);
+        return value != null ? Duration.of(value, unit) : defaultValue;
+    }
+
+    private Integer configOverride(String key) {
         return getActiveByType(CONFIG_TYPE).stream()
                 .filter(l -> key.equals(l.lookupKey()) && l.lookupValue() != null)
                 .findFirst()
                 .map(l -> {
                     try {
                         long v = new java.math.BigDecimal(l.lookupValue().toString().trim()).longValueExact();
-                        return v > 0 && v <= Integer.MAX_VALUE ? (int) v : null;
+                        return v > 0 && v <= Integer.MAX_VALUE ? (Integer) (int) v : null;
                     } catch (NumberFormatException | ArithmeticException e) {
                         log.warn("Ignoring invalid config lookup {}: {}", key, l.lookupValue());
                         return null;
                     }
                 })
-                .orElse(defaultValue);
+                .orElse(null);
     }
 
     @Transactional(readOnly = true)
@@ -200,10 +212,13 @@ public class LookupService {
                 .orElseThrow(() -> ApiException.notFound(MessageKey.LOOKUP_NOT_FOUND));
     }
 
+    // After commit: evicting earlier lets a concurrent read re-cache the old rows for LOOKUP_CACHE_DURATION
     private void evictCacheForType(String lookupType, boolean isFrontend) {
-        redisService.delete(CacheNamespaces.LOOKUP_BY_TYPE, lookupType);
-        if (isFrontend) {
-            redisService.delete(CacheNamespaces.LOOKUP_FRONTEND, CACHE_KEY_FRONTEND);
-        }
+        AfterCommit.run(() -> {
+            redisService.delete(CacheNamespaces.LOOKUP_BY_TYPE, lookupType);
+            if (isFrontend) {
+                redisService.delete(CacheNamespaces.LOOKUP_FRONTEND, CACHE_KEY_FRONTEND);
+            }
+        });
     }
 }

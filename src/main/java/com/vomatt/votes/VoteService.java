@@ -1,5 +1,6 @@
 package com.vomatt.votes;
 
+import com.vomatt.lookups.LookupService;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.util.AfterCommit;
 import com.vomatt.common.util.TextUtil;
@@ -7,6 +8,7 @@ import com.vomatt.common.email.EmailService;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.i18n.MessageKey;
 import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.Comparator;
@@ -91,9 +93,15 @@ public class VoteService {
     private final UserPreferenceRepository preferenceRepository;
     private final TransactionTemplate transactionTemplate;
     private final LockTimeout lockTimeout;
+    private final LookupService lookupService;
 
     private static final String INVITATION_COUNTER_NS = "email:invitation";
     private static final String BALLOT_RATE_LIMIT_NS = "rate:limit:ballot";
+    // Admin overrides (lookup type config); without one the app.* settings below apply
+    static final String INVITATION_LIMIT_KEY = "invitation_email_daily_limit";
+    static final String MAX_OPTIONS_KEY = "vote_max_options";
+    static final String MAX_DURATION_DAYS_KEY = "vote_max_duration_days";
+    static final String DELETE_WINDOW_MINUTES_KEY = "vote_delete_window_minutes";
 
     @Value("${app.email.invitation-daily-limit:200}")
     private int invitationDailyLimit;
@@ -465,8 +473,9 @@ public class VoteService {
         // Exclusive lock: an in-flight Ballot finishes first, and none can land once Delete returns
         Vote vote = requireOwned(lockVote(UUID.fromString(voteId)), userId);
         OffsetDateTime now = OffsetDateTime.now();
-        if (!vote.canDeleteAt(now, voteConfig.getDeleteWindow())) {
-            throw ApiException.badRequest(MessageKey.VOTE_DELETE_WINDOW_PASSED, voteConfig.getDeleteWindow().toMinutes());
+        Duration deleteWindow = deleteWindow();
+        if (!vote.canDeleteAt(now, deleteWindow)) {
+            throw ApiException.badRequest(MessageKey.VOTE_DELETE_WINDOW_PASSED, deleteWindow.toMinutes());
         }
         softDelete(vote, now);
         log.info("Vote {} deleted by creator {}", voteId, userId);
@@ -675,10 +684,12 @@ public class VoteService {
      * the Invitees are still saved.
      */
     private int takeInvitationQuota(UUID ownerId, int n) {
+        // Read before counting and outside the catch: a failing lookup query must not be swallowed inside this transaction
+        int limit = lookupService.configInt(INVITATION_LIMIT_KEY, invitationDailyLimit);
         try {
             String day = TextUtil.utcDay();
             long count = redisService.incrementAndExpire(INVITATION_COUNTER_NS, ownerId + ":" + day, n, Duration.ofDays(1));
-            return Math.clamp(invitationDailyLimit - (count - n), 0, n);
+            return Math.clamp(limit - (count - n), 0, n);
         } catch (RuntimeException e) {
             log.warn("Invitation email limit check failed for owner {}: {}", ownerId, e.getMessage());
             return 0;
@@ -810,6 +821,8 @@ public class VoteService {
         Map<UUID, Long> inviteeCounts = inviteOnlyIds.isEmpty() ? Map.of()
             : inviteeRepository.countByVoteIds(inviteOnlyIds).stream()
                 .collect(Collectors.toMap(IdCount::getId, IdCount::getCount));
+        // Read only when the page holds the caller's own Polls (the only ones that get deletable)
+        Duration deleteWindow = votes.stream().anyMatch(v -> v.isOwnedBy(userId)) ? deleteWindow() : null;
         return votes.stream().map(vote -> {
             VoteResponse response = voteMapper.toResponse(vote, sortedOptions(vote));
             BallotSelection mine = selections.get(vote.getId());
@@ -821,10 +834,15 @@ public class VoteService {
                 response.setInviteeCount(inviteeCounts.getOrDefault(vote.getId(), 0L));
             }
             if (vote.isOwnedBy(userId)) {
-                response.setDeletable(vote.canDeleteAt(now, voteConfig.getDeleteWindow()));
+                response.setDeletable(vote.canDeleteAt(now, deleteWindow));
             }
             return response;
         }).toList();
+    }
+
+    /** Admin override {@code config / vote_delete_window_minutes}, else {@code app.vote.delete-window} (ADR 0004). */
+    private Duration deleteWindow() {
+        return lookupService.configDuration(DELETE_WINDOW_MINUTES_KEY, ChronoUnit.MINUTES, voteConfig.getDeleteWindow());
     }
 
     private static List<VoteOption> sortedOptions(Vote vote) {
@@ -927,8 +945,11 @@ public class VoteService {
             throw ApiException.badRequest(MessageKey.VOTE_OPTIONS_MIN, voteConfig.getMinOptionsPerVote());
         }
 
-        if (request.getOptions().size() > voteConfig.getMaxOptionsPerVote()) {
-            throw ApiException.badRequest(MessageKey.VOTE_OPTIONS_MAX, voteConfig.getMaxOptionsPerVote());
+        // Never below the minimum, or no Poll could be created
+        int maxOptions = Math.max(lookupService.configInt(MAX_OPTIONS_KEY, voteConfig.getMaxOptionsPerVote()),
+                voteConfig.getMinOptionsPerVote());
+        if (request.getOptions().size() > maxOptions) {
+            throw ApiException.badRequest(MessageKey.VOTE_OPTIONS_MAX, maxOptions);
         }
 
         if (request.getEndTime() != null) {
@@ -941,10 +962,10 @@ public class VoteService {
                 throw ApiException.badRequest(MessageKey.VOTE_END_BEFORE_START);
             }
 
-            OffsetDateTime maxEndTime = (startTime != null ? startTime : OffsetDateTime.now())
-                .plus(voteConfig.getMaxVoteDuration());
+            Duration maxDuration = lookupService.configDuration(MAX_DURATION_DAYS_KEY, ChronoUnit.DAYS, voteConfig.getMaxVoteDuration());
+            OffsetDateTime maxEndTime = (startTime != null ? startTime : OffsetDateTime.now()).plus(maxDuration);
             if (request.getEndTime().isAfter(maxEndTime)) {
-                throw ApiException.badRequest(MessageKey.VOTE_DURATION_EXCEEDED, voteConfig.getMaxVoteDuration().toDays());
+                throw ApiException.badRequest(MessageKey.VOTE_DURATION_EXCEEDED, maxDuration.toDays());
             }
         }
     }

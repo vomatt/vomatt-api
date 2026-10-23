@@ -89,11 +89,11 @@ public class InviteListController {
     @CommonApiResponses
     @Operation(summary = "Create an Invite List", description = """
             **Auth**: required
-            **Precondition**: the caller has fewer than 50 Invite Lists
+            **Precondition**: the caller has fewer Invite Lists than the limit (default 50, admin-configurable)
             **Behavior**: creates an empty Invite List owned by the caller; add members through `POST /api/invite-lists/{inviteListId}/members`.
             **Side effects**: the creation is audit-logged.
             **Errors**:
-            - 400 `invite_list.max_reached`: the caller already has 50 InviteLists
+            - 400 `invite_list.max_reached`: the caller already has as many Invite Lists as the limit (default 50)
             - 400 `common.validation_failed`: `name` is blank or longer than 50 characters
             - 404 `user.not_found`: the signed-in user no longer exists
             """,
@@ -107,7 +107,7 @@ public class InviteListController {
                         "id": "0199f2b0-7a1c-7e45-9b3d-2c8f6a4e1d07", "name": "Book club", "memberCount": 0, "createdAt": "2026-10-09T15:20:31+08:00"
                       }, "message": null, "errorCode": null, "error": null }
                     """)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "The caller already has 50 Invite Lists (`invite_list.max_reached`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "The caller already has as many Invite Lists as the limit, default 50 (`invite_list.max_reached`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "invite_list.max_reached", value = ERR_MESSAGE + "You can keep at most 50 Invite Lists" + ERR_CODE + "invite_list.max_reached" + ERR_ERROR + "You can keep at most 50 Invite Lists" + ERR_END)))
     public ResponseEntity<ApiResponse<InviteListResponse>> createInviteList(
@@ -197,14 +197,14 @@ public class InviteListController {
     @CommonApiResponses
     @Operation(summary = "Add Invite List members", description = """
             **Auth**: required (owner only)
-            **Precondition**: the Invite List stays within 100 members
+            **Precondition**: the Invite List stays within the member limit (default 100, admin-configurable). A list already over a lowered limit is kept but accepts no new members
             **Behavior**: adds the users and email addresses as members. Members already in the Invite List, duplicates and the owner's own ID / address are ignored. \
             An address is always listed as entered, whether or not it belongs to an account; once someone verifies it at sign-up / sign-in it is tied to that user, \
             still listed by the address. Returns the full member list.
             **Side effects**: nobody is notified (members never learn about the Invite List); the action is audit-logged.
             **Errors**:
             - 400 `invite_list.member.ids_invalid`: one of `userIds` is not an existing user or is suspended (`emails` never cause it)
-            - 400 `invite_list.members.max`: the Invite List would hold more than 100 members
+            - 400 `invite_list.members.max`: the Invite List would hold more members than the limit (default 100), including when it is already over a lowered limit
             - 400 `common.validation_failed`: both `userIds` and `emails` are empty, one holds more than 100 entries, a null element or an invalid address
             """ + NOT_FOUND,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
@@ -213,7 +213,7 @@ public class InviteListController {
                             """))))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Members after the addition",
             content = @Content(examples = @ExampleObject(name = "Members", value = EX_MEMBERS)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "A user does not exist (`invite_list.member.ids_invalid`) or the Invite List would exceed 100 members (`invite_list.members.max`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "A user does not exist (`invite_list.member.ids_invalid`) or the Invite List would exceed the member limit, default 100 (`invite_list.members.max`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = {
                     @ExampleObject(name = "invite_list.member.ids_invalid", value = ERR_MESSAGE + "One or more users do not exist or are suspended" + ERR_CODE + "invite_list.member.ids_invalid" + ERR_ERROR + "One or more users do not exist or are suspended" + ERR_END),
                     @ExampleObject(name = "invite_list.members.max", value = ERR_MESSAGE + "An Invite List can hold at most 100 members" + ERR_CODE + "invite_list.members.max" + ERR_ERROR + "An Invite List can hold at most 100 members" + ERR_END)}))

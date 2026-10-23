@@ -44,6 +44,7 @@ class InviteListServiceTest {
     @Mock InviteListMemberRepository inviteListMemberRepository;
     @Mock UserRepository userRepository;
     @Spy InviteListMapper inviteListMapper = new InviteListMapper();
+    @Mock com.vomatt.lookups.LookupService lookupService;
 
     @InjectMocks
     InviteListService inviteListService;
@@ -58,6 +59,8 @@ class InviteListServiceTest {
         owner = User.builder().id(ownerId).username("alice").email("alice@example.com").build();
         inviteList = new InviteList(owner, "Book club");
         ReflectionTestUtils.setField(inviteList, "id", inviteListId);
+        org.mockito.Mockito.lenient().when(lookupService.configInt(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyInt()))
+                .thenAnswer(inv -> inv.getArgument(1));
     }
 
     private static void assertApiException(Throwable ex, MessageKey key) {
@@ -81,6 +84,22 @@ class InviteListServiceTest {
         List<InviteListMember> rows = new ArrayList<>();
         ((Iterable<?>) captor.getValue()).forEach(m -> rows.add((InviteListMember) m));
         return rows;
+    }
+
+    @Test
+    @DisplayName("should throw 400 INVITE_LIST_MAX_REACHED at the admin-set cap when one is set in lookups")
+    void shouldRejectCreateWhenAdminCapReached() {
+        when(lookupService.configInt(InviteListService.MAX_LISTS_KEY, InviteListService.MAX_INVITE_LISTS_PER_OWNER)).thenReturn(3);
+        when(userRepository.findById(ownerId)).thenReturn(Optional.of(owner));
+        when(inviteListRepository.countByOwnerId(ownerId)).thenReturn(3L);
+        InviteListRequest request = new InviteListRequest();
+        request.setName("One more");
+
+        assertThatThrownBy(() -> inviteListService.createInviteList(request, ownerId.toString()))
+                .satisfies(ex -> {
+                    assertApiException(ex, MessageKey.INVITE_LIST_MAX_REACHED);
+                    assertThat(((ApiException) ex).getMessageArgs()).containsExactly(3);
+                });
     }
 
     @Test

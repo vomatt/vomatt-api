@@ -135,10 +135,10 @@ public class VoteController {
                     - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended (`inviteeEmails` and `inviteListIds` never cause it)
                     - 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true
                     - 400 `vote.options.min`: fewer than 2 options
-                    - 400 `vote.options.max`: more than 10 options
+                    - 400 `vote.options.max`: more options than the limit (default 10, admin-configurable)
                     - 400 `vote.end_time.past`: `endTime` is in the past
                     - 400 `vote.end_time.before_start`: `endTime` is not after `startTime`
-                    - 400 `vote.duration.exceeded`: `endTime` is more than 365 days after the start time
+                    - 400 `vote.duration.exceeded`: `endTime` is further after the start time than the limit (default 365 days, admin-configurable)
                     - 400 `tag.ids.invalid`: one of `tagIds` does not exist
                     - 400 `common.validation_failed`: a field breaks its size / required rule (first failing field only)
             - 404 `user.not_found`: the signed-in user no longer exists
@@ -196,10 +196,10 @@ public class VoteController {
             - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended (`inviteeEmails` and `inviteListIds` never cause it)
             - 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true
             - 400 `vote.options.min`: fewer than 2 options
-            - 400 `vote.options.max`: more than 10 options
+            - 400 `vote.options.max`: more options than the limit (default 10, admin-configurable)
             - 400 `vote.end_time.past`: `endTime` is in the past
             - 400 `vote.end_time.before_start`: `endTime` is not after `startTime`
-            - 400 `vote.duration.exceeded`: `endTime` is more than 365 days after the start time
+            - 400 `vote.duration.exceeded`: `endTime` is further after the start time than the limit (default 365 days, admin-configurable)
             - 400 `tag.ids.invalid`: one of `tagIds` does not exist
             - 400 `common.validation_failed`: a field breaks its size / required rule (first failing field only)
             - 404 `invite_list.not_found`: one of `inviteListIds` does not exist or belongs to someone else

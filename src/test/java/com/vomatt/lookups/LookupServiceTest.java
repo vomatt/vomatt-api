@@ -340,6 +340,16 @@ class LookupServiceTest {
         }
 
         @Test
+        void shouldConvertDurationOverrideOrKeepDefaultWhenMissing() {
+            when(redisService.get(eq(com.vomatt.common.redis.CacheNamespaces.LOOKUP_BY_TYPE), eq("config"), any(TypeReference.class)))
+                    .thenReturn(java.util.List.of(new LookupDto(LOOKUP_ID.toString(), "config", "k", 30, 0, null, null, true, null, false)));
+            assertThat(lookupService.configDuration("k", java.time.temporal.ChronoUnit.MINUTES, java.time.Duration.ofSeconds(90)))
+                    .isEqualTo(java.time.Duration.ofMinutes(30));
+            assertThat(lookupService.configDuration("other", java.time.temporal.ChronoUnit.MINUTES, java.time.Duration.ofSeconds(90)))
+                    .isEqualTo(java.time.Duration.ofSeconds(90));
+        }
+
+        @Test
         void shouldFallBackWhenKeyMissing() {
             when(redisService.get(eq(com.vomatt.common.redis.CacheNamespaces.LOOKUP_BY_TYPE), eq("config"), any(TypeReference.class)))
                     .thenReturn(java.util.List.of());

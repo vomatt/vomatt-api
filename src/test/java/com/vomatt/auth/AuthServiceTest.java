@@ -242,6 +242,8 @@ class AuthServiceTest {
         verify(redisService).delete("otp:email", k("user@example.com"));
         verify(redisService).set(eq("otp:email:cooldown"), eq(k("user@example.com")), anyString(), eq(Duration.ofSeconds(30)));
         verify(redisService, never()).delete("otp:email:cooldown", k("user@example.com"));
+        // The failed send gives its daily-quota slot back
+        verify(redisService).incrementAndExpire(eq("otp:email:daily"), startsWith(k("user@example.com") + ":"), eq(-1L), eq(Duration.ofDays(1)));
     }
 
     @Test
@@ -765,7 +767,7 @@ class AuthServiceTest {
                 .displayName("User").roles(new String[] { "user" }).build();
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(existing));
 
-        User result = authService.findOrCreateUserByEmail("user@example.com", "User", "google", true);
+        User result = authService.findOrCreateUserByEmail("user@example.com", "User", "google", true).user();
 
         assertThat(result).isSameAs(existing);
         verify(userRepository, org.mockito.Mockito.never()).save(any());
@@ -777,7 +779,7 @@ class AuthServiceTest {
         when(userRepository.findByEmail("fresh@example.com")).thenReturn(Optional.empty());
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        User result = authService.findOrCreateUserByEmail("fresh@example.com", "Fresh", "google", true);
+        User result = authService.findOrCreateUserByEmail("fresh@example.com", "Fresh", "google", true).user();
 
         assertThat(result).isNotNull();
         assertThat(result.getEmail()).isEqualTo("fresh@example.com");
@@ -800,7 +802,7 @@ class AuthServiceTest {
         when(userRepository.existsByUsername(anyString())).thenReturn(true, false);
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        User result = authService.findOrCreateUserByEmail("fresh@example.com", null, "email_otp", true);
+        User result = authService.findOrCreateUserByEmail("fresh@example.com", null, "email_otp", true).user();
 
         verify(userRepository, org.mockito.Mockito.times(2)).existsByUsername(anyString());
         assertThat(result.getUsername()).matches("fresh_\\d{4}");
@@ -813,7 +815,7 @@ class AuthServiceTest {
         when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.empty());
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        User result = authService.findOrCreateUserByEmail("admin@example.com", null, "email_otp", true);
+        User result = authService.findOrCreateUserByEmail("admin@example.com", null, "email_otp", true).user();
 
         assertThat(result.getUsername()).matches("admin_\\d{4}");
         assertThat(ReservedUsernames.contains(result.getUsername())).isFalse();
@@ -836,7 +838,7 @@ class AuthServiceTest {
         when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("mock-token");
         when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
 
-        authService.verifyOtp(" Carol@Example.com", null, "123456", IP);
+        assertThat(authService.verifyOtp(" Carol@Example.com", null, "123456", IP).isNewUser()).isTrue();
 
         var order = inOrder(userRepository, voteService, inviteListService);
         order.verify(userRepository).save(any(User.class));
@@ -1040,7 +1042,7 @@ class AuthServiceTest {
     void shouldRejectGoogleTokenWhenPresentedTwice() throws Exception {
         ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
         String idToken = signedGoogleToken(googlePayload("carol@example.com", true));
-        when(redisService.setIfAbsent(eq("oauth:used"), eq(com.vomatt.common.security.AppKey.sha256Hex(idToken)), eq("1"), eq(Duration.ofMinutes(15))))
+        when(redisService.setIfAbsent(eq("oauth:used"), eq(com.vomatt.common.security.AppKey.sha256Hex(idToken)), eq("1"), any(Duration.class)))
                 .thenReturn(false);
 
         assertGoogleRejected(idToken, MessageKey.AUTH_OAUTH_TOKEN_REPLAYED);
@@ -1077,7 +1079,9 @@ class AuthServiceTest {
         when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("mock-token");
         when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
         assertThat(authService.appleLogin(idToken, null, "raw-nonce").token()).isEqualTo("mock-token");
-        verify(redisService).setIfAbsent("oauth:used", com.vomatt.common.security.AppKey.sha256Hex(idToken), "1", Duration.ofMinutes(15));
+        // The marker outlives the token: exp (600 s) plus the 60 s clock skew
+        verify(redisService).setIfAbsent(eq("oauth:used"), eq(com.vomatt.common.security.AppKey.sha256Hex(idToken)), eq("1"),
+                argThat((Duration ttl) -> ttl.compareTo(Duration.ofMinutes(10)) > 0 && ttl.compareTo(Duration.ofMinutes(11)) <= 0));
     }
 
     private static java.util.Map<String, Object> googlePayload(String email, boolean emailVerified) {
@@ -1125,7 +1129,7 @@ class AuthServiceTest {
         when(userRepository.findByPhoneNumber("+886912345678")).thenReturn(Optional.empty());
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        User result = authService.findOrCreateUserByPhone("0912345678");
+        User result = authService.findOrCreateUserByPhone("0912345678").user();
 
         assertThat(result.getPhoneNumber()).isEqualTo("+886912345678");
         assertThat(result.getEmail()).isNull();
@@ -1159,7 +1163,7 @@ class AuthServiceTest {
 
         assertThat(response.user().id()).isEqualTo(existing.getId().toString());
         assertThat(response.user().phoneNumber()).isEqualTo("+886912345678");
-        assertThat(authService.findOrCreateUserByPhone("0912345678")).isSameAs(existing);
+        assertThat(authService.findOrCreateUserByPhone("0912345678").user()).isSameAs(existing);
     }
 
     // ── buildAuthResponse: active=false (suspended) check ───────────────────────────
@@ -1193,11 +1197,10 @@ class AuthServiceTest {
         assertThat(response.user().email()).isEqualTo("ok@example.com");
         assertThat(response.user().username()).isEqualTo("ok_user");
         assertThat(response.user().roles()).containsExactly("user");
-        // Successful login updates lastLoginAt; the first one marks the account as new
+        // Successful login updates lastLoginAt; an existing account is never reported as new
         assertThat(user.getLastLoginAt()).isNotNull();
-        assertThat(response.isNewUser()).isTrue();
-        assertThat(authService.buildAuthResponse(user).isNewUser()).isFalse();
-        verify(userRepository, org.mockito.Mockito.times(2)).save(user);
+        assertThat(response.isNewUser()).isFalse();
+        verify(userRepository).save(user);
     }
 
     // ── appleLogin (P6-#16 external failure classification + #21 JWKS cache) ──────────────────

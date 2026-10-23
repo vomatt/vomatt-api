@@ -352,12 +352,9 @@ public class VoteService {
             if (previous.isEmpty()) {
                 voteRepository.adjustTurnout(voteUuid, 1);
             }
-            // The option of an Anonymous Ballot stays out of the logs
-            if (anonymous) {
-                log.info("User {} cast anonymous ballot on vote {}", userId, voteId);
-            } else {
-                log.info("User {} cast ballot on vote {} for option {}", userId, voteId, optionUuid);
-            }
+            // Ballot logs name only the Poll and the event: never who voted nor what they chose, so log platforms
+            // (looser access than the DB, long retention) cannot rebuild Ballots
+            log.info("ballot.cast vote={} anonymous={}", voteId, anonymous);
         }
         return optionUuid;
     }
@@ -371,7 +368,7 @@ public class VoteService {
             lockOpenVote(voteUuid, userId);
             userVoteRepository.findByUserIdAndVoteId(UUID.fromString(userId), voteUuid)
                 .ifPresent(this::releaseBallot);
-            log.info("User {} retracted ballot in vote {}", userId, voteId);
+            log.info("ballot.retract vote={}", voteId);
             return null;
         });
         return transactionTemplate.execute(s -> ballotResponse(voteUuid, userId, null));
@@ -388,8 +385,7 @@ public class VoteService {
             userVoteRepository.findByUserIdAndVoteIdAndOptionId(userUuid, voteUuid, UUID.fromString(optionId))
                 .ifPresent(ballot -> {
                     releaseBallot(ballot);
-                    log.info("User {} removed vote from {} in vote {}", userId,
-                        ballot.isAnonymous() ? "an anonymous ballot" : "option " + optionId, voteId);
+                    log.info("ballot.retract vote={}", voteId);
                 });
             return null;
         });

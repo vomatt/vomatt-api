@@ -508,8 +508,8 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("should log the option only when the Ballot is not Anonymous")
-        void shouldOmitOptionFromLogWhenBallotIsAnonymous() {
+        @DisplayName("should log neither the voter nor the option for any Ballot event")
+        void shouldKeepUserAndOptionOutOfLogsWhenBallotCastOrRetracted() {
             vote.setStartTime(OffsetDateTime.now().minusHours(1));
             vote.setEndTime(OffsetDateTime.now().plusDays(1));
             UUID optionId = UUID.randomUUID();
@@ -525,12 +525,19 @@ class VoteServiceTest {
             try {
                 VoteRequest request = new VoteRequest();
                 request.setOptionIds(List.of(optionId.toString()));
+                request.setAnonymous(false);
+                voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1");
                 request.setAnonymous(true);
                 voteService.vote(voteId.toString(), request, userId.toString(), "127.0.0.1");
+                voteService.retract(voteId.toString(), userId.toString());
+                voteService.removeVote(voteId.toString(), optionId.toString(), userId.toString());
 
                 assertThat(logs.list).extracting(ILoggingEvent::getFormattedMessage)
-                        .anySatisfy(m -> assertThat(m).contains("anonymous ballot"))
-                        .noneSatisfy(m -> assertThat(m).contains(optionId.toString()));
+                        .anySatisfy(m -> assertThat(m).contains("ballot.cast").contains("anonymous=false"))
+                        .anySatisfy(m -> assertThat(m).contains("anonymous=true"))
+                        .anySatisfy(m -> assertThat(m).contains("ballot.retract"))
+                        .allSatisfy(m -> assertThat(m).contains(voteId.toString())
+                                .doesNotContain(userId.toString()).doesNotContain(optionId.toString()));
             } finally {
                 serviceLogger.detachAppender(logs);
             }

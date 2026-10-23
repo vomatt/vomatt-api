@@ -87,16 +87,19 @@ class InviteListServiceTest {
     }
 
     @Test
-    @DisplayName("should use the admin override from lookups when one is set")
+    @DisplayName("should throw 400 INVITE_LIST_MAX_REACHED at the admin-set cap when one is set in lookups")
     void shouldRejectCreateWhenAdminCapReached() {
-        when(lookupService.configInt("invite_list_max_per_owner", InviteListService.MAX_INVITE_LISTS_PER_OWNER)).thenReturn(3);
+        when(lookupService.configInt(InviteListService.MAX_LISTS_KEY, InviteListService.MAX_INVITE_LISTS_PER_OWNER)).thenReturn(3);
         when(userRepository.findById(ownerId)).thenReturn(Optional.of(owner));
         when(inviteListRepository.countByOwnerId(ownerId)).thenReturn(3L);
         InviteListRequest request = new InviteListRequest();
         request.setName("One more");
 
         assertThatThrownBy(() -> inviteListService.createInviteList(request, ownerId.toString()))
-                .satisfies(ex -> assertThat(((ApiException) ex).getMessageArgs()).containsExactly(3));
+                .satisfies(ex -> {
+                    assertApiException(ex, MessageKey.INVITE_LIST_MAX_REACHED);
+                    assertThat(((ApiException) ex).getMessageArgs()).containsExactly(3);
+                });
     }
 
     @Test

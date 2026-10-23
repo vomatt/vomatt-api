@@ -8,6 +8,7 @@ import com.vomatt.common.email.EmailService;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.i18n.MessageKey;
 import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.Comparator;
@@ -96,6 +97,11 @@ public class VoteService {
 
     private static final String INVITATION_COUNTER_NS = "email:invitation";
     private static final String BALLOT_RATE_LIMIT_NS = "rate:limit:ballot";
+    // Admin overrides (lookup type config); without one the app.* settings below apply
+    static final String INVITATION_LIMIT_KEY = "invitation_email_daily_limit";
+    static final String MAX_OPTIONS_KEY = "vote_max_options";
+    static final String MAX_DURATION_DAYS_KEY = "vote_max_duration_days";
+    static final String DELETE_WINDOW_MINUTES_KEY = "vote_delete_window_minutes";
 
     @Value("${app.email.invitation-daily-limit:200}")
     private int invitationDailyLimit;
@@ -678,10 +684,11 @@ public class VoteService {
      * the Invitees are still saved.
      */
     private int takeInvitationQuota(UUID ownerId, int n) {
+        // Read before counting and outside the catch: a failing lookup query must not be swallowed inside this transaction
+        int limit = lookupService.configInt(INVITATION_LIMIT_KEY, invitationDailyLimit);
         try {
             String day = TextUtil.utcDay();
             long count = redisService.incrementAndExpire(INVITATION_COUNTER_NS, ownerId + ":" + day, n, Duration.ofDays(1));
-            int limit = lookupService.configInt("invitation_email_daily_limit", invitationDailyLimit);
             return Math.clamp(limit - (count - n), 0, n);
         } catch (RuntimeException e) {
             log.warn("Invitation email limit check failed for owner {}: {}", ownerId, e.getMessage());
@@ -814,7 +821,8 @@ public class VoteService {
         Map<UUID, Long> inviteeCounts = inviteOnlyIds.isEmpty() ? Map.of()
             : inviteeRepository.countByVoteIds(inviteOnlyIds).stream()
                 .collect(Collectors.toMap(IdCount::getId, IdCount::getCount));
-        Duration deleteWindow = userId == null ? null : deleteWindow();
+        // Read only when the page holds the caller's own Polls (the only ones that get deletable)
+        Duration deleteWindow = votes.stream().anyMatch(v -> v.isOwnedBy(userId)) ? deleteWindow() : null;
         return votes.stream().map(vote -> {
             VoteResponse response = voteMapper.toResponse(vote, sortedOptions(vote));
             BallotSelection mine = selections.get(vote.getId());
@@ -834,8 +842,7 @@ public class VoteService {
 
     /** Admin override {@code config / vote_delete_window_minutes}, else {@code app.vote.delete-window} (ADR 0004). */
     private Duration deleteWindow() {
-        int minutes = lookupService.configInt("vote_delete_window_minutes", -1);
-        return minutes > 0 ? Duration.ofMinutes(minutes) : voteConfig.getDeleteWindow();
+        return lookupService.configDuration(DELETE_WINDOW_MINUTES_KEY, ChronoUnit.MINUTES, voteConfig.getDeleteWindow());
     }
 
     private static List<VoteOption> sortedOptions(Vote vote) {
@@ -938,7 +945,9 @@ public class VoteService {
             throw ApiException.badRequest(MessageKey.VOTE_OPTIONS_MIN, voteConfig.getMinOptionsPerVote());
         }
 
-        int maxOptions = lookupService.configInt("vote_max_options", voteConfig.getMaxOptionsPerVote());
+        // Never below the minimum, or no Poll could be created
+        int maxOptions = Math.max(lookupService.configInt(MAX_OPTIONS_KEY, voteConfig.getMaxOptionsPerVote()),
+                voteConfig.getMinOptionsPerVote());
         if (request.getOptions().size() > maxOptions) {
             throw ApiException.badRequest(MessageKey.VOTE_OPTIONS_MAX, maxOptions);
         }
@@ -953,8 +962,7 @@ public class VoteService {
                 throw ApiException.badRequest(MessageKey.VOTE_END_BEFORE_START);
             }
 
-            int days = lookupService.configInt("vote_max_duration_days", -1);
-            Duration maxDuration = days > 0 ? Duration.ofDays(days) : voteConfig.getMaxVoteDuration();
+            Duration maxDuration = lookupService.configDuration(MAX_DURATION_DAYS_KEY, ChronoUnit.DAYS, voteConfig.getMaxVoteDuration());
             OffsetDateTime maxEndTime = (startTime != null ? startTime : OffsetDateTime.now()).plus(maxDuration);
             if (request.getEndTime().isAfter(maxEndTime)) {
                 throw ApiException.badRequest(MessageKey.VOTE_DURATION_EXCEEDED, maxDuration.toDays());

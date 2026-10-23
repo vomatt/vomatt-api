@@ -43,6 +43,8 @@ public class InviteListService {
     /** Defaults; admins override them with lookups {@code config / invite_list_max_per_owner} and {@code invite_list_max_members}. */
     public static final int MAX_INVITE_LISTS_PER_OWNER = 50;
     public static final int MAX_MEMBERS_PER_INVITE_LIST = 100;
+    static final String MAX_LISTS_KEY = "invite_list_max_per_owner";
+    static final String MAX_MEMBERS_KEY = "invite_list_max_members";
 
     private final InviteListRepository inviteListRepository;
     private final InviteListMemberRepository inviteListMemberRepository;
@@ -70,7 +72,7 @@ public class InviteListService {
         User owner = userRepository.findById(UUID.fromString(userId))
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
         // ponytail: count-then-insert can overshoot the cap under concurrent creates; lock the owner row if it matters
-        int maxLists = lookupService.configInt("invite_list_max_per_owner", MAX_INVITE_LISTS_PER_OWNER);
+        int maxLists = lookupService.configInt(MAX_LISTS_KEY, MAX_INVITE_LISTS_PER_OWNER);
         if (inviteListRepository.countByOwnerId(owner.getId()) >= maxLists) {
             throw ApiException.badRequest(MessageKey.INVITE_LIST_MAX_REACHED, maxLists);
         }
@@ -130,7 +132,8 @@ public class InviteListService {
                 added.add(new InviteListMember(inviteList, account, email));
             }
         }
-        int maxMembers = lookupService.configInt("invite_list_max_members", MAX_MEMBERS_PER_INVITE_LIST);
+        // Lowering the cap keeps larger lists as they are; they only stop accepting new members
+        int maxMembers = lookupService.configInt(MAX_MEMBERS_KEY, MAX_MEMBERS_PER_INVITE_LIST);
         if (existing.size() + added.size() > maxMembers) {
             throw ApiException.badRequest(MessageKey.INVITE_LIST_MEMBERS_MAX, maxMembers);
         }

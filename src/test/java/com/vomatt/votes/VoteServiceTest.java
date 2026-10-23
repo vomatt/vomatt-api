@@ -109,6 +109,8 @@ class VoteServiceTest {
         ReflectionTestUtils.setField(voteService, "invitationDailyLimit", 200);
         org.mockito.Mockito.lenient().when(lookupService.configInt(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyInt()))
                 .thenAnswer(inv -> inv.getArgument(1));
+        lenient().when(lookupService.configDuration(org.mockito.ArgumentMatchers.anyString(), any(), any()))
+                .thenAnswer(inv -> inv.getArgument(2));
         lenient().when(inviteListService.expand(any(), any())).thenReturn(new InviteListService.Members(List.of(), List.of()));
         // Runs the callback in place, as a real template does on the calling thread
         lenient().when(transactionTemplate.execute(any()))
@@ -181,18 +183,22 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("should use the admin max options from lookups over app.vote config")
+        @DisplayName("should throw 400 VOTE_OPTIONS_MAX at the admin-set max options, never below the minimum")
         void shouldThrowWhenAdminMaxOptionsExceeded() {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
-            when(lookupService.configInt("vote_max_options", 10)).thenReturn(2);
+            // 1 is below the 2-option minimum, so the effective max is 2
+            when(lookupService.configInt(VoteService.MAX_OPTIONS_KEY, 10)).thenReturn(1);
 
             CreateVoteRequest request = new CreateVoteRequest();
             request.setTitle("Test");
             request.setOptions(List.of(buildOption("A"), buildOption("B"), buildOption("C")));
 
             assertThatThrownBy(() -> voteService.createVote(request, userId.toString()))
-                    .satisfies(ex -> assertThat(((ApiException) ex).getMessageArgs()).containsExactly(2));
+                    .satisfies(ex -> {
+                        assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_OPTIONS_MAX);
+                        assertThat(((ApiException) ex).getMessageArgs()).containsExactly(2);
+                    });
         }
 
         @Test

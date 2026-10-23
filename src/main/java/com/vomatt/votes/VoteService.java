@@ -1,5 +1,6 @@
 package com.vomatt.votes;
 
+import com.vomatt.lookups.LookupService;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.util.AfterCommit;
 import com.vomatt.common.util.TextUtil;
@@ -91,6 +92,7 @@ public class VoteService {
     private final UserPreferenceRepository preferenceRepository;
     private final TransactionTemplate transactionTemplate;
     private final LockTimeout lockTimeout;
+    private final LookupService lookupService;
 
     private static final String INVITATION_COUNTER_NS = "email:invitation";
     private static final String BALLOT_RATE_LIMIT_NS = "rate:limit:ballot";
@@ -465,8 +467,9 @@ public class VoteService {
         // Exclusive lock: an in-flight Ballot finishes first, and none can land once Delete returns
         Vote vote = requireOwned(lockVote(UUID.fromString(voteId)), userId);
         OffsetDateTime now = OffsetDateTime.now();
-        if (!vote.canDeleteAt(now, voteConfig.getDeleteWindow())) {
-            throw ApiException.badRequest(MessageKey.VOTE_DELETE_WINDOW_PASSED, voteConfig.getDeleteWindow().toMinutes());
+        Duration deleteWindow = deleteWindow();
+        if (!vote.canDeleteAt(now, deleteWindow)) {
+            throw ApiException.badRequest(MessageKey.VOTE_DELETE_WINDOW_PASSED, deleteWindow.toMinutes());
         }
         softDelete(vote, now);
         log.info("Vote {} deleted by creator {}", voteId, userId);
@@ -678,7 +681,8 @@ public class VoteService {
         try {
             String day = TextUtil.utcDay();
             long count = redisService.incrementAndExpire(INVITATION_COUNTER_NS, ownerId + ":" + day, n, Duration.ofDays(1));
-            return Math.clamp(invitationDailyLimit - (count - n), 0, n);
+            int limit = lookupService.configInt("invitation_email_daily_limit", invitationDailyLimit);
+            return Math.clamp(limit - (count - n), 0, n);
         } catch (RuntimeException e) {
             log.warn("Invitation email limit check failed for owner {}: {}", ownerId, e.getMessage());
             return 0;
@@ -810,6 +814,7 @@ public class VoteService {
         Map<UUID, Long> inviteeCounts = inviteOnlyIds.isEmpty() ? Map.of()
             : inviteeRepository.countByVoteIds(inviteOnlyIds).stream()
                 .collect(Collectors.toMap(IdCount::getId, IdCount::getCount));
+        Duration deleteWindow = userId == null ? null : deleteWindow();
         return votes.stream().map(vote -> {
             VoteResponse response = voteMapper.toResponse(vote, sortedOptions(vote));
             BallotSelection mine = selections.get(vote.getId());
@@ -821,10 +826,16 @@ public class VoteService {
                 response.setInviteeCount(inviteeCounts.getOrDefault(vote.getId(), 0L));
             }
             if (vote.isOwnedBy(userId)) {
-                response.setDeletable(vote.canDeleteAt(now, voteConfig.getDeleteWindow()));
+                response.setDeletable(vote.canDeleteAt(now, deleteWindow));
             }
             return response;
         }).toList();
+    }
+
+    /** Admin override {@code config / vote_delete_window_minutes}, else {@code app.vote.delete-window} (ADR 0004). */
+    private Duration deleteWindow() {
+        int minutes = lookupService.configInt("vote_delete_window_minutes", -1);
+        return minutes > 0 ? Duration.ofMinutes(minutes) : voteConfig.getDeleteWindow();
     }
 
     private static List<VoteOption> sortedOptions(Vote vote) {
@@ -927,8 +938,9 @@ public class VoteService {
             throw ApiException.badRequest(MessageKey.VOTE_OPTIONS_MIN, voteConfig.getMinOptionsPerVote());
         }
 
-        if (request.getOptions().size() > voteConfig.getMaxOptionsPerVote()) {
-            throw ApiException.badRequest(MessageKey.VOTE_OPTIONS_MAX, voteConfig.getMaxOptionsPerVote());
+        int maxOptions = lookupService.configInt("vote_max_options", voteConfig.getMaxOptionsPerVote());
+        if (request.getOptions().size() > maxOptions) {
+            throw ApiException.badRequest(MessageKey.VOTE_OPTIONS_MAX, maxOptions);
         }
 
         if (request.getEndTime() != null) {
@@ -941,10 +953,11 @@ public class VoteService {
                 throw ApiException.badRequest(MessageKey.VOTE_END_BEFORE_START);
             }
 
-            OffsetDateTime maxEndTime = (startTime != null ? startTime : OffsetDateTime.now())
-                .plus(voteConfig.getMaxVoteDuration());
+            int days = lookupService.configInt("vote_max_duration_days", -1);
+            Duration maxDuration = days > 0 ? Duration.ofDays(days) : voteConfig.getMaxVoteDuration();
+            OffsetDateTime maxEndTime = (startTime != null ? startTime : OffsetDateTime.now()).plus(maxDuration);
             if (request.getEndTime().isAfter(maxEndTime)) {
-                throw ApiException.badRequest(MessageKey.VOTE_DURATION_EXCEEDED, voteConfig.getMaxVoteDuration().toDays());
+                throw ApiException.badRequest(MessageKey.VOTE_DURATION_EXCEEDED, maxDuration.toDays());
             }
         }
     }

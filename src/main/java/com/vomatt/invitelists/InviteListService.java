@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.vomatt.lookups.LookupService;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.entity.InviteList;
@@ -39,6 +40,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class InviteListService {
 
+    /** Defaults; admins override them with lookups {@code config / invite_list_max_per_owner} and {@code invite_list_max_members}. */
     public static final int MAX_INVITE_LISTS_PER_OWNER = 50;
     public static final int MAX_MEMBERS_PER_INVITE_LIST = 100;
 
@@ -46,6 +48,7 @@ public class InviteListService {
     private final InviteListMemberRepository inviteListMemberRepository;
     private final UserRepository userRepository;
     private final InviteListMapper inviteListMapper;
+    private final LookupService lookupService;
 
     /** An Invite List's members as they are now: users added by ID and addresses added by email. */
     public record Members(List<UUID> userIds, List<String> emails) {
@@ -67,8 +70,9 @@ public class InviteListService {
         User owner = userRepository.findById(UUID.fromString(userId))
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
         // ponytail: count-then-insert can overshoot the cap under concurrent creates; lock the owner row if it matters
-        if (inviteListRepository.countByOwnerId(owner.getId()) >= MAX_INVITE_LISTS_PER_OWNER) {
-            throw ApiException.badRequest(MessageKey.INVITE_LIST_MAX_REACHED, MAX_INVITE_LISTS_PER_OWNER);
+        int maxLists = lookupService.configInt("invite_list_max_per_owner", MAX_INVITE_LISTS_PER_OWNER);
+        if (inviteListRepository.countByOwnerId(owner.getId()) >= maxLists) {
+            throw ApiException.badRequest(MessageKey.INVITE_LIST_MAX_REACHED, maxLists);
         }
         InviteList inviteList = inviteListRepository.save(new InviteList(owner, request.getName()));
         log.info("Invite List {} created by user {}", inviteList.getId(), userId);
@@ -126,8 +130,9 @@ public class InviteListService {
                 added.add(new InviteListMember(inviteList, account, email));
             }
         }
-        if (existing.size() + added.size() > MAX_MEMBERS_PER_INVITE_LIST) {
-            throw ApiException.badRequest(MessageKey.INVITE_LIST_MEMBERS_MAX, MAX_MEMBERS_PER_INVITE_LIST);
+        int maxMembers = lookupService.configInt("invite_list_max_members", MAX_MEMBERS_PER_INVITE_LIST);
+        if (existing.size() + added.size() > maxMembers) {
+            throw ApiException.badRequest(MessageKey.INVITE_LIST_MEMBERS_MAX, maxMembers);
         }
         inviteListMemberRepository.saveAllAndFlush(added);
         log.info("{} member(s) added to Invite List {} by user {}", added.size(), inviteListId, userId);

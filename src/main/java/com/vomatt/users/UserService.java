@@ -211,7 +211,7 @@ public class UserService {
     /** Data portability: everything stored about the caller, nothing about anyone else. Fails closed when Redis is down. */
     @Transactional(readOnly = true)
     public com.vomatt.users.dto.UserDataExportResponse exportMyData(String userId) {
-        String day = java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString();
+        String day = com.vomatt.common.util.TextUtil.utcDay();
         // Checked first so a spent quota costs nothing, counted only once the document is built, so a failure
         // (DB error, missing account) does not spend the day's export
         if (redisService.get(EXPORT_COUNTER_NS, userId + ":" + day, Long.class) != null) {

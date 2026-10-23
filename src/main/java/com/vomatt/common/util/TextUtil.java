@@ -10,6 +10,11 @@ public final class TextUtil {
         return value == null || value.isBlank() ? null : value.strip();
     }
 
+    /** Today's UTC date as {@code yyyy-MM-dd}: the key suffix of every per-day counter (OTP sends, exports, invitations). */
+    public static String utcDay() {
+        return java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString();
+    }
+
     /** For logs and admin lists: {@code a***@domain}; anything without a local part becomes {@code ***}. */
     public static String maskEmail(String email) {
         int at = email == null ? -1 : email.indexOf('@');

@@ -14,6 +14,12 @@ class TextUtilTest {
     }
 
     @Test
+    void shouldFormatUtcDayWhenUsedAsCounterSuffix() {
+        assertThat(TextUtil.utcDay()).matches("\\d{4}-\\d{2}-\\d{2}")
+                .isEqualTo(java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString());
+    }
+
+    @Test
     void shouldMaskEmailAndPhoneWhenLogged() {
         assertThat(TextUtil.maskEmail("carol@example.com")).isEqualTo("c***@example.com");
         assertThat(TextUtil.maskEmail("broken")).isEqualTo("***");

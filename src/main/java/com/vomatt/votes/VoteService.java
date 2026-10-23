@@ -7,9 +7,7 @@ import com.vomatt.common.email.EmailService;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.i18n.MessageKey;
 import java.time.Duration;
-import java.time.LocalDate;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -678,7 +676,7 @@ public class VoteService {
      */
     private int takeInvitationQuota(UUID ownerId, int n) {
         try {
-            String day = LocalDate.now(ZoneOffset.UTC).toString();
+            String day = com.vomatt.common.util.TextUtil.utcDay();
             long count = redisService.incrementAndExpire(INVITATION_COUNTER_NS, ownerId + ":" + day, n, Duration.ofDays(1));
             return Math.clamp(invitationDailyLimit - (count - n), 0, n);
         } catch (RuntimeException e) {

@@ -4,6 +4,7 @@ Contract changes that affect the frontend. 💥 BREAKING means frontend code mus
 
 ## 2026-10-23
 
+- OpenAPI only: request fields that were already required non-blank now declare `minLength: 1` (strings) or `minItems: 1` (arrays) in `openapi.json`. Validation behavior is unchanged.
 - New `GET /api/users/me/export`: one JSON document with the caller's profile, preferences, Polls created, Comments and Ballots (data portability). Once per UTC day; a second call is 429 `common.rate_limited`.
 - 💥 Admin: `GET /api/admin/users` items no longer carry `firstName`, `lastName` and `birthday`, and `email` / `phoneNumber` are masked (`a***@example.com`, `+88****78`). `GET /api/admin/users/{userId}` still returns everything and is now recorded in the audit log (action `VIEW`, resource `USER`). `q` still searches the full values.
 - 💥 `GET /api/votes/{voteId}/voters`: the list is no longer hidden (403 `vote.voters.hidden`) when a Poll holds 1 or 2 Anonymous Ballots. Instead, whenever the Poll holds any Anonymous Ballot other than the caller's own, `optionId` is `null` for every Participant (the list still says who took part). `vote.voters.hidden` now only means Voter Visibility does not allow the caller.

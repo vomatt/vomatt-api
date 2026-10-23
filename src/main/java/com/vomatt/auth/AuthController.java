@@ -1,9 +1,7 @@
 package com.vomatt.auth;
 
 import com.vomatt.auth.dto.AppleAuthRequest;
-import com.vomatt.auth.dto.AuthEmailExistsResponse;
 import com.vomatt.auth.dto.AuthResponse;
-import com.vomatt.auth.dto.CheckEmailRequest;
 import com.vomatt.auth.dto.GoogleAuthRequest;
 import com.vomatt.auth.dto.LineAuthRequest;
 import com.vomatt.auth.dto.PhoneSendOtpRequest;
@@ -54,7 +52,8 @@ public class AuthController {
                   "roles": ["user"],
                   "avatarUrl": "bot:boba",
                   "phoneNumber": null
-                }
+                },
+                "isNewUser": false
               },
               "message": null,
               "errorCode": null,
@@ -67,7 +66,8 @@ public class AuthController {
               "data": {
                 "token": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTkwYThiMi0xMjM0LTc4OTAtYWJjZC1lZjAxMjM0NTY3ODkifQ.sig",
                 "refreshToken": "2f9d1c6e-7b3a-4c58-9e10-a4b5c6d7e8f9",
-                "user": null
+                "user": null,
+                "isNewUser": null
               },
               "message": null,
               "errorCode": null,
@@ -88,7 +88,8 @@ public class AuthController {
                   "roles": ["user", "admin"],
                   "avatarUrl": "bot:boba",
                   "phoneNumber": null
-                }
+                },
+                "isNewUser": false
               },
               "message": null,
               "errorCode": null,
@@ -143,7 +144,7 @@ public class AuthController {
                     **Auth**: public
                     **Precondition**: an OTP was sent to this email via `POST /api/auth/send-otp` and has not expired
                     **Behavior**: consumes the OTP and returns an access token and refresh token. Creates the user if the email is new (signup), \
-                    otherwise signs the existing user in. The tokens never grant the admin role, even for an admin account: the admin console signs in with `POST /api/auth/admin/verify-otp`
+                    otherwise signs the existing user in; `isNewUser` tells which, so the client needs no separate registration check. The tokens never grant the admin role, even for an admin account: the admin console signs in with `POST /api/auth/admin/verify-otp`
                     **Side effects**: the OTP is consumed on success; a new user (with a random bot avatar) is created and a welcome email sent on signup; `lastLoginAt` is updated. \
                     Wrong codes are counted per email and client IP; resending does not reset the count. \
                     The 3rd wrong code locks this email for the caller's IP for 5 minutes, doubling on each further lockout (10, 20, 40 minutes...) up to 24 hours; \
@@ -221,25 +222,6 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.ok(authService.verifyAdminOtp(req.email(), req.code(), ClientIpResolver.resolve(httpRequest))));
     }
 
-    @PostMapping("/check-email")
-    @PublicApiResponse
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
-            content = @Content(examples = @ExampleObject(value = """
-                    {"success": true, "data": {"exists": true}, "message": null, "errorCode": null, "error": null}""")))
-    @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
-                    {"email": "user@example.com"}""")))
-    @Operation(summary = "Check whether an email is registered",
-            description = """
-                    **Auth**: public
-                    **Precondition**: none
-                    **Behavior**: returns whether a user with this email exists (case-insensitive). Lets the client choose between login and signup wording
-                    **Side effects**: none
-                    **Errors**:
-                    - 400 `common.validation_failed`: `email` is blank or not a valid email""")
-    public ResponseEntity<ApiResponse<AuthEmailExistsResponse>> checkEmail(@Valid @RequestBody CheckEmailRequest req) {
-        boolean exists = authService.checkEmailExists(req.email());
-        return ResponseEntity.ok(ApiResponse.ok(new AuthEmailExistsResponse(exists)));
-    }
 
     @PostMapping("/phone/send-otp")
     @PublicApiResponse

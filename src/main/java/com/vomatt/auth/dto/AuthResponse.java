@@ -22,7 +22,11 @@ public record AuthResponse(
 
         @Schema(description = "Basic user info. Null on POST /api/auth/refresh (keep the info from login); always present on login and signup",
                 nullable = true)
-        UserInfo user
+        UserInfo user,
+
+        @Schema(description = "True when this sign-in is the account's first (it was just created), so the client can show signup wording. Null on POST /api/auth/refresh",
+                example = "false", nullable = true)
+        Boolean isNewUser
 ) {
 
     /**

@@ -597,38 +597,6 @@
         },
         "type" : "object"
       },
-      "ApiResponseAuthEmailExistsResponse" : {
-        "description" : "Envelope of every API response, success or error",
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/AuthEmailExistsResponse"
-          },
-          "error" : {
-            "description" : "Legacy duplicate of `message` on errors; null on success. Use `message` instead",
-            "example" : "Poll not found",
-            "nullable" : true,
-            "type" : "string"
-          },
-          "errorCode" : {
-            "description" : "Stable machine-readable error code (lowercase, dot-separated); branch on this, not on `message`. Null on success",
-            "example" : "vote.not_found",
-            "nullable" : true,
-            "type" : "string"
-          },
-          "message" : {
-            "description" : "Localized text following Accept-Language. On success it is usually null, except operations that attach a toast-ready text; on error it is the error message",
-            "example" : "Operation completed",
-            "nullable" : true,
-            "type" : "string"
-          },
-          "success" : {
-            "description" : "true on success, false on error",
-            "example" : true,
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
       "ApiResponseAuthResponse" : {
         "description" : "Envelope of every API response, success or error",
         "properties" : {
@@ -1771,22 +1739,16 @@
         },
         "type" : "object"
       },
-      "AuthEmailExistsResponse" : {
-        "description" : "Result of the email registration check",
-        "nullable" : true,
-        "properties" : {
-          "exists" : {
-            "description" : "True if a user with this email is registered",
-            "example" : true,
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
       "AuthResponse" : {
         "description" : "Response after a successful login, signup or token refresh",
         "nullable" : true,
         "properties" : {
+          "isNewUser" : {
+            "description" : "True when this sign-in is the account's first (it was just created), so the client can show signup wording. Null on POST /api/auth/refresh",
+            "example" : false,
+            "nullable" : true,
+            "type" : "boolean"
+          },
           "refreshToken" : {
             "description" : "Opaque refresh token, valid for 30 days by default. Use it with POST /api/auth/refresh when the access token expires. Single-use: every refresh returns a new one that replaces it",
             "example" : "8c7e3f4a-1234-5678-90ab-cdef12345678",
@@ -1801,19 +1763,6 @@
             "$ref" : "#/components/schemas/UserInfo"
           }
         },
-        "type" : "object"
-      },
-      "CheckEmailRequest" : {
-        "description" : "Request to check whether an email is registered",
-        "properties" : {
-          "email" : {
-            "description" : "Email address to check",
-            "example" : "user@example.com",
-            "format" : "email",
-            "type" : "string"
-          }
-        },
-        "required" : [ "email" ],
         "type" : "object"
       },
       "CommentDto" : {
@@ -7641,6 +7590,7 @@
               "application/json" : {
                 "example" : {
                   "data" : {
+                    "isNewUser" : false,
                     "refreshToken" : "8c7e3f4a-1234-5678-90ab-cdef12345678",
                     "token" : "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTkwYThiMi0xMjM0LTc4OTAtYWJjZC1lZjAxMjM0NTY3ODkifQ.sig",
                     "user" : {
@@ -7762,6 +7712,7 @@
               "application/json" : {
                 "example" : {
                   "data" : {
+                    "isNewUser" : false,
                     "refreshToken" : "8c7e3f4a-1234-5678-90ab-cdef12345678",
                     "token" : "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTkwYThiMi0xMjM0LTc4OTAtYWJjZC1lZjAxMjM0NTY3ODkifQ.sig",
                     "user" : {
@@ -7875,81 +7826,6 @@
         "tags" : [ "Auth" ]
       }
     },
-    "/api/auth/check-email" : {
-      "post" : {
-        "description" : "**Auth**: public\n**Precondition**: none\n**Behavior**: returns whether a user with this email exists (case-insensitive). Lets the client choose between login and signup wording\n**Side effects**: none\n**Errors**:\n- 400 `common.validation_failed`: `email` is blank or not a valid email",
-        "operationId" : "checkEmail",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "example" : {
-                "email" : "user@example.com"
-              },
-              "schema" : {
-                "$ref" : "#/components/schemas/CheckEmailRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "application/json" : {
-                "example" : {
-                  "data" : {
-                    "exists" : true
-                  },
-                  "error" : null,
-                  "errorCode" : null,
-                  "message" : null,
-                  "success" : true
-                },
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseAuthEmailExistsResponse"
-                }
-              }
-            },
-            "description" : "Success"
-          },
-          "400" : {
-            "content" : {
-              "application/json" : {
-                "example" : null,
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
-          },
-          "404" : {
-            "content" : {
-              "application/json" : {
-                "example" : null,
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description" : "Resource not found (errorCode e.g. `vote.not_found`)"
-          },
-          "429" : {
-            "content" : {
-              "application/json" : {
-                "example" : null,
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
-          }
-        },
-        "summary" : "Check whether an email is registered",
-        "tags" : [ "Auth" ]
-      }
-    },
     "/api/auth/google" : {
       "post" : {
         "description" : "**Auth**: public\n**Precondition**: the client obtained a Google ID token (Google Sign-In)\n**Behavior**: verifies the ID token signature against Google's public keys, then its issuer, audience and expiry. Each ID token signs in once; presenting it again is refused. Signs in the user with that email, creating the user if new. An existing account with the same email is reused only when Google reports the email as verified\n**Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated; the token is marked used for 15 minutes\n**Errors**:\n- 400 `auth.google.not_configured`: Google login is not configured on the server\n- 401 `auth.google.no_email`: the token is invalid (malformed, bad signature, wrong issuer, expired) or carries no email\n- 401 `auth.google.invalid_audience`: the token was issued for a different client ID\n- 401 `auth.oauth.token_replayed`: this ID token was already used to sign in\n- 401 `auth.email_not_verified`: Google reports the email as unverified\n- 403 `auth.account_banned`: the user is suspended (`active=false`)\n- 503 `common.service_unavailable`: Google's key endpoint is unreachable",
@@ -7973,6 +7849,7 @@
               "application/json" : {
                 "example" : {
                   "data" : {
+                    "isNewUser" : false,
                     "refreshToken" : "8c7e3f4a-1234-5678-90ab-cdef12345678",
                     "token" : "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTkwYThiMi0xMjM0LTc4OTAtYWJjZC1lZjAxMjM0NTY3ODkifQ.sig",
                     "user" : {
@@ -8110,6 +7987,7 @@
               "application/json" : {
                 "example" : {
                   "data" : {
+                    "isNewUser" : false,
                     "refreshToken" : "8c7e3f4a-1234-5678-90ab-cdef12345678",
                     "token" : "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTkwYThiMi0xMjM0LTc4OTAtYWJjZC1lZjAxMjM0NTY3ODkifQ.sig",
                     "user" : {
@@ -8381,6 +8259,7 @@
               "application/json" : {
                 "example" : {
                   "data" : {
+                    "isNewUser" : false,
                     "refreshToken" : "8c7e3f4a-1234-5678-90ab-cdef12345678",
                     "token" : "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTkwYThiMi0xMjM0LTc4OTAtYWJjZC1lZjAxMjM0NTY3ODkifQ.sig",
                     "user" : {
@@ -8500,6 +8379,7 @@
               "application/json" : {
                 "example" : {
                   "data" : {
+                    "isNewUser" : null,
                     "refreshToken" : "2f9d1c6e-7b3a-4c58-9e10-a4b5c6d7e8f9",
                     "token" : "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTkwYThiMi0xMjM0LTc4OTAtYWJjZC1lZjAxMjM0NTY3ODkifQ.sig",
                     "user" : null
@@ -8648,7 +8528,7 @@
     },
     "/api/auth/verify-otp" : {
       "post" : {
-        "description" : "**Auth**: public\n**Precondition**: an OTP was sent to this email via `POST /api/auth/send-otp` and has not expired\n**Behavior**: consumes the OTP and returns an access token and refresh token. Creates the user if the email is new (signup), otherwise signs the existing user in. The tokens never grant the admin role, even for an admin account: the admin console signs in with `POST /api/auth/admin/verify-otp`\n**Side effects**: the OTP is consumed on success; a new user (with a random bot avatar) is created and a welcome email sent on signup; `lastLoginAt` is updated. Wrong codes are counted per email and client IP; resending does not reset the count. The 3rd wrong code locks this email for the caller's IP for 5 minutes, doubling on each further lockout (10, 20, 40 minutes...) up to 24 hours; the doubling is forgotten 24 hours after the last lock ends, and a successful sign-in from that IP resets it. While locked, sending or verifying an OTP from that IP is refused; other IPs are not affected and the OTP stays valid. One OTP allows 10 guesses in total across all IPs; after the 10th wrong guess it no longer verifies and a new OTP can be requested only after 15 minutes\n**Errors**:\n- 400 `auth.identifier.required`: `email` is missing or blank\n- 401 `auth.otp.invalid_or_expired`: no OTP exists for this email (never sent, expired, already used, or its 10 guesses are used up)\n- 401 `auth.invalid_otp`: the code is wrong\n- 401 `auth.otp.too_many_attempts`: 3rd wrong code, or this identifier is locked for the caller's IP (even a correct code is refused until the lock ends)\n- 403 `auth.account_banned`: the user is suspended (`active=false`)",
+        "description" : "**Auth**: public\n**Precondition**: an OTP was sent to this email via `POST /api/auth/send-otp` and has not expired\n**Behavior**: consumes the OTP and returns an access token and refresh token. Creates the user if the email is new (signup), otherwise signs the existing user in; `isNewUser` tells which, so the client needs no separate registration check. The tokens never grant the admin role, even for an admin account: the admin console signs in with `POST /api/auth/admin/verify-otp`\n**Side effects**: the OTP is consumed on success; a new user (with a random bot avatar) is created and a welcome email sent on signup; `lastLoginAt` is updated. Wrong codes are counted per email and client IP; resending does not reset the count. The 3rd wrong code locks this email for the caller's IP for 5 minutes, doubling on each further lockout (10, 20, 40 minutes...) up to 24 hours; the doubling is forgotten 24 hours after the last lock ends, and a successful sign-in from that IP resets it. While locked, sending or verifying an OTP from that IP is refused; other IPs are not affected and the OTP stays valid. One OTP allows 10 guesses in total across all IPs; after the 10th wrong guess it no longer verifies and a new OTP can be requested only after 15 minutes\n**Errors**:\n- 400 `auth.identifier.required`: `email` is missing or blank\n- 401 `auth.otp.invalid_or_expired`: no OTP exists for this email (never sent, expired, already used, or its 10 guesses are used up)\n- 401 `auth.invalid_otp`: the code is wrong\n- 401 `auth.otp.too_many_attempts`: 3rd wrong code, or this identifier is locked for the caller's IP (even a correct code is refused until the lock ends)\n- 403 `auth.account_banned`: the user is suspended (`active=false`)",
         "operationId" : "verifyOtp",
         "requestBody" : {
           "content" : {
@@ -8670,6 +8550,7 @@
               "application/json" : {
                 "example" : {
                   "data" : {
+                    "isNewUser" : false,
                     "refreshToken" : "8c7e3f4a-1234-5678-90ab-cdef12345678",
                     "token" : "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTkwYThiMi0xMjM0LTc4OTAtYWJjZC1lZjAxMjM0NTY3ODkifQ.sig",
                     "user" : {

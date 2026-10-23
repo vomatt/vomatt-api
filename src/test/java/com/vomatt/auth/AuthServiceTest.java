@@ -1193,9 +1193,11 @@ class AuthServiceTest {
         assertThat(response.user().email()).isEqualTo("ok@example.com");
         assertThat(response.user().username()).isEqualTo("ok_user");
         assertThat(response.user().roles()).containsExactly("user");
-        // Successful login updates lastLoginAt
+        // Successful login updates lastLoginAt; the first one marks the account as new
         assertThat(user.getLastLoginAt()).isNotNull();
-        verify(userRepository).save(user);
+        assertThat(response.isNewUser()).isTrue();
+        assertThat(authService.buildAuthResponse(user).isNewUser()).isFalse();
+        verify(userRepository, org.mockito.Mockito.times(2)).save(user);
     }
 
     // ── appleLogin (P6-#16 external failure classification + #21 JWKS cache) ──────────────────

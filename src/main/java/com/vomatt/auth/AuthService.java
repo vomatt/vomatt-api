@@ -579,10 +579,6 @@ public class AuthService {
         return Long.toString(Instant.now().plus(cooldown).getEpochSecond());
     }
 
-    public boolean checkEmailExists(String email) {
-        return userRepository.existsByEmail(User.normalizeEmail(email));
-    }
-
     // ── Google OAuth ──────────────────────────────────────────────────
 
     public AuthResponse googleLogin(String idToken) {
@@ -947,6 +943,8 @@ public class AuthService {
         if (!user.isActive()) {
             throw ApiException.forbidden(MessageKey.AUTH_ACCOUNT_BANNED);
         }
+        // No sign-in yet means the account was created by this very request (every creation path ends here)
+        boolean isNewUser = user.getLastLoginAt() == null;
         user.setLastLoginAt(java.time.OffsetDateTime.now());
         userRepository.save(user);
         List<String> roles = List.of(user.getRoles());
@@ -954,7 +952,7 @@ public class AuthService {
         String refreshToken = refreshTokenService.generate(user.getId().toString(), roles, adminScope);
         return new AuthResponse(token, refreshToken,
                 new AuthResponse.UserInfo(user.getId().toString(), user.getEmail(), user.getUsername(),
-                        user.getDisplayName(), roles, user.getAvatarUrl(), user.getPhoneNumber()));
+                        user.getDisplayName(), roles, user.getAvatarUrl(), user.getPhoneNumber()), isNewUser);
     }
 
     public AuthResponse refresh(String refreshToken) {
@@ -963,7 +961,7 @@ public class AuthService {
             if (result == null) {
                 throw ApiException.unauthorized(MessageKey.AUTH_REFRESH_TOKEN_INVALID);
             }
-            return new AuthResponse(result.newAccessToken(), result.newRefreshToken(), null);
+            return new AuthResponse(result.newAccessToken(), result.newRefreshToken(), null, null);
         } catch (com.vomatt.common.security.RefreshTokenReuseException e) {
             throw ApiException.unauthorized(MessageKey.AUTH_SUSPICIOUS_LOGIN);
         }

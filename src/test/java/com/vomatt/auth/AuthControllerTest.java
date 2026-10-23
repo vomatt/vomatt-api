@@ -63,7 +63,7 @@ class AuthControllerTest {
     @Test
     void verifyOtp_withValidCode_shouldReturnToken() throws Exception {
         AuthResponse mockResponse = new AuthResponse("mock-token", "mock-refresh-token",
-                new AuthResponse.UserInfo("id1", "user@example.com", "test_0001", "Test", List.of("user"), null, null));
+                new AuthResponse.UserInfo("id1", "user@example.com", "test_0001", "Test", List.of("user"), null, null), true);
         when(authService.verifyOtp(anyString(), any(), anyString(), any())).thenReturn(mockResponse);
 
         mockMvc.perform(post("/api/auth/verify-otp").contentType(MediaType.APPLICATION_JSON)

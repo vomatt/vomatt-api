@@ -47,7 +47,7 @@ class AuditAspectTest {
 
 
     @Test
-    void shouldNotIdentifyUserWhenDeletingOwnAccountThroughController() {
+    void shouldPassActorAndResourceThroughControllerWhenDeletingAccounts() {
         com.vomatt.users.UserService userService = mock(com.vomatt.users.UserService.class);
         com.vomatt.users.UserController proxied = proxied(new com.vomatt.users.UserController(userService, mock(com.vomatt.votes.VoteService.class)));
         java.util.UUID self = java.util.UUID.randomUUID();
@@ -60,11 +60,10 @@ class AuditAspectTest {
             org.springframework.security.core.context.SecurityContextHolder.clearContext();
         }
 
-        // Own account: the entry says an account was deleted, not who (the service anonymized the rest already)
-        verify(auditService).logAction(org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.eq("DELETE"),
-                org.mockito.ArgumentMatchers.eq("USER"), org.mockito.ArgumentMatchers.eq(self.toString()), org.mockito.ArgumentMatchers.isNull(),
-                org.mockito.ArgumentMatchers.isNull(), any(), any(), any());
-        // Someone else's account (admin): the actor stays on record (username resolved later by AuditService)
+        // The aspect records the token's actor as is; AuditService decides on its writer whether the actor still exists
+        // (a self-deletion is anonymized there, see AuditServiceTest)
+        verify(auditService).logAction(org.mockito.ArgumentMatchers.eq(self.toString()), org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.eq("DELETE"),
+                org.mockito.ArgumentMatchers.eq("USER"), org.mockito.ArgumentMatchers.eq(self.toString()), any(), any(), any(), any(), any());
         verify(auditService).logAction(org.mockito.ArgumentMatchers.eq(self.toString()), org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.eq("DELETE"),
                 org.mockito.ArgumentMatchers.eq("USER"), org.mockito.ArgumentMatchers.eq(other.toString()), any(), any(), any(), any(), any());
     }

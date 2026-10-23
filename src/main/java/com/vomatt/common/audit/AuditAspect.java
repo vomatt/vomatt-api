@@ -35,18 +35,15 @@ public class AuditAspect {
             
             if (request != null && userInfo[0] != null) {
                 String resourceId = argString(joinPoint.getArgs(), auditable.resourceIdIndex());
-                // A user deleting their own account: the service just anonymized their audit entries, so this one
-                // records the deletion without re-identifying them (no id, username, IP or user agent)
-                boolean selfDelete = isSelfDelete(auditable, resourceId, userInfo[0]);
                 
                 auditService.logAction(
-                    selfDelete ? null : userInfo[0], // userId
-                    selfDelete ? null : userInfo[1], // username
+                    userInfo[0], // userId
+                    userInfo[1], // username
                     auditable.action(),
                     auditable.resourceType(),
                     resourceId,
-                    selfDelete ? null : ClientIpResolver.resolve(request),
-                    selfDelete ? null : request.getHeader("User-Agent"),
+                    ClientIpResolver.resolve(request),
+                    request.getHeader("User-Agent"),
                     request.getRequestURI(),
                     request.getMethod(),
                     details(joinPoint.getArgs(), auditable.detailsIndex())
@@ -87,7 +84,7 @@ public class AuditAspect {
         }
     }
     
-    /** {userId, username}: the token carries no username, AuditService looks it up on its async writer. */
+    /** {userId, username}: the token carries no username, AuditService resolves the actor on its async writer. */
     private String[] getCurrentUserInfo() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.getPrincipal() instanceof UserPrincipal principal) {
@@ -96,11 +93,6 @@ public class AuditAspect {
         return new String[]{null, null};
     }
     
-    static boolean isSelfDelete(Auditable auditable, String resourceId, String userId) {
-        return "DELETE".equals(auditable.action()) && "USER".equals(auditable.resourceType())
-                && resourceId != null && resourceId.equals(userId);
-    }
-
     private HttpServletRequest getCurrentRequest() {
         ServletRequestAttributes requestAttributes = 
             (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();

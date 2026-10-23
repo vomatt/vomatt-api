@@ -50,7 +50,7 @@ public class AuditService {
         }
         
         try {
-            AuditLog auditLog = new AuditLog(userId, usernameOf(userId, username), action, resourceType, resourceId);
+            AuditLog auditLog = new AuditLog(userId, username, action, resourceType, resourceId);
             auditLog.setIpAddress(ipAddress);
             auditLog.setUserAgent(userAgent);
             auditLog.setRequestUri(requestUri);
@@ -73,7 +73,7 @@ public class AuditService {
         }
         
         try {
-            AuditLog auditLog = new AuditLog(userId, usernameOf(userId, username), action, resourceType, resourceId);
+            AuditLog auditLog = new AuditLog(userId, username, action, resourceType, resourceId);
             auditLog.setSuccess(false);
             auditLog.setErrorMessage(errorMessage);
             auditLog.setIpAddress(ipAddress);
@@ -86,22 +86,41 @@ public class AuditService {
         }
     }
     
-    // Runs on the async thread, so waiting here never blocks a request; under sustained overload the entry is dropped
     /**
-     * The token carries no email or username, so the actor's username is read here, on the async writer rather than
-     * the request thread; a username given by the caller is kept, and an unknown account (deleted) yields null.
+     * Resolves the actor on the writer, under the write permit so the lookup shares the audit connection budget. The
+     * token carries no username, so it is read here. An actor that no longer exists (account deleted, possibly after
+     * this entry was queued) is not re-identified: id, username, IP and user agent are dropped, and when the entry is
+     * the deletion of that very account its resource id and request URI (which spell the id) go too.
      */
-    private String usernameOf(String userId, String username) {
-        if (username != null || userId == null) {
-            return username;
+    private void resolveActor(AuditLog auditLog) {
+        String userId = auditLog.getUserId();
+        if (userId == null) {
+            return;
         }
+        java.util.Optional<com.vomatt.entity.User> actor;
         try {
-            return userRepository.findById(java.util.UUID.fromString(userId)).map(com.vomatt.entity.User::getUsername).orElse(null);
+            actor = userRepository.findById(java.util.UUID.fromString(userId));
         } catch (RuntimeException e) {
-            return null;
+            actor = java.util.Optional.empty();
+        }
+        if (actor.isPresent()) {
+            if (auditLog.getUsername() == null) {
+                auditLog.setUsername(actor.get().getUsername());
+            }
+            return;
+        }
+        auditLog.setUserId(null);
+        auditLog.setUsername(null);
+        auditLog.setIpAddress(null);
+        auditLog.setUserAgent(null);
+        if ("DELETE".equals(auditLog.getAction()) && "USER".equals(auditLog.getResourceType())
+                && userId.equals(auditLog.getResourceId())) {
+            auditLog.setResourceId(null);
+            auditLog.setRequestUri(null);
         }
     }
 
+    // Runs on the async thread, so waiting here never blocks a request; under sustained overload the entry is dropped
     private void save(AuditLog auditLog) {
         boolean acquired;
         try {
@@ -116,6 +135,7 @@ public class AuditService {
             return;
         }
         try {
+            resolveActor(auditLog);
             auditLogRepository.save(auditLog);
         } finally {
             writePermits.release();

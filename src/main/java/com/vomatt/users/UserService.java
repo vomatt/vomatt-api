@@ -270,7 +270,10 @@ public class UserService {
                 .findByUserIdAndKeyStartingWith(userId, VisibilityField.getPreferencePrefix());
         for (UserPreference pref : prefs) {
             String fieldName = VisibilityField.extractFieldName(pref.getKey());
-            settings.put(fieldName, Boolean.parseBoolean(pref.getValue()));
+            // Rows for fields that are no longer controllable (visibility.email, visibility.birthday) are ignored
+            if (VisibilityField.fromFieldName(fieldName).isPresent()) {
+                settings.put(fieldName, Boolean.parseBoolean(pref.getValue()));
+            }
         }
 
         return settings;

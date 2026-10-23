@@ -7,13 +7,12 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Controllable personal profile fields for visibility settings
+ * Controllable personal profile fields for visibility settings. Email and birthday are not here on purpose: they are
+ * never shown on the public profile (account takeover and social engineering material), whatever the owner sets.
  */
 public enum VisibilityField {
-    EMAIL("email", false),
     FIRST_NAME("firstName", false),
     LAST_NAME("lastName", false),
-    BIRTHDAY("birthday", false),
     LOCATION("location", false),
     POINTS("points", false),
     DISPLAY_NAME("displayName", true),

@@ -2,7 +2,6 @@ package com.vomatt.users.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
 @Schema(description = "Public view of a user; optional fields are null when the owner has not made them visible")
@@ -22,15 +21,11 @@ public record UserProfileResponse(
         int totalPolls,
         @Schema(description = "Number of Polls the user holds a Ballot in", example = "17")
         int totalVotes,
-        // controllable fields: null when hidden
-        @Schema(description = "Email; null when the owner keeps it hidden (default) or has none", example = "alice@example.com", nullable = true)
-        String email,
+        // controllable fields: null when hidden. Email and birthday are never part of the public profile
         @Schema(description = "First name; null when hidden (default) or not set", example = "Alice", nullable = true)
         String firstName,
         @Schema(description = "Last name; null when hidden (default) or not set", example = "Chen", nullable = true)
         String lastName,
-        @Schema(description = "Birthday (ISO date); null when hidden (default) or not set", example = "1995-04-12", nullable = true)
-        LocalDate birthday,
         @Schema(description = "Location; null when hidden (default) or not set", example = "Taipei", nullable = true)
         String location,
         @Schema(description = "Points; null when hidden (default)", example = "120", nullable = true)

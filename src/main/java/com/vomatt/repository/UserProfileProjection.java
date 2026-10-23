@@ -1,6 +1,5 @@
 package com.vomatt.repository;
 
-import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -18,10 +17,8 @@ public interface UserProfileProjection {
     Long getTotalVotes();
     Boolean getActive();
     // Extended fields whose visibility can be controlled
-    String getEmail();
     String getFirstName();
     String getLastName();
-    LocalDate getBirthday();
     String getLocation();
     Integer getPoints();
     String getMembershipLevel();

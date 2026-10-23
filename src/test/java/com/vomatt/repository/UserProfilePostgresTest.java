@@ -76,7 +76,6 @@ class UserProfilePostgresTest extends PostgresRepositoryTest {
 
         assertThat(profile.getFirstName()).isEqualTo("Alice");
         assertThat(profile.getLastName()).isEqualTo("Chen");
-        assertThat(profile.getBirthday()).isEqualTo(java.time.LocalDate.of(1995, 4, 12));
     }
 
     @Test

@@ -4,6 +4,7 @@ Contract changes that affect the frontend. 💥 BREAKING means frontend code mus
 
 ## 2026-10-23
 
+- 💥 `GET /api/users/{username}` and the `PATCH /api/users/me` response (`UserProfileResponse`) no longer carry `email` and `birthday`: they are never public, whatever the owner's settings. `visibilitySettings` on `GET /api/users/me` and `PATCH /api/users/me/visibility` drops the `email` and `birthday` keys, and sending them is ignored like any unknown key. Read your own email and birthday from `GET /api/users/me`.
 - `POST /api/auth/send-otp`, `POST /api/auth/admin/send-otp` and `POST /api/auth/phone/send-otp` now cap sends per identifier per UTC day (20 per email, 5 per phone, across all IPs): over it they return 429 `auth.otp.daily_limit`. The resend cooldown is unchanged.
 
 ## 2026-10-22

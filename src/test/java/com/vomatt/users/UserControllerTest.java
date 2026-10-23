@@ -83,7 +83,7 @@ class UserControllerTest {
         signIn("u1");
         when(userService.updateMyProfile(eq("u1"), any())).thenAnswer(inv -> new UserProfileResponse("alice", null, null,
                 inv.<com.vomatt.users.dto.UpdateProfileRequest>getArgument(1).getAvatarUrl(), null, 0, 0,
-                null, null, null, null, null, null, null));
+                null, null, null, null, null));
 
         for (String kind : BotAvatar.KINDS) {
             mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
@@ -100,7 +100,7 @@ class UserControllerTest {
         signIn("u1");
         when(userService.updateMyProfile(eq("u1"), any())).thenAnswer(inv -> new UserProfileResponse("alice", null, null,
                 inv.<com.vomatt.users.dto.UpdateProfileRequest>getArgument(1).getAvatarUrl(), null, 0, 0,
-                null, null, null, null, null, null, null));
+                null, null, null, null, null));
 
         mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"avatarUrl\":\"bot:none\"}"))
@@ -128,7 +128,7 @@ class UserControllerTest {
         signIn("u1");
         when(userService.updateMyProfile(eq("u1"), argThat(r -> r.getAvatarUrl() == null && "Al".equals(r.getDisplayName()))))
                 .thenReturn(new UserProfileResponse("alice", "Al", null, "bot:boba", null, 0, 0,
-                        null, null, null, null, null, null, null));
+                        null, null, null, null, null));
 
         mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON).content("{\"displayName\":\"Al\"}"))
                 .andExpect(status().isOk())
@@ -142,12 +142,14 @@ class UserControllerTest {
         when(userService.updateMyProfile(eq("u1"), argThat(r -> "Alice".equals(r.getFirstName())
                 && "Chen".equals(r.getLastName()) && java.time.LocalDate.of(1995, 4, 12).equals(r.getBirthday()))))
                 .thenReturn(new UserProfileResponse("alice", null, null, "bot:boba", null, 0, 0,
-                        null, "Alice", "Chen", java.time.LocalDate.of(1995, 4, 12), null, null, null));
+                        "Alice", "Chen", null, null, null));
 
         mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"firstName\":\"Alice\",\"lastName\":\"Chen\",\"birthday\":\"1995-04-12\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.birthday").value("1995-04-12"));
+                .andExpect(jsonPath("$.data.firstName").value("Alice"))
+                // The public profile never carries the birthday; GET /api/users/me does
+                .andExpect(jsonPath("$.data.birthday").doesNotExist());
     }
 
     @ParameterizedTest

@@ -3282,13 +3282,12 @@
         "properties" : {
           "visibility" : {
             "additionalProperties" : {
-              "description" : "Field name to visible flag. Allowed keys: email, firstName, lastName, birthday, location, points, displayName, bio, membershipLevel. Omitted fields keep their current setting; unknown keys are ignored",
+              "description" : "Field name to visible flag. Allowed keys: firstName, lastName, location, points, displayName, bio, membershipLevel. Omitted fields keep their current setting; unknown keys (including email and birthday, which are never public) are ignored",
               "example" : false,
               "type" : "boolean"
             },
-            "description" : "Field name to visible flag. Allowed keys: email, firstName, lastName, birthday, location, points, displayName, bio, membershipLevel. Omitted fields keep their current setting; unknown keys are ignored",
+            "description" : "Field name to visible flag. Allowed keys: firstName, lastName, location, points, displayName, bio, membershipLevel. Omitted fields keep their current setting; unknown keys (including email and birthday, which are never public) are ignored",
             "example" : {
-              "email" : false,
               "firstName" : true,
               "location" : false
             },
@@ -3395,22 +3394,9 @@
             "nullable" : true,
             "type" : "string"
           },
-          "birthday" : {
-            "description" : "Birthday (ISO date); null when hidden (default) or not set",
-            "example" : "1995-04-12",
-            "format" : "date",
-            "nullable" : true,
-            "type" : "string"
-          },
           "displayName" : {
             "description" : "Display name; null if the owner hid it (public by default) or never set one",
             "example" : "Alice",
-            "nullable" : true,
-            "type" : "string"
-          },
-          "email" : {
-            "description" : "Email; null when the owner keeps it hidden (default) or has none",
-            "example" : "alice@example.com",
             "nullable" : true,
             "type" : "string"
           },
@@ -10511,9 +10497,7 @@
                     "username" : "alice",
                     "visibilitySettings" : {
                       "bio" : true,
-                      "birthday" : false,
                       "displayName" : true,
-                      "email" : false,
                       "firstName" : false,
                       "lastName" : false,
                       "location" : false,
@@ -10619,9 +10603,7 @@
                   "data" : {
                     "avatarUrl" : "bot:boba",
                     "bio" : "Poll enthusiast",
-                    "birthday" : null,
                     "displayName" : "Alice C.",
-                    "email" : null,
                     "firstName" : "Alice",
                     "joinedAt" : "2026-08-01T10:00:00+08:00",
                     "lastName" : null,
@@ -11032,9 +11014,7 @@
                 "example" : {
                   "data" : {
                     "bio" : true,
-                    "birthday" : false,
                     "displayName" : true,
-                    "email" : false,
                     "firstName" : true,
                     "lastName" : true,
                     "location" : false,
@@ -11335,7 +11315,7 @@
     },
     "/api/users/{username}" : {
       "get" : {
-        "description" : "**Auth**: public (the response is the same whether or not the caller is signed in)\n**Precondition**: none\n**Behavior**: returns the public view of a user. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` (Public, non-Deleted Polls only) are always present (`avatarUrl` is `null` when never set). Every optional field is `null` unless the owner made it visible: `displayName` and `bio` are visible by default, `email`, `firstName`, `lastName`, `birthday`, `location`, `points` and `membershipLevel` are hidden by default. `totalPolls` counts only Polls that have opened (Open and Ended), matching `GET /api/users/{username}/votes`.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended",
+        "description" : "**Auth**: public (the response is the same whether or not the caller is signed in)\n**Precondition**: none\n**Behavior**: returns the public view of a user. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` (Public, non-Deleted Polls only) are always present (`avatarUrl` is `null` when never set). Every optional field is `null` unless the owner made it visible: `displayName` and `bio` are visible by default, `firstName`, `lastName`, `location`, `points` and `membershipLevel` are hidden by default; email and birthday are never returned. `totalPolls` counts only Polls that have opened (Open and Ended), matching `GET /api/users/{username}/votes`.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended",
         "operationId" : "getUserProfile",
         "parameters" : [ {
           "description" : "Username of the user to look up",
@@ -11355,9 +11335,7 @@
                   "data" : {
                     "avatarUrl" : "bot:boba",
                     "bio" : "Poll enthusiast",
-                    "birthday" : null,
                     "displayName" : "Alice",
-                    "email" : null,
                     "firstName" : "Alice",
                     "joinedAt" : "2026-08-01T10:00:00+08:00",
                     "lastName" : null,

@@ -83,8 +83,9 @@ class UserServiceTest {
         poll.addOption(option);
         com.vomatt.entity.UserVote sealed = new com.vomatt.entity.UserVote(user, poll, null);
         sealed.setAnonymous(true);
+        when(redisService.get(eq("export:daily"), org.mockito.ArgumentMatchers.startsWith(id + ":"), eq(Long.class))).thenReturn(null, 1L);
         when(redisService.incrementAndExpire(eq("export:daily"), org.mockito.ArgumentMatchers.startsWith(id + ":"), eq(java.time.Duration.ofDays(1))))
-                .thenReturn(1L, 2L);
+                .thenReturn(1L);
         when(userRepository.findById(id)).thenReturn(Optional.of(user));
         com.vomatt.repository.UserProfileProjection projection = org.mockito.Mockito.mock(com.vomatt.repository.UserProfileProjection.class);
         when(projection.getTotalPolls()).thenReturn(1L);

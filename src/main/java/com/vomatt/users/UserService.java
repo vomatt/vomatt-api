@@ -212,7 +212,9 @@ public class UserService {
     @Transactional(readOnly = true)
     public com.vomatt.users.dto.UserDataExportResponse exportMyData(String userId) {
         String day = java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString();
-        if (redisService.incrementAndExpire(EXPORT_COUNTER_NS, userId + ":" + day, java.time.Duration.ofDays(1)) > 1) {
+        // Checked first so a spent quota costs nothing, counted only once the document is built, so a failure
+        // (DB error, missing account) does not spend the day's export
+        if (redisService.get(EXPORT_COUNTER_NS, userId + ":" + day, Long.class) != null) {
             throw ApiException.tooManyRequests(MessageKey.COMMON_RATE_LIMITED);
         }
         UUID userUuid = UUID.fromString(userId);
@@ -234,6 +236,9 @@ public class UserService {
                         b.getOption() == null ? null : b.getOption().getId().toString(), b.getOption() == null ? null : b.getOption().getText(),
                         b.isAnonymous(), b.getCreatedAt()))
                 .toList();
+        if (redisService.incrementAndExpire(EXPORT_COUNTER_NS, userId + ":" + day, java.time.Duration.ofDays(1)) > 1) {
+            throw ApiException.tooManyRequests(MessageKey.COMMON_RATE_LIMITED);
+        }
         log.info("Data export produced for user {}", userId);
         return new com.vomatt.users.dto.UserDataExportResponse(java.time.OffsetDateTime.now(), profile, preferences, polls, comments, ballots);
     }

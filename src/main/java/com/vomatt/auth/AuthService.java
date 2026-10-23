@@ -8,6 +8,7 @@ import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.security.AppKey;
 import com.vomatt.common.security.JwtUtil;
 import com.vomatt.common.security.RefreshTokenService;
+import com.vomatt.common.util.TextUtil;
 import com.vomatt.common.sms.SmsService;
 import com.vomatt.entity.User;
 import com.vomatt.invitelists.InviteListService;
@@ -176,7 +177,7 @@ public class AuthService {
         String redisKey = redisKey(normalizedEmail);
         acquireResendCooldown(namespace, redisKey);
         // Computed once: the refund on failure must hit the same day's key even across UTC midnight
-        String quotaKey = dailyQuotaKey(redisKey);
+        String quotaKey = redisKey + ":" + TextUtil.utcDay();
         takeDailyQuota(namespace, quotaKey, otpDailyLimitEmail);
         storeOtp(namespace, redisKey, quotaKey, attemptKey, new OtpRecord(otpHash(normalizedEmail, code), otpType, Instant.now(), 0));
 
@@ -206,7 +207,7 @@ public class AuthService {
 
         String redisKey = redisKey(phone);
         acquireResendCooldown(OTP_PHONE_NS, redisKey);
-        String quotaKey = dailyQuotaKey(redisKey);
+        String quotaKey = redisKey + ":" + TextUtil.utcDay();
         takeDailyQuota(OTP_PHONE_NS, quotaKey, otpDailyLimitPhone);
         storeOtp(OTP_PHONE_NS, redisKey, quotaKey, attemptKey, new OtpRecord(otpHash(phone, code), otpType, Instant.now(), 0));
 
@@ -560,10 +561,6 @@ public class AuthService {
         }
     }
 
-    private static String dailyQuotaKey(String redisKey) {
-        return redisKey + ":" + com.vomatt.common.util.TextUtil.utcDay();
-    }
-
     /**
      * Stores the OTP and, in the same transaction, extends this identifier + IP's failure counter to outlive it, so a
      * resend never grants fresh guesses (the counter is not reset). If that fails, releases the cooldown just claimed.
@@ -593,8 +590,10 @@ public class AuthService {
     private void releaseUndeliveredOtp(String namespace, String key, String quotaKey) {
         refundDailyQuota(namespace, quotaKey);
         try {
-            redisService.delete(namespace, key);
+            // Cooldown first: if the delete then fails, the user can at least retry soon; the other order could leave a
+            // full-length cooldown with no OTP behind it
             redisService.set(namespace + OTP_COOLDOWN_SUFFIX, key, availableAt(OTP_FAILED_SEND_COOLDOWN), OTP_FAILED_SEND_COOLDOWN);
+            redisService.delete(namespace, key);
         } catch (RuntimeException cleanup) {
             log.warn("Failed to release undelivered OTP: {}", cleanup.getMessage());
         }

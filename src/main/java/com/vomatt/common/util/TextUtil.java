@@ -10,7 +10,7 @@ public final class TextUtil {
         return value == null || value.isBlank() ? null : value.strip();
     }
 
-    /** Today's UTC date as {@code yyyy-MM-dd}: the key suffix of every per-day counter (OTP sends, exports, invitations). */
+    /** Today's UTC date as {@code yyyy-MM-dd}, the day boundary of per-day counters. */
     public static String utcDay() {
         return java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString();
     }

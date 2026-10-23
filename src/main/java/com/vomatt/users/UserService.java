@@ -23,6 +23,7 @@ import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.VoteRepository;
 import com.vomatt.repository.LockTimeout;
 import com.vomatt.common.util.AfterCommit;
+import com.vomatt.common.util.TextUtil;
 import com.vomatt.common.util.UUIDv7Generator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -211,7 +212,7 @@ public class UserService {
     /** Data portability: everything stored about the caller, nothing about anyone else. Fails closed when Redis is down. */
     @Transactional(readOnly = true)
     public com.vomatt.users.dto.UserDataExportResponse exportMyData(String userId) {
-        String day = com.vomatt.common.util.TextUtil.utcDay();
+        String day = TextUtil.utcDay();
         // Checked first so a spent quota costs nothing, counted only once the document is built, so a failure
         // (DB error, missing account) does not spend the day's export
         if (redisService.get(EXPORT_COUNTER_NS, userId + ":" + day, Long.class) != null) {

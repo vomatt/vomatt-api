@@ -676,7 +676,7 @@ public class VoteService {
      */
     private int takeInvitationQuota(UUID ownerId, int n) {
         try {
-            String day = com.vomatt.common.util.TextUtil.utcDay();
+            String day = TextUtil.utcDay();
             long count = redisService.incrementAndExpire(INVITATION_COUNTER_NS, ownerId + ":" + day, n, Duration.ofDays(1));
             return Math.clamp(invitationDailyLimit - (count - n), 0, n);
         } catch (RuntimeException e) {

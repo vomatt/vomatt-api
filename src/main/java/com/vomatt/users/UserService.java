@@ -49,11 +49,15 @@ public class UserService {
     private final VoteOptionRepository voteOptionRepository;
     private final VoteRepository voteRepository;
     private final LockTimeout lockTimeout;
+    private final com.vomatt.common.audit.AuditLogRepository auditLogRepository;
 
     /**
      * The user themself or an active admin can delete the account; deletion also revokes all of the user's refresh tokens.
      * Deleting someone else needs both an admin-scope token (admin console login) and an active admin in the database,
      * so neither a consumer-app session of an admin nor a demoted or suspended admin's stale token can do it.
+     * <p>Rows that reference the user cascade in the database; audit_logs has no FK, so the user's entries are
+     * anonymized here in the same transaction. Redis keys other than refresh tokens (OTP, rate limits, lockouts, used
+     * id_tokens) carry no account data and are left to expire with their TTL.</p>
      */
     @Transactional
     public void deleteUser(String userId, UserPrincipal principal) {
@@ -70,6 +74,7 @@ public class UserService {
         // Poll rows before option rows, the same lock order as a Ballot, so a concurrent Ballot cannot deadlock it
         voteRepository.decrementTurnoutForUserBallots(user.getId());
         voteOptionRepository.decrementForUserBallots(user.getId());
+        auditLogRepository.anonymizeByUserId(userId);
         userRepository.delete(user);
         log.info("User {} deleted by {}", userId, principal.userId());
     }

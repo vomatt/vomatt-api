@@ -27,4 +27,13 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
     
     @Query("SELECT COUNT(al) FROM AuditLog al WHERE al.success = false AND al.createdAt >= :since")
     long countFailedActionsLast24Hours(@Param("since") OffsetDateTime since);
+
+    /**
+     * Account deletion: strips who acted (id, username, IP, user agent) from the user's entries, keeping action and
+     * resource so admins still see that "a deleted account was suspended"; entries about the user as a resource keep
+     * their resource_id, which no longer resolves to anyone.
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("UPDATE AuditLog al SET al.userId = NULL, al.username = NULL, al.ipAddress = NULL, al.userAgent = NULL WHERE al.userId = :userId")
+    int anonymizeByUserId(@Param("userId") String userId);
 }

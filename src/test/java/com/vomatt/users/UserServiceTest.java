@@ -53,6 +53,7 @@ class UserServiceTest {
     @Mock RefreshTokenService refreshTokenService;
     @Mock VoteOptionRepository voteOptionRepository;
     @Mock VoteRepository voteRepository;
+    @Mock com.vomatt.common.audit.AuditLogRepository auditLogRepository;
     @Spy com.vomatt.repository.LockTimeout lockTimeout = new com.vomatt.repository.LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @InjectMocks UserService userService;
 
@@ -76,9 +77,10 @@ class UserServiceTest {
 
         userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), List.of("user")));
 
-        InOrder order = inOrder(voteOptionRepository, voteRepository, userRepository);
+        InOrder order = inOrder(voteOptionRepository, voteRepository, auditLogRepository, userRepository);
         order.verify(voteRepository).decrementTurnoutForUserBallots(id);
         order.verify(voteOptionRepository).decrementForUserBallots(id);
+        order.verify(auditLogRepository).anonymizeByUserId(id.toString());
         order.verify(userRepository).delete(user);
     }
 

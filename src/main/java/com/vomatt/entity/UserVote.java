@@ -40,17 +40,13 @@ public class UserVote extends AuditableEntity {
     @JoinColumn(name = "option_id")
     private VoteOption option;
 
-    @Column(name = "ip_address")
-    private String ipAddress;
-
     /** Anonymous Ballot: left out of the voter list whatever the Poll's Voter Visibility. */
     @Column(name = "anonymous")
     private boolean anonymous;
 
-    public UserVote(User user, Vote vote, VoteOption option, String ipAddress) {
+    public UserVote(User user, Vote vote, VoteOption option) {
         this.user = user;
         this.vote = vote;
         this.option = option;
-        this.ipAddress = ipAddress;
     }
 }

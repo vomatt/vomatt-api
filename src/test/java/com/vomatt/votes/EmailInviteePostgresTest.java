@@ -339,7 +339,7 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
         VoteRequest ballot = new VoteRequest();
         ballot.setOptionIds(List.of(voteService.getVote(poll.getId().toString(), user.getId().toString())
                 .getOptions().getFirst().getId()));
-        voteService.vote(poll.getId().toString(), ballot, user.getId().toString(), null);
+        voteService.vote(poll.getId().toString(), ballot, user.getId().toString());
     }
 
     private Vote reloaded() {

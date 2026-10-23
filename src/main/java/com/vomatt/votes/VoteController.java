@@ -28,7 +28,6 @@ import com.vomatt.votes.dto.VoteResponse;
 import com.vomatt.votes.dto.VoteResultResponse;
 import com.vomatt.votes.dto.VoterResponse;
 import com.vomatt.common.security.UserPrincipal;
-import com.vomatt.common.util.ClientIpResolver;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import com.vomatt.votes.VoteService;
 import com.vomatt.common.audit.Auditable;
@@ -40,7 +39,6 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -385,10 +383,8 @@ public class VoteController {
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
             @PathVariable String voteId,
             @Valid @RequestBody VoteRequest request,
-            @AuthenticationPrincipal UserPrincipal principal,
-            HttpServletRequest httpRequest) {
-        String ipAddress = ClientIpResolver.resolve(httpRequest);
-        VoteResponse response = voteService.vote(voteId, request, principal.userId(), ipAddress);
+            @AuthenticationPrincipal UserPrincipal principal) {
+        VoteResponse response = voteService.vote(voteId, request, principal.userId());
         log.info("User {} voted on vote {}", principal.userId(), voteId);
         return ResponseEntity.ok(ApiResponse.ok(response));
     }

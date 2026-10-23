@@ -54,7 +54,7 @@ class UserProfilePostgresTest extends PostgresRepositoryTest {
         Vote inviteOnly = persistPoll(owner, now.minusHours(1), now.plusDays(1), "A", "B");
         inviteOnly.setAudience(Audience.INVITE_ONLY);
         for (Vote poll : List.of(publicPoll, unlisted, inviteOnly)) {
-            em.persist(new UserVote(voter, poll, poll.getOptions().iterator().next(), null));
+            em.persist(new UserVote(voter, poll, poll.getOptions().iterator().next()));
         }
         em.flush();
         em.clear();

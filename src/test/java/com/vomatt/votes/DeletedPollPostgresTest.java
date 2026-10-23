@@ -68,7 +68,7 @@ class DeletedPollPostgresTest extends PostgresRepositoryTest {
         Vote vote = persistPoll(owner, start, end, "A", "B");
         vote.setTitle(title + " " + word);
         vote.addTag(tag);
-        em.persist(new UserVote(voter, vote, vote.getOptions().iterator().next(), null));
+        em.persist(new UserVote(voter, vote, vote.getOptions().iterator().next()));
         return vote;
     }
 
@@ -107,7 +107,7 @@ class DeletedPollPostgresTest extends PostgresRepositoryTest {
         com.vomatt.votes.dto.VoteRequest request = new com.vomatt.votes.dto.VoteRequest();
         request.setOptionIds(List.of(poll.getOptions().iterator().next().getId().toString()));
 
-        VoteResponse response = voteService.vote(poll.getId().toString(), request, owner.getId().toString(), null);
+        VoteResponse response = voteService.vote(poll.getId().toString(), request, owner.getId().toString());
 
         assertThat(response.getDeletable()).isTrue();
     }

@@ -98,7 +98,7 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
     private VoteResponse cast() {
         VoteRequest request = new VoteRequest();
         request.setOptionIds(List.of(optionA.toString()));
-        return voteService.vote(poll.getId().toString(), request, voter.getId().toString(), "127.0.0.1");
+        return voteService.vote(poll.getId().toString(), request, voter.getId().toString());
     }
 
     private VoteResponse close() {
@@ -394,7 +394,7 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
     private VoteResponse castAs(User user) {
         VoteRequest request = new VoteRequest();
         request.setOptionIds(List.of(optionA.toString()));
-        return voteService.vote(poll.getId().toString(), request, user.getId().toString(), "127.0.0.1");
+        return voteService.vote(poll.getId().toString(), request, user.getId().toString());
     }
 
     private static boolean unsealed(VoteResponse response) {
@@ -434,7 +434,7 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
         VoteRequest request = new VoteRequest();
         request.setOptionIds(List.of(optionB.toString()));
 
-        VoteResponse ended = voteService.vote(poll.getId().toString(), request, last.getId().toString(), "127.0.0.1");
+        VoteResponse ended = voteService.vote(poll.getId().toString(), request, last.getId().toString());
 
         // The end is set on the locked Poll before the count updates clear the persistence context
         assertThat(unsealed(ended)).isTrue();

@@ -121,7 +121,7 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
         poll("untouched", now.minusHours(2), now.plusDays(1));
         User voter = persistUser("list-voter-" + System.nanoTime());
         VoteOption chosen = voted.getOptions().iterator().next();
-        em.persist(new UserVote(voter, voted, chosen, null));
+        em.persist(new UserVote(voter, voted, chosen));
         em.flush();
         em.createNativeQuery("UPDATE vomatt.vote_options SET vote_count = 1 WHERE id = :id")
                 .setParameter("id", chosen.getId()).executeUpdate();

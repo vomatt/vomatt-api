@@ -308,13 +308,13 @@ public class VoteService {
      * The response is built after the locked write commits, so the Poll-row lock covers only the write.
      */
     @Transactional(propagation = Propagation.SUPPORTS)
-    public VoteResponse vote(String voteId, VoteRequest request, String userId, String ipAddress) {
+    public VoteResponse vote(String voteId, VoteRequest request, String userId) {
         checkBallotRateLimit(userId);
-        UUID optionUuid = transactionTemplate.execute(s -> castBallot(voteId, request, userId, ipAddress));
+        UUID optionUuid = transactionTemplate.execute(s -> castBallot(voteId, request, userId));
         return transactionTemplate.execute(s -> ballotResponse(UUID.fromString(voteId), userId, optionUuid));
     }
 
-    private UUID castBallot(String voteId, VoteRequest request, String userId, String ipAddress) {
+    private UUID castBallot(String voteId, VoteRequest request, String userId) {
         UUID voteUuid = UUID.fromString(voteId);
         UUID userUuid = UUID.fromString(userId);
         Vote vote = lockOpenVote(voteUuid, userId);
@@ -341,7 +341,7 @@ public class VoteService {
             previous.get().setAnonymous(anonymous);
         } else {
             Optional<UUID> releasedOptionId = previous.map(this::deleteBallot);
-            UserVote ballot = new UserVote(user, vote, option, ipAddress);
+            UserVote ballot = new UserVote(user, vote, option);
             ballot.setAnonymous(anonymous);
             userVoteRepository.saveAndFlush(ballot);
             // Before the count updates below: each clears the persistence context, detaching the locked Poll, and the

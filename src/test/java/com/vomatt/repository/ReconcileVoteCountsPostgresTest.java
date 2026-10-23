@@ -28,7 +28,7 @@ class ReconcileVoteCountsPostgresTest extends PostgresRepositoryTest {
         Vote voted = persistPoll(owner, now.minusHours(1), now.plusDays(1), "A", "B");
         Vote empty = persistPoll(owner, now.minusHours(1), now.plusDays(1), "A", "B");
         VoteOption chosen = voted.getOptions().iterator().next();
-        em.persist(new UserVote(voter, voted, chosen, null));
+        em.persist(new UserVote(voter, voted, chosen));
         em.flush();
         em.createNativeQuery("UPDATE vomatt.votes SET turnout = 7 WHERE id IN (:ids)")
                 .setParameter("ids", java.util.List.of(voted.getId(), empty.getId())).executeUpdate();

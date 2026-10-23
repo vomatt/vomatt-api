@@ -38,7 +38,7 @@ class VoterListPostgresTest extends PostgresRepositoryTest {
         List<String> expected = new ArrayList<>();
         for (int i = 0; i < 5; i++) {
             User voter = persistUser("vl-voter-" + i);
-            em.persist(new UserVote(voter, poll, option, null));
+            em.persist(new UserVote(voter, poll, option));
             expected.add(voter.getUsername());
         }
         em.flush();
@@ -68,7 +68,7 @@ class VoterListPostgresTest extends PostgresRepositoryTest {
         Vote poll = persistPoll(owner, now.minusDays(2), now.minusDays(1), "A", "B");
         User voter = persistUser("vl-av-voter");
         voter.setAvatarUrl("bot:mochi");
-        em.persist(new UserVote(voter, poll, poll.getOptions().iterator().next(), null));
+        em.persist(new UserVote(voter, poll, poll.getOptions().iterator().next()));
         em.flush();
         em.clear();
         String pollId = poll.getId().toString();
@@ -87,7 +87,7 @@ class VoterListPostgresTest extends PostgresRepositoryTest {
         OffsetDateTime now = OffsetDateTime.now();
         Vote poll = persistPoll(owner, now.minusDays(2), now.minusDays(1), "A", "B");
         VoteOption option = poll.getOptions().iterator().next();
-        em.persist(new UserVote(persistUser("vl-anon-named"), poll, option, null));
+        em.persist(new UserVote(persistUser("vl-anon-named"), poll, option));
         persistAnonymousBallot(persistUser("vl-anon-hidden-0"), poll, option);
         em.flush();
         em.clear();
@@ -130,7 +130,7 @@ class VoterListPostgresTest extends PostgresRepositoryTest {
     }
 
     private void persistAnonymousBallot(User user, Vote poll, VoteOption option) {
-        UserVote ballot = new UserVote(user, poll, option, null);
+        UserVote ballot = new UserVote(user, poll, option);
         ballot.setAnonymous(true);
         em.persist(ballot);
     }

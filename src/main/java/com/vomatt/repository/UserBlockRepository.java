@@ -32,15 +32,22 @@ public interface UserBlockRepository extends JpaRepository<UserBlock, UUID> {
     @Query("DELETE FROM UserBlock b WHERE b.blocker.id = :blockerId AND b.blocked.id = :blockedId")
     int deleteByBlockerIdAndBlockedId(@Param("blockerId") UUID blockerId, @Param("blockedId") UUID blockedId);
 
-    /** Keyset page of the users a user blocked, most recently blocked first. Null cursor values for the first page. */
+    /**
+     * Keyset page of the users a user blocked, most recently blocked first; suspended users are left out, as in user
+     * search. Null cursor values for the first page.
+     */
     @Query("""
             SELECT b FROM UserBlock b JOIN FETCH b.blocked
-            WHERE b.blocker.id = :blockerId
+            WHERE b.blocker.id = :blockerId AND b.blocked.active = true
               AND (CAST(:afterTime AS OffsetDateTime) IS NULL OR b.createdAt < :afterTime
                    OR (b.createdAt = :afterTime AND b.id < :afterId))
             ORDER BY b.createdAt DESC, b.id DESC""")
     List<UserBlock> findPage(@Param("blockerId") UUID blockerId, @Param("afterTime") OffsetDateTime afterTime,
                              @Param("afterId") UUID afterId, Limit limit);
+
+    /** Data export: every user the user blocked, suspended ones included, oldest first. */
+    @Query("SELECT b FROM UserBlock b JOIN FETCH b.blocked WHERE b.blocker.id = :blockerId ORDER BY b.createdAt, b.id")
+    List<UserBlock> findAllByBlocker(@Param("blockerId") UUID blockerId);
 
     long countByBlockerId(UUID blockerId);
 

@@ -6,8 +6,11 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 
-/** Everything the service holds about the caller, for a data-portability request; never includes other users' data. */
-@Schema(description = "Export of the caller's own data: profile, preferences, Polls created, Comments written, Ballots cast and feedback sent")
+/**
+ * Everything the service holds about the caller, for a data-portability request; of other users it carries only the id
+ * and username of those the caller follows or blocked.
+ */
+@Schema(description = "Export of the caller's own data: profile, preferences, Polls created, Comments written, Ballots cast, feedback sent, follows and blocks")
 public record UserDataExportResponse(
         @Schema(description = "When the export was produced", example = "2026-10-23T10:00:00+08:00") OffsetDateTime exportedAt,
         @Schema(description = "The profile as returned by GET /api/users/me") MyProfileResponse profile,
@@ -15,7 +18,9 @@ public record UserDataExportResponse(
         @Schema(description = "Polls the caller created, newest first, Deleted ones included") List<PollExport> polls,
         @Schema(description = "Comments the caller wrote that are not deleted") List<CommentExport> comments,
         @Schema(description = "Ballots the caller holds, oldest first") List<BallotExport> ballots,
-        @Schema(description = "Feedback the caller sent, oldest first") List<FeedbackExport> feedback
+        @Schema(description = "Feedback the caller sent, oldest first") List<FeedbackExport> feedback,
+        @Schema(description = "Users the caller follows, oldest first, suspended ones included") List<RelationExport> following,
+        @Schema(description = "Users the caller blocked, oldest first, suspended ones included") List<RelationExport> blocking
 ) {
     @Schema(description = "A Poll the caller created")
     public record PollExport(
@@ -53,5 +58,12 @@ public record UserDataExportResponse(
             @Schema(example = "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70") String id,
             @Schema(example = "Please add dark mode.") String content,
             OffsetDateTime createdAt
+    ) {}
+
+    @Schema(description = "A user the caller follows or blocked")
+    public record RelationExport(
+            @Schema(example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47") String userId,
+            @Schema(example = "bob") String username,
+            @Schema(description = "When the follow or block was added") OffsetDateTime since
     ) {}
 }

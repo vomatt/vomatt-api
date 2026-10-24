@@ -29,7 +29,7 @@ public final class SecurityEndpoints {
      * Authenticated /api/votes sub-paths. The Poll paths in {@link #PUBLIC_GET} only match UUIDs, so they already don't permit these paths;
      * they are listed here explicitly as a second line of defense and matched before {@link #PUBLIC_GET}.
      */
-    public static final String[] AUTHENTICATED_VOTES = { "/api/votes/my", "/api/votes/*/my-vote-status",
+    public static final String[] AUTHENTICATED_VOTES = { "/api/votes/my", "/api/votes/following", "/api/votes/*/my-vote-status",
             "/api/votes/*/voters", "/api/votes/*/invitees", "/api/votes/*/invitees/*" };
 
     /**

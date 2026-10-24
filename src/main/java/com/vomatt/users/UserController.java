@@ -75,7 +75,7 @@ public class UserController {
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"exportedAt":"2026-10-23T10:00:00+08:00","profile":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":null,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","points":120,"membershipLevel":"basic","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":1,"totalVotes":1,"visibilitySettings":{"firstName":false,"lastName":false,"location":true,"points":false,"displayName":true,"bio":true,"membershipLevel":false},"anonymousBallotByDefault":false},"preferences":{"visibility.location":"true"},"polls":[{"id":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","title":"Lunch?","description":null,"audience":"PUBLIC","startTime":"2026-10-01T12:00:00+08:00","endTime":"2026-10-08T12:00:00+08:00","createdAt":"2026-10-01T12:00:00+08:00","deleted":false,"options":["Ramen","Sushi"]}],"comments":[{"id":"0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b","voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","text":"Ramen!","createdAt":"2026-10-02T09:00:00+08:00"}],"ballots":[{"voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","voteTitle":"Lunch?","optionId":"0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813","optionText":"Ramen","anonymous":false,"castAt":"2026-10-02T08:30:00+08:00"}],"feedback":[{"id":"0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70","content":"Please add dark mode.","createdAt":"2026-10-03T10:00:00+08:00"}]},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"exportedAt":"2026-10-23T10:00:00+08:00","profile":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":null,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","points":120,"membershipLevel":"basic","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":1,"totalVotes":1,"visibilitySettings":{"firstName":false,"lastName":false,"location":true,"points":false,"displayName":true,"bio":true,"membershipLevel":false},"anonymousBallotByDefault":false},"preferences":{"visibility.location":"true"},"polls":[{"id":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","title":"Lunch?","description":null,"audience":"PUBLIC","startTime":"2026-10-01T12:00:00+08:00","endTime":"2026-10-08T12:00:00+08:00","createdAt":"2026-10-01T12:00:00+08:00","deleted":false,"options":["Ramen","Sushi"]}],"comments":[{"id":"0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b","voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","text":"Ramen!","createdAt":"2026-10-02T09:00:00+08:00"}],"ballots":[{"voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","voteTitle":"Lunch?","optionId":"0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813","optionText":"Ramen","anonymous":false,"castAt":"2026-10-02T08:30:00+08:00"}],"feedback":[{"id":"0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70","content":"Please add dark mode.","createdAt":"2026-10-03T10:00:00+08:00"}],"following":[{"userId":"0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f","username":"bob","since":"2026-10-04T10:00:00+08:00"}],"blocking":[]},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "Already exported today (`common.rate_limited`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
@@ -85,7 +85,8 @@ public class UserController {
             **Precondition**: not exported yet today (UTC)
             **Behavior**: returns everything stored about the caller in one JSON document: the profile (as `GET /api/users/me`), stored preferences, \
             Polls the caller created (Deleted included, with option texts), Comments written (not deleted), Ballots cast (with the chosen option; \
-            an Anonymous Ballot of an Ended Poll has no option once sealed) and feedback sent. Nothing about other users is included.
+            an Anonymous Ballot of an Ended Poll has no option once sealed), feedback sent, and the users the caller follows and blocked \
+            (`following`, `blocking`, oldest first, suspended accounts included). Of other users, only those follows' and blocks' ids and usernames are included.
             **Side effects**: none; counted toward the one export per UTC day
             **Errors**:
             - 404 `user.not_found`: the account no longer exists
@@ -274,7 +275,7 @@ public class UserController {
                             {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Block a user", description = """
             **Auth**: required
-            **Precondition**: `userId` is another existing account
+            **Precondition**: `userId` is another existing, active account
             **Behavior**: one-way block. From then on the caller no longer sees, in `GET /api/votes` (Feed / Explore / Search / Top), \
             Polls the blocked user created, nor, in `GET /api/votes/{voteId}/comments` and its replies, Comment threads the blocked user \
             started or Replies they wrote. Nothing else changes: the Poll detail, voter list, profile and My Polls still show them, \
@@ -283,8 +284,7 @@ public class UserController {
             **Errors**:
             - 400 `user.block.self`: `userId` is the caller's own id
             - 400 `common.bad_request`: `userId` is not a valid id
-            - 404 `user.not_found`: no account with this id
-            - 409 `common.conflict`: the same block was added concurrently; it is in place, nothing to retry""")
+            - 404 `user.not_found`: no account with this id, or it is suspended""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> blockUser(
             @Parameter(description = "Id of the user to block", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47")
             @PathVariable String userId,
@@ -312,6 +312,82 @@ public class UserController {
             @PathVariable String userId,
             @AuthenticationPrincipal UserPrincipal principal) {
         userService.unblockUser(principal.userId(), userId);
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
+    @GetMapping("/me/follows")
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of followed users",
+            content = @Content(examples = @ExampleObject(value = """
+                    {"success":true,"data":{"items":[{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice","avatarUrl":"bot:boba"}],"nextCursor":null},"message":null,"errorCode":null,"error":null}""")))
+    @Operation(summary = "List followed users", description = """
+            **Auth**: required
+            **Precondition**: none
+            **Behavior**: users the caller follows, most recently followed first, cursor-paged \
+            (`limit` 1-50, default 20; out-of-range values are clamped). `nextCursor` is `null` on the last page. \
+            Each item carries only public profile fields, like user search.
+            **Side effects**: none
+            **Errors**:
+            - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list""")
+    public ResponseEntity<ApiResponse<CursorResponse<UserDto>>> listFollowedUsers(
+            @Parameter(description = "`nextCursor` returned by the previous page") @RequestParam(required = false) String cursor,
+            @Parameter(description = "Page size (1-50, default 20)") @RequestParam(required = false) Integer limit,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(userService.listFollowedUsers(principal.userId(), cursor, limit)));
+    }
+
+    @PostMapping("/me/follows/{userId}")
+    @Auditable(action = "FOLLOW", resourceType = "USER", resourceIdIndex = 0)
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
+            content = @Content(examples = @ExampleObject(value = """
+                    {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Following yourself (errorCode `user.follow.self`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(value = """
+                            {"success":false,"data":null,"message":"You cannot follow yourself","errorCode":"user.follow.self","error":"You cannot follow yourself"}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account does not exist (errorCode `user.not_found`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(value = """
+                            {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
+    @Operation(summary = "Follow a user", description = """
+            **Auth**: required
+            **Precondition**: `userId` is another existing, active account
+            **Behavior**: one-way follow. From then on `GET /api/votes/following` lists PUBLIC Polls the followed user creates. \
+            Following is private: the followed user is not told, and no follower list or count is exposed. \
+            Idempotent: following an already followed user succeeds.
+            **Side effects**: the follow is written to the audit log
+            **Errors**:
+            - 400 `user.follow.self`: `userId` is the caller's own id
+            - 400 `common.bad_request`: `userId` is not a valid id
+            - 404 `user.not_found`: no account with this id, or it is suspended""")
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> followUser(
+            @Parameter(description = "Id of the user to follow", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47")
+            @PathVariable String userId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        userService.followUser(principal.userId(), userId);
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
+    @DeleteMapping("/me/follows/{userId}")
+    @Auditable(action = "UNFOLLOW", resourceType = "USER", resourceIdIndex = 0)
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
+            content = @Content(examples = @ExampleObject(value = """
+                    {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
+    @Operation(summary = "Unfollow a user", description = """
+            **Auth**: required
+            **Precondition**: none
+            **Behavior**: removes the caller's follow of the user, so their Polls leave `GET /api/votes/following`. \
+            Idempotent: succeeds when the user was not followed or does not exist.
+            **Side effects**: the unfollow is written to the audit log
+            **Errors**:
+            - 400 `common.bad_request`: `userId` is not a valid id""")
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> unfollowUser(
+            @Parameter(description = "Id of the user to unfollow", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47")
+            @PathVariable String userId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        userService.unfollowUser(principal.userId(), userId);
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 

@@ -2,6 +2,14 @@
 
 Contract changes that affect the frontend. 💥 BREAKING means frontend code must change. See [openapi.json](openapi.json) for the contract snapshot and [error-codes.md](error-codes.md) for error codes.
 
+## 2026-10-24
+
+- New user follow (one-way, private): `POST /api/users/me/follows/{userId}` follows a user (idempotent; 400 `user.follow.self` for yourself, 404 `user.not_found` for an unknown id), `DELETE /api/users/me/follows/{userId}` unfollows (idempotent), `GET /api/users/me/follows` lists followed users most recently followed first (cursor-paged, items shaped like `GET /api/users/search`). The followed user is not told; no follower list or count is exposed.
+- New `GET /api/votes/following` (sign-in required): Open PUBLIC Polls created by followed users, most recently opened first, cursor-paged like `GET /api/votes`. Polls of users the caller blocked are left out. Deploy: run `schema.sql` (adds `user_follows`).
+- Suspended accounts: `POST /api/users/me/follows/{userId}` and `POST /api/users/me/blocks/{userId}` return 404 `user.not_found` for a suspended account (as its profile does), and `GET /api/users/me/follows` / `GET /api/users/me/blocks` leave suspended users out. An existing follow or block is kept and shows again once the account is unsuspended. `DELETE` still succeeds.
+- `GET /api/users/me/export` adds `following` and `blocking` (`{ userId, username, since }`, oldest first, suspended accounts included).
+- OpenAPI only: the 409 `common.conflict` line is removed from `POST /api/users/me/blocks/{userId}`; a concurrent duplicate block already succeeded as a no-op.
+
 ## 2026-10-23
 
 - Admin: more limits can be changed at runtime with dictionary items via `/api/admin/lookups` (`lookupType` `config`, `lookupValue` a positive number; leave `frontendUsing` off). Without an active, valid item the current default applies. Keys: `invite_list_max_per_owner` (default 50), `invite_list_max_members` (100), `invitation_email_daily_limit` (200), `vote_max_options` (10), `vote_max_duration_days` (365), `vote_delete_window_minutes` (20). Error messages (`invite_list.max_reached`, `invite_list.members.max`, `vote.options.max`, `vote.duration.exceeded`, `vote.delete.window_passed`) report the value in effect. `vote_max_options` is never below the 2-option minimum. Lowering `invite_list_max_members` keeps larger lists as they are, but they accept no new members until under the limit.

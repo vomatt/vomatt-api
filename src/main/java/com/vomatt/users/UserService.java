@@ -12,8 +12,10 @@ import com.vomatt.users.dto.UserDto;
 import com.vomatt.users.dto.UserProfileResponse;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserBlock;
+import com.vomatt.entity.UserFollow;
 import com.vomatt.entity.UserPreference;
 import com.vomatt.repository.UserBlockRepository;
+import com.vomatt.repository.UserFollowRepository;
 import com.vomatt.repository.UserPreferenceRepository;
 import com.vomatt.repository.UserProfileProjection;
 import com.vomatt.common.response.Cursor;
@@ -45,6 +47,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final UserPreferenceRepository preferenceRepository;
     private final UserBlockRepository blockRepository;
+    private final UserFollowRepository followRepository;
     private final UserMapper userMapper;
     private final RefreshTokenService refreshTokenService;
     private final VoteOptionRepository voteOptionRepository;
@@ -133,10 +136,7 @@ public class UserService {
     /** Blocks a user (one-way, see {@link UserBlock}); idempotent. */
     @Transactional
     public void blockUser(String userId, String targetId) {
-        User target = findUserById(targetId);
-        if (target.getId().toString().equals(userId)) {
-            throw ApiException.badRequest(MessageKey.USER_BLOCK_SELF);
-        }
+        User target = findOtherActiveUser(userId, targetId, MessageKey.USER_BLOCK_SELF);
         if (blockRepository.insertIfAbsent(UUIDv7Generator.generateId(), UUID.fromString(userId), target.getId()) > 0) {
             log.info("User {} blocked user {}", userId, targetId);
         }
@@ -159,6 +159,34 @@ public class UserService {
             after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
         return CursorResponse.of(rows, size, Cursor.Scope.BLOCKS, b -> Cursor.of(b.getCreatedAt(), b.getId()),
             page -> toSearchResults(page.stream().map(UserBlock::getBlocked).toList()));
+    }
+
+    /** Follows a user (one-way, see {@link UserFollow}); idempotent. */
+    @Transactional
+    public void followUser(String userId, String targetId) {
+        User target = findOtherActiveUser(userId, targetId, MessageKey.USER_FOLLOW_SELF);
+        if (followRepository.insertIfAbsent(UUIDv7Generator.generateId(), UUID.fromString(userId), target.getId()) > 0) {
+            log.info("User {} followed user {}", userId, targetId);
+        }
+    }
+
+    /** Unfollows a user; idempotent, also when the user does not exist. */
+    @Transactional
+    public void unfollowUser(String userId, String targetId) {
+        if (followRepository.deleteByFollowerIdAndFollowedId(UUID.fromString(userId), UUID.fromString(targetId)) > 0) {
+            log.info("User {} unfollowed user {}", userId, targetId);
+        }
+    }
+
+    /** Users the caller follows, most recently followed first, as public profile fields. */
+    @Transactional(readOnly = true)
+    public CursorResponse<UserDto> listFollowedUsers(String userId, String cursor, Integer limit) {
+        int size = CursorResponse.limit(limit);
+        Cursor after = Cursor.decode(cursor, Cursor.Scope.FOLLOWS);
+        List<UserFollow> rows = followRepository.findPage(UUID.fromString(userId),
+            after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
+        return CursorResponse.of(rows, size, Cursor.Scope.FOLLOWS, f -> Cursor.of(f.getCreatedAt(), f.getId()),
+            page -> toSearchResults(page.stream().map(UserFollow::getFollowed).toList()));
     }
 
     /** Public profile fields of a page of users, display name masked by each owner's setting. */
@@ -241,11 +269,20 @@ public class UserService {
         List<com.vomatt.users.dto.UserDataExportResponse.FeedbackExport> feedback = feedbackRepository.findByUserIdOrderByCreatedAt(userUuid).stream()
                 .map(f -> new com.vomatt.users.dto.UserDataExportResponse.FeedbackExport(f.getId().toString(), f.getContent(), f.getCreatedAt()))
                 .toList();
+        List<com.vomatt.users.dto.UserDataExportResponse.RelationExport> following = followRepository.findAllByFollower(userUuid).stream()
+                .map(f -> new com.vomatt.users.dto.UserDataExportResponse.RelationExport(f.getFollowed().getId().toString(),
+                        f.getFollowed().getUsername(), f.getCreatedAt()))
+                .toList();
+        List<com.vomatt.users.dto.UserDataExportResponse.RelationExport> blocking = blockRepository.findAllByBlocker(userUuid).stream()
+                .map(b -> new com.vomatt.users.dto.UserDataExportResponse.RelationExport(b.getBlocked().getId().toString(),
+                        b.getBlocked().getUsername(), b.getCreatedAt()))
+                .toList();
         if (redisService.incrementAndExpire(EXPORT_COUNTER_NS, userId + ":" + day, java.time.Duration.ofDays(1)) > 1) {
             throw ApiException.tooManyRequests(MessageKey.COMMON_RATE_LIMITED);
         }
         log.info("Data export produced for user {}", userId);
-        return new com.vomatt.users.dto.UserDataExportResponse(java.time.OffsetDateTime.now(), profile, preferences, polls, comments, ballots, feedback);
+        return new com.vomatt.users.dto.UserDataExportResponse(java.time.OffsetDateTime.now(), profile, preferences, polls, comments, ballots, feedback,
+                following, blocking);
     }
 
     @Transactional
@@ -328,6 +365,21 @@ public class UserService {
         }
 
         return settings;
+    }
+
+    /**
+     * Target of a block or follow: a suspended account is not found, as on its profile and in user search, so these
+     * endpoints do not reveal that it exists.
+     */
+    private User findOtherActiveUser(String userId, String targetId, MessageKey selfKey) {
+        User target = findUserById(targetId);
+        if (!target.isActive()) {
+            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
+        }
+        if (target.getId().toString().equals(userId)) {
+            throw ApiException.badRequest(selfKey);
+        }
+        return target;
     }
 
     private User findUserById(String userId) {

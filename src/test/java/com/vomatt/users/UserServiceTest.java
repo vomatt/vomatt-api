@@ -35,6 +35,7 @@ import com.vomatt.entity.User;
 import com.vomatt.entity.UserPreference;
 import com.vomatt.users.dto.UserDto;
 import com.vomatt.repository.UserBlockRepository;
+import com.vomatt.repository.UserFollowRepository;
 import com.vomatt.repository.UserPreferenceRepository;
 import com.vomatt.users.dto.UpdateProfileRequest;
 import com.vomatt.repository.UserProfileProjection;
@@ -49,6 +50,7 @@ class UserServiceTest {
     @Mock UserRepository userRepository;
     @Mock UserPreferenceRepository preferenceRepository;
     @Mock UserBlockRepository blockRepository;
+    @Mock UserFollowRepository followRepository;
     @Spy UserMapper userMapper = new UserMapper();
     @Mock RefreshTokenService refreshTokenService;
     @Mock VoteOptionRepository voteOptionRepository;
@@ -69,6 +71,38 @@ class UserServiceTest {
         assertThatThrownBy(() -> userService.blockUser(id.toString(), id.toString()))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_BLOCK_SELF));
+        verify(blockRepository, never()).insertIfAbsent(any(), any(), any());
+    }
+
+    @Test
+    void shouldRejectWhenFollowingSelf() {
+        UUID id = UUID.randomUUID();
+        when(userRepository.findById(id)).thenReturn(Optional.of(User.builder().id(id).username("u").build()));
+
+        assertThatThrownBy(() -> userService.followUser(id.toString(), id.toString()))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_FOLLOW_SELF));
+        verify(followRepository, never()).insertIfAbsent(any(), any(), any());
+    }
+
+    @Test
+    void shouldRejectAsNotFoundWhenFollowingSuspendedOrUnknownUser() {
+        UUID suspended = UUID.randomUUID();
+        UUID unknown = UUID.randomUUID();
+        when(userRepository.findById(suspended))
+                .thenReturn(Optional.of(User.builder().id(suspended).username("s").active(false).build()));
+        when(userRepository.findById(unknown)).thenReturn(Optional.empty());
+        String caller = UUID.randomUUID().toString();
+
+        for (UUID target : List.of(suspended, unknown)) {
+            assertThatThrownBy(() -> userService.followUser(caller, target.toString()))
+                    .isInstanceOfSatisfying(ApiException.class,
+                            e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND));
+            assertThatThrownBy(() -> userService.blockUser(caller, target.toString()))
+                    .isInstanceOfSatisfying(ApiException.class,
+                            e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND));
+        }
+        verify(followRepository, never()).insertIfAbsent(any(), any(), any());
         verify(blockRepository, never()).insertIfAbsent(any(), any(), any());
     }
 

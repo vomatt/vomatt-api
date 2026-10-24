@@ -108,6 +108,37 @@ public class VoteListRepository {
     }
 
     /**
+     * Following list: Open Public Polls created by users the follower follows (and has not blocked), most recently
+     * opened first. Starts from the follower's follows and reads each followed user's newest Polls through
+     * idx_votes_creator_start_id, so the cost grows with the follows, not with every Open Poll.
+     */
+    @SuppressWarnings("unchecked")
+    public List<Vote> findFollowing(UUID followerId, Cursor after, OffsetDateTime now, int limit) {
+        // ponytail: walks each followed user's Polls past Ended ones; add an Open-only partial index if creators pile up history
+        String keyset = after == null ? "" : " AND (v.start_time, v.id) < (:afterKey, :afterId)";
+        String sql = """
+                SELECT v.* FROM vomatt.user_follows f
+                CROSS JOIN LATERAL (
+                    SELECT * FROM vomatt.votes v
+                    WHERE v.creator_id = f.followed_id AND v.deleted_at IS NULL AND v.audience = 'PUBLIC'
+                      AND v.start_time <= :now AND v.end_time > :now""" + keyset + """
+
+                    ORDER BY v.start_time DESC, v.id DESC LIMIT :limit) v
+                WHERE f.follower_id = :followerId
+                  AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b
+                                  WHERE b.blocker_id = :followerId AND b.blocked_id = f.followed_id)
+                ORDER BY v.start_time DESC, v.id DESC LIMIT :limit""";
+        Query nativeQuery = em.createNativeQuery(sql, Vote.class)
+                .setParameter("followerId", followerId)
+                .setParameter("now", now)
+                .setParameter("limit", limit);
+        if (after != null) {
+            nativeQuery.setParameter("afterKey", after.timeKey()).setParameter("afterId", after.id());
+        }
+        return nativeQuery.getResultList();
+    }
+
+    /**
      * My Polls: Polls the user created or holds a Ballot in. Not yet Ended (Scheduled + Open) closing soonest
      * first, or Ended most recently ended first.
      */

@@ -314,6 +314,27 @@ public class VoteController {
                 limit, principal != null ? principal.userId() : null)));
     }
 
+    @GetMapping("/following")
+    @CommonApiResponses
+    @Operation(summary = "Following Polls", description = """
+            **Auth**: required
+            **Precondition**: none
+            **Behavior**: cursor-paged Open PUBLIC Polls created by users the caller follows (`POST /api/users/me/follows/{userId}`), \
+            most recently opened first. Scheduled, Ended, UNLISTED and INVITE_ONLY Polls never appear, nor Polls of users the caller blocked. \
+            `nextCursor` null means the last page; `limit` is clamped to 1-50 (default 20).
+            **Side effects**: none
+            **Errors**:
+            - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list
+            """)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of Polls by followed users",
+            content = @Content(examples = @ExampleObject(name = "Page", value = EX_PAGE_OF_POLLS)))
+    public ResponseEntity<ApiResponse<CursorResponse<VoteResponse>>> getFollowingVotes(
+            @Parameter(description = "`nextCursor` of the previous page; omit for the first page") @RequestParam(required = false) String cursor,
+            @Parameter(description = "Page size, 1-50 (default 20); out-of-range values are clamped", example = "20") @RequestParam(required = false) Integer limit,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(voteService.listFollowingVotes(principal.userId(), cursor, limit)));
+    }
+
     @GetMapping("/my")
     @CommonApiResponses
     @Operation(summary = "My Polls", description = """

@@ -563,6 +563,30 @@ class VoteControllerTest {
         }
     }
 
+    // ─── GET /api/votes/following ─────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("GET /api/votes/following")
+    class GetFollowingVotesTests {
+
+        @Test
+        @DisplayName("should require sign-in")
+        void shouldRequireSignInWhenReadingFollowing() {
+            assertThat(isPublic("GET", "/api/votes/following")).isFalse();
+        }
+
+        @Test
+        @DisplayName("should pass the caller, cursor and limit to the service")
+        void shouldReturnPageWhenAuthenticated() throws Exception {
+            authenticate();
+            when(voteService.listFollowingVotes(USER_ID, "c1", 5)).thenReturn(new CursorResponse<>(List.of(), null));
+
+            mockMvc.perform(get("/api/votes/following").param("cursor", "c1").param("limit", "5"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+        }
+    }
+
     // ─── POST /api/votes/{voteId}/vote ────────────────────────────────────────
 
 

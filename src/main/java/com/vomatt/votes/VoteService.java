@@ -250,6 +250,16 @@ public class VoteService {
             page -> toResponses(page, userId));
     }
 
+    /** Following list: Open PUBLIC Polls created by users the caller follows, most recently opened first. */
+    @Transactional(readOnly = true)
+    public CursorResponse<VoteResponse> listFollowingVotes(String userId, String cursor, Integer limit) {
+        int size = CursorResponse.limit(limit);
+        List<Vote> rows = voteListRepository.findFollowing(UUID.fromString(userId),
+            Cursor.decode(cursor, Cursor.Scope.FEED_FOLLOWING), OffsetDateTime.now(), size + 1);
+        return CursorResponse.of(rows, size, Cursor.Scope.FEED_FOLLOWING, v -> Cursor.of(v.getStartTime(), v.getId()),
+            page -> toResponses(page, userId));
+    }
+
     /**
      * My Polls: Polls the user created, holds a Ballot in or is invited to. {@code status=open} (default) lists Scheduled
      * and Open ones closing soonest first; {@code status=ended} lists Ended ones most recently ended first. Each item

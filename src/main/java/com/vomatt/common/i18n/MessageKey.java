@@ -81,6 +81,7 @@ public enum MessageKey {
     USER_PHONE_TAKEN("user.phone.taken"),
     USER_DELETE_FORBIDDEN("user.delete.forbidden"),
     USER_BLOCK_SELF("user.block.self"),
+    USER_FOLLOW_SELF("user.follow.self"),
 
     // === Vote ===
     VOTE_NOT_FOUND("vote.not_found"),

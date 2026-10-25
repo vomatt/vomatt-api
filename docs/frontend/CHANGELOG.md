@@ -2,6 +2,12 @@
 
 Contract changes that affect the frontend. 💥 BREAKING means frontend code must change. See [openapi.json](openapi.json) for the contract snapshot and [error-codes.md](error-codes.md) for error codes.
 
+## 2026-10-25
+
+- `GET /api/users/{username}` adds `id` and the viewer relation `isFollowing` / `isBlocked`: whether the caller follows / has blocked the user, `null` when signed out (an invalid or expired token is treated as signed out, not 401), `false` on the caller's own profile. The `PATCH /api/users/me` response carries the same fields (`id` set, both flags `false`).
+- 💥 New `GET /api/users/{username}/followers` and `GET /api/users/{username}/following` (sign-in required; 401 when signed out): who follows the user / whom the user follows, most recently followed first, cursor-paged like `GET /api/users/me/follows` (items shaped like `GET /api/users/search`). Suspended users are left out; blocks do not filter these lists (they still hide only Polls and Comments). An unknown or suspended `username` is 404 `user.not_found`. Follow relationships are therefore no longer private (the 2026-10-24 entry said no follower list was exposed). A cursor is accepted only by the list and user it came from: another list, or the same list of another user, is 400 `common.cursor_invalid`. Deploy: run `schema.sql` (adds `idx_user_follows_followed_created`, drops `idx_user_follows_followed`).
+- 💥 Blocking a user now also unfollows them, and `POST /api/users/me/follows/{userId}` for a user the caller blocked is 400 `user.follow.blocked` (unblock first). `isFollowing` and `isBlocked` are therefore never both `true`. Deploy: run `db/migrations/2026-10-25-unfollow-blocked.sql` to remove existing follows of blocked users.
+
 ## 2026-10-24
 
 - New user follow (one-way, private): `POST /api/users/me/follows/{userId}` follows a user (idempotent; 400 `user.follow.self` for yourself, 404 `user.not_found` for an unknown id), `DELETE /api/users/me/follows/{userId}` unfollows (idempotent), `GET /api/users/me/follows` lists followed users most recently followed first (cursor-paged, items shaped like `GET /api/users/search`). The followed user is not told; no follower list or count is exposed.

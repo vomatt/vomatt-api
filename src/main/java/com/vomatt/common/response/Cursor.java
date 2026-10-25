@@ -23,7 +23,8 @@ public record Cursor(String key, UUID id) {
      */
     public enum Scope {
         FEED_NEWEST, FEED_CLOSING, FEED_ENDED, FEED_TOP, MY_OPEN, MY_ENDED, USER_POLLS,
-        COMMENTS, REPLIES, VOTERS, USER_SEARCH, POPULAR_TAGS, BLOCKS, FOLLOWS, FEED_FOLLOWING
+        COMMENTS, REPLIES, VOTERS, USER_SEARCH, POPULAR_TAGS, BLOCKS, FOLLOWS, FEED_FOLLOWING,
+        USER_FOLLOWERS, USER_FOLLOWING
     }
 
     public static Cursor of(OffsetDateTime time, UUID id) {
@@ -79,8 +80,20 @@ public record Cursor(String key, UUID id) {
     }
 
     public String encode(Scope scope) {
+        return encode(scope.name());
+    }
+
+    /**
+     * For a list of one owner (e.g. one user's followers): the cursor is then rejected by the same list of another
+     * owner. A null owner is the same as {@link #encode(Scope)}.
+     */
+    public String encode(Scope scope, UUID owner) {
+        return encode(owner == null ? scope.name() : scope + ":" + owner);
+    }
+
+    private String encode(String tag) {
         return Base64.getUrlEncoder().withoutPadding()
-                .encodeToString((scope + "|" + id + "|" + key).getBytes(StandardCharsets.UTF_8));
+                .encodeToString((tag + "|" + id + "|" + key).getBytes(StandardCharsets.UTF_8));
     }
 
     /**
@@ -88,12 +101,21 @@ public record Cursor(String key, UUID id) {
      * A cursor issued for another list or ordering, or one without a scope, is a bad cursor.
      */
     public static Cursor decode(String token, Scope expected) {
+        return decode(token, expected.name());
+    }
+
+    /** Decodes a cursor issued by {@link #encode(Scope, UUID)} for the same owner (null: unbound). */
+    public static Cursor decode(String token, Scope expected, UUID owner) {
+        return decode(token, owner == null ? expected.name() : expected + ":" + owner);
+    }
+
+    private static Cursor decode(String token, String expected) {
         if (token == null || token.isBlank()) {
             return null;
         }
         try {
             String[] parts = new String(Base64.getUrlDecoder().decode(token), StandardCharsets.UTF_8).split("\\|", 3);
-            if (parts.length < 3 || !parts[0].equals(expected.name())) {
+            if (parts.length < 3 || !parts[0].equals(expected)) {
                 throw ApiException.badRequest(MessageKey.COMMON_CURSOR_INVALID);
             }
             return new Cursor(parts[2], UUID.fromString(parts[1]));

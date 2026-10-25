@@ -32,6 +32,7 @@ class UserFollowPostgresTest extends PostgresRepositoryTest {
 
     @Autowired VoteService voteService;
     @Autowired UserFollowRepository followRepository;
+    @Autowired com.vomatt.repository.UserRepository userRepository;
 
     private User viewer;
     private User followed;
@@ -134,6 +135,64 @@ class UserFollowPostgresTest extends PostgresRepositoryTest {
         assertThat(followRepository.findPage(viewer.getId(), null, null, Limit.of(10))).isEmpty();
         assertThat(followRepository.findAllByFollower(viewer.getId()))
                 .extracting(f -> f.getFollowed().getId()).containsExactly(followed.getId());
+    }
+
+    @Test
+    @DisplayName("should page a user's followers most recently followed first, leaving out suspended followers and other users' follows")
+    void shouldListNewestFirstWhenPagingFollowers() {
+        List<UUID> expected = new ArrayList<>(List.of(viewer.getId()));
+        for (int i = 0; i < 3; i++) {
+            User u = persistUser("uf-follower-" + UUID.randomUUID());
+            em.persist(new UserFollow(u, followed));
+            em.flush();
+            expected.addFirst(u.getId());
+        }
+        User suspended = persistUser("uf-suspended-" + UUID.randomUUID());
+        suspended.setActive(false);
+        em.persist(new UserFollow(suspended, followed));
+        em.persist(new UserFollow(viewer, other));
+        em.flush();
+
+        List<UserFollow> first = followRepository.findFollowersPage(followed.getId(), null, null, Limit.of(2));
+        UserFollow last = first.getLast();
+        List<UserFollow> rest = followRepository.findFollowersPage(followed.getId(), last.getCreatedAt(), last.getId(), Limit.of(10));
+
+        List<UUID> all = new ArrayList<>();
+        first.forEach(f -> all.add(f.getFollower().getId()));
+        rest.forEach(f -> all.add(f.getFollower().getId()));
+        assertThat(all).containsExactlyElementsOf(expected);
+        assertThat(followRepository.findFollowersPage(other.getId(), null, null, Limit.of(10)))
+                .extracting(f -> f.getFollower().getId()).containsExactly(viewer.getId());
+    }
+
+    @Test
+    @DisplayName("should read the viewer's follow and block of the user in the profile query")
+    void shouldReturnRelationFlagsWhenReadingProfileForViewer() {
+        em.persist(new UserBlock(viewer, other));
+        em.flush();
+
+        var profile = userRepository.findProfileForViewer(followed.getUsername(), viewer.getId()).orElseThrow();
+        assertThat(profile.getFollowing()).isTrue();
+        assertThat(profile.getBlocked()).isFalse();
+        var blocked = userRepository.findProfileForViewer(other.getUsername(), viewer.getId()).orElseThrow();
+        assertThat(blocked.getFollowing()).isFalse();
+        assertThat(blocked.getBlocked()).isTrue();
+        // One-way, own profile and no viewer: all false
+        var reverse = userRepository.findProfileForViewer(viewer.getUsername(), followed.getId()).orElseThrow();
+        assertThat(reverse.getFollowing()).isFalse();
+        var own = userRepository.findProfileForViewer(viewer.getUsername(), viewer.getId()).orElseThrow();
+        assertThat(own.getFollowing()).isFalse();
+        assertThat(own.getBlocked()).isFalse();
+        var signedOut = userRepository.findProfileByUsername(followed.getUsername()).orElseThrow();
+        assertThat(signedOut.getFollowing()).isFalse();
+        assertThat(signedOut.getBlocked()).isFalse();
+    }
+
+    @Test
+    @DisplayName("should take the pair advisory lock inside the transaction, re-entrantly")
+    void shouldLockPairWhenFollowOrBlockRuns() {
+        assertThat(followRepository.lockPair(viewer.getId(), other.getId())).isEqualTo(1);
+        assertThat(followRepository.lockPair(viewer.getId(), other.getId())).isEqualTo(1);
     }
 
     @Test

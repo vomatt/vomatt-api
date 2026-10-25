@@ -6,6 +6,8 @@ import java.time.OffsetDateTime;
 
 @Schema(description = "Public view of a user; optional fields are null when the owner has not made them visible")
 public record UserProfileResponse(
+        @Schema(description = "User id", example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47")
+        String id,
         @Schema(description = "Unique username", example = "alice")
         String username,
         @Schema(description = "Display name; null if the owner hid it (public by default) or never set one", example = "Alice", nullable = true)
@@ -31,5 +33,12 @@ public record UserProfileResponse(
         @Schema(description = "Points; null when hidden (default)", example = "120", nullable = true)
         Integer points,
         @Schema(description = "Membership level; null when hidden (default) or not set", example = "basic", nullable = true)
-        String membershipLevel
+        String membershipLevel,
+        // viewer relation: null for a signed-out caller, false on the caller's own profile
+        @Schema(description = "Whether the caller follows this user; null when signed out, false on the caller's own profile",
+                example = "false", nullable = true)
+        Boolean isFollowing,
+        @Schema(description = "Whether the caller has blocked this user; null when signed out, false on the caller's own profile",
+                example = "false", nullable = true)
+        Boolean isBlocked
 ) {}

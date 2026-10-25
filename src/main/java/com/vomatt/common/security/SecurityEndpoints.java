@@ -21,9 +21,10 @@ public final class SecurityEndpoints {
     /**
      * Authenticated /api/users sub-paths; must be matched before {@link #PUBLIC_GET},
      * otherwise {@code /api/users/{username}} would also permit {@code /me} and {@code /search}.
+     * A user's follower and following lists are for signed-in users only.
      */
     public static final String[] AUTHENTICATED_USERS = { "/api/users/me", "/api/users/me/**", "/api/users/search",
-            "/api/users/search/**" };
+            "/api/users/search/**", "/api/users/*/followers", "/api/users/*/following" };
 
     /**
      * Authenticated /api/votes sub-paths. The Poll paths in {@link #PUBLIC_GET} only match UUIDs, so they already don't permit these paths;

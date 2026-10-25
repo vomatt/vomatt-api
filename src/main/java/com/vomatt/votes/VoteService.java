@@ -289,8 +289,7 @@ public class VoteService {
      */
     @Transactional(readOnly = true)
     public CursorResponse<VoteResponse> getUserPolls(String username, String cursor, Integer limit, String userId) {
-        // Suspended users are hidden, same as user search
-        User creator = userRepository.findByUsername(username).filter(User::isActive)
+        User creator = userRepository.findActiveByUsername(username)
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
         int size = CursorResponse.limit(limit);
         List<Vote> rows = voteListRepository.findByCreator(creator.getId(), Cursor.decode(cursor, Cursor.Scope.USER_POLLS),

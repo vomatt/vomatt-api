@@ -62,6 +62,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | AdminUserService, FeedbackService, InviteListService, UserService, VoteCommentService, VoteService |
 | `user.username.taken` | 409 | 使用者名稱已被使用 | Username already taken | Show message (resource state conflict) | UserService |
 | `user.delete.forbidden` | 403 | 只能刪除自己的帳號 | You can only delete your own account | Show a permission-denied notice | UserService |
+| `user.follow.blocked` | 400 | 不能追蹤已封鎖的使用者，請先解除封鎖 | You cannot follow a user you blocked; unblock them first | Show message so the user can fix the input | UserService |
 | `vote.not_found` | 404 | 找不到投票 | Vote not found | Show resource not found | AdminVoteService, VoteService |
 | `vote.option.not_found` | 404 | 找不到投票選項 | Vote option not found | Show resource not found | VoteService |
 | `vote.option.not_in_vote` | 400 | 選項不屬於此投票 | Option does not belong to this vote | Show message so the user can fix the input | VoteService |

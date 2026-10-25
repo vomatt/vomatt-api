@@ -125,15 +125,16 @@ public class UserController {
     @PublicApiResponse
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"username":"alice","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"firstName":"Alice","lastName":null,"location":null,"points":null,"membershipLevel":null},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"firstName":"Alice","lastName":null,"location":null,"points":null,"membershipLevel":null,"isFollowing":true,"isBlocked":false},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No user with this username (errorCode `user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Get user public profile", description = """
-            **Auth**: public (the response is the same whether or not the caller is signed in)
+            **Auth**: public; optional login fills `isFollowing` and `isBlocked`. An invalid or expired token is treated as signed out
             **Precondition**: none
-            **Behavior**: returns the public view of a user. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` (Public, non-Deleted Polls only) are always present \
+            **Behavior**: returns the public view of a user. `isFollowing` / `isBlocked` say whether the caller follows / has blocked \
+            the user: `null` when signed out, `false` on the caller's own profile. Profile fields do not depend on the caller. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` (Public, non-Deleted Polls only) are always present \
             (`avatarUrl` is `null` when never set). \
             Every optional field is `null` unless the owner made it visible: `displayName` and `bio` are visible by default, \
             `firstName`, `lastName`, `location`, `points` and `membershipLevel` are hidden by default; email and birthday are never returned. \
@@ -143,9 +144,63 @@ public class UserController {
             - 404 `user.not_found`: no user has this username, or the user is suspended""")
     public ResponseEntity<ApiResponse<UserProfileResponse>> getUserProfile(
             @Parameter(description = "Username of the user to look up", required = true, example = "alice")
-            @PathVariable String username) {
-        UserProfileResponse profile = userService.getUserProfile(username, false);
+            @PathVariable String username,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        UserProfileResponse profile = userService.getUserProfile(username, false,
+                principal != null ? principal.userId() : null);
         return ResponseEntity.ok(ApiResponse.ok(profile));
+    }
+
+    @GetMapping("/{username}/followers")
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of followers",
+            content = @Content(examples = @ExampleObject(value = """
+                    {"success":true,"data":{"items":[{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"bob","displayName":"Bob","avatarUrl":"bot:boba"}],"nextCursor":null},"message":null,"errorCode":null,"error":null}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No active user with this username (errorCode `user.not_found`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(value = """
+                            {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
+    @Operation(summary = "List a user's followers", description = """
+            **Auth**: required
+            **Precondition**: the user exists and is not suspended
+            **Behavior**: users who follow this user, most recently followed first, cursor-paged \
+            (`limit` 1-50, default 20; out-of-range values are clamped). `nextCursor` is `null` on the last page. \
+            Suspended followers are left out. Blocks do not filter this list (they hide only Polls and Comments). Each item carries only public profile fields, like user search.
+            **Side effects**: none
+            **Errors**:
+            - 404 `user.not_found`: no user has this username, or the user is suspended
+            - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list""")
+    public ResponseEntity<ApiResponse<CursorResponse<UserDto>>> listFollowers(
+            @Parameter(description = "Username of the followed user", required = true, example = "alice") @PathVariable String username,
+            @Parameter(description = "`nextCursor` from the previous page; omit for the first page") @RequestParam(required = false) String cursor,
+            @Parameter(description = "Page size, 1-50 (default 20); out-of-range values are clamped", example = "20") @RequestParam(required = false) Integer limit) {
+        return ResponseEntity.ok(ApiResponse.ok(userService.listFollowers(username, cursor, limit)));
+    }
+
+    @GetMapping("/{username}/following")
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of followed users",
+            content = @Content(examples = @ExampleObject(value = """
+                    {"success":true,"data":{"items":[{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"bob","displayName":"Bob","avatarUrl":"bot:boba"}],"nextCursor":null},"message":null,"errorCode":null,"error":null}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No active user with this username (errorCode `user.not_found`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(value = """
+                            {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
+    @Operation(summary = "List users a user follows", description = """
+            **Auth**: required
+            **Precondition**: the user exists and is not suspended
+            **Behavior**: users this user follows, most recently followed first, cursor-paged \
+            (`limit` 1-50, default 20; out-of-range values are clamped). `nextCursor` is `null` on the last page. \
+            Suspended users are left out. Blocks do not filter this list (they hide only Polls and Comments). Each item carries only public profile fields, like user search.
+            **Side effects**: none
+            **Errors**:
+            - 404 `user.not_found`: no user has this username, or the user is suspended
+            - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list""")
+    public ResponseEntity<ApiResponse<CursorResponse<UserDto>>> listFollowing(
+            @Parameter(description = "Username of the follower", required = true, example = "alice") @PathVariable String username,
+            @Parameter(description = "`nextCursor` from the previous page; omit for the first page") @RequestParam(required = false) String cursor,
+            @Parameter(description = "Page size, 1-50 (default 20); out-of-range values are clamped", example = "20") @RequestParam(required = false) Integer limit) {
+        return ResponseEntity.ok(ApiResponse.ok(userService.listFollowing(username, cursor, limit)));
     }
 
     @GetMapping("/{username}/votes")
@@ -180,7 +235,7 @@ public class UserController {
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"username":"alice","displayName":"Alice C.","bio":"Poll enthusiast","avatarUrl":"bot:boba","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"firstName":"Alice","lastName":null,"location":null,"points":null,"membershipLevel":null},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice C.","bio":"Poll enthusiast","avatarUrl":"bot:boba","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"firstName":"Alice","lastName":null,"location":null,"points":null,"membershipLevel":null,"isFollowing":false,"isBlocked":false},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
@@ -280,7 +335,8 @@ public class UserController {
             Polls the blocked user created, nor, in `GET /api/votes/{voteId}/comments` and its replies, Comment threads the blocked user \
             started or Replies they wrote. Nothing else changes: the Poll detail, voter list, profile and My Polls still show them, \
             and the blocked user is not told and sees the caller's content as before. Idempotent: blocking an already blocked user succeeds.
-            **Side effects**: the block is written to the audit log
+            **Side effects**: the caller's follow of the user, if any, is removed (and cannot be added back while blocked); \
+            the block is written to the audit log
             **Errors**:
             - 400 `user.block.self`: `userId` is the caller's own id
             - 400 `common.bad_request`: `userId` is not a valid id
@@ -342,23 +398,26 @@ public class UserController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Following yourself (errorCode `user.follow.self`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Following yourself or a user you blocked (errorCode `user.follow.self`, `user.follow.blocked`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"You cannot follow yourself","errorCode":"user.follow.self","error":"You cannot follow yourself"}""")))
+                    examples = {@ExampleObject(name = "Self", value = """
+                            {"success":false,"data":null,"message":"You cannot follow yourself","errorCode":"user.follow.self","error":"You cannot follow yourself"}"""),
+                            @ExampleObject(name = "Blocked", value = """
+                            {"success":false,"data":null,"message":"You cannot follow a user you blocked; unblock them first","errorCode":"user.follow.blocked","error":"You cannot follow a user you blocked; unblock them first"}""")}))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account does not exist (errorCode `user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Follow a user", description = """
             **Auth**: required
-            **Precondition**: `userId` is another existing, active account
+            **Precondition**: `userId` is another existing, active account the caller has not blocked
             **Behavior**: one-way follow. From then on `GET /api/votes/following` lists PUBLIC Polls the followed user creates. \
-            Following is private: the followed user is not told, and no follower list or count is exposed. \
+            The followed user is not told; the follow shows in `GET /api/users/{username}/followers` and `/following`. \
             Idempotent: following an already followed user succeeds.
             **Side effects**: the follow is written to the audit log
             **Errors**:
             - 400 `user.follow.self`: `userId` is the caller's own id
+            - 400 `user.follow.blocked`: the caller has blocked this user; unblock first
             - 400 `common.bad_request`: `userId` is not a valid id
             - 404 `user.not_found`: no account with this id, or it is suspended""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> followUser(

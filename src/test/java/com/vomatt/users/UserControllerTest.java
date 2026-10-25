@@ -305,6 +305,7 @@ class UserControllerTest {
     @Test
     @DisplayName("should pass cursor and limit through when listing followers and following")
     void shouldPassCursorWhenListingFollowersAndFollowing() throws Exception {
+        signIn("u1");
         UserDto bob = new UserDto("id-2", "bob", "Bob", null);
         when(userService.listFollowers("alice", "c1", 10)).thenReturn(new CursorResponse<>(List.of(bob), "next"));
         when(userService.listFollowing("alice", null, null)).thenReturn(new CursorResponse<>(List.of(), null));
@@ -319,16 +320,17 @@ class UserControllerTest {
     }
 
     @Test
-    @DisplayName("should make follower lists public while /api/users/me/** and /api/users/search still require sign-in")
-    void shouldExposeFollowListsPubliclyWhenAuthenticatedPathsStayProtected() {
+    @DisplayName("should require sign-in for follower lists, /api/users/me/** and /api/users/search while the profile stays public")
+    void shouldRequireSignInWhenReadingFollowLists() {
         PathPatternParser parser = PathPatternParser.defaultInstance;
         java.util.function.BiPredicate<String[], String> matches = (patterns, path) -> Arrays.stream(patterns)
                 .anyMatch(p -> parser.parse(p).matches(PathContainer.parsePath(path)));
-        assertThat(matches.test(SecurityEndpoints.PUBLIC_GET, "/api/users/alice/followers")).isTrue();
-        assertThat(matches.test(SecurityEndpoints.PUBLIC_GET, "/api/users/alice/following")).isTrue();
-        // AUTHENTICATED_USERS is matched before PUBLIC_GET, so these keep requiring sign-in
-        for (String path : List.of("/api/users/me", "/api/users/me/follows", "/api/users/me/followers",
-                "/api/users/me/following", "/api/users/search", "/api/users/search/followers", "/api/users/search/following")) {
+        assertThat(matches.test(SecurityEndpoints.PUBLIC_GET, "/api/users/alice")).isTrue();
+        assertThat(matches.test(SecurityEndpoints.AUTHENTICATED_USERS, "/api/users/alice")).isFalse();
+        assertThat(matches.test(SecurityEndpoints.AUTHENTICATED_USERS, "/api/users/alice/votes")).isFalse();
+        // AUTHENTICATED_USERS is matched before PUBLIC_GET, so these require sign-in
+        for (String path : List.of("/api/users/alice/followers", "/api/users/alice/following", "/api/users/me",
+                "/api/users/me/follows", "/api/users/search", "/api/users/search/followers")) {
             assertThat(matches.test(SecurityEndpoints.AUTHENTICATED_USERS, path)).as(path).isTrue();
         }
     }

@@ -68,6 +68,18 @@ class OpenApiSnapshotTest {
                 "./mvnw test -Dtest=OpenApiSnapshotTest -Dsnapshot.update=true");
     }
 
+    /** Real filter chain: the follow lists need a token, the profile does not. */
+    @Test
+    void shouldReturn401WhenReadingFollowListsSignedOut() throws Exception {
+        MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(context)
+                .apply(org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity()).build();
+        for (String path : java.util.List.of("/api/users/alice/followers", "/api/users/alice/following", "/api/users/me/follows",
+                "/api/users/search")) {
+            mockMvc.perform(get(path)).andExpect(status().isUnauthorized());
+        }
+        mockMvc.perform(get("/api/users/nobody-here")).andExpect(status().isNotFound());
+    }
+
     @Autowired
     tools.jackson.databind.ObjectMapper appMapper;
 

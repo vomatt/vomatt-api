@@ -94,6 +94,8 @@ class UserProfileVisibilityTest {
             @Override public String getLocation() { return "Taipei"; }
             @Override public Integer getPoints() { return 100; }
             @Override public String getMembershipLevel() { return "SILVER"; }
+            @Override public Boolean getFollowing() { return false; }
+            @Override public Boolean getBlocked() { return false; }
         };
     }
 
@@ -203,7 +205,7 @@ class UserProfileVisibilityTest {
                     null, null, null, null, null, null, null
             );
 
-            when(userRepository.findProfileByUsername(USERNAME)).thenReturn(Optional.of(projection));
+            when(userRepository.findProfileForViewer(USERNAME, null)).thenReturn(Optional.of(projection));
             when(preferenceRepository.findByUserIdAndKeyStartingWith(USER_UUID, "visibility."))
                     .thenReturn(Collections.emptyList());
             when(userMapper.toPublicProfileResponse(eq(projection), anyMap(), isNull(), isNull()))
@@ -226,7 +228,7 @@ class UserProfileVisibilityTest {
         @Test
         @DisplayName("should return 404 when user is suspended")
         void shouldReturnNotFoundWhenUserSuspended() {
-            when(userRepository.findProfileByUsername(USERNAME)).thenReturn(Optional.of(createTestProjection(false)));
+            when(userRepository.findProfileForViewer(USERNAME, null)).thenReturn(Optional.of(createTestProjection(false)));
 
             assertThatThrownBy(() -> userService.getUserProfile(USERNAME, false, null))
                     .isInstanceOfSatisfying(ApiException.class, ex -> {
@@ -250,7 +252,7 @@ class UserProfileVisibilityTest {
                     null, null, "Taipei", null, null, null, null
             );
 
-            when(userRepository.findProfileByUsername(USERNAME)).thenReturn(Optional.of(projection));
+            when(userRepository.findProfileForViewer(USERNAME, null)).thenReturn(Optional.of(projection));
             when(preferenceRepository.findByUserIdAndKeyStartingWith(USER_UUID, "visibility."))
                     .thenReturn(List.of(locationPref, staleEmailPref));
             when(userMapper.toPublicProfileResponse(eq(projection),

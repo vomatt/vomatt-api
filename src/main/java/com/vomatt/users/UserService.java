@@ -133,13 +133,14 @@ public class UserService {
             u -> Cursor.of(u.getUsername(), u.getId()), this::toSearchResults);
     }
 
-    /** Blocks a user (one-way, see {@link UserBlock}); idempotent. */
+    /** Blocks a user (one-way, see {@link UserBlock}) and drops the caller's follow of them; idempotent. */
     @Transactional
     public void blockUser(String userId, String targetId) {
         User target = findOtherActiveUser(userId, targetId, MessageKey.USER_BLOCK_SELF);
         if (blockRepository.insertIfAbsent(UUIDv7Generator.generateId(), UUID.fromString(userId), target.getId()) > 0) {
             log.info("User {} blocked user {}", userId, targetId);
         }
+        followRepository.deleteByFollowerIdAndFollowedId(UUID.fromString(userId), target.getId());
     }
 
     /** Unblocks a user; idempotent, also when the user does not exist. */
@@ -165,6 +166,11 @@ public class UserService {
     @Transactional
     public void followUser(String userId, String targetId) {
         User target = findOtherActiveUser(userId, targetId, MessageKey.USER_FOLLOW_SELF);
+        // ponytail: check-then-insert, so a block committing between the two can leave a follow behind;
+        // lock the pair (or a trigger) if that shows up
+        if (blockRepository.existsByBlockerIdAndBlockedId(UUID.fromString(userId), target.getId())) {
+            throw ApiException.badRequest(MessageKey.USER_FOLLOW_BLOCKED);
+        }
         if (followRepository.insertIfAbsent(UUIDv7Generator.generateId(), UUID.fromString(userId), target.getId()) > 0) {
             log.info("User {} followed user {}", userId, targetId);
         }
@@ -181,11 +187,16 @@ public class UserService {
     /** Users the caller follows, most recently followed first, as public profile fields. */
     @Transactional(readOnly = true)
     public CursorResponse<UserDto> listFollowedUsers(String userId, String cursor, Integer limit) {
+        return followedPage(UUID.fromString(userId), Cursor.Scope.FOLLOWS, null, cursor, limit);
+    }
+
+    /** Page of the users {@code followerId} follows; {@code owner} binds the cursor to one user's list (null: unbound). */
+    private CursorResponse<UserDto> followedPage(UUID followerId, Cursor.Scope scope, UUID owner, String cursor, Integer limit) {
         int size = CursorResponse.limit(limit);
-        Cursor after = Cursor.decode(cursor, Cursor.Scope.FOLLOWS);
-        List<UserFollow> rows = followRepository.findPage(UUID.fromString(userId),
+        Cursor after = Cursor.decode(cursor, scope, owner);
+        List<UserFollow> rows = followRepository.findPage(followerId,
             after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
-        return CursorResponse.of(rows, size, Cursor.Scope.FOLLOWS, f -> Cursor.of(f.getCreatedAt(), f.getId()),
+        return CursorResponse.of(rows, size, scope, owner, f -> Cursor.of(f.getCreatedAt(), f.getId()),
             page -> toSearchResults(page.stream().map(UserFollow::getFollowed).toList()));
     }
 
@@ -209,25 +220,21 @@ public class UserService {
     /** Users who follow the given user, most recently followed first, as public profile fields. */
     @Transactional(readOnly = true)
     public CursorResponse<UserDto> listFollowers(String username, String cursor, Integer limit) {
-        UUID userId = findActiveUserByUsername(username).getId();
+        UUID userId = userRepository.findActiveByUsername(username).getId();
         int size = CursorResponse.limit(limit);
-        Cursor after = Cursor.decode(cursor, Cursor.Scope.USER_FOLLOWERS);
+        // Bound to the user, so a cursor of another user's follower list is rejected
+        Cursor after = Cursor.decode(cursor, Cursor.Scope.USER_FOLLOWERS, userId);
         List<UserFollow> rows = followRepository.findFollowersPage(userId,
             after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
-        return CursorResponse.of(rows, size, Cursor.Scope.USER_FOLLOWERS, f -> Cursor.of(f.getCreatedAt(), f.getId()),
+        return CursorResponse.of(rows, size, Cursor.Scope.USER_FOLLOWERS, userId, f -> Cursor.of(f.getCreatedAt(), f.getId()),
             page -> toSearchResults(page.stream().map(UserFollow::getFollower).toList()));
     }
 
     /** Users the given user follows, most recently followed first, as public profile fields. */
     @Transactional(readOnly = true)
     public CursorResponse<UserDto> listFollowing(String username, String cursor, Integer limit) {
-        UUID userId = findActiveUserByUsername(username).getId();
-        int size = CursorResponse.limit(limit);
-        Cursor after = Cursor.decode(cursor, Cursor.Scope.USER_FOLLOWING);
-        List<UserFollow> rows = followRepository.findPage(userId,
-            after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
-        return CursorResponse.of(rows, size, Cursor.Scope.USER_FOLLOWING, f -> Cursor.of(f.getCreatedAt(), f.getId()),
-            page -> toSearchResults(page.stream().map(UserFollow::getFollowed).toList()));
+        UUID userId = userRepository.findActiveByUsername(username).getId();
+        return followedPage(userId, Cursor.Scope.USER_FOLLOWING, userId, cursor, limit);
     }
 
     /**
@@ -238,21 +245,16 @@ public class UserService {
     public UserProfileResponse getUserProfile(String username, boolean isVisibility, String viewerId) {
         // Use Projection to fetch profile and statistics in one query, avoiding N+1
         // Suspended users are hidden, same as user search and their Poll list
-        UserProfileProjection projection = userRepository.findProfileByUsername(username)
+        boolean signedIn = viewerId != null;
+        UserProfileProjection projection = userRepository.findProfileForViewer(username,
+                signedIn ? UUID.fromString(viewerId) : null)
             .filter(p -> Boolean.TRUE.equals(p.getActive()))
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
 
         // Query target user's visibility settings
         Map<String, Boolean> visibility = loadVisibilitySettings(projection.getId(), isVisibility);
-        Boolean isFollowing = null;
-        Boolean isBlocked = null;
-        if (viewerId != null) {
-            UUID viewer = UUID.fromString(viewerId);
-            boolean self = viewer.equals(projection.getId());
-            isFollowing = !self && followRepository.existsByFollowerIdAndFollowedId(viewer, projection.getId());
-            isBlocked = !self && blockRepository.existsByBlockerIdAndBlockedId(viewer, projection.getId());
-        }
-        return userMapper.toPublicProfileResponse(projection, visibility, isFollowing, isBlocked);
+        return userMapper.toPublicProfileResponse(projection, visibility,
+                signedIn ? projection.getFollowing() : null, signedIn ? projection.getBlocked() : null);
     }
 
     @Transactional(readOnly = true)
@@ -378,7 +380,10 @@ public class UserService {
             savePreference(user, UserPreference.ANONYMOUS_BALLOT_KEY, request.getAnonymousBallotByDefault().toString());
         }
         userRepository.save(user);
-        return getUserProfile(user.getUsername(), true, userId);
+        UserProfileProjection projection = userRepository.findProfileByUsername(user.getUsername())
+            .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
+        // The owner's own profile: no follow or block of oneself exists
+        return userMapper.toPublicProfileResponse(projection, loadVisibilitySettings(user.getId(), true), false, false);
     }
 
     /**
@@ -416,12 +421,6 @@ public class UserService {
             throw ApiException.badRequest(selfKey);
         }
         return target;
-    }
-
-    /** Suspended users are not found, same as their profile. */
-    private User findActiveUserByUsername(String username) {
-        return userRepository.findByUsername(username).filter(User::isActive)
-            .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
     }
 
     private User findUserById(String userId) {

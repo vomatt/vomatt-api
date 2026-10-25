@@ -32,6 +32,7 @@ class UserFollowPostgresTest extends PostgresRepositoryTest {
 
     @Autowired VoteService voteService;
     @Autowired UserFollowRepository followRepository;
+    @Autowired com.vomatt.repository.UserRepository userRepository;
 
     private User viewer;
     private User followed;
@@ -162,8 +163,29 @@ class UserFollowPostgresTest extends PostgresRepositoryTest {
         assertThat(all).containsExactlyElementsOf(expected);
         assertThat(followRepository.findFollowersPage(other.getId(), null, null, Limit.of(10)))
                 .extracting(f -> f.getFollower().getId()).containsExactly(viewer.getId());
-        assertThat(followRepository.existsByFollowerIdAndFollowedId(viewer.getId(), followed.getId())).isTrue();
-        assertThat(followRepository.existsByFollowerIdAndFollowedId(followed.getId(), viewer.getId())).isFalse();
+    }
+
+    @Test
+    @DisplayName("should read the viewer's follow and block of the user in the profile query")
+    void shouldReturnRelationFlagsWhenReadingProfileForViewer() {
+        em.persist(new UserBlock(viewer, other));
+        em.flush();
+
+        var profile = userRepository.findProfileForViewer(followed.getUsername(), viewer.getId()).orElseThrow();
+        assertThat(profile.getFollowing()).isTrue();
+        assertThat(profile.getBlocked()).isFalse();
+        var blocked = userRepository.findProfileForViewer(other.getUsername(), viewer.getId()).orElseThrow();
+        assertThat(blocked.getFollowing()).isFalse();
+        assertThat(blocked.getBlocked()).isTrue();
+        // One-way, own profile and no viewer: all false
+        var reverse = userRepository.findProfileForViewer(viewer.getUsername(), followed.getId()).orElseThrow();
+        assertThat(reverse.getFollowing()).isFalse();
+        var own = userRepository.findProfileForViewer(viewer.getUsername(), viewer.getId()).orElseThrow();
+        assertThat(own.getFollowing()).isFalse();
+        assertThat(own.getBlocked()).isFalse();
+        var signedOut = userRepository.findProfileByUsername(followed.getUsername()).orElseThrow();
+        assertThat(signedOut.getFollowing()).isFalse();
+        assertThat(signedOut.getBlocked()).isFalse();
     }
 
     @Test

@@ -23,9 +23,22 @@ public record CursorResponse<T>(
     public static <E, T> CursorResponse<T> of(List<E> rows, int limit, Cursor.Scope scope,
                                               Function<E, Cursor> cursorOf,
                                               Function<List<E>, List<T>> mapPage) {
+        return of(rows, limit, c -> c.encode(scope), cursorOf, mapPage);
+    }
+
+    /** Same, with the next cursor bound to {@code owner} (see {@link Cursor#encode(Cursor.Scope, java.util.UUID)}). */
+    public static <E, T> CursorResponse<T> of(List<E> rows, int limit, Cursor.Scope scope, java.util.UUID owner,
+                                              Function<E, Cursor> cursorOf,
+                                              Function<List<E>, List<T>> mapPage) {
+        return of(rows, limit, c -> c.encode(scope, owner), cursorOf, mapPage);
+    }
+
+    private static <E, T> CursorResponse<T> of(List<E> rows, int limit, Function<Cursor, String> encode,
+                                               Function<E, Cursor> cursorOf,
+                                               Function<List<E>, List<T>> mapPage) {
         boolean hasMore = rows.size() > limit;
         List<E> page = hasMore ? rows.subList(0, limit) : rows;
-        String next = hasMore ? cursorOf.apply(page.getLast()).encode(scope) : null;
+        String next = hasMore ? encode.apply(cursorOf.apply(page.getLast())) : null;
         return new CursorResponse<>(mapPage.apply(page), next);
     }
 

@@ -21,9 +21,10 @@ public final class SecurityEndpoints {
     /**
      * Authenticated /api/users sub-paths; must be matched before {@link #PUBLIC_GET},
      * otherwise {@code /api/users/{username}} would also permit {@code /me} and {@code /search}.
+     * A user's follower and following lists are for signed-in users only.
      */
     public static final String[] AUTHENTICATED_USERS = { "/api/users/me", "/api/users/me/**", "/api/users/search",
-            "/api/users/search/**" };
+            "/api/users/search/**", "/api/users/*/followers", "/api/users/*/following" };
 
     /**
      * Authenticated /api/votes sub-paths. The Poll paths in {@link #PUBLIC_GET} only match UUIDs, so they already don't permit these paths;
@@ -41,7 +42,7 @@ public final class SecurityEndpoints {
     /** GET-only public endpoints (Poll details, an Invite-only Poll's owner, results after the Poll ends, comments and replies are readable without login) */
     public static final String[] PUBLIC_GET = { "/api/tags", "/api/tags/**", "/api/votes", VOTE, VOTE + "/creator",
             VOTE + "/results", VOTE + "/comments", VOTE + "/comments/*/replies", "/api/users/{username}",
-            "/api/users/{username}/votes", "/api/users/{username}/followers", "/api/users/{username}/following" };
+            "/api/users/{username}/votes" };
 
     /** Swagger / OpenAPI UI */
     public static final String[] PUBLIC_SWAGGER = { "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**",

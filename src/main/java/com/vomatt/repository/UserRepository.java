@@ -11,6 +11,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.util.LikePattern;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserVote;
@@ -27,6 +29,12 @@ public interface UserRepository extends JpaRepository<User, UUID> {
             ORDER BY u.username""";
 
     Optional<User> findByUsername(String username);
+
+    /** A suspended user is not found, as on their profile: same 404 everywhere a username is looked up publicly. */
+    default User findActiveByUsername(String username) {
+        return findByUsername(username).filter(User::isActive)
+            .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
+    }
 
     Optional<User> findByEmail(String email);
 
@@ -92,8 +100,17 @@ public interface UserRepository extends JpaRepository<User, UUID> {
            "(SELECT COUNT(v) FROM Vote v WHERE v.creator.id = u.id AND v.startTime <= CURRENT_TIMESTAMP " +
            "AND v.endTime > v.startTime AND v.deletedAt IS NULL AND v.audience = com.vomatt.entity.Audience.PUBLIC) AS totalPolls, " +
            "(SELECT COUNT(uv) FROM UserVote uv WHERE uv.user.id = u.id AND uv.vote.deletedAt IS NULL " +
-           "AND uv.vote.audience = com.vomatt.entity.Audience.PUBLIC) AS totalVotes " +
+           "AND uv.vote.audience = com.vomatt.entity.Audience.PUBLIC) AS totalVotes, " +
+           // false for a null viewer and for the viewer's own row (follows and blocks of oneself cannot exist)
+           "CASE WHEN EXISTS (SELECT 1 FROM UserFollow f WHERE f.follower.id = :viewerId AND f.followed.id = u.id) " +
+           "THEN true ELSE false END AS following, " +
+           "CASE WHEN EXISTS (SELECT 1 FROM UserBlock b WHERE b.blocker.id = :viewerId AND b.blocked.id = u.id) " +
+           "THEN true ELSE false END AS blocked " +
            "FROM User u " +
            "WHERE u.username = :username")
-    Optional<UserProfileProjection> findProfileByUsername(@Param("username") String username);
+    Optional<UserProfileProjection> findProfileForViewer(@Param("username") String username, @Param("viewerId") UUID viewerId);
+
+    default Optional<UserProfileProjection> findProfileByUsername(String username) {
+        return findProfileForViewer(username, null);
+    }
 }

@@ -23,7 +23,8 @@ public record Cursor(String key, UUID id) {
      */
     public enum Scope {
         FEED_NEWEST, FEED_CLOSING, FEED_ENDED, FEED_TOP, MY_OPEN, MY_ENDED, USER_POLLS,
-        COMMENTS, REPLIES, VOTERS, USER_SEARCH, POPULAR_TAGS, BLOCKS, FOLLOWS, FEED_FOLLOWING
+        COMMENTS, REPLIES, VOTERS, USER_SEARCH, POPULAR_TAGS, BLOCKS, FOLLOWS, FEED_FOLLOWING,
+        USER_FOLLOWERS, USER_FOLLOWING
     }
 
     public static Cursor of(OffsetDateTime time, UUID id) {

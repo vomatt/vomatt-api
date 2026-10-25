@@ -206,8 +206,36 @@ public class UserService {
             .collect(Collectors.toMap(pref -> pref.getUser().getId(), pref -> Boolean.parseBoolean(pref.getValue())));
     }
 
+    /** Users who follow the given user, most recently followed first, as public profile fields. */
     @Transactional(readOnly = true)
-    public UserProfileResponse getUserProfile(String username, boolean isVisibility) {
+    public CursorResponse<UserDto> listFollowers(String username, String cursor, Integer limit) {
+        UUID userId = findActiveUserByUsername(username).getId();
+        int size = CursorResponse.limit(limit);
+        Cursor after = Cursor.decode(cursor, Cursor.Scope.USER_FOLLOWERS);
+        List<UserFollow> rows = followRepository.findFollowersPage(userId,
+            after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
+        return CursorResponse.of(rows, size, Cursor.Scope.USER_FOLLOWERS, f -> Cursor.of(f.getCreatedAt(), f.getId()),
+            page -> toSearchResults(page.stream().map(UserFollow::getFollower).toList()));
+    }
+
+    /** Users the given user follows, most recently followed first, as public profile fields. */
+    @Transactional(readOnly = true)
+    public CursorResponse<UserDto> listFollowing(String username, String cursor, Integer limit) {
+        UUID userId = findActiveUserByUsername(username).getId();
+        int size = CursorResponse.limit(limit);
+        Cursor after = Cursor.decode(cursor, Cursor.Scope.USER_FOLLOWING);
+        List<UserFollow> rows = followRepository.findPage(userId,
+            after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
+        return CursorResponse.of(rows, size, Cursor.Scope.USER_FOLLOWING, f -> Cursor.of(f.getCreatedAt(), f.getId()),
+            page -> toSearchResults(page.stream().map(UserFollow::getFollowed).toList()));
+    }
+
+    /**
+     * @param viewerId the signed-in caller, or null when signed out: {@code isFollowing} / {@code isBlocked} are then
+     *                 null, and false on the caller's own profile
+     */
+    @Transactional(readOnly = true)
+    public UserProfileResponse getUserProfile(String username, boolean isVisibility, String viewerId) {
         // Use Projection to fetch profile and statistics in one query, avoiding N+1
         // Suspended users are hidden, same as user search and their Poll list
         UserProfileProjection projection = userRepository.findProfileByUsername(username)
@@ -216,7 +244,15 @@ public class UserService {
 
         // Query target user's visibility settings
         Map<String, Boolean> visibility = loadVisibilitySettings(projection.getId(), isVisibility);
-        return userMapper.toPublicProfileResponse(projection, visibility);
+        Boolean isFollowing = null;
+        Boolean isBlocked = null;
+        if (viewerId != null) {
+            UUID viewer = UUID.fromString(viewerId);
+            boolean self = viewer.equals(projection.getId());
+            isFollowing = !self && followRepository.existsByFollowerIdAndFollowedId(viewer, projection.getId());
+            isBlocked = !self && blockRepository.existsByBlockerIdAndBlockedId(viewer, projection.getId());
+        }
+        return userMapper.toPublicProfileResponse(projection, visibility, isFollowing, isBlocked);
     }
 
     @Transactional(readOnly = true)
@@ -342,7 +378,7 @@ public class UserService {
             savePreference(user, UserPreference.ANONYMOUS_BALLOT_KEY, request.getAnonymousBallotByDefault().toString());
         }
         userRepository.save(user);
-        return getUserProfile(user.getUsername(), true);
+        return getUserProfile(user.getUsername(), true, userId);
     }
 
     /**
@@ -380,6 +416,12 @@ public class UserService {
             throw ApiException.badRequest(selfKey);
         }
         return target;
+    }
+
+    /** Suspended users are not found, same as their profile. */
+    private User findActiveUserByUsername(String username) {
+        return userRepository.findByUsername(username).filter(User::isActive)
+            .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
     }
 
     private User findUserById(String userId) {

@@ -317,8 +317,10 @@ CREATE INDEX IF NOT EXISTS idx_notification_reads_vote     ON vomatt.notificatio
 CREATE INDEX IF NOT EXISTS idx_user_blocks_blocked         ON vomatt.user_blocks (blocked_id);
 -- Block list page (UserBlockRepository.findPage)
 CREATE INDEX IF NOT EXISTS idx_user_blocks_blocker_created ON vomatt.user_blocks (blocker_id, created_at DESC, id DESC);
--- Followed-user FK: the UNIQUE (follower_id, followed_id) cannot serve ON DELETE CASCADE from the followed side
-CREATE INDEX IF NOT EXISTS idx_user_follows_followed       ON vomatt.user_follows (followed_id);
+-- Follower list page (UserFollowRepository.findFollowersPage); its leading followed_id also serves ON DELETE CASCADE
+-- from the followed side, which the UNIQUE (follower_id, followed_id) cannot, so it replaces idx_user_follows_followed
+CREATE INDEX IF NOT EXISTS idx_user_follows_followed_created ON vomatt.user_follows (followed_id, created_at DESC, id DESC);
+DROP INDEX IF EXISTS vomatt.idx_user_follows_followed;
 -- Follow list page (UserFollowRepository.findPage)
 CREATE INDEX IF NOT EXISTS idx_user_follows_follower_created ON vomatt.user_follows (follower_id, created_at DESC, id DESC);
 -- Admin feedback list, newest first (FeedbackRepository.findPage), all users or one; the second also serves the user FK cascade

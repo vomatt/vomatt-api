@@ -32,6 +32,8 @@ import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.security.UserPrincipal;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.entity.User;
+import com.vomatt.users.dto.UserProfileResponse;
+import com.vomatt.entity.UserFollow;
 import com.vomatt.entity.UserPreference;
 import com.vomatt.users.dto.UserDto;
 import com.vomatt.repository.UserBlockRepository;
@@ -409,5 +411,127 @@ class UserServiceTest {
                 new UserDto(shown.getId().toString(), "alice", "Alice", "https://cdn.example.com/a.jpg"),
                 new UserDto(hidden.getId().toString(), "alicia", null, null));
         assertThat(page.nextCursor()).isNull();
+    }
+
+    private UserProfileProjection activeProfile(UUID id) {
+        UserProfileProjection projection = org.mockito.Mockito.mock(UserProfileProjection.class);
+        when(projection.getId()).thenReturn(id);
+        when(projection.getActive()).thenReturn(true);
+        when(projection.getTotalPolls()).thenReturn(0L);
+        when(projection.getTotalVotes()).thenReturn(0L);
+        when(userRepository.findProfileByUsername("alice")).thenReturn(Optional.of(projection));
+        return projection;
+    }
+
+    @Test
+    @DisplayName("should report whether the viewer follows and blocked the user when signed in")
+    void shouldReturnRelationFlagsWhenViewerSignedIn() {
+        UUID target = UUID.randomUUID();
+        UUID viewer = UUID.randomUUID();
+        activeProfile(target);
+        when(followRepository.existsByFollowerIdAndFollowedId(viewer, target)).thenReturn(true);
+        when(blockRepository.existsByBlockerIdAndBlockedId(viewer, target)).thenReturn(false);
+
+        UserProfileResponse profile = userService.getUserProfile("alice", false, viewer.toString());
+
+        assertThat(profile.id()).isEqualTo(target.toString());
+        assertThat(profile.isFollowing()).isTrue();
+        assertThat(profile.isBlocked()).isFalse();
+    }
+
+    @Test
+    @DisplayName("should return false for both relation flags on the viewer's own profile")
+    void shouldReturnFalseFlagsWhenViewingOwnProfile() {
+        UUID self = UUID.randomUUID();
+        activeProfile(self);
+
+        UserProfileResponse profile = userService.getUserProfile("alice", false, self.toString());
+
+        assertThat(profile.isFollowing()).isFalse();
+        assertThat(profile.isBlocked()).isFalse();
+        org.mockito.Mockito.verifyNoInteractions(followRepository, blockRepository);
+    }
+
+    @Test
+    @DisplayName("should return null relation flags when signed out")
+    void shouldReturnNullFlagsWhenSignedOut() {
+        activeProfile(UUID.randomUUID());
+
+        UserProfileResponse profile = userService.getUserProfile("alice", false, null);
+
+        assertThat(profile.isFollowing()).isNull();
+        assertThat(profile.isBlocked()).isNull();
+        org.mockito.Mockito.verifyNoInteractions(followRepository, blockRepository);
+    }
+
+    @Test
+    @DisplayName("should list a user's followers with display names masked by each follower's setting")
+    void shouldMaskHiddenDisplayNameWhenListingFollowers() {
+        User alice = User.builder().id(UUID.randomUUID()).username("alice").build();
+        User hidden = User.builder().id(UUID.randomUUID()).username("bob").displayName("Bob").build();
+        UserPreference pref = new UserPreference();
+        pref.setUser(hidden);
+        pref.setKey("visibility.displayName");
+        pref.setValue("false");
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(alice));
+        when(followRepository.findFollowersPage(eq(alice.getId()), eq(null), eq(null), any(Limit.class)))
+                .thenReturn(List.of(new UserFollow(hidden, alice)));
+        when(preferenceRepository.findByUserIdInAndKey(List.of(hidden.getId()), "visibility.displayName"))
+                .thenReturn(List.of(pref));
+
+        CursorResponse<UserDto> page = userService.listFollowers("alice", null, null);
+
+        assertThat(page.items()).containsExactly(new UserDto(hidden.getId().toString(), "bob", null, null));
+        assertThat(page.nextCursor()).isNull();
+    }
+
+    @Test
+    @DisplayName("should list the users a user follows")
+    void shouldListFollowedUsersWhenReadingFollowing() {
+        User alice = User.builder().id(UUID.randomUUID()).username("alice").build();
+        User bob = User.builder().id(UUID.randomUUID()).username("bob").displayName("Bob").build();
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(alice));
+        when(followRepository.findPage(eq(alice.getId()), eq(null), eq(null), any(Limit.class)))
+                .thenReturn(List.of(new UserFollow(alice, bob)));
+
+        CursorResponse<UserDto> page = userService.listFollowing("alice", null, null);
+
+        assertThat(page.items()).containsExactly(new UserDto(bob.getId().toString(), "bob", "Bob", null));
+    }
+
+    @Test
+    @DisplayName("should return 404 for follower and following lists of a suspended or unknown user")
+    void shouldReturnNotFoundWhenListTargetSuspendedOrUnknown() {
+        when(userRepository.findByUsername("gone"))
+                .thenReturn(Optional.of(User.builder().id(UUID.randomUUID()).username("gone").active(false).build()));
+        when(userRepository.findByUsername("nobody")).thenReturn(Optional.empty());
+
+        for (String username : List.of("gone", "nobody")) {
+            assertThatThrownBy(() -> userService.listFollowers(username, null, null))
+                    .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND));
+            assertThatThrownBy(() -> userService.listFollowing(username, null, null))
+                    .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND));
+        }
+        org.mockito.Mockito.verifyNoInteractions(followRepository);
+    }
+
+    @Test
+    @DisplayName("should reject a cursor issued by another follow list")
+    void shouldRejectCursorWhenIssuedByAnotherFollowList() {
+        User alice = User.builder().id(UUID.randomUUID()).username("alice").build();
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(alice));
+        com.vomatt.common.response.Cursor at = com.vomatt.common.response.Cursor.of(java.time.OffsetDateTime.now(), UUID.randomUUID());
+        String mine = at.encode(com.vomatt.common.response.Cursor.Scope.FOLLOWS);
+        String followers = at.encode(com.vomatt.common.response.Cursor.Scope.USER_FOLLOWERS);
+        String following = at.encode(com.vomatt.common.response.Cursor.Scope.USER_FOLLOWING);
+
+        for (Runnable call : List.<Runnable>of(
+                () -> userService.listFollowing("alice", mine, null),
+                () -> userService.listFollowing("alice", followers, null),
+                () -> userService.listFollowers("alice", mine, null),
+                () -> userService.listFollowers("alice", following, null))) {
+            assertThatThrownBy(call::run).isInstanceOfSatisfying(ApiException.class,
+                    e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.COMMON_CURSOR_INVALID));
+        }
     }
 }

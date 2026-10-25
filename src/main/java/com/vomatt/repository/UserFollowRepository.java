@@ -41,6 +41,18 @@ public interface UserFollowRepository extends JpaRepository<UserFollow, UUID> {
     List<UserFollow> findPage(@Param("followerId") UUID followerId, @Param("afterTime") OffsetDateTime afterTime,
                               @Param("afterId") UUID afterId, Limit limit);
 
+    /** Keyset page of the users who follow a user, most recently followed first; suspended followers are left out. */
+    @Query("""
+            SELECT f FROM UserFollow f JOIN FETCH f.follower
+            WHERE f.followed.id = :followedId AND f.follower.active = true
+              AND (CAST(:afterTime AS OffsetDateTime) IS NULL OR f.createdAt < :afterTime
+                   OR (f.createdAt = :afterTime AND f.id < :afterId))
+            ORDER BY f.createdAt DESC, f.id DESC""")
+    List<UserFollow> findFollowersPage(@Param("followedId") UUID followedId, @Param("afterTime") OffsetDateTime afterTime,
+                                       @Param("afterId") UUID afterId, Limit limit);
+
+    boolean existsByFollowerIdAndFollowedId(UUID followerId, UUID followedId);
+
     /** Data export: every user the user follows, suspended ones included, oldest first. */
     @Query("SELECT f FROM UserFollow f JOIN FETCH f.followed WHERE f.follower.id = :followerId ORDER BY f.createdAt, f.id")
     List<UserFollow> findAllByFollower(@Param("followerId") UUID followerId);

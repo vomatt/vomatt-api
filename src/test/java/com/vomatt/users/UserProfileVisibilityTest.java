@@ -198,19 +198,19 @@ class UserProfileVisibilityTest {
             // Given
             UserProfileProjection projection = createTestProjection();
             UserProfileResponse expectedResponse = new UserProfileResponse(
-                    USERNAME, "TestDisplay", "Hello world", "bot:boba",
+                    USER_ID, USERNAME, "TestDisplay", "Hello world", "bot:boba",
                     JOINED_AT, 5, 10,
-                    null, null, null, null, null
+                    null, null, null, null, null, null, null
             );
 
             when(userRepository.findProfileByUsername(USERNAME)).thenReturn(Optional.of(projection));
             when(preferenceRepository.findByUserIdAndKeyStartingWith(USER_UUID, "visibility."))
                     .thenReturn(Collections.emptyList());
-            when(userMapper.toPublicProfileResponse(eq(projection), anyMap()))
+            when(userMapper.toPublicProfileResponse(eq(projection), anyMap(), isNull(), isNull()))
                     .thenReturn(expectedResponse);
 
             // When
-            UserProfileResponse result = userService.getUserProfile(USERNAME, false);
+            UserProfileResponse result = userService.getUserProfile(USERNAME, false, null);
 
             // Then
             assertThat(result).isNotNull();
@@ -228,7 +228,7 @@ class UserProfileVisibilityTest {
         void shouldReturnNotFoundWhenUserSuspended() {
             when(userRepository.findProfileByUsername(USERNAME)).thenReturn(Optional.of(createTestProjection(false)));
 
-            assertThatThrownBy(() -> userService.getUserProfile(USERNAME, false))
+            assertThatThrownBy(() -> userService.getUserProfile(USERNAME, false, null))
                     .isInstanceOfSatisfying(ApiException.class, ex -> {
                         assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
                         assertThat(ex.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND);
@@ -245,9 +245,9 @@ class UserProfileVisibilityTest {
             UserPreference staleEmailPref = createPref("visibility.email", "true");
 
             UserProfileResponse expectedResponse = new UserProfileResponse(
-                    USERNAME, "TestDisplay", "Hello world", "bot:boba",
+                    USER_ID, USERNAME, "TestDisplay", "Hello world", "bot:boba",
                     JOINED_AT, 5, 10,
-                    null, null, "Taipei", null, null
+                    null, null, "Taipei", null, null, null, null
             );
 
             when(userRepository.findProfileByUsername(USERNAME)).thenReturn(Optional.of(projection));
@@ -255,11 +255,11 @@ class UserProfileVisibilityTest {
                     .thenReturn(List.of(locationPref, staleEmailPref));
             when(userMapper.toPublicProfileResponse(eq(projection),
                     argThat(v -> Boolean.TRUE.equals(v.get("location")) && Boolean.FALSE.equals(v.get("firstName"))
-                            && !v.containsKey("email"))))
+                            && !v.containsKey("email")), isNull(), isNull()))
                     .thenReturn(expectedResponse);
 
             // When
-            UserProfileResponse result = userService.getUserProfile(USERNAME, false);
+            UserProfileResponse result = userService.getUserProfile(USERNAME, false, null);
 
             // Then
             assertThat(result.location()).isEqualTo("Taipei");
@@ -277,7 +277,7 @@ class UserProfileVisibilityTest {
         @DisplayName("should output only visibility=true fields and null for the rest")
         void shouldMaskHiddenFields() {
             UserProfileResponse result = new UserMapper().toPublicProfileResponse(
-                    createTestProjection(), Map.of("location", true, "points", true));
+                    createTestProjection(), Map.of("location", true, "points", true), null, null);
 
             assertThat(result.location()).isEqualTo("Taipei");
             assertThat(result.points()).isEqualTo(100);
@@ -296,7 +296,7 @@ class UserProfileVisibilityTest {
         @DisplayName("should return null when display name and bio are hidden")
         void shouldHideDisplayNameAndBioWhenHidden() {
             UserProfileResponse result = new UserMapper().toPublicProfileResponse(
-                    createTestProjection(), Map.of("displayName", false, "bio", false));
+                    createTestProjection(), Map.of("displayName", false, "bio", false), null, null);
 
             assertThat(result.displayName()).isNull();
             assertThat(result.bio()).isNull();
@@ -307,7 +307,7 @@ class UserProfileVisibilityTest {
         @DisplayName("should return original values when display name and bio are public")
         void shouldShowDisplayNameAndBioWhenVisible() {
             UserProfileResponse result = new UserMapper().toPublicProfileResponse(
-                    createTestProjection(), Map.of("displayName", true, "bio", true));
+                    createTestProjection(), Map.of("displayName", true, "bio", true), null, null);
 
             assertThat(result.displayName()).isEqualTo("TestDisplay");
             assertThat(result.bio()).isEqualTo("Hello world");

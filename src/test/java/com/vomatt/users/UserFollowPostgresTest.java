@@ -137,6 +137,36 @@ class UserFollowPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should page a user's followers most recently followed first, leaving out suspended followers and other users' follows")
+    void shouldListNewestFirstWhenPagingFollowers() {
+        List<UUID> expected = new ArrayList<>(List.of(viewer.getId()));
+        for (int i = 0; i < 3; i++) {
+            User u = persistUser("uf-follower-" + UUID.randomUUID());
+            em.persist(new UserFollow(u, followed));
+            em.flush();
+            expected.addFirst(u.getId());
+        }
+        User suspended = persistUser("uf-suspended-" + UUID.randomUUID());
+        suspended.setActive(false);
+        em.persist(new UserFollow(suspended, followed));
+        em.persist(new UserFollow(viewer, other));
+        em.flush();
+
+        List<UserFollow> first = followRepository.findFollowersPage(followed.getId(), null, null, Limit.of(2));
+        UserFollow last = first.getLast();
+        List<UserFollow> rest = followRepository.findFollowersPage(followed.getId(), last.getCreatedAt(), last.getId(), Limit.of(10));
+
+        List<UUID> all = new ArrayList<>();
+        first.forEach(f -> all.add(f.getFollower().getId()));
+        rest.forEach(f -> all.add(f.getFollower().getId()));
+        assertThat(all).containsExactlyElementsOf(expected);
+        assertThat(followRepository.findFollowersPage(other.getId(), null, null, Limit.of(10)))
+                .extracting(f -> f.getFollower().getId()).containsExactly(viewer.getId());
+        assertThat(followRepository.existsByFollowerIdAndFollowedId(viewer.getId(), followed.getId())).isTrue();
+        assertThat(followRepository.existsByFollowerIdAndFollowedId(followed.getId(), viewer.getId())).isFalse();
+    }
+
+    @Test
     @DisplayName("should insert a follow once and ignore the duplicate")
     void shouldIgnoreDuplicateWhenInsertingExistingFollow() {
         assertThat(followRepository.insertIfAbsent(UUIDv7Generator.generateId(), viewer.getId(), other.getId())).isEqualTo(1);

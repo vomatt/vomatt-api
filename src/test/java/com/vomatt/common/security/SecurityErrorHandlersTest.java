@@ -305,4 +305,46 @@ class SecurityErrorHandlersTest {
         assertThat(env.resolvePlaceholders("${springdoc.api-docs.enabled}")).isEqualTo("false");
         assertThat(env.resolvePlaceholders("${springdoc.swagger-ui.enabled}")).isEqualTo("false");
     }
+
+    /** Runs the filter on a public GET and returns the principal it left in the context (null when signed out). */
+    private Object principalOnPublicPath(String token) throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/users/alice");
+        if (token != null) {
+            request.addHeader("Authorization", "Bearer " + token);
+        }
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+        try {
+            jwtAuthFilter.doFilter(request, response, chain);
+            // The request goes on to the permitAll rule; the filter writes no error itself
+            verify(chain).doFilter(request, response);
+            assertThat(response.getContentAsString()).isEmpty();
+            var auth = SecurityContextHolder.getContext().getAuthentication();
+            return auth == null ? null : auth.getPrincipal();
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+    }
+
+    @Test
+    void shouldSetUserPrincipalWhenValidTokenOnPublicPath() throws Exception {
+        String token = Jwts.builder().subject("u1").claim("roles", List.of("user"))
+                .expiration(new Date(System.currentTimeMillis() + 60_000))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes())).compact();
+
+        assertThat(principalOnPublicPath(token)).isInstanceOfSatisfying(UserPrincipal.class,
+                p -> assertThat(p.userId()).isEqualTo("u1"));
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void shouldContinueSignedOutWhenInvalidOrExpiredTokenOnPublicPath() throws Exception {
+        String expired = Jwts.builder().subject("u1").claim("roles", List.of("user"))
+                .expiration(new Date(System.currentTimeMillis() - 60_000))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes())).compact();
+
+        assertThat(principalOnPublicPath(null)).isNull();
+        assertThat(principalOnPublicPath("not-a-jwt")).isNull();
+        assertThat(principalOnPublicPath(expired)).isNull();
+    }
 }

@@ -57,8 +57,10 @@ public class UserMapper {
      * Convert Projection to public profile response, mask fields based on visibility settings
      */
     public UserProfileResponse toPublicProfileResponse(UserProfileProjection projection,
-                                                        Map<String, Boolean> visibility) {
+                                                        Map<String, Boolean> visibility,
+                                                        Boolean isFollowing, Boolean isBlocked) {
         return new UserProfileResponse(
+                projection.getId().toString(),
                 projection.getUsername(),
                 visibility.getOrDefault("displayName", false) ? projection.getDisplayName() : null,
                 visibility.getOrDefault("bio", false) ? projection.getBio() : null,
@@ -70,7 +72,9 @@ public class UserMapper {
                 visibility.getOrDefault("lastName", false) ? projection.getLastName() : null,
                 visibility.getOrDefault("location", false) ? projection.getLocation() : null,
                 visibility.getOrDefault("points", false) ? projection.getPoints() : null,
-                visibility.getOrDefault("membershipLevel", false) ? projection.getMembershipLevel() : null
+                visibility.getOrDefault("membershipLevel", false) ? projection.getMembershipLevel() : null,
+                isFollowing,
+                isBlocked
         );
     }
 }

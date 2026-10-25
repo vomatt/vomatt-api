@@ -41,7 +41,7 @@ public final class SecurityEndpoints {
     /** GET-only public endpoints (Poll details, an Invite-only Poll's owner, results after the Poll ends, comments and replies are readable without login) */
     public static final String[] PUBLIC_GET = { "/api/tags", "/api/tags/**", "/api/votes", VOTE, VOTE + "/creator",
             VOTE + "/results", VOTE + "/comments", VOTE + "/comments/*/replies", "/api/users/{username}",
-            "/api/users/{username}/votes" };
+            "/api/users/{username}/votes", "/api/users/{username}/followers", "/api/users/{username}/following" };
 
     /** Swagger / OpenAPI UI */
     public static final String[] PUBLIC_SWAGGER = { "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**",

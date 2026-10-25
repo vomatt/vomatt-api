@@ -81,9 +81,9 @@ class UserControllerTest {
     @DisplayName("should accept every bot kind as avatarUrl when updating profile")
     void shouldAcceptAvatarUrlWhenBotKindKnown() throws Exception {
         signIn("u1");
-        when(userService.updateMyProfile(eq("u1"), any())).thenAnswer(inv -> new UserProfileResponse("alice", null, null,
+        when(userService.updateMyProfile(eq("u1"), any())).thenAnswer(inv -> new UserProfileResponse("id-1", "alice", null, null,
                 inv.<com.vomatt.users.dto.UpdateProfileRequest>getArgument(1).getAvatarUrl(), null, 0, 0,
-                null, null, null, null, null));
+                null, null, null, null, null, false, false));
 
         for (String kind : BotAvatar.KINDS) {
             mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
@@ -98,9 +98,9 @@ class UserControllerTest {
     @DisplayName("should accept bot:none as avatarUrl when updating profile")
     void shouldAcceptAvatarUrlWhenNone() throws Exception {
         signIn("u1");
-        when(userService.updateMyProfile(eq("u1"), any())).thenAnswer(inv -> new UserProfileResponse("alice", null, null,
+        when(userService.updateMyProfile(eq("u1"), any())).thenAnswer(inv -> new UserProfileResponse("id-1", "alice", null, null,
                 inv.<com.vomatt.users.dto.UpdateProfileRequest>getArgument(1).getAvatarUrl(), null, 0, 0,
-                null, null, null, null, null));
+                null, null, null, null, null, false, false));
 
         mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"avatarUrl\":\"bot:none\"}"))
@@ -127,8 +127,8 @@ class UserControllerTest {
     void shouldPassNullAvatarUrlWhenOmitted() throws Exception {
         signIn("u1");
         when(userService.updateMyProfile(eq("u1"), argThat(r -> r.getAvatarUrl() == null && "Al".equals(r.getDisplayName()))))
-                .thenReturn(new UserProfileResponse("alice", "Al", null, "bot:boba", null, 0, 0,
-                        null, null, null, null, null));
+                .thenReturn(new UserProfileResponse("id-1", "alice", "Al", null, "bot:boba", null, 0, 0,
+                        null, null, null, null, null, false, false));
 
         mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON).content("{\"displayName\":\"Al\"}"))
                 .andExpect(status().isOk())
@@ -141,8 +141,8 @@ class UserControllerTest {
         signIn("u1");
         when(userService.updateMyProfile(eq("u1"), argThat(r -> "Alice".equals(r.getFirstName())
                 && "Chen".equals(r.getLastName()) && java.time.LocalDate.of(1995, 4, 12).equals(r.getBirthday()))))
-                .thenReturn(new UserProfileResponse("alice", null, null, "bot:boba", null, 0, 0,
-                        "Alice", "Chen", null, null, null));
+                .thenReturn(new UserProfileResponse("id-1", "alice", null, null, "bot:boba", null, 0, 0,
+                        "Alice", "Chen", null, null, null, false, false));
 
         mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"firstName\":\"Alice\",\"lastName\":\"Chen\",\"birthday\":\"1995-04-12\"}"))
@@ -255,5 +255,81 @@ class UserControllerTest {
                 .anyMatch(p -> parser.parse(p).matches(PathContainer.parsePath("/api/users/me/votes")))).isTrue();
         assertThat(Arrays.stream(SecurityEndpoints.AUTHENTICATED_USERS)
                 .anyMatch(p -> parser.parse(p).matches(PathContainer.parsePath("/api/users/search/votes")))).isTrue();
+    }
+
+    private static UserProfileResponse profile(Boolean isFollowing, Boolean isBlocked) {
+        return new UserProfileResponse("id-1", "alice", null, null, "bot:boba", null, 0, 0,
+                null, null, null, null, null, isFollowing, isBlocked);
+    }
+
+    @Test
+    @DisplayName("should return null relation flags under isFollowing / isBlocked keys when signed out")
+    void shouldReturnNullRelationFlagsWhenSignedOut() throws Exception {
+        when(userService.getUserProfile("alice", false, null)).thenReturn(profile(null, null));
+
+        mockMvc.perform(get("/api/users/alice"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("id-1"))
+                .andExpect(jsonPath("$.data", org.hamcrest.Matchers.hasKey("isFollowing")))
+                .andExpect(jsonPath("$.data", org.hamcrest.Matchers.hasKey("isBlocked")))
+                .andExpect(jsonPath("$.data.isFollowing").isEmpty())
+                .andExpect(jsonPath("$.data.following").doesNotExist())
+                .andExpect(jsonPath("$.data.blocked").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("should treat the anonymous token of a permitAll path as signed out")
+    void shouldPassNullViewerWhenAnonymousAuthentication() throws Exception {
+        // What AnonymousAuthenticationFilter leaves on a public path when there is no valid token
+        SecurityContextHolder.getContext().setAuthentication(new org.springframework.security.authentication.AnonymousAuthenticationToken(
+                "key", "anonymousUser", AuthorityUtils.createAuthorityList("ROLE_ANONYMOUS")));
+        when(userService.getUserProfile("alice", false, null)).thenReturn(profile(null, null));
+
+        mockMvc.perform(get("/api/users/alice"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.isFollowing").isEmpty());
+    }
+
+    @Test
+    @DisplayName("should pass the signed-in viewer to the profile lookup")
+    void shouldPassViewerIdWhenSignedIn() throws Exception {
+        signIn("u1");
+        when(userService.getUserProfile("alice", false, "u1")).thenReturn(profile(true, false));
+
+        mockMvc.perform(get("/api/users/alice"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.isFollowing").value(true))
+                .andExpect(jsonPath("$.data.isBlocked").value(false));
+    }
+
+    @Test
+    @DisplayName("should pass cursor and limit through when listing followers and following")
+    void shouldPassCursorWhenListingFollowersAndFollowing() throws Exception {
+        UserDto bob = new UserDto("id-2", "bob", "Bob", null);
+        when(userService.listFollowers("alice", "c1", 10)).thenReturn(new CursorResponse<>(List.of(bob), "next"));
+        when(userService.listFollowing("alice", null, null)).thenReturn(new CursorResponse<>(List.of(), null));
+
+        mockMvc.perform(get("/api/users/alice/followers").param("cursor", "c1").param("limit", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].username").value("bob"))
+                .andExpect(jsonPath("$.data.nextCursor").value("next"));
+        mockMvc.perform(get("/api/users/alice/following"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items", hasSize(0)));
+    }
+
+    @Test
+    @DisplayName("should make follower lists public while /api/users/me/** and /api/users/search still require sign-in")
+    void shouldExposeFollowListsPubliclyWhenAuthenticatedPathsStayProtected() {
+        PathPatternParser parser = PathPatternParser.defaultInstance;
+        java.util.function.BiPredicate<String[], String> matches = (patterns, path) -> Arrays.stream(patterns)
+                .anyMatch(p -> parser.parse(p).matches(PathContainer.parsePath(path)));
+        assertThat(matches.test(SecurityEndpoints.PUBLIC_GET, "/api/users/alice/followers")).isTrue();
+        assertThat(matches.test(SecurityEndpoints.PUBLIC_GET, "/api/users/alice/following")).isTrue();
+        // AUTHENTICATED_USERS is matched before PUBLIC_GET, so these keep requiring sign-in
+        for (String path : List.of("/api/users/me", "/api/users/me/follows", "/api/users/me/followers",
+                "/api/users/me/following", "/api/users/search", "/api/users/search/followers", "/api/users/search/following")) {
+            assertThat(matches.test(SecurityEndpoints.AUTHENTICATED_USERS, path)).as(path).isTrue();
+        }
     }
 }

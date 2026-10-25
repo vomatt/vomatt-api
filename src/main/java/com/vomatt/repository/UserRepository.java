@@ -11,8 +11,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import com.vomatt.common.exception.ApiException;
-import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.util.LikePattern;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserVote;
@@ -30,10 +28,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     Optional<User> findByUsername(String username);
 
-    /** A suspended user is not found, as on their profile: same 404 everywhere a username is looked up publicly. */
-    default User findActiveByUsername(String username) {
-        return findByUsername(username).filter(User::isActive)
-            .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
+    /** A suspended user is not found, as on their profile: callers answer both with the same 404. */
+    default Optional<User> findActiveByUsername(String username) {
+        return findByUsername(username).filter(User::isActive);
     }
 
     Optional<User> findByEmail(String email);

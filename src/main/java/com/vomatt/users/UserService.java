@@ -137,10 +137,13 @@ public class UserService {
     @Transactional
     public void blockUser(String userId, String targetId) {
         User target = findOtherActiveUser(userId, targetId, MessageKey.USER_BLOCK_SELF);
+        followRepository.lockPair(UUID.fromString(userId), target.getId());
         if (blockRepository.insertIfAbsent(UUIDv7Generator.generateId(), UUID.fromString(userId), target.getId()) > 0) {
             log.info("User {} blocked user {}", userId, targetId);
         }
-        followRepository.deleteByFollowerIdAndFollowedId(UUID.fromString(userId), target.getId());
+        if (followRepository.deleteByFollowerIdAndFollowedId(UUID.fromString(userId), target.getId()) > 0) {
+            log.info("User {} unfollowed user {} (blocked)", userId, targetId);
+        }
     }
 
     /** Unblocks a user; idempotent, also when the user does not exist. */
@@ -166,8 +169,8 @@ public class UserService {
     @Transactional
     public void followUser(String userId, String targetId) {
         User target = findOtherActiveUser(userId, targetId, MessageKey.USER_FOLLOW_SELF);
-        // ponytail: check-then-insert, so a block committing between the two can leave a follow behind;
-        // lock the pair (or a trigger) if that shows up
+        // Same pair lock as blockUser, so a concurrent block cannot slip between the check and the insert
+        followRepository.lockPair(UUID.fromString(userId), target.getId());
         if (blockRepository.existsByBlockerIdAndBlockedId(UUID.fromString(userId), target.getId())) {
             throw ApiException.badRequest(MessageKey.USER_FOLLOW_BLOCKED);
         }
@@ -220,7 +223,8 @@ public class UserService {
     /** Users who follow the given user, most recently followed first, as public profile fields. */
     @Transactional(readOnly = true)
     public CursorResponse<UserDto> listFollowers(String username, String cursor, Integer limit) {
-        UUID userId = userRepository.findActiveByUsername(username).getId();
+        UUID userId = userRepository.findActiveByUsername(username)
+            .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND)).getId();
         int size = CursorResponse.limit(limit);
         // Bound to the user, so a cursor of another user's follower list is rejected
         Cursor after = Cursor.decode(cursor, Cursor.Scope.USER_FOLLOWERS, userId);
@@ -233,7 +237,8 @@ public class UserService {
     /** Users the given user follows, most recently followed first, as public profile fields. */
     @Transactional(readOnly = true)
     public CursorResponse<UserDto> listFollowing(String username, String cursor, Integer limit) {
-        UUID userId = userRepository.findActiveByUsername(username).getId();
+        UUID userId = userRepository.findActiveByUsername(username)
+            .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND)).getId();
         return followedPage(userId, Cursor.Scope.USER_FOLLOWING, userId, cursor, limit);
     }
 

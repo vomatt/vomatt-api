@@ -475,7 +475,10 @@ class UserServiceTest {
 
         userService.blockUser(caller.toString(), target.toString());
 
-        verify(followRepository).deleteByFollowerIdAndFollowedId(caller, target);
+        InOrder order = inOrder(followRepository, blockRepository);
+        order.verify(followRepository).lockPair(caller, target);
+        order.verify(blockRepository).insertIfAbsent(any(), eq(caller), eq(target));
+        order.verify(followRepository).deleteByFollowerIdAndFollowedId(caller, target);
     }
 
     @Test
@@ -491,6 +494,10 @@ class UserServiceTest {
                     assertThat(e.getStatus()).isEqualTo(org.springframework.http.HttpStatus.BAD_REQUEST);
                     assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_FOLLOW_BLOCKED);
                 });
+        // The pair lock is taken before the block check
+        InOrder order = inOrder(followRepository, blockRepository);
+        order.verify(followRepository).lockPair(caller, target);
+        order.verify(blockRepository).existsByBlockerIdAndBlockedId(caller, target);
         verify(followRepository, never()).insertIfAbsent(any(), any(), any());
     }
 
@@ -503,7 +510,7 @@ class UserServiceTest {
         pref.setUser(hidden);
         pref.setKey("visibility.displayName");
         pref.setValue("false");
-        when(userRepository.findActiveByUsername("alice")).thenReturn(alice);
+        when(userRepository.findActiveByUsername("alice")).thenReturn(Optional.of(alice));
         when(followRepository.findFollowersPage(eq(alice.getId()), eq(null), eq(null), any(Limit.class)))
                 .thenReturn(List.of(new UserFollow(hidden, alice)));
         when(preferenceRepository.findByUserIdInAndKey(List.of(hidden.getId()), "visibility.displayName"))
@@ -520,7 +527,7 @@ class UserServiceTest {
     void shouldListFollowedUsersWhenReadingFollowing() {
         User alice = User.builder().id(UUID.randomUUID()).username("alice").build();
         User bob = User.builder().id(UUID.randomUUID()).username("bob").displayName("Bob").build();
-        when(userRepository.findActiveByUsername("alice")).thenReturn(alice);
+        when(userRepository.findActiveByUsername("alice")).thenReturn(Optional.of(alice));
         when(followRepository.findPage(eq(alice.getId()), eq(null), eq(null), any(Limit.class)))
                 .thenReturn(List.of(new UserFollow(alice, bob)));
 
@@ -551,7 +558,7 @@ class UserServiceTest {
     void shouldRejectCursorWhenIssuedByAnotherFollowList() {
         User alice = User.builder().id(UUID.randomUUID()).username("alice").build();
         UUID bob = UUID.randomUUID();
-        when(userRepository.findActiveByUsername("alice")).thenReturn(alice);
+        when(userRepository.findActiveByUsername("alice")).thenReturn(Optional.of(alice));
         com.vomatt.common.response.Cursor at = com.vomatt.common.response.Cursor.of(java.time.OffsetDateTime.now(), UUID.randomUUID());
         String mine = at.encode(com.vomatt.common.response.Cursor.Scope.FOLLOWS);
         String bobsFollowers = at.encode(com.vomatt.common.response.Cursor.Scope.USER_FOLLOWERS, bob);
@@ -576,7 +583,7 @@ class UserServiceTest {
         UserFollow f2 = new UserFollow(User.builder().id(UUID.randomUUID()).username("c").build(), alice);
         org.springframework.test.util.ReflectionTestUtils.setField(f1, "id", UUID.randomUUID());
         org.springframework.test.util.ReflectionTestUtils.setField(f1, "createdAt", java.time.OffsetDateTime.now());
-        when(userRepository.findActiveByUsername("alice")).thenReturn(alice);
+        when(userRepository.findActiveByUsername("alice")).thenReturn(Optional.of(alice));
         when(followRepository.findFollowersPage(eq(alice.getId()), any(), any(), any(Limit.class))).thenReturn(List.of(f1, f2));
 
         String next = userService.listFollowers("alice", null, 1).nextCursor();

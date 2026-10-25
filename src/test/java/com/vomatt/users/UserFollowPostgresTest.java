@@ -189,6 +189,13 @@ class UserFollowPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should take the pair advisory lock inside the transaction, re-entrantly")
+    void shouldLockPairWhenFollowOrBlockRuns() {
+        assertThat(followRepository.lockPair(viewer.getId(), other.getId())).isEqualTo(1);
+        assertThat(followRepository.lockPair(viewer.getId(), other.getId())).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("should insert a follow once and ignore the duplicate")
     void shouldIgnoreDuplicateWhenInsertingExistingFollow() {
         assertThat(followRepository.insertIfAbsent(UUIDv7Generator.generateId(), viewer.getId(), other.getId())).isEqualTo(1);

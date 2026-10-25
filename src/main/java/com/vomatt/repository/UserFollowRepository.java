@@ -23,6 +23,15 @@ public interface UserFollowRepository extends JpaRepository<UserFollow, UUID> {
             ON CONFLICT (follower_id, followed_id) DO NOTHING""", nativeQuery = true)
     int insertIfAbsent(@Param("id") UUID id, @Param("followerId") UUID followerId, @Param("followedId") UUID followedId);
 
+    /**
+     * Transaction-scoped advisory lock on one (follower, followed) pair; followUser and blockUser take it before
+     * their check / insert / delete, so a follow and a block of the same pair run one after the other.
+     */
+    @Query(value = """
+            SELECT 1 FROM pg_advisory_xact_lock(hashtextextended(CAST(:followerId AS text) || CAST(:followedId AS text), 0))""",
+            nativeQuery = true)
+    int lockPair(@Param("followerId") UUID followerId, @Param("followedId") UUID followedId);
+
     /** @return 1 when a follow was removed, 0 when there was none */
     @Modifying
     @Query("DELETE FROM UserFollow f WHERE f.follower.id = :followerId AND f.followed.id = :followedId")

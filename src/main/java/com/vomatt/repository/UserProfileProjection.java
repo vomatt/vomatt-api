@@ -15,6 +15,8 @@ public interface UserProfileProjection {
     OffsetDateTime getCreatedAt();
     Long getTotalPolls();
     Long getTotalVotes();
+    Long getFollowersCount();
+    Long getFollowingCount();
     Boolean getActive();
     // Extended fields whose visibility can be controlled
     String getFirstName();
@@ -25,4 +27,6 @@ public interface UserProfileProjection {
     // Viewer relation; false when there is no viewer
     Boolean getFollowing();
     Boolean getBlocked();
+    /** Whether the user follows the viewer */
+    Boolean getFollowsViewer();
 }

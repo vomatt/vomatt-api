@@ -48,6 +48,10 @@ public record MyProfileResponse(
         int totalPolls,
         @Schema(description = "Number of Polls the user holds a Ballot in", example = "17")
         int totalVotes,
+        @Schema(description = "Number of users following the caller; suspended accounts are not counted", example = "12")
+        int followersCount,
+        @Schema(description = "Number of users the caller follows; suspended accounts are not counted", example = "8")
+        int followingCount,
         @Schema(description = "Field name to visible flag, i.e. what other users see on the public profile; "
                 + "keys: email, firstName, lastName, birthday, location, points, displayName, bio, membershipLevel",
                 example = "{\"email\": false, \"displayName\": true, \"bio\": true}")

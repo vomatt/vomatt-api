@@ -1,5 +1,6 @@
 package com.vomatt.users;
 
+import com.vomatt.users.dto.FollowUserDto;
 import com.vomatt.users.dto.MyProfileResponse;
 import com.vomatt.users.dto.UserDto;
 import com.vomatt.users.dto.UserProfileResponse;
@@ -24,10 +25,22 @@ public class UserMapper {
         );
     }
 
+    /** Follower / following list item: search result fields plus the caller's relation to the user. */
+    public FollowUserDto toFollowItem(User user, boolean displayNameVisible, boolean isFollowing, boolean followsYou) {
+        return new FollowUserDto(
+                user.getId().toString(),
+                user.getUsername(),
+                displayNameVisible ? user.getDisplayName() : null,
+                user.getAvatarUrl(),
+                isFollowing,
+                followsYou
+        );
+    }
+
     /**
-     * Convert User entity to profile response (including all fields)
+     * Convert User entity to profile response (including all fields); counts come from the profile projection
      */
-    public MyProfileResponse toMyProfileResponse(User user, int totalPolls, int totalVotes,
+    public MyProfileResponse toMyProfileResponse(User user, UserProfileProjection stats,
                                                   Map<String, Boolean> visibilitySettings, boolean anonymousBallotByDefault) {
         return new MyProfileResponse(
                 user.getId().toString(),
@@ -46,8 +59,10 @@ public class UserMapper {
                 user.isActive(),
                 user.getLastLoginAt(),
                 user.getCreatedAt(),
-                totalPolls,
-                totalVotes,
+                stats.getTotalPolls().intValue(),
+                stats.getTotalVotes().intValue(),
+                stats.getFollowersCount().intValue(),
+                stats.getFollowingCount().intValue(),
                 visibilitySettings,
                 anonymousBallotByDefault
         );
@@ -58,7 +73,7 @@ public class UserMapper {
      */
     public UserProfileResponse toPublicProfileResponse(UserProfileProjection projection,
                                                         Map<String, Boolean> visibility,
-                                                        Boolean isFollowing, Boolean isBlocked) {
+                                                        Boolean isFollowing, Boolean isBlocked, Boolean followsYou) {
         return new UserProfileResponse(
                 projection.getId().toString(),
                 projection.getUsername(),
@@ -68,12 +83,15 @@ public class UserMapper {
                 projection.getCreatedAt(),
                 projection.getTotalPolls().intValue(),
                 projection.getTotalVotes().intValue(),
+                projection.getFollowersCount().intValue(),
+                projection.getFollowingCount().intValue(),
                 visibility.getOrDefault("firstName", false) ? projection.getFirstName() : null,
                 visibility.getOrDefault("lastName", false) ? projection.getLastName() : null,
                 visibility.getOrDefault("location", false) ? projection.getLocation() : null,
                 visibility.getOrDefault("points", false) ? projection.getPoints() : null,
                 visibility.getOrDefault("membershipLevel", false) ? projection.getMembershipLevel() : null,
                 isFollowing,
+                followsYou,
                 isBlocked
         );
     }

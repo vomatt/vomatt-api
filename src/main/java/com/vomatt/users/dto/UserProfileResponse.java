@@ -23,6 +23,10 @@ public record UserProfileResponse(
         int totalPolls,
         @Schema(description = "Number of Polls the user holds a Ballot in", example = "17")
         int totalVotes,
+        @Schema(description = "Number of users following this user; suspended accounts are not counted", example = "12")
+        int followersCount,
+        @Schema(description = "Number of users this user follows; suspended accounts are not counted", example = "8")
+        int followingCount,
         // controllable fields: null when hidden. Email and birthday are never part of the public profile
         @Schema(description = "First name; null when hidden (default) or not set", example = "Alice", nullable = true)
         String firstName,
@@ -38,6 +42,9 @@ public record UserProfileResponse(
         @Schema(description = "Whether the caller follows this user; null when signed out, false on the caller's own profile",
                 example = "false", nullable = true)
         Boolean isFollowing,
+        @Schema(description = "Whether this user follows the caller; null when signed out, false on the caller's own profile",
+                example = "true", nullable = true)
+        Boolean followsYou,
         @Schema(description = "Whether the caller has blocked this user; null when signed out, false on the caller's own profile",
                 example = "false", nullable = true)
         Boolean isBlocked

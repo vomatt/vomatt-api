@@ -1,6 +1,7 @@
 package com.vomatt.repository;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -59,6 +60,13 @@ public interface UserFollowRepository extends JpaRepository<UserFollow, UUID> {
             ORDER BY f.createdAt DESC, f.id DESC""")
     List<UserFollow> findFollowersPage(@Param("followedId") UUID followedId, @Param("afterTime") OffsetDateTime afterTime,
                                        @Param("afterId") UUID afterId, Limit limit);
+
+    /** Follows between the viewer and any of the users, in either direction; one query for a page of users. */
+    @Query("""
+            SELECT new com.vomatt.repository.FollowEdge(f.follower.id, f.followed.id) FROM UserFollow f
+            WHERE (f.follower.id = :viewerId AND f.followed.id IN :userIds)
+               OR (f.followed.id = :viewerId AND f.follower.id IN :userIds)""")
+    List<FollowEdge> findEdgesWithViewer(@Param("viewerId") UUID viewerId, @Param("userIds") Collection<UUID> userIds);
 
     /** Data export: every user the user follows, suspended ones included, oldest first. */
     @Query("SELECT f FROM UserFollow f JOIN FETCH f.followed WHERE f.follower.id = :followerId ORDER BY f.createdAt, f.id")

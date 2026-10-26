@@ -42,6 +42,7 @@ import com.vomatt.common.i18n.LocalizedMessageService;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.security.SecurityEndpoints;
 import com.vomatt.common.security.UserPrincipal;
+import com.vomatt.users.dto.FollowUserDto;
 import com.vomatt.users.dto.UserDto;
 import com.vomatt.users.dto.UserProfileResponse;
 import com.vomatt.votes.VoteService;
@@ -82,8 +83,8 @@ class UserControllerTest {
     void shouldAcceptAvatarUrlWhenBotKindKnown() throws Exception {
         signIn("u1");
         when(userService.updateMyProfile(eq("u1"), any())).thenAnswer(inv -> new UserProfileResponse("id-1", "alice", null, null,
-                inv.<com.vomatt.users.dto.UpdateProfileRequest>getArgument(1).getAvatarUrl(), null, 0, 0,
-                null, null, null, null, null, false, false));
+                inv.<com.vomatt.users.dto.UpdateProfileRequest>getArgument(1).getAvatarUrl(), null, 0, 0, 0, 0,
+                null, null, null, null, null, false, false, false));
 
         for (String kind : BotAvatar.KINDS) {
             mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
@@ -99,8 +100,8 @@ class UserControllerTest {
     void shouldAcceptAvatarUrlWhenNone() throws Exception {
         signIn("u1");
         when(userService.updateMyProfile(eq("u1"), any())).thenAnswer(inv -> new UserProfileResponse("id-1", "alice", null, null,
-                inv.<com.vomatt.users.dto.UpdateProfileRequest>getArgument(1).getAvatarUrl(), null, 0, 0,
-                null, null, null, null, null, false, false));
+                inv.<com.vomatt.users.dto.UpdateProfileRequest>getArgument(1).getAvatarUrl(), null, 0, 0, 0, 0,
+                null, null, null, null, null, false, false, false));
 
         mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"avatarUrl\":\"bot:none\"}"))
@@ -127,8 +128,8 @@ class UserControllerTest {
     void shouldPassNullAvatarUrlWhenOmitted() throws Exception {
         signIn("u1");
         when(userService.updateMyProfile(eq("u1"), argThat(r -> r.getAvatarUrl() == null && "Al".equals(r.getDisplayName()))))
-                .thenReturn(new UserProfileResponse("id-1", "alice", "Al", null, "bot:boba", null, 0, 0,
-                        null, null, null, null, null, false, false));
+                .thenReturn(new UserProfileResponse("id-1", "alice", "Al", null, "bot:boba", null, 0, 0, 0, 0,
+                        null, null, null, null, null, false, false, false));
 
         mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON).content("{\"displayName\":\"Al\"}"))
                 .andExpect(status().isOk())
@@ -141,8 +142,8 @@ class UserControllerTest {
         signIn("u1");
         when(userService.updateMyProfile(eq("u1"), argThat(r -> "Alice".equals(r.getFirstName())
                 && "Chen".equals(r.getLastName()) && java.time.LocalDate.of(1995, 4, 12).equals(r.getBirthday()))))
-                .thenReturn(new UserProfileResponse("id-1", "alice", null, null, "bot:boba", null, 0, 0,
-                        "Alice", "Chen", null, null, null, false, false));
+                .thenReturn(new UserProfileResponse("id-1", "alice", null, null, "bot:boba", null, 0, 0, 0, 0,
+                        "Alice", "Chen", null, null, null, false, false, false));
 
         mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"firstName\":\"Alice\",\"lastName\":\"Chen\",\"birthday\":\"1995-04-12\"}"))
@@ -258,8 +259,8 @@ class UserControllerTest {
     }
 
     private static UserProfileResponse profile(Boolean isFollowing, Boolean isBlocked) {
-        return new UserProfileResponse("id-1", "alice", null, null, "bot:boba", null, 0, 0,
-                null, null, null, null, null, isFollowing, isBlocked);
+        return new UserProfileResponse("id-1", "alice", null, null, "bot:boba", null, 0, 0, 0, 0,
+                null, null, null, null, null, isFollowing, isFollowing, isBlocked);
     }
 
     @Test
@@ -272,6 +273,7 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.data.id").value("id-1"))
                 .andExpect(jsonPath("$.data", org.hamcrest.Matchers.hasKey("isFollowing")))
                 .andExpect(jsonPath("$.data", org.hamcrest.Matchers.hasKey("isBlocked")))
+                .andExpect(jsonPath("$.data", org.hamcrest.Matchers.hasKey("followsYou")))
                 .andExpect(jsonPath("$.data.isFollowing").isEmpty())
                 .andExpect(jsonPath("$.data.following").doesNotExist())
                 .andExpect(jsonPath("$.data.blocked").doesNotExist());
@@ -303,16 +305,19 @@ class UserControllerTest {
     }
 
     @Test
-    @DisplayName("should pass cursor and limit through when listing followers and following")
+    @DisplayName("should pass cursor, limit and caller through when listing followers and following")
     void shouldPassCursorWhenListingFollowersAndFollowing() throws Exception {
         signIn("u1");
-        UserDto bob = new UserDto("id-2", "bob", "Bob", null);
-        when(userService.listFollowers("alice", "c1", 10)).thenReturn(new CursorResponse<>(List.of(bob), "next"));
-        when(userService.listFollowing("alice", null, null)).thenReturn(new CursorResponse<>(List.of(), null));
+        FollowUserDto bob = new FollowUserDto("id-2", "bob", "Bob", null, false, true);
+        when(userService.listFollowers("alice", "c1", 10, "u1")).thenReturn(new CursorResponse<>(List.of(bob), "next"));
+        when(userService.listFollowing("alice", null, null, "u1")).thenReturn(new CursorResponse<>(List.of(), null));
 
         mockMvc.perform(get("/api/users/alice/followers").param("cursor", "c1").param("limit", "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].username").value("bob"))
+                .andExpect(jsonPath("$.data.items[0].isFollowing").value(false))
+                .andExpect(jsonPath("$.data.items[0].followsYou").value(true))
+                .andExpect(jsonPath("$.data.items[0].following").doesNotExist())
                 .andExpect(jsonPath("$.data.nextCursor").value("next"));
         mockMvc.perform(get("/api/users/alice/following"))
                 .andExpect(status().isOk())

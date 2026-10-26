@@ -20,6 +20,7 @@ import com.vomatt.entity.User;
 import com.vomatt.entity.UserBlock;
 import com.vomatt.entity.UserFollow;
 import com.vomatt.entity.Vote;
+import com.vomatt.repository.FollowEdge;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.repository.UserFollowRepository;
 import com.vomatt.votes.VoteService;
@@ -186,6 +187,53 @@ class UserFollowPostgresTest extends PostgresRepositoryTest {
         var signedOut = userRepository.findProfileByUsername(followed.getUsername()).orElseThrow();
         assertThat(signedOut.getFollowing()).isFalse();
         assertThat(signedOut.getBlocked()).isFalse();
+    }
+
+    @Test
+    @DisplayName("should count followers and following like the lists: suspended accounts left out, blocks not filtered")
+    void shouldMatchListsWhenCountingFollows() {
+        User fan = persistUser("uf-fan-" + UUID.randomUUID());
+        User suspended = persistUser("uf-suspended-" + UUID.randomUUID());
+        suspended.setActive(false);
+        em.persist(new UserFollow(fan, followed));
+        em.persist(new UserFollow(suspended, followed));
+        em.persist(new UserFollow(followed, other));
+        em.persist(new UserFollow(followed, suspended));
+        // other blocked followed; followed still follows other (a block is one-way)
+        em.persist(new UserBlock(other, followed));
+        em.flush();
+
+        var profile = userRepository.findProfileByUsername(followed.getUsername()).orElseThrow();
+        assertThat(profile.getFollowersCount()).isEqualTo(2L)
+                .isEqualTo(followRepository.findFollowersPage(followed.getId(), null, null, Limit.of(50)).size());
+        assertThat(profile.getFollowingCount()).isEqualTo(1L)
+                .isEqualTo(followRepository.findPage(followed.getId(), null, null, Limit.of(50)).size());
+        assertThat(userRepository.findProfileByUsername(other.getUsername()).orElseThrow().getFollowersCount()).isEqualTo(1L);
+        var blockedByViewer = userRepository.findProfileForViewer(followed.getUsername(), other.getId()).orElseThrow();
+        assertThat(blockedByViewer.getBlocked()).isTrue();
+        assertThat(blockedByViewer.getFollowsViewer()).isTrue();
+    }
+
+    @Test
+    @DisplayName("should read whether the user follows the viewer in the profile query")
+    void shouldReturnFollowsViewerWhenReadingProfileForViewer() {
+        assertThat(userRepository.findProfileForViewer(viewer.getUsername(), followed.getId()).orElseThrow().getFollowsViewer()).isTrue();
+        assertThat(userRepository.findProfileForViewer(followed.getUsername(), viewer.getId()).orElseThrow().getFollowsViewer()).isFalse();
+        assertThat(userRepository.findProfileForViewer(viewer.getUsername(), viewer.getId()).orElseThrow().getFollowsViewer()).isFalse();
+        assertThat(userRepository.findProfileByUsername(viewer.getUsername()).orElseThrow().getFollowsViewer()).isFalse();
+    }
+
+    @Test
+    @DisplayName("should return only the follows between the viewer and the given users, in both directions")
+    void shouldReturnBothDirectionsWhenFindingEdgesWithViewer() {
+        User stranger = persistUser("uf-stranger-" + UUID.randomUUID());
+        em.persist(new UserFollow(other, viewer));
+        em.persist(new UserFollow(followed, other));
+        em.persist(new UserFollow(viewer, stranger));
+        em.flush();
+
+        assertThat(followRepository.findEdgesWithViewer(viewer.getId(), List.of(followed.getId(), other.getId())))
+                .containsExactlyInAnyOrder(new FollowEdge(viewer.getId(), followed.getId()), new FollowEdge(other.getId(), viewer.getId()));
     }
 
     @Test

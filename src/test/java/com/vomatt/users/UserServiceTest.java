@@ -35,7 +35,10 @@ import com.vomatt.entity.User;
 import com.vomatt.users.dto.UserProfileResponse;
 import com.vomatt.entity.UserFollow;
 import com.vomatt.entity.UserPreference;
+import com.vomatt.users.dto.FollowUserDto;
+import com.vomatt.users.dto.MyProfileResponse;
 import com.vomatt.users.dto.UserDto;
+import com.vomatt.repository.FollowEdge;
 import com.vomatt.repository.UserBlockRepository;
 import com.vomatt.repository.UserFollowRepository;
 import com.vomatt.repository.UserPreferenceRepository;
@@ -428,12 +431,61 @@ class UserServiceTest {
         UserProfileProjection projection = activeProfile(target, viewer);
         when(projection.getFollowing()).thenReturn(true);
         when(projection.getBlocked()).thenReturn(false);
+        when(projection.getFollowsViewer()).thenReturn(true);
 
         UserProfileResponse profile = userService.getUserProfile("alice", false, viewer.toString());
 
         assertThat(profile.id()).isEqualTo(target.toString());
         assertThat(profile.isFollowing()).isTrue();
         assertThat(profile.isBlocked()).isFalse();
+        assertThat(profile.followsYou()).isTrue();
+    }
+
+    @Test
+    @DisplayName("should still report that a user the caller blocked follows the caller")
+    void shouldReturnFollowsYouWhenCallerBlockedFollower() {
+        UUID viewer = UUID.randomUUID();
+        UserProfileProjection projection = activeProfile(UUID.randomUUID(), viewer);
+        when(projection.getFollowing()).thenReturn(false);
+        when(projection.getBlocked()).thenReturn(true);
+        when(projection.getFollowsViewer()).thenReturn(true);
+
+        UserProfileResponse profile = userService.getUserProfile("alice", false, viewer.toString());
+
+        assertThat(profile.isBlocked()).isTrue();
+        assertThat(profile.isFollowing()).isFalse();
+        assertThat(profile.followsYou()).isTrue();
+    }
+
+    @Test
+    @DisplayName("should return follower and following counts on the public profile whether or not the caller is signed in")
+    void shouldReturnFollowCountsWhenReadingProfile() {
+        UserProfileProjection projection = activeProfile(UUID.randomUUID(), null);
+        when(projection.getFollowersCount()).thenReturn(12L);
+        when(projection.getFollowingCount()).thenReturn(8L);
+
+        UserProfileResponse profile = userService.getUserProfile("alice", false, null);
+
+        assertThat(profile.followersCount()).isEqualTo(12);
+        assertThat(profile.followingCount()).isEqualTo(8);
+    }
+
+    @Test
+    @DisplayName("should return follower and following counts on the caller's own profile")
+    void shouldReturnFollowCountsWhenReadingMyProfile() {
+        UUID id = UUID.randomUUID();
+        when(userRepository.findById(id)).thenReturn(Optional.of(User.builder().id(id).username("alice").build()));
+        UserProfileProjection projection = org.mockito.Mockito.mock(UserProfileProjection.class);
+        when(projection.getTotalPolls()).thenReturn(0L);
+        when(projection.getTotalVotes()).thenReturn(0L);
+        when(projection.getFollowersCount()).thenReturn(3L);
+        when(projection.getFollowingCount()).thenReturn(5L);
+        when(userRepository.findProfileByUsername("alice")).thenReturn(Optional.of(projection));
+
+        MyProfileResponse profile = userService.getMyProfile(id.toString());
+
+        assertThat(profile.followersCount()).isEqualTo(3);
+        assertThat(profile.followingCount()).isEqualTo(5);
     }
 
     @Test
@@ -445,6 +497,7 @@ class UserServiceTest {
 
         assertThat(profile.isFollowing()).isNull();
         assertThat(profile.isBlocked()).isNull();
+        assertThat(profile.followsYou()).isNull();
     }
 
     @Test
@@ -463,6 +516,7 @@ class UserServiceTest {
 
         assertThat(profile.isFollowing()).isFalse();
         assertThat(profile.isBlocked()).isFalse();
+        assertThat(profile.followsYou()).isFalse();
     }
 
     @Test
@@ -516,9 +570,9 @@ class UserServiceTest {
         when(preferenceRepository.findByUserIdInAndKey(List.of(hidden.getId()), "visibility.displayName"))
                 .thenReturn(List.of(pref));
 
-        CursorResponse<UserDto> page = userService.listFollowers("alice", null, null);
+        CursorResponse<FollowUserDto> page = userService.listFollowers("alice", null, null, UUID.randomUUID().toString());
 
-        assertThat(page.items()).containsExactly(new UserDto(hidden.getId().toString(), "bob", null, null));
+        assertThat(page.items()).containsExactly(new FollowUserDto(hidden.getId().toString(), "bob", null, null, false, false));
         assertThat(page.nextCursor()).isNull();
     }
 
@@ -531,9 +585,9 @@ class UserServiceTest {
         when(followRepository.findPage(eq(alice.getId()), eq(null), eq(null), any(Limit.class)))
                 .thenReturn(List.of(new UserFollow(alice, bob)));
 
-        CursorResponse<UserDto> page = userService.listFollowing("alice", null, null);
+        CursorResponse<FollowUserDto> page = userService.listFollowing("alice", null, null, UUID.randomUUID().toString());
 
-        assertThat(page.items()).containsExactly(new UserDto(bob.getId().toString(), "bob", "Bob", null));
+        assertThat(page.items()).containsExactly(new FollowUserDto(bob.getId().toString(), "bob", "Bob", null, false, false));
     }
 
     @Test
@@ -545,9 +599,9 @@ class UserServiceTest {
         when(userRepository.findByUsername("nobody")).thenReturn(Optional.empty());
 
         for (String username : List.of("gone", "nobody")) {
-            assertThatThrownBy(() -> userService.listFollowers(username, null, null))
+            assertThatThrownBy(() -> userService.listFollowers(username, null, null, UUID.randomUUID().toString()))
                     .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND));
-            assertThatThrownBy(() -> userService.listFollowing(username, null, null))
+            assertThatThrownBy(() -> userService.listFollowing(username, null, null, UUID.randomUUID().toString()))
                     .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND));
         }
         org.mockito.Mockito.verifyNoInteractions(followRepository);
@@ -558,6 +612,7 @@ class UserServiceTest {
     void shouldRejectCursorWhenIssuedByAnotherFollowList() {
         User alice = User.builder().id(UUID.randomUUID()).username("alice").build();
         UUID bob = UUID.randomUUID();
+        String caller = UUID.randomUUID().toString();
         when(userRepository.findActiveByUsername("alice")).thenReturn(Optional.of(alice));
         com.vomatt.common.response.Cursor at = com.vomatt.common.response.Cursor.of(java.time.OffsetDateTime.now(), UUID.randomUUID());
         String mine = at.encode(com.vomatt.common.response.Cursor.Scope.FOLLOWS);
@@ -566,10 +621,10 @@ class UserServiceTest {
         String alicesFollowing = at.encode(com.vomatt.common.response.Cursor.Scope.USER_FOLLOWING, alice.getId());
 
         for (Runnable call : List.<Runnable>of(
-                () -> userService.listFollowing("alice", mine, null),
-                () -> userService.listFollowing("alice", bobsFollowing, null),
-                () -> userService.listFollowers("alice", bobsFollowers, null),
-                () -> userService.listFollowers("alice", alicesFollowing, null))) {
+                () -> userService.listFollowing("alice", mine, null, caller),
+                () -> userService.listFollowing("alice", bobsFollowing, null, caller),
+                () -> userService.listFollowers("alice", bobsFollowers, null, caller),
+                () -> userService.listFollowers("alice", alicesFollowing, null, caller))) {
             assertThatThrownBy(call::run).isInstanceOfSatisfying(ApiException.class,
                     e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.COMMON_CURSOR_INVALID));
         }
@@ -586,11 +641,45 @@ class UserServiceTest {
         when(userRepository.findActiveByUsername("alice")).thenReturn(Optional.of(alice));
         when(followRepository.findFollowersPage(eq(alice.getId()), any(), any(), any(Limit.class))).thenReturn(List.of(f1, f2));
 
-        String next = userService.listFollowers("alice", null, 1).nextCursor();
+        String caller = UUID.randomUUID().toString();
+        String next = userService.listFollowers("alice", null, 1, caller).nextCursor();
 
         assertThat(next).isNotNull();
-        userService.listFollowers("alice", next, 1);
+        userService.listFollowers("alice", next, 1, caller);
         verify(followRepository).findFollowersPage(eq(alice.getId()), eq(f1.getCreatedAt().withOffsetSameInstant(java.time.ZoneOffset.UTC)),
                 eq(f1.getId()), any(Limit.class));
+    }
+
+    @Test
+    @DisplayName("should mark each listed user the caller follows and who follows the caller, from one query for the page")
+    void shouldReturnRelationFlagsWhenListingFollowers() {
+        User alice = User.builder().id(UUID.randomUUID()).username("alice").build();
+        User mutual = User.builder().id(UUID.randomUUID()).username("bob").build();
+        User fan = User.builder().id(UUID.randomUUID()).username("carol").build();
+        User caller = User.builder().id(UUID.randomUUID()).username("dave").build();
+        when(userRepository.findActiveByUsername("alice")).thenReturn(Optional.of(alice));
+        when(followRepository.findFollowersPage(eq(alice.getId()), eq(null), eq(null), any(Limit.class)))
+                .thenReturn(List.of(new UserFollow(mutual, alice), new UserFollow(fan, alice), new UserFollow(caller, alice)));
+        when(followRepository.findEdgesWithViewer(caller.getId(), List.of(mutual.getId(), fan.getId(), caller.getId())))
+                .thenReturn(List.of(new FollowEdge(caller.getId(), mutual.getId()), new FollowEdge(mutual.getId(), caller.getId()),
+                        new FollowEdge(fan.getId(), caller.getId())));
+
+        CursorResponse<FollowUserDto> page = userService.listFollowers("alice", null, null, caller.getId().toString());
+
+        assertThat(page.items()).extracting(FollowUserDto::username, FollowUserDto::isFollowing, FollowUserDto::followsYou)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("bob", true, true),
+                        org.assertj.core.groups.Tuple.tuple("carol", false, true),
+                        org.assertj.core.groups.Tuple.tuple("dave", false, false));
+        verify(followRepository, org.mockito.Mockito.times(1)).findEdgesWithViewer(any(), any());
+    }
+
+    @Test
+    @DisplayName("should skip the relation query when a follow list page is empty")
+    void shouldSkipRelationQueryWhenFollowListEmpty() {
+        User alice = User.builder().id(UUID.randomUUID()).username("alice").build();
+        when(userRepository.findActiveByUsername("alice")).thenReturn(Optional.of(alice));
+
+        assertThat(userService.listFollowing("alice", null, null, UUID.randomUUID().toString()).items()).isEmpty();
+        verify(followRepository, never()).findEdgesWithViewer(any(), any());
     }
 }

@@ -706,6 +706,38 @@
         },
         "type" : "object"
       },
+      "ApiResponseCursorResponseFollowUserDto" : {
+        "description" : "Envelope of every API response, success or error",
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/CursorResponseFollowUserDto"
+          },
+          "error" : {
+            "description" : "Legacy duplicate of `message` on errors; null on success. Use `message` instead",
+            "example" : "Poll not found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "errorCode" : {
+            "description" : "Stable machine-readable error code (lowercase, dot-separated); branch on this, not on `message`. Null on success",
+            "example" : "vote.not_found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "message" : {
+            "description" : "Localized text following Accept-Language. On success it is usually null, except operations that attach a toast-ready text; on error it is the error message",
+            "example" : "Operation completed",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "success" : {
+            "description" : "true on success, false on error",
+            "example" : true,
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseCursorResponseTagDto" : {
         "description" : "Envelope of every API response, success or error",
         "properties" : {
@@ -2265,6 +2297,26 @@
         },
         "type" : "object"
       },
+      "CursorResponseFollowUserDto" : {
+        "description" : "Cursor-paged list container; pass `nextCursor` back as `cursor` to fetch the next page",
+        "nullable" : true,
+        "properties" : {
+          "items" : {
+            "description" : "Items of this page",
+            "items" : {
+              "$ref" : "#/components/schemas/FollowUserDto"
+            },
+            "type" : "array"
+          },
+          "nextCursor" : {
+            "description" : "Opaque cursor of the next page; null when this is the last page",
+            "example" : "MDE5OWMzYTItN2I1ZS03YzFkLTlhNGYtM2UyYjFkNWM2ZjcwfDQy",
+            "nullable" : true,
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "CursorResponseTagDto" : {
         "description" : "Cursor-paged list container; pass `nextCursor` back as `cursor` to fetch the next page",
         "nullable" : true,
@@ -2385,6 +2437,44 @@
           },
           "id" : {
             "example" : "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "FollowUserDto" : {
+        "description" : "Follower or following list item: public profile fields, masked by the owner's visibility settings, plus the caller's relation to the user",
+        "properties" : {
+          "avatarUrl" : {
+            "description" : "Avatar as `bot:<kind>` (the bot cast). Older accounts may hold an image URL; null if never set",
+            "example" : "bot:boba",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "displayName" : {
+            "description" : "Display name; null if the owner hid it (public by default) or never set one",
+            "example" : "Alice",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "followsYou" : {
+            "description" : "Whether this user follows the caller; false for the caller's own entry",
+            "example" : false,
+            "type" : "boolean"
+          },
+          "id" : {
+            "description" : "User id (UUIDv7)",
+            "example" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
+            "type" : "string"
+          },
+          "isFollowing" : {
+            "description" : "Whether the caller follows this user; false for the caller's own entry",
+            "example" : true,
+            "type" : "boolean"
+          },
+          "username" : {
+            "description" : "Unique username",
+            "example" : "alice",
             "type" : "string"
           }
         },
@@ -2745,6 +2835,18 @@
             "example" : "Alice",
             "nullable" : true,
             "type" : "string"
+          },
+          "followersCount" : {
+            "description" : "Number of users following the caller; suspended accounts are not counted",
+            "example" : 12,
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "followingCount" : {
+            "description" : "Number of users the caller follows; suspended accounts are not counted",
+            "example" : 8,
+            "format" : "int32",
+            "type" : "integer"
           },
           "id" : {
             "description" : "User id (UUIDv7)",
@@ -3698,6 +3800,24 @@
             "example" : "Alice",
             "nullable" : true,
             "type" : "string"
+          },
+          "followersCount" : {
+            "description" : "Number of users following this user; suspended accounts are not counted",
+            "example" : 12,
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "followingCount" : {
+            "description" : "Number of users this user follows; suspended accounts are not counted",
+            "example" : 8,
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "followsYou" : {
+            "description" : "Whether this user follows the caller; null when signed out, false on the caller's own profile",
+            "example" : true,
+            "nullable" : true,
+            "type" : "boolean"
           },
           "id" : {
             "description" : "User id",
@@ -10949,7 +11069,7 @@
     },
     "/api/users/me" : {
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: returns the caller's own profile with every field, ignoring visibility settings. Unlike the public profile, nothing is masked; `visibilitySettings` reports what other users see on `GET /api/users/{username}` (unset fields use their defaults: `displayName` and `bio` public, the rest hidden). `totalPolls` counts Polls the user created that have opened (Open and Ended; not Scheduled or Cancelled before opening), `totalVotes` counts Public, non-Deleted Polls the user holds a Ballot in. `anonymousBallotByDefault` is whether Ballots are Anonymous when a Ballot does not say otherwise (false until set).\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: the account no longer exists",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: returns the caller's own profile with every field, ignoring visibility settings. Unlike the public profile, nothing is masked; `visibilitySettings` reports what other users see on `GET /api/users/{username}` (unset fields use their defaults: `displayName` and `bio` public, the rest hidden). `totalPolls` counts Polls the user created that have opened (Open and Ended; not Scheduled or Cancelled before opening), `totalVotes` counts Public, non-Deleted Polls the user holds a Ballot in. `followersCount` / `followingCount` count the users in `GET /api/users/{username}/followers` / `/following` (suspended accounts left out). `anonymousBallotByDefault` is whether Ballots are Anonymous when a Ballot does not say otherwise (false until set).\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: the account no longer exists",
         "operationId" : "getMyProfile",
         "responses" : {
           "200" : {
@@ -10965,6 +11085,8 @@
                     "displayName" : "Alice",
                     "email" : "alice@example.com",
                     "firstName" : "Alice",
+                    "followersCount" : 12,
+                    "followingCount" : 8,
                     "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
                     "joinedAt" : "2026-08-01T10:00:00+08:00",
                     "lastLoginAt" : "2026-10-09T09:15:00+08:00",
@@ -11536,6 +11658,8 @@
                       "displayName" : "Alice",
                       "email" : "alice@example.com",
                       "firstName" : "Alice",
+                      "followersCount" : 0,
+                      "followingCount" : 1,
                       "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
                       "joinedAt" : "2026-08-01T10:00:00+08:00",
                       "lastLoginAt" : "2026-10-09T09:15:00+08:00",
@@ -11621,7 +11745,7 @@
     },
     "/api/users/me/follows" : {
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: users the caller follows, most recently followed first, cursor-paged (`limit` 1-50, default 20; out-of-range values are clamped). `nextCursor` is `null` on the last page. Each item carries only public profile fields, like user search.\n**Side effects**: none\n**Errors**:\n- 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: users the caller follows, most recently followed first, cursor-paged (`limit` 1-50, default 20; out-of-range values are clamped). `nextCursor` is `null` on the last page. Each item carries the public profile fields of user search, plus `isFollowing` (always `true` here) and `followsYou` (the user follows the caller back).\n**Side effects**: none\n**Errors**:\n- 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list",
         "operationId" : "listFollowedUsers",
         "parameters" : [ {
           "description" : "`nextCursor` returned by the previous page",
@@ -11650,7 +11774,9 @@
                     "items" : [ {
                       "avatarUrl" : "bot:boba",
                       "displayName" : "Alice",
+                      "followsYou" : false,
                       "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
+                      "isFollowing" : true,
                       "username" : "alice"
                     } ],
                     "nextCursor" : null
@@ -11661,7 +11787,7 @@
                   "success" : true
                 },
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseCursorResponseUserDto"
+                  "$ref" : "#/components/schemas/ApiResponseCursorResponseFollowUserDto"
                 }
               }
             },
@@ -12225,7 +12351,7 @@
     },
     "/api/users/{username}" : {
       "get" : {
-        "description" : "**Auth**: public; optional login fills `isFollowing` and `isBlocked`. An invalid or expired token is treated as signed out\n**Precondition**: none\n**Behavior**: returns the public view of a user. `isFollowing` / `isBlocked` say whether the caller follows / has blocked the user: `null` when signed out, `false` on the caller's own profile. Profile fields do not depend on the caller. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` (Public, non-Deleted Polls only) are always present (`avatarUrl` is `null` when never set). Every optional field is `null` unless the owner made it visible: `displayName` and `bio` are visible by default, `firstName`, `lastName`, `location`, `points` and `membershipLevel` are hidden by default; email and birthday are never returned. `totalPolls` counts only Polls that have opened (Open and Ended), matching `GET /api/users/{username}/votes`.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended",
+        "description" : "**Auth**: public; optional login fills `isFollowing`, `followsYou` and `isBlocked`. An invalid or expired token is treated as signed out\n**Precondition**: none\n**Behavior**: returns the public view of a user. `isFollowing` / `isBlocked` say whether the caller follows / has blocked the user, and `followsYou` whether the user follows the caller: `null` when signed out, `false` on the caller's own profile. `followersCount` / `followingCount` count the users in `GET /api/users/{username}/followers` / `/following` (suspended accounts left out, blocks not filtered). Profile fields do not depend on the caller. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` (Public, non-Deleted Polls only) are always present (`avatarUrl` is `null` when never set). Every optional field is `null` unless the owner made it visible: `displayName` and `bio` are visible by default, `firstName`, `lastName`, `location`, `points` and `membershipLevel` are hidden by default; email and birthday are never returned. `totalPolls` counts only Polls that have opened (Open and Ended), matching `GET /api/users/{username}/votes`.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended",
         "operationId" : "getUserProfile",
         "parameters" : [ {
           "description" : "Username of the user to look up",
@@ -12247,6 +12373,9 @@
                     "bio" : "Poll enthusiast",
                     "displayName" : "Alice",
                     "firstName" : "Alice",
+                    "followersCount" : 12,
+                    "followingCount" : 8,
+                    "followsYou" : true,
                     "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
                     "isBlocked" : false,
                     "isFollowing" : true,
@@ -12311,7 +12440,7 @@
     },
     "/api/users/{username}/followers" : {
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: the user exists and is not suspended\n**Behavior**: users who follow this user, most recently followed first, cursor-paged (`limit` 1-50, default 20; out-of-range values are clamped). `nextCursor` is `null` on the last page. Suspended followers are left out. Blocks do not filter this list (they hide only Polls and Comments). Each item carries only public profile fields, like user search.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended\n- 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list",
+        "description" : "**Auth**: required\n**Precondition**: the user exists and is not suspended\n**Behavior**: users who follow this user, most recently followed first, cursor-paged (`limit` 1-50, default 20; out-of-range values are clamped). `nextCursor` is `null` on the last page. Suspended followers are left out. Blocks do not filter this list (they hide only Polls and Comments). Each item carries the public profile fields of user search, plus `isFollowing` (the caller follows the user) and `followsYou` (the user follows the caller), both `false` on the caller's own entry.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended\n- 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list",
         "operationId" : "listFollowers",
         "parameters" : [ {
           "description" : "Username of the followed user",
@@ -12350,7 +12479,9 @@
                     "items" : [ {
                       "avatarUrl" : "bot:boba",
                       "displayName" : "Bob",
+                      "followsYou" : true,
                       "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
+                      "isFollowing" : false,
                       "username" : "bob"
                     } ],
                     "nextCursor" : null
@@ -12361,7 +12492,7 @@
                   "success" : true
                 },
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseCursorResponseUserDto"
+                  "$ref" : "#/components/schemas/ApiResponseCursorResponseFollowUserDto"
                 }
               }
             },
@@ -12435,7 +12566,7 @@
     },
     "/api/users/{username}/following" : {
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: the user exists and is not suspended\n**Behavior**: users this user follows, most recently followed first, cursor-paged (`limit` 1-50, default 20; out-of-range values are clamped). `nextCursor` is `null` on the last page. Suspended users are left out. Blocks do not filter this list (they hide only Polls and Comments). Each item carries only public profile fields, like user search.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended\n- 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list",
+        "description" : "**Auth**: required\n**Precondition**: the user exists and is not suspended\n**Behavior**: users this user follows, most recently followed first, cursor-paged (`limit` 1-50, default 20; out-of-range values are clamped). `nextCursor` is `null` on the last page. Suspended users are left out. Blocks do not filter this list (they hide only Polls and Comments). Each item carries the public profile fields of user search, plus `isFollowing` (the caller follows the user) and `followsYou` (the user follows the caller), both `false` on the caller's own entry.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended\n- 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list",
         "operationId" : "listFollowing",
         "parameters" : [ {
           "description" : "Username of the follower",
@@ -12474,7 +12605,9 @@
                     "items" : [ {
                       "avatarUrl" : "bot:boba",
                       "displayName" : "Bob",
+                      "followsYou" : true,
                       "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
+                      "isFollowing" : false,
                       "username" : "bob"
                     } ],
                     "nextCursor" : null
@@ -12485,7 +12618,7 @@
                   "success" : true
                 },
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseCursorResponseUserDto"
+                  "$ref" : "#/components/schemas/ApiResponseCursorResponseFollowUserDto"
                 }
               }
             },

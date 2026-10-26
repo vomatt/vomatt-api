@@ -21,18 +21,22 @@ import com.vomatt.entity.NotificationKind;
 import com.vomatt.entity.UserPreference;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
+import com.vomatt.entity.VoteOption;
 import com.vomatt.notifications.dto.NotificationPreferencesResponse;
 import com.vomatt.notifications.dto.NotificationResponse;
 import com.vomatt.notifications.dto.UnreadCountResponse;
 import com.vomatt.notifications.dto.UpdateNotificationPreferencesRequest;
+import com.vomatt.repository.BallotSelection;
 import com.vomatt.repository.NotificationRepository;
 import com.vomatt.repository.NotificationRepository.NotificationRow;
 import com.vomatt.repository.UserPreferenceRepository;
 import com.vomatt.repository.UserRepository;
+import com.vomatt.repository.UserVoteRepository;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.repository.VoteRepository;
 import com.vomatt.users.UserService;
-import com.vomatt.users.dto.UserDto;
+import com.vomatt.users.dto.FollowUserDto;
+import com.vomatt.votes.VoteMapper;
 import com.vomatt.votes.VoteService;
 
 import lombok.RequiredArgsConstructor;
@@ -56,8 +60,10 @@ public class NotificationService {
     private final UserRepository userRepository;
     private final VoteRepository voteRepository;
     private final VoteCommentRepository commentRepository;
+    private final UserVoteRepository userVoteRepository;
     private final UserService userService;
     private final VoteService voteService;
+    private final VoteMapper voteMapper;
 
     /** The caller's feed, newest first, of the kinds their preferences leave on. */
     @Transactional(readOnly = true)
@@ -68,7 +74,7 @@ public class NotificationService {
                 NotificationPreference.enabledKinds(preferences(userUuid)), Cursor.decode(cursor, Cursor.Scope.NOTIFICATIONS),
                 OffsetDateTime.now(), size + 1);
         return CursorResponse.of(rows, size, Cursor.Scope.NOTIFICATIONS, row -> Cursor.of(row.createdAt(), row.sourceId()),
-                this::toResponses);
+                page -> toResponses(userUuid, page));
     }
 
     @Transactional(readOnly = true)
@@ -159,13 +165,21 @@ public class NotificationService {
         }
     }
 
-    /** Loads the page's actors, Polls and Comments in one query each. */
-    private List<NotificationResponse> toResponses(List<NotificationRow> rows) {
-        Map<UUID, UserDto> actors = userService.toSearchResults(
-                        userRepository.findAllById(ids(rows, NotificationRow::actorId))).stream()
+    /**
+     * Fills in the page's actors (with the caller's follows both ways), Polls (with the caller's Selection and, once
+     * Ended, the winners) and Comments, a fixed number of queries per page.
+     */
+    private List<NotificationResponse> toResponses(UUID userId, List<NotificationRow> rows) {
+        Map<UUID, FollowUserDto> actors = userService.toFollowItems(
+                        userRepository.findAllById(ids(rows, NotificationRow::actorId)), userId).stream()
                 .collect(Collectors.toMap(user -> UUID.fromString(user.id()), Function.identity()));
-        Map<UUID, Vote> polls = voteRepository.findAllById(ids(rows, NotificationRow::voteId)).stream()
+        List<UUID> voteIds = ids(rows, NotificationRow::voteId);
+        Map<UUID, Vote> polls = voteRepository.findAllById(voteIds).stream()
                 .collect(Collectors.toMap(Vote::getId, Function.identity()));
+        // A sealed Anonymous Ballot has no option any more, so it is left out like no Ballot
+        Map<UUID, UUID> myOptions = voteIds.isEmpty() ? Map.of() : userVoteRepository.findSelections(userId, voteIds).stream()
+                .filter(selection -> selection.getOptionId() != null)
+                .collect(Collectors.toMap(BallotSelection::getVoteId, BallotSelection::getOptionId, (a, b) -> a));
         Map<UUID, VoteComment> comments = commentRepository.findAllById(ids(rows, NotificationRow::commentId)).stream()
                 .collect(Collectors.toMap(VoteComment::getId, Function.identity()));
         OffsetDateTime now = OffsetDateTime.now();
@@ -175,7 +189,7 @@ public class NotificationService {
                 row.createdAt(),
                 row.read(),
                 row.actorId() == null ? null : actors.get(row.actorId()),
-                row.voteId() == null ? null : toPollSummary(polls.get(row.voteId()), now),
+                row.voteId() == null ? null : toPollSummary(polls.get(row.voteId()), myOptions.get(row.voteId()), now),
                 row.commentId() == null ? null : toCommentSummary(comments.get(row.commentId()))))
                 .toList();
     }
@@ -184,14 +198,21 @@ public class NotificationService {
         return rows.stream().map(id).filter(Objects::nonNull).distinct().toList();
     }
 
-    // No per-option counts: the summary is the same whether or not the Poll's results are Sealed
-    private static NotificationResponse.PollSummary toPollSummary(Vote poll, OffsetDateTime now) {
-        return new NotificationResponse.PollSummary(poll.getId().toString(), poll.getTitle(), poll.getEndTime(),
-                poll.statusAt(now), poll.getTurnout());
+    // No per-option counts; the winners come from VoteMapper, which keeps them null while Sealed
+    private NotificationResponse.PollSummary toPollSummary(Vote poll, UUID myOptionId, OffsetDateTime now) {
+        List<VoteOption> winners = voteMapper.toWinners(poll);
+        return new NotificationResponse.PollSummary(poll.getId().toString(), poll.getTitle(), poll.getStartTime(),
+                poll.getEndTime(), poll.statusAt(now), poll.getTurnout(),
+                myOptionId == null ? null : myOptionId.toString(),
+                winners == null ? null : winners.stream().map(option -> option.getId().toString()).toList(),
+                winners == null ? null : winners.stream().map(VoteOption::getText).toList(),
+                winners == null ? null : winners.size() > 1);
     }
 
     private static NotificationResponse.CommentSummary toCommentSummary(VoteComment comment) {
-        return new NotificationResponse.CommentSummary(comment.getId().toString(), excerpt(comment.getContent()));
+        VoteComment parent = comment.getParent();
+        return new NotificationResponse.CommentSummary(comment.getId().toString(),
+                parent == null ? null : parent.getId().toString(), excerpt(comment.getContent()));
     }
 
     static String excerpt(String content) {

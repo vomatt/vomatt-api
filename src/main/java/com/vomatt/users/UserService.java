@@ -211,7 +211,7 @@ public class UserService {
     }
 
     /** Follow list items of a page of users: display name masking as in search, and the viewer's follows both ways in one query. */
-    private List<FollowUserDto> toFollowItems(List<User> users, UUID viewerId) {
+    public List<FollowUserDto> toFollowItems(List<User> users, UUID viewerId) {
         if (users.isEmpty()) {
             return List.of();
         }

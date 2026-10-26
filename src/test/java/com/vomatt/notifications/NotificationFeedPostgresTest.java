@@ -5,8 +5,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,6 +30,7 @@ import com.vomatt.entity.UserFollow;
 import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
+import com.vomatt.entity.VoteOption;
 import com.vomatt.entity.VoteStatus;
 import com.vomatt.notifications.dto.NotificationResponse;
 import com.vomatt.notifications.dto.UpdateNotificationPreferencesRequest;
@@ -346,5 +350,170 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
         assertThatThrownBy(() -> notificationService.list(me.getId().toString(), foreign, 2))
                 .isInstanceOfSatisfying(ApiException.class,
                         ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMON_CURSOR_INVALID));
+    }
+
+    /** Sets each option's stored count (display order), then reloads everything so the feed reads them back. */
+    private void counts(Vote poll, int... counts) {
+        List<VoteOption> options = poll.getOptions().stream()
+                .sorted(Comparator.comparingInt(VoteOption::getDisplayOrder)).toList();
+        em.flush();
+        for (int i = 0; i < counts.length; i++) {
+            em.createNativeQuery("UPDATE vomatt.vote_options SET vote_count = :count WHERE id = :id")
+                    .setParameter("count", counts[i]).setParameter("id", options.get(i).getId()).executeUpdate();
+        }
+    }
+
+    private VoteOption option(Vote poll, String text) {
+        return poll.getOptions().stream().filter(o -> o.getText().equals(text)).findFirst().orElseThrow();
+    }
+
+    private NotificationResponse.PollSummary reloadedPoll(User user) {
+        em.flush();
+        em.clear();
+        return notificationService.list(user.getId().toString(), null, 50).items().getFirst().poll();
+    }
+
+    @Test
+    @DisplayName("should give an Ended Poll's start, the user's option and the single winner when one option has the most Ballots")
+    void shouldGiveWinnerAndMyOptionWhenPollEnded() {
+        Vote ended = persistPoll(alice, now.minusDays(2), now.minusHours(1), "A", "B", "C");
+        em.persist(new UserVote(me, ended, option(ended, "B")));
+        counts(ended, 3, 1, 0);
+
+        NotificationResponse.PollSummary poll = reloadedPoll(me);
+
+        assertThat(poll.startTime().toInstant()).isEqualTo(ended.getStartTime().toInstant());
+        assertThat(poll.myOptionId()).isEqualTo(option(ended, "B").getId().toString());
+        assertThat(poll.winningOptionIds()).containsExactly(option(ended, "A").getId().toString());
+        assertThat(poll.winningOptionLabels()).containsExactly("A");
+        assertThat(poll.tie()).isFalse();
+    }
+
+    @Test
+    @DisplayName("should name every top option in display order and flag a tie when options share the most Ballots")
+    void shouldFlagTieWhenTopOptionsShareMostBallots() {
+        Vote ended = persistPoll(alice, now.minusDays(2), now.minusHours(1), "A", "B", "C");
+        ballot(me, ended);
+        counts(ended, 1, 2, 2);
+
+        NotificationResponse.PollSummary poll = reloadedPoll(me);
+
+        assertThat(poll.winningOptionLabels()).containsExactly("B", "C");
+        assertThat(poll.tie()).isTrue();
+    }
+
+    @Test
+    @DisplayName("should give no winner and no tie when an Ended Poll holds no Ballot naming an option")
+    void shouldGiveNoWinnerWhenEndedPollHasNoCounts() {
+        Vote ended = persistPoll(me, now.minusDays(2), now.minusHours(1), "A", "B");
+
+        NotificationResponse.PollSummary poll = reloadedPoll(me);
+
+        assertThat(poll.myOptionId()).isNull();
+        assertThat(poll.winningOptionIds()).isEmpty();
+        assertThat(poll.winningOptionLabels()).isEmpty();
+        assertThat(poll.tie()).isFalse();
+        assertThat(poll.id()).isEqualTo(ended.getId().toString());
+    }
+
+    @Test
+    @DisplayName("should keep the outcome null but give the user's option while the Poll is Sealed")
+    void shouldSealOutcomeWhenPollNotEnded() {
+        Vote open = invitePoll(alice, now.minusHours(1), now.plusDays(2), me);
+        em.persist(new UserVote(me, open, option(open, "A")));
+        counts(open, 5, 1);
+
+        NotificationResponse.PollSummary poll = reloadedPoll(me);
+
+        assertThat(poll.status()).isEqualTo(VoteStatus.OPEN);
+        assertThat(poll.myOptionId()).isEqualTo(option(open, "A").getId().toString());
+        assertThat(poll.winningOptionIds()).isNull();
+        assertThat(poll.winningOptionLabels()).isNull();
+        assertThat(poll.tie()).isNull();
+    }
+
+    @Test
+    @DisplayName("should give no option for the user's Anonymous Ballot once it is sealed")
+    void shouldGiveNoMyOptionWhenAnonymousBallotSealed() {
+        Vote ended = persistPoll(alice, now.minusDays(2), now.minusHours(1), "A", "B");
+        UserVote sealed = new UserVote(me, ended, null);
+        sealed.setAnonymous(true);
+        em.persist(sealed);
+
+        assertThat(reloadedPoll(me).myOptionId()).isNull();
+    }
+
+    @Test
+    @DisplayName("should tell, for each actor, whether the user follows them and whether they follow the user")
+    void shouldGiveFollowsBothWaysWhenActorListed() {
+        follow(alice, me);
+        follow(me, alice);
+        follow(bob, me);
+        Vote mine = poll(me, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        User carol = persistUser("f-carol-" + System.nanoTime());
+        comment(carol, mine, null, "hi");
+        follow(me, carol);
+
+        List<NotificationResponse> feed = feed(me);
+
+        assertThat(feed).filteredOn(n -> n.actor().username().equals(alice.getUsername())).singleElement()
+                .satisfies(n -> assertThat(n.actor()).extracting("isFollowing", "followsYou").containsExactly(true, true));
+        assertThat(feed).filteredOn(n -> n.actor().username().equals(bob.getUsername())).singleElement()
+                .satisfies(n -> assertThat(n.actor()).extracting("isFollowing", "followsYou").containsExactly(false, true));
+        assertThat(feed).filteredOn(n -> n.actor().username().equals(carol.getUsername())).singleElement()
+                .satisfies(n -> assertThat(n.actor()).extracting("isFollowing", "followsYou").containsExactly(true, false));
+    }
+
+    @Test
+    @DisplayName("should give a Reply's parent Comment id, and none for a top-level Comment")
+    void shouldGiveParentIdWhenCommentIsReply() {
+        Vote mine = poll(me, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        Vote alices = poll(alice, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        VoteComment topLevel = comment(bob, mine, null, "top");
+        VoteComment myComment = comment(me, alices, null, "mine");
+        VoteComment reply = comment(bob, alices, myComment, "reply");
+
+        List<NotificationResponse> feed = feed(me);
+
+        assertThat(feed).filteredOn(n -> n.comment().id().equals(topLevel.getId().toString())).singleElement()
+                .satisfies(n -> assertThat(n.comment().parentId()).isNull());
+        assertThat(feed).filteredOn(n -> n.comment().id().equals(reply.getId().toString())).singleElement()
+                .satisfies(n -> assertThat(n.comment().parentId()).isEqualTo(myComment.getId().toString()));
+    }
+
+    /** {@code each} notifications of every kind that carries an actor, a Poll or a Comment, from distinct users. */
+    private void feedOf(User user, int each) {
+        Vote host = poll(alice, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        VoteComment userComment = comment(user, host, null, "mine");
+        for (int i = 0; i < each; i++) {
+            User other = persistUser("f-other-" + i + "-" + System.nanoTime());
+            follow(other, user);
+            comment(other, host, userComment, "reply " + i);
+            invitePoll(other, now.minusHours(1), now.plusDays(2), user);
+            Vote ended = persistPoll(other, now.minusDays(2), now.minusHours(i + 1), "A", "B");
+            ballot(user, ended);
+            counts(ended, 1, 0);
+        }
+    }
+
+    @Test
+    @DisplayName("should run as many queries for a page of twenty notifications as for a page of four")
+    void shouldRunSameQueriesWhenPageGrows() {
+        feedOf(me, 1);
+        feedOf(bob, 5);
+        em.flush();
+        em.clear();
+        Statistics stats = em.getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
+        stats.setStatisticsEnabled(true);
+
+        stats.clear();
+        assertThat(notificationService.list(me.getId().toString(), null, 50).items()).hasSize(4);
+        long smallPage = stats.getPrepareStatementCount();
+        em.clear();
+        stats.clear();
+        assertThat(notificationService.list(bob.getId().toString(), null, 50).items()).hasSize(20);
+        long largePage = stats.getPrepareStatementCount();
+
+        assertThat(largePage).isEqualTo(smallPage);
     }
 }

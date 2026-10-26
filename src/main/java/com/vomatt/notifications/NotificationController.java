@@ -41,16 +41,20 @@ public class NotificationController {
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"items":[\
                     {"id":"closing_soon_0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","kind":"CLOSING_SOON","createdAt":"2026-10-26T12:00:00+08:00","read":false,\
-                    "actor":{"id":"0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f","username":"jtan","displayName":"J. Tan","avatarUrl":"bot:boba"},\
-                    "poll":{"id":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","title":"Best ramen in Taipei?","endTime":"2026-10-27T12:00:00+08:00","status":"OPEN","turnout":342},"comment":null},\
+                    "actor":{"id":"0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f","username":"jtan","displayName":"J. Tan","avatarUrl":"bot:boba","isFollowing":true,"followsYou":false},\
+                    "poll":{"id":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","title":"Best ramen in Taipei?","startTime":"2026-10-20T12:00:00+08:00","endTime":"2026-10-27T12:00:00+08:00","status":"OPEN","turnout":342,\
+                    "myOptionId":null,"winningOptionIds":null,"winningOptionLabels":null,"tie":null},"comment":null},\
                     {"id":"comment_0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b","kind":"COMMENT","createdAt":"2026-10-26T09:30:00+08:00","read":false,\
-                    "actor":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"rosa","displayName":"Rosa","avatarUrl":"bot:mochi"},\
-                    "poll":{"id":"0199f2a3-8c1d-7e2f-9a3b-4c5d6e7f8a9b","title":"Tabs or spaces?","endTime":"2026-10-30T12:00:00+08:00","status":"OPEN","turnout":57},\
-                    "comment":{"id":"0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b","excerpt":"Tabs, because the reader picks the width"}},\
+                    "actor":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"rosa","displayName":"Rosa","avatarUrl":"bot:mochi","isFollowing":false,"followsYou":false},\
+                    "poll":{"id":"0199f2a3-8c1d-7e2f-9a3b-4c5d6e7f8a9b","title":"Tabs or spaces?","startTime":"2026-10-23T12:00:00+08:00","endTime":"2026-10-30T12:00:00+08:00","status":"OPEN","turnout":57,\
+                    "myOptionId":"0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813","winningOptionIds":null,"winningOptionLabels":null,"tie":null},\
+                    "comment":{"id":"0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b","parentId":"0199f2a4-ff01-7a2b-9c3d-4e5f6a7b8c9d","excerpt":"Tabs, because the reader picks the width"}},\
                     {"id":"followed_0199f2a6-2d3e-7f40-9b5c-6d7e8f9a0b1c","kind":"FOLLOWED","createdAt":"2026-10-25T20:00:00+08:00","read":true,\
-                    "actor":{"id":"0199c1a2-1a2b-7c3d-8e4f-5a6b7c8d9e0f","username":"bkim","displayName":null,"avatarUrl":"bot:boba"},"poll":null,"comment":null},\
+                    "actor":{"id":"0199c1a2-1a2b-7c3d-8e4f-5a6b7c8d9e0f","username":"bkim","displayName":null,"avatarUrl":"bot:boba","isFollowing":true,"followsYou":true},"poll":null,"comment":null},\
                     {"id":"result_0199f2a3-1a2b-7c3d-8e4f-9a0b1c2d3e4f","kind":"RESULT","createdAt":"2026-10-25T18:00:00+08:00","read":true,"actor":null,\
-                    "poll":{"id":"0199f2a3-1a2b-7c3d-8e4f-9a0b1c2d3e4f","title":"Lunch?","endTime":"2026-10-25T18:00:00+08:00","status":"ENDED","turnout":12},"comment":null}],\
+                    "poll":{"id":"0199f2a3-1a2b-7c3d-8e4f-9a0b1c2d3e4f","title":"Lunch?","startTime":"2026-10-25T09:00:00+08:00","endTime":"2026-10-25T18:00:00+08:00","status":"ENDED","turnout":12,\
+                    "myOptionId":"0199f2a4-2b3c-7d4e-8f5a-6b7c8d9e0f1a","winningOptionIds":["0199f2a4-2b3c-7d4e-8f5a-6b7c8d9e0f1a","0199f2a4-3c4d-7e5f-9a6b-7c8d9e0f1a2b"],\
+                    "winningOptionLabels":["Dumplings","Noodles"],"tie":true},"comment":null}],\
                     "nextCursor":"Tk9USUZJQ0FUSU9OU3wwMTk5ZjJhMy0xYTJiLTdjM2QtOGU0Zi05YTBiMWMyZDNlNGZ8MjAyNi0xMC0yNVQxMDowMDowMFo"},\
                     "message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "`cursor` was not issued by this list (errorCode `common.cursor_invalid`)",
@@ -74,8 +78,11 @@ public class NotificationController {
             - CLOSING_SOON: an Open Poll ends within 24 hours and the caller holds no Ballot in it, if the caller is its Invitee, \
             or it is a Public Poll of a user the caller follows. Gone once the caller casts a Ballot or the Poll Ends. Off by default
             Kinds switched off in the caller's preferences are left out (FOLLOWED cannot be switched off). Nothing from a suspended user, \
-            a user the caller blocked or a user who blocked the caller is listed. `poll` never carries per-option counts and \
-            `actor` is never a voter, so Sealed results and Anonymous Ballots stay hidden. \
+            a user the caller blocked or a user who blocked the caller is listed. `poll` never carries per-option counts, its \
+            outcome (`winningOptionIds`, `winningOptionLabels`, `tie`) stays null until the Poll has Ended, and `actor` is never \
+            a voter, so Sealed results and Anonymous Ballots stay hidden. Each item carries what a row needs: the caller's \
+            Selection (`poll.myOptionId`), the caller's follows with the actor both ways (`actor.isFollowing`, `actor.followsYou`), \
+            and for a Reply the Comment it is under (`comment.parentId`). \
             An item can appear or vanish behind a cursor (a follow, a block); de-duplicate by `id`.
             **Side effects**: none
             **Errors**:

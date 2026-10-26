@@ -2091,6 +2091,12 @@
             "description" : "Comment id",
             "example" : "0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b",
             "type" : "string"
+          },
+          "parentId" : {
+            "description" : "For a Reply, the id of the Comment it is under (link it as `<parentId>/<id>`); null for a top-level Comment",
+            "example" : "0199f2a4-ff01-7a2b-9c3d-4e5f6a7b8c9d",
+            "nullable" : true,
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -2545,6 +2551,7 @@
       },
       "FollowUserDto" : {
         "description" : "Follower or following list item: public profile fields, masked by the owner's visibility settings, plus the caller's relation to the user",
+        "nullable" : true,
         "properties" : {
           "avatarUrl" : {
             "description" : "Avatar as `bot:<kind>` (the bot cast). Older accounts may hold an image URL; null if never set",
@@ -3062,7 +3069,7 @@
         "description" : "One notification of the feed. Which of `actor`, `poll` and `comment` are set depends on `kind`: RESULT has `poll`; CANCELLED, INVITATION and CLOSING_SOON have `actor` (the Poll's owner) and `poll`; FOLLOWED has `actor` (the new follower); COMMENT has `actor` (the author), `poll` and `comment`",
         "properties" : {
           "actor" : {
-            "$ref" : "#/components/schemas/UserDto"
+            "$ref" : "#/components/schemas/FollowUserDto"
           },
           "comment" : {
             "$ref" : "#/components/schemas/CommentSummary"
@@ -3376,7 +3383,7 @@
         "type" : "object"
       },
       "PollSummary" : {
-        "description" : "The Poll a notification is about. Carries no per-option counts, so it is the same whether or not results are Sealed",
+        "description" : "The Poll a notification is about. Carries no per-option counts; the outcome fields are null until the Poll has Ended, so Sealed results stay hidden",
         "nullable" : true,
         "properties" : {
           "endTime" : {
@@ -3390,11 +3397,29 @@
             "example" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05",
             "type" : "string"
           },
+          "myOptionId" : {
+            "description" : "Option of the caller's Ballot; null without a Ballot, or once an Anonymous Ballot of an Ended Poll is sealed",
+            "example" : "0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "startTime" : {
+            "description" : "When the Poll opens (or opened)",
+            "example" : "2026-10-20T09:00:00+08:00",
+            "format" : "date-time",
+            "type" : "string"
+          },
           "status" : {
             "description" : "Poll status now",
             "enum" : [ "SCHEDULED", "OPEN", "ENDED" ],
             "example" : "OPEN",
             "type" : "string"
+          },
+          "tie" : {
+            "description" : "Ended only: whether more than one option shares the most Ballots. Null until the Poll has Ended",
+            "example" : false,
+            "nullable" : true,
+            "type" : "boolean"
           },
           "title" : {
             "description" : "Poll title",
@@ -3406,6 +3431,24 @@
             "example" : 342,
             "format" : "int32",
             "type" : "integer"
+          },
+          "winningOptionIds" : {
+            "description" : "Ended only: ids of the option(s) with the most Ballots, in display order; more than one is a tie, empty when no Ballot named an option. Null until the Poll has Ended",
+            "items" : {
+              "example" : "0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813",
+              "type" : "string"
+            },
+            "nullable" : true,
+            "type" : "array"
+          },
+          "winningOptionLabels" : {
+            "description" : "Ended only: texts of the options in `winningOptionIds`, same order. Null until the Poll has Ended",
+            "items" : {
+              "example" : "Nagi",
+              "type" : "string"
+            },
+            "nullable" : true,
+            "type" : "array"
           }
         },
         "type" : "object"
@@ -3924,7 +3967,6 @@
       },
       "UserDto" : {
         "description" : "User search result item; only public profile fields, masked by the owner's visibility settings",
-        "nullable" : true,
         "properties" : {
           "avatarUrl" : {
             "description" : "Avatar as `bot:<kind>` (the bot cast). Older accounts may hold an image URL; null if never set",
@@ -10974,7 +11016,7 @@
     },
     "/api/notifications" : {
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: the caller's notifications, newest `createdAt` first, cursor-paged. They are not stored but derived from Polls, Invitations, follows and Comments when read, so an item disappears when what it is about goes away (a Comment deleted, a follow undone, a Poll Deleted). Kinds:\n- RESULT: a Poll the caller owns, holds a Ballot in or is an Invitee of has Ended (end time passed, Closed, or every Invitee voted). A Participant who made a Retraction and is not an Invitee gets none\n- CANCELLED: an Invite-only Poll the caller is an Invitee of was Cancelled before it opened (only Polls Cancelled before 2026-10-14; a Scheduled Poll is now Deleted, which notifies nobody)\n- INVITATION: the caller is an Invitee of a Scheduled or Open Invite-only Poll; listed until the Poll Ends, when its RESULT takes over. Being removed and invited again is a new, unread INVITATION\n- FOLLOWED: someone followed the caller (one item per follower; group them in the UI)\n- COMMENT: someone else commented on or replied under the caller's Poll, or replied to the caller's Comment, on a Poll the caller can see\n- CLOSING_SOON: an Open Poll ends within 24 hours and the caller holds no Ballot in it, if the caller is its Invitee, or it is a Public Poll of a user the caller follows. Gone once the caller casts a Ballot or the Poll Ends. Off by default\nKinds switched off in the caller's preferences are left out (FOLLOWED cannot be switched off). Nothing from a suspended user, a user the caller blocked or a user who blocked the caller is listed. `poll` never carries per-option counts and `actor` is never a voter, so Sealed results and Anonymous Ballots stay hidden. An item can appear or vanish behind a cursor (a follow, a block); de-duplicate by `id`.\n**Side effects**: none\n**Errors**:\n- 400 `common.cursor_invalid`: `cursor` came from another list",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: the caller's notifications, newest `createdAt` first, cursor-paged. They are not stored but derived from Polls, Invitations, follows and Comments when read, so an item disappears when what it is about goes away (a Comment deleted, a follow undone, a Poll Deleted). Kinds:\n- RESULT: a Poll the caller owns, holds a Ballot in or is an Invitee of has Ended (end time passed, Closed, or every Invitee voted). A Participant who made a Retraction and is not an Invitee gets none\n- CANCELLED: an Invite-only Poll the caller is an Invitee of was Cancelled before it opened (only Polls Cancelled before 2026-10-14; a Scheduled Poll is now Deleted, which notifies nobody)\n- INVITATION: the caller is an Invitee of a Scheduled or Open Invite-only Poll; listed until the Poll Ends, when its RESULT takes over. Being removed and invited again is a new, unread INVITATION\n- FOLLOWED: someone followed the caller (one item per follower; group them in the UI)\n- COMMENT: someone else commented on or replied under the caller's Poll, or replied to the caller's Comment, on a Poll the caller can see\n- CLOSING_SOON: an Open Poll ends within 24 hours and the caller holds no Ballot in it, if the caller is its Invitee, or it is a Public Poll of a user the caller follows. Gone once the caller casts a Ballot or the Poll Ends. Off by default\nKinds switched off in the caller's preferences are left out (FOLLOWED cannot be switched off). Nothing from a suspended user, a user the caller blocked or a user who blocked the caller is listed. `poll` never carries per-option counts, its outcome (`winningOptionIds`, `winningOptionLabels`, `tie`) stays null until the Poll has Ended, and `actor` is never a voter, so Sealed results and Anonymous Ballots stay hidden. Each item carries what a row needs: the caller's Selection (`poll.myOptionId`), the caller's follows with the actor both ways (`actor.isFollowing`, `actor.followsYou`), and for a Reply the Comment it is under (`comment.parentId`). An item can appear or vanish behind a cursor (a follow, a block); de-duplicate by `id`.\n**Side effects**: none\n**Errors**:\n- 400 `common.cursor_invalid`: `cursor` came from another list",
         "operationId" : "list",
         "parameters" : [ {
           "description" : "`nextCursor` of the previous page; omit for the first page",
@@ -11005,7 +11047,9 @@
                       "actor" : {
                         "avatarUrl" : "bot:boba",
                         "displayName" : "J. Tan",
+                        "followsYou" : false,
                         "id" : "0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f",
+                        "isFollowing" : true,
                         "username" : "jtan"
                       },
                       "comment" : null,
@@ -11015,21 +11059,29 @@
                       "poll" : {
                         "endTime" : "2026-10-27T12:00:00+08:00",
                         "id" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05",
+                        "myOptionId" : null,
+                        "startTime" : "2026-10-20T12:00:00+08:00",
                         "status" : "OPEN",
+                        "tie" : null,
                         "title" : "Best ramen in Taipei?",
-                        "turnout" : 342
+                        "turnout" : 342,
+                        "winningOptionIds" : null,
+                        "winningOptionLabels" : null
                       },
                       "read" : false
                     }, {
                       "actor" : {
                         "avatarUrl" : "bot:mochi",
                         "displayName" : "Rosa",
+                        "followsYou" : false,
                         "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
+                        "isFollowing" : false,
                         "username" : "rosa"
                       },
                       "comment" : {
                         "excerpt" : "Tabs, because the reader picks the width",
-                        "id" : "0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b"
+                        "id" : "0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b",
+                        "parentId" : "0199f2a4-ff01-7a2b-9c3d-4e5f6a7b8c9d"
                       },
                       "createdAt" : "2026-10-26T09:30:00+08:00",
                       "id" : "comment_0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b",
@@ -11037,16 +11089,23 @@
                       "poll" : {
                         "endTime" : "2026-10-30T12:00:00+08:00",
                         "id" : "0199f2a3-8c1d-7e2f-9a3b-4c5d6e7f8a9b",
+                        "myOptionId" : "0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813",
+                        "startTime" : "2026-10-23T12:00:00+08:00",
                         "status" : "OPEN",
+                        "tie" : null,
                         "title" : "Tabs or spaces?",
-                        "turnout" : 57
+                        "turnout" : 57,
+                        "winningOptionIds" : null,
+                        "winningOptionLabels" : null
                       },
                       "read" : false
                     }, {
                       "actor" : {
                         "avatarUrl" : "bot:boba",
                         "displayName" : null,
+                        "followsYou" : true,
                         "id" : "0199c1a2-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+                        "isFollowing" : true,
                         "username" : "bkim"
                       },
                       "comment" : null,
@@ -11064,9 +11123,14 @@
                       "poll" : {
                         "endTime" : "2026-10-25T18:00:00+08:00",
                         "id" : "0199f2a3-1a2b-7c3d-8e4f-9a0b1c2d3e4f",
+                        "myOptionId" : "0199f2a4-2b3c-7d4e-8f5a-6b7c8d9e0f1a",
+                        "startTime" : "2026-10-25T09:00:00+08:00",
                         "status" : "ENDED",
+                        "tie" : true,
                         "title" : "Lunch?",
-                        "turnout" : 12
+                        "turnout" : 12,
+                        "winningOptionIds" : [ "0199f2a4-2b3c-7d4e-8f5a-6b7c8d9e0f1a", "0199f2a4-3c4d-7e5f-9a6b-7c8d9e0f1a2b" ],
+                        "winningOptionLabels" : [ "Dumplings", "Noodles" ]
                       },
                       "read" : true
                     } ],

@@ -36,7 +36,7 @@ import com.vomatt.common.response.CursorResponse;
 import com.vomatt.entity.NotificationKind;
 import com.vomatt.notifications.dto.NotificationResponse;
 import com.vomatt.notifications.dto.UnreadCountResponse;
-import com.vomatt.users.dto.UserDto;
+import com.vomatt.users.dto.FollowUserDto;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("NotificationController")
@@ -80,13 +80,14 @@ class NotificationControllerTest {
     @DisplayName("should list the feed with the cursor and limit given")
     void shouldListNotificationsWhenRequested() throws Exception {
         NotificationResponse followed = new NotificationResponse("followed_" + UUID.randomUUID(), NotificationKind.FOLLOWED,
-                OffsetDateTime.now(), false, new UserDto(UUID.randomUUID().toString(), "jtan", null, null), null, null);
+                OffsetDateTime.now(), false, new FollowUserDto(UUID.randomUUID().toString(), "jtan", null, null, false, true), null, null);
         when(notificationService.list(USER_ID, "abc", 5)).thenReturn(new CursorResponse<>(List.of(followed), "next"));
 
         mockMvc.perform(get("/api/notifications").param("cursor", "abc").param("limit", "5"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].kind").value("FOLLOWED"))
                 .andExpect(jsonPath("$.data.items[0].actor.username").value("jtan"))
+                .andExpect(jsonPath("$.data.items[0].actor.followsYou").value(true))
                 .andExpect(jsonPath("$.data.nextCursor").value("next"));
     }
 

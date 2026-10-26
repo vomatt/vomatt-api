@@ -2024,6 +2024,19 @@
             "nullable" : true,
             "type" : "string"
           },
+          "replies" : {
+            "description" : "First Replies under this Comment, oldest first, at most 2, filtered like the Reply list. Only filled on top-level Comments in the Poll's Comment list; [] on Replies and on responses of create / update",
+            "items" : {
+              "$ref" : "#/components/schemas/CommentDto"
+            },
+            "type" : "array"
+          },
+          "repliesNextCursor" : {
+            "description" : "Cursor for `GET /api/votes/{voteId}/comments/{commentId}/replies` that continues right after the last of `replies`, so no Reply is listed twice. Null when `replies` holds every Reply (replyCount equals its length)",
+            "example" : "UkVQTElFU3wwMTk5YzNhMi03YjFlLTdjNGQtOWExMC0zZjVlOGQyYjZhNDF8MjAyNi0xMC0wOVQwNDozNDo1Nlo",
+            "nullable" : true,
+            "type" : "string"
+          },
           "replyCount" : {
             "description" : "Number of non-deleted Replies. Only filled on top-level Comments in the Poll's Comment list; 0 on Replies and on responses of create / update",
             "example" : 2,
@@ -14717,7 +14730,7 @@
     },
     "/api/votes/{voteId}/comments" : {
       "get" : {
-        "description" : "**Auth**: public (optional login changes response: `likedByCurrentUser` reflects the signed-in user's likes, and is always false when not logged in; threads started by and Replies written by users the caller blocked are left out)\n**Precondition**: the Poll exists\n**Behavior**: returns top-level Comments only, newest first, cursor-paged (`limit` default 20, max 50; pass `nextCursor` back as `cursor`). Each item carries `replyCount`; load Replies with the replies endpoint. A deleted Comment that still has non-deleted Replies stays as a placeholder (`deleted` = true; `userId`, `author` and `text` are null); a deleted Comment without Replies is omitted. For a signed-in caller, a thread whose top-level Comment was written by a user they blocked (`POST /api/users/me/blocks/{userId}`) is omitted with all its Replies, Replies by blocked users do not count in `replyCount`, and a deleted placeholder whose only Replies are by blocked users is omitted\n**Side effects**: none\n**Errors**:\n- 400 `common.cursor_invalid`: `cursor` is not a token returned by this endpoint\n- 404 `vote.not_found`: Poll does not exist or is Deleted\n",
+        "description" : "**Auth**: public (optional login changes response: `likedByCurrentUser` reflects the signed-in user's likes, and is always false when not logged in; threads started by and Replies written by users the caller blocked are left out)\n**Precondition**: the Poll exists\n**Behavior**: returns top-level Comments only, newest first, cursor-paged (`limit` default 20, max 50; pass `nextCursor` back as `cursor`). Each item carries `replyCount` and its first Replies in `replies` (at most 2, oldest first, filtered like the replies endpoint); when `repliesNextCursor` is set, pass it as `cursor` to the replies endpoint to load the rest without repeating those shown. A deleted Comment that still has non-deleted Replies stays as a placeholder (`deleted` = true; `userId`, `author` and `text` are null); a deleted Comment without Replies is omitted. For a signed-in caller, a thread whose top-level Comment was written by a user they blocked (`POST /api/users/me/blocks/{userId}`) is omitted with all its Replies, Replies by blocked users do not count in `replyCount`, and a deleted placeholder whose only Replies are by blocked users is omitted\n**Side effects**: none\n**Errors**:\n- 400 `common.cursor_invalid`: `cursor` is not a token returned by this endpoint\n- 404 `vote.not_found`: Poll does not exist or is Deleted\n",
         "operationId" : "getComments",
         "parameters" : [ {
           "description" : "Poll ID",
@@ -14763,7 +14776,41 @@
                           "likeCount" : 3,
                           "likedByCurrentUser" : false,
                           "parentId" : null,
-                          "replyCount" : 2,
+                          "replies" : [ {
+                            "author" : "bob",
+                            "createdAt" : "2026-10-09T12:50:00+08:00",
+                            "deleted" : false,
+                            "edited" : false,
+                            "id" : "0199c3a8-1b2c-7d3e-8f4a-5b6c7d8e9f01",
+                            "likeCount" : 0,
+                            "likedByCurrentUser" : false,
+                            "parentId" : "0199c3a2-7b1e-7c4d-9a10-3f5e8d2b6a41",
+                            "replies" : [ ],
+                            "repliesNextCursor" : null,
+                            "replyCount" : 0,
+                            "text" : "Same, B wins on price.",
+                            "updatedAt" : "2026-10-09T12:50:00+08:00",
+                            "userId" : "0199b8e4-5d6e-7f70-9a1b-2c3d4e5f6a7b",
+                            "voteId" : "0199c2f0-4d3a-7e8b-b6c2-1a9f0e7d5c33"
+                          }, {
+                            "author" : "carol",
+                            "createdAt" : "2026-10-09T13:05:00+08:00",
+                            "deleted" : false,
+                            "edited" : false,
+                            "id" : "0199c3a9-2c3d-7e4f-9a5b-6c7d8e9f0a12",
+                            "likeCount" : 0,
+                            "likedByCurrentUser" : false,
+                            "parentId" : "0199c3a2-7b1e-7c4d-9a10-3f5e8d2b6a41",
+                            "replies" : [ ],
+                            "repliesNextCursor" : null,
+                            "replyCount" : 0,
+                            "text" : "A lasts longer though.",
+                            "updatedAt" : "2026-10-09T13:05:00+08:00",
+                            "userId" : "0199b8e4-5d6e-7f70-9a1b-2c3d4e5f6a7b",
+                            "voteId" : "0199c2f0-4d3a-7e8b-b6c2-1a9f0e7d5c33"
+                          } ],
+                          "repliesNextCursor" : "UkVQTElFU3wwMTk5YzNhOS0yYzNkLTdlNGYtOWE1Yi02YzdkOGU5ZjBhMTJ8MjAyNi0xMC0wOVQwNTowNTowMFo",
+                          "replyCount" : 3,
                           "text" : "I would pick option B, it is the cheaper one.",
                           "updatedAt" : "2026-10-09T12:34:56+08:00",
                           "userId" : "0199b8e4-1c2d-7f60-8a3b-6d4e2f1a9b05",
@@ -14777,6 +14824,24 @@
                           "likeCount" : 0,
                           "likedByCurrentUser" : false,
                           "parentId" : null,
+                          "replies" : [ {
+                            "author" : "dave",
+                            "createdAt" : "2026-10-09T12:25:00+08:00",
+                            "deleted" : false,
+                            "edited" : false,
+                            "id" : "0199c3a0-3d4e-7f5a-8b6c-7d8e9f0a1b23",
+                            "likeCount" : 0,
+                            "likedByCurrentUser" : false,
+                            "parentId" : "0199c39e-1a2b-7d3c-8e4f-9a0b1c2d3e4f",
+                            "replies" : [ ],
+                            "repliesNextCursor" : null,
+                            "replyCount" : 0,
+                            "text" : "Still worth discussing.",
+                            "updatedAt" : "2026-10-09T12:25:00+08:00",
+                            "userId" : "0199b8e4-5d6e-7f70-9a1b-2c3d4e5f6a7b",
+                            "voteId" : "0199c2f0-4d3a-7e8b-b6c2-1a9f0e7d5c33"
+                          } ],
+                          "repliesNextCursor" : null,
                           "replyCount" : 1,
                           "text" : null,
                           "updatedAt" : "2026-10-09T12:20:00+08:00",
@@ -14890,6 +14955,8 @@
                         "likeCount" : 0,
                         "likedByCurrentUser" : false,
                         "parentId" : "0199c3a2-7b1e-7c4d-9a10-3f5e8d2b6a41",
+                        "replies" : [ ],
+                        "repliesNextCursor" : null,
                         "replyCount" : 0,
                         "text" : "I agree with you.",
                         "updatedAt" : "2026-10-09T12:34:56+08:00",
@@ -14908,7 +14975,7 @@
                 }
               }
             },
-            "description" : "Comment or Reply created (same shape as list items; `replyCount` is 0)"
+            "description" : "Comment or Reply created (same shape as list items; `replyCount` is 0 and `replies` is [])"
           },
           "400" : {
             "content" : {
@@ -15135,6 +15202,8 @@
                         "likeCount" : 3,
                         "likedByCurrentUser" : false,
                         "parentId" : null,
+                        "replies" : [ ],
+                        "repliesNextCursor" : null,
                         "replyCount" : 0,
                         "text" : "Edited: B is cheaper and ships faster.",
                         "updatedAt" : "2026-10-09T12:40:02+08:00",
@@ -15490,6 +15559,8 @@
                           "likeCount" : 0,
                           "likedByCurrentUser" : false,
                           "parentId" : "0199c3a2-7b1e-7c4d-9a10-3f5e8d2b6a41",
+                          "replies" : [ ],
+                          "repliesNextCursor" : null,
                           "replyCount" : 0,
                           "text" : "I agree with you.",
                           "updatedAt" : "2026-10-09T12:34:56+08:00",

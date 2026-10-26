@@ -71,6 +71,23 @@ public interface VoteCommentRepository extends JpaRepository<VoteComment, UUID> 
     List<VoteComment> findReplyPage(@Param("parentId") UUID parentId, @Param("afterTime") OffsetDateTime afterTime,
                                     @Param("afterId") UUID afterId, @Param("viewerId") UUID viewerId, Limit limit);
 
+    /**
+     * The first {@code perParent} Replies under each of a page of top-level Comments, filtered like
+     * {@link #findReplyPage}, oldest first, in one statement.
+     */
+    @Query("""
+            SELECT c FROM VoteComment c JOIN FETCH c.user
+            WHERE c.id IN (SELECT p.id FROM (SELECT r.id AS id,
+                                                    ROW_NUMBER() OVER (PARTITION BY r.parent.id ORDER BY r.createdAt, r.id) AS rn
+                                             FROM VoteComment r
+                                             WHERE r.parent.id IN :parentIds AND r.isDeleted = false
+                                               AND NOT EXISTS (SELECT 1 FROM UserBlock b
+                                                               WHERE b.blocker.id = :viewerId AND b.blocked = r.user)) p
+                           WHERE p.rn <= :perParent)
+            ORDER BY c.createdAt, c.id""")
+    List<VoteComment> findReplyPreviews(@Param("parentIds") Collection<UUID> parentIds, @Param("viewerId") UUID viewerId,
+                                        @Param("perParent") int perParent);
+
     /** Visible Reply counts for a page of top-level Comments, without Replies of users the viewer blocked. */
     @Query("SELECT c.parent.id AS id, COUNT(c) AS count FROM VoteComment c "
             + "WHERE c.parent.id IN :parentIds AND c.isDeleted = false AND NOT EXISTS (SELECT 1 FROM UserBlock b WHERE b.blocker.id = :viewerId AND b.blocked = c.user) GROUP BY c.parent.id")

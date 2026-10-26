@@ -51,7 +51,7 @@ public class VoteCommentController {
     @PostMapping
     @Auditable(action = "CREATE", resourceType = "COMMENT")
     @CommonApiResponses
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Comment or Reply created (same shape as list items; `replyCount` is 0)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Comment or Reply created (same shape as list items; `replyCount` is 0 and `replies` is [])",
             content = @Content(examples = @ExampleObject(name = "reply", value = """
                             {
                               "success": true,
@@ -68,6 +68,8 @@ public class VoteCommentController {
                               "likedByCurrentUser": false,
                               "parentId": "0199c3a2-7b1e-7c4d-9a10-3f5e8d2b6a41",
                               "replyCount": 0,
+                              "replies": [],
+                              "repliesNextCursor": null,
                               "deleted": false
                             },
                               "message": null,
@@ -139,7 +141,44 @@ public class VoteCommentController {
                                   "likeCount": 3,
                                   "likedByCurrentUser": false,
                                   "parentId": null,
-                                  "replyCount": 2,
+                                  "replyCount": 3,
+                                  "replies": [
+                                    {
+                                      "id": "0199c3a8-1b2c-7d3e-8f4a-5b6c7d8e9f01",
+                                      "voteId": "0199c2f0-4d3a-7e8b-b6c2-1a9f0e7d5c33",
+                                      "userId": "0199b8e4-5d6e-7f70-9a1b-2c3d4e5f6a7b",
+                                      "author": "bob",
+                                      "text": "Same, B wins on price.",
+                                      "createdAt": "2026-10-09T12:50:00+08:00",
+                                      "updatedAt": "2026-10-09T12:50:00+08:00",
+                                      "edited": false,
+                                      "likeCount": 0,
+                                      "likedByCurrentUser": false,
+                                      "parentId": "0199c3a2-7b1e-7c4d-9a10-3f5e8d2b6a41",
+                                      "replyCount": 0,
+                                      "replies": [],
+                                      "repliesNextCursor": null,
+                                      "deleted": false
+                                    },
+                                    {
+                                      "id": "0199c3a9-2c3d-7e4f-9a5b-6c7d8e9f0a12",
+                                      "voteId": "0199c2f0-4d3a-7e8b-b6c2-1a9f0e7d5c33",
+                                      "userId": "0199b8e4-5d6e-7f70-9a1b-2c3d4e5f6a7b",
+                                      "author": "carol",
+                                      "text": "A lasts longer though.",
+                                      "createdAt": "2026-10-09T13:05:00+08:00",
+                                      "updatedAt": "2026-10-09T13:05:00+08:00",
+                                      "edited": false,
+                                      "likeCount": 0,
+                                      "likedByCurrentUser": false,
+                                      "parentId": "0199c3a2-7b1e-7c4d-9a10-3f5e8d2b6a41",
+                                      "replyCount": 0,
+                                      "replies": [],
+                                      "repliesNextCursor": null,
+                                      "deleted": false
+                                    }
+                                  ],
+                                  "repliesNextCursor": "UkVQTElFU3wwMTk5YzNhOS0yYzNkLTdlNGYtOWE1Yi02YzdkOGU5ZjBhMTJ8MjAyNi0xMC0wOVQwNTowNTowMFo",
                                   "deleted": false
                                 },
                                 {
@@ -155,6 +194,26 @@ public class VoteCommentController {
                                   "likedByCurrentUser": false,
                                   "parentId": null,
                                   "replyCount": 1,
+                                  "replies": [
+                                    {
+                                      "id": "0199c3a0-3d4e-7f5a-8b6c-7d8e9f0a1b23",
+                                      "voteId": "0199c2f0-4d3a-7e8b-b6c2-1a9f0e7d5c33",
+                                      "userId": "0199b8e4-5d6e-7f70-9a1b-2c3d4e5f6a7b",
+                                      "author": "dave",
+                                      "text": "Still worth discussing.",
+                                      "createdAt": "2026-10-09T12:25:00+08:00",
+                                      "updatedAt": "2026-10-09T12:25:00+08:00",
+                                      "edited": false,
+                                      "likeCount": 0,
+                                      "likedByCurrentUser": false,
+                                      "parentId": "0199c39e-1a2b-7d3c-8e4f-9a0b1c2d3e4f",
+                                      "replyCount": 0,
+                                      "replies": [],
+                                      "repliesNextCursor": null,
+                                      "deleted": false
+                                    }
+                                  ],
+                                  "repliesNextCursor": null,
                                   "deleted": true
                                 }
                               ],
@@ -169,7 +228,7 @@ public class VoteCommentController {
             description = """
                     **Auth**: public (optional login changes response: `likedByCurrentUser` reflects the signed-in user's likes, and is always false when not logged in; threads started by and Replies written by users the caller blocked are left out)
                     **Precondition**: the Poll exists
-                    **Behavior**: returns top-level Comments only, newest first, cursor-paged (`limit` default 20, max 50; pass `nextCursor` back as `cursor`). Each item carries `replyCount`; load Replies with the replies endpoint. A deleted Comment that still has non-deleted Replies stays as a placeholder (`deleted` = true; `userId`, `author` and `text` are null); a deleted Comment without Replies is omitted. For a signed-in caller, a thread whose top-level Comment was written by a user they blocked (`POST /api/users/me/blocks/{userId}`) is omitted with all its Replies, Replies by blocked users do not count in `replyCount`, and a deleted placeholder whose only Replies are by blocked users is omitted
+                    **Behavior**: returns top-level Comments only, newest first, cursor-paged (`limit` default 20, max 50; pass `nextCursor` back as `cursor`). Each item carries `replyCount` and its first Replies in `replies` (at most 2, oldest first, filtered like the replies endpoint); when `repliesNextCursor` is set, pass it as `cursor` to the replies endpoint to load the rest without repeating those shown. A deleted Comment that still has non-deleted Replies stays as a placeholder (`deleted` = true; `userId`, `author` and `text` are null); a deleted Comment without Replies is omitted. For a signed-in caller, a thread whose top-level Comment was written by a user they blocked (`POST /api/users/me/blocks/{userId}`) is omitted with all its Replies, Replies by blocked users do not count in `replyCount`, and a deleted placeholder whose only Replies are by blocked users is omitted
                     **Side effects**: none
                     **Errors**:
                     - 400 `common.cursor_invalid`: `cursor` is not a token returned by this endpoint
@@ -205,6 +264,8 @@ public class VoteCommentController {
                                   "likedByCurrentUser": false,
                                   "parentId": "0199c3a2-7b1e-7c4d-9a10-3f5e8d2b6a41",
                                   "replyCount": 0,
+                                  "replies": [],
+                                  "repliesNextCursor": null,
                                   "deleted": false
                                 }
                               ],
@@ -256,6 +317,8 @@ public class VoteCommentController {
                               "likedByCurrentUser": false,
                               "parentId": null,
                               "replyCount": 0,
+                              "replies": [],
+                              "repliesNextCursor": null,
                               "deleted": false
                             },
                               "message": null,

@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -42,6 +43,9 @@ public class VoteCommentService {
     private final CommentLikeRepository commentLikeRepository;
     private final UserBlockRepository blockRepository;
     private final CommentMapper commentMapper;
+
+    /** Replies shown under each top-level Comment in a Poll's Comment list. */
+    static final int REPLY_PREVIEW_SIZE = 2;
 
     public CommentDto createComment(String voteId, String userId, CreateCommentRequest request) {
         Vote vote = voteService.findAccessibleVote(UUID.fromString(voteId), userId);
@@ -73,7 +77,7 @@ public class VoteCommentService {
         List<VoteComment> rows = commentRepository.findPageByVoteId(voteUuid,
             after == null ? null : after.timeKey(), after == null ? null : after.id(), viewerId, Limit.of(size + 1));
         return CursorResponse.of(rows, size, Cursor.Scope.COMMENTS, c -> Cursor.of(c.getCreatedAt(), c.getId()),
-            page -> withReplyCounts(page, toDtos(page, currentUserId), viewerId));
+            page -> toThreads(page, viewerId, currentUserId));
     }
 
     /** Replies under one top-level Comment, oldest first, cursor-paged. */
@@ -113,15 +117,36 @@ public class VoteCommentService {
         return target.getParent() != null ? target.getParent() : target;
     }
 
-    private List<CommentDto> withReplyCounts(List<VoteComment> roots, List<CommentDto> dtos, UUID viewerId) {
+    /**
+     * Top-level Comments with their visible Reply counts and first Replies; likes are loaded once for both. The
+     * {@code repliesNextCursor} continues {@link #getReplies} right after the last preview.
+     */
+    private List<CommentDto> toThreads(List<VoteComment> roots, UUID viewerId, String currentUserId) {
         if (roots.isEmpty()) {
-            return dtos;
+            return List.of();
         }
         Map<UUID, Long> replyCounts = commentRepository.countRepliesByParentIds(
                 roots.stream().map(VoteComment::getId).toList(), viewerId).stream()
             .collect(Collectors.toMap(IdCount::getId, IdCount::getCount));
-        dtos.forEach(dto -> dto.setReplyCount(replyCounts.getOrDefault(UUID.fromString(dto.getId()), 0L)));
-        return dtos;
+        List<VoteComment> previews = replyCounts.isEmpty() ? List.of()
+            : commentRepository.findReplyPreviews(replyCounts.keySet(), viewerId, REPLY_PREVIEW_SIZE);
+        List<CommentDto> dtos = toDtos(Stream.concat(roots.stream(), previews.stream()).toList(), currentUserId);
+        List<CommentDto> rootDtos = dtos.subList(0, roots.size());
+        Map<String, List<CommentDto>> repliesByRoot = dtos.subList(roots.size(), dtos.size()).stream()
+            .collect(Collectors.groupingBy(CommentDto::getParentId));
+        for (CommentDto root : rootDtos) {
+            long replyCount = replyCounts.getOrDefault(UUID.fromString(root.getId()), 0L);
+            List<CommentDto> replies = repliesByRoot.getOrDefault(root.getId(), List.of());
+            root.setReplyCount(replyCount);
+            root.setReplies(replies);
+            // Empty only if every Reply went between the two reads; then there is nothing to continue from
+            if (!replies.isEmpty() && replyCount > replies.size()) {
+                CommentDto last = replies.getLast();
+                root.setRepliesNextCursor(Cursor.of(last.getCreatedAt(), UUID.fromString(last.getId()))
+                    .encode(Cursor.Scope.REPLIES));
+            }
+        }
+        return rootDtos;
     }
 
     public CommentDto updateComment(UUID commentId, String userId, UpdateCommentRequest request) {

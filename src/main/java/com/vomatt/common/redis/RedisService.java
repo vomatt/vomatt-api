@@ -11,7 +11,8 @@ import java.util.Map;
  * Error handling strategy:
  * - Reads + idempotent writes (get, hGet, hGetAll, hasKey, set, expire): swallow-and-log; cache-aside can fail soft.
  * - Correctness-critical (getOrThrow, getAndDelete, setOrThrow, setIfAbsent, incrementAndExpire, delete, hDelete,
- *   hasKeyOrThrow, execInTransaction, execScript): throw RedisOperationException.
+ *   hGetAllOrThrow, hasKeyOrThrow, execInTransaction, execScript): throw RedisOperationException. getOrThrow takes a
+ *   value it cannot decode for a miss and deletes it, so one bad value is not an outage for as long as it lives.
  */
 public interface RedisService {
 
@@ -60,10 +61,13 @@ public interface RedisService {
 
     <T> T hGet(String cacheName, String key, String field, Class<T> clazz);
 
-    /** Deletes a hash field; throws RedisOperationException on Redis failure. */
-    boolean hDelete(String cacheName, String key, String field);
+    /** Deletes hash fields; throws RedisOperationException on Redis failure. */
+    boolean hDelete(String cacheName, String key, String... fields);
 
     Map<String, Object> hGetAll(String cacheName, String key);
+
+    /** HGETALL; throws RedisOperationException on Redis failure instead of answering an empty map. */
+    Map<String, Object> hGetAllOrThrow(String cacheName, String key);
 
     // ── Counter ───────────────────────────────────────────────────────
 

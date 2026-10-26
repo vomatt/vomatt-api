@@ -17,8 +17,9 @@ class ClientIpResolverTest {
         ClientIpResolver.setClientIpSecret(null);
     }
 
+    /** vomatt-web (egress 203.0.113.7) through the platform ingress. */
     private static MockHttpServletRequest fromWeb(String clientIp, String secret) {
-        MockHttpServletRequest req = request("203.0.113.7", null);
+        MockHttpServletRequest req = request("10.0.0.5", "203.0.113.7");
         req.addHeader(ClientIpResolver.CLIENT_IP_HEADER, clientIp);
         req.addHeader(ClientIpResolver.CLIENT_IP_SECRET_HEADER, secret);
         return req;
@@ -52,6 +53,16 @@ class ClientIpResolverTest {
         // An env value ending in a newline; the container trims the header value
         ClientIpResolver.setClientIpSecret(" " + SECRET + "\n");
         assertThat(ClientIpResolver.resolve(fromWeb("198.51.100.9", SECRET))).isEqualTo("198.51.100.9");
+    }
+
+    @Test
+    void shouldIgnoreClientIpHeaderWhenPeerIsNotTrustedProxy() {
+        ClientIpResolver.setClientIpSecret(SECRET);
+        MockHttpServletRequest direct = request("203.0.113.5", null);
+        direct.addHeader(ClientIpResolver.CLIENT_IP_HEADER, "198.51.100.9");
+        direct.addHeader(ClientIpResolver.CLIENT_IP_SECRET_HEADER, SECRET);
+
+        assertThat(ClientIpResolver.resolve(direct)).isEqualTo("203.0.113.5");
     }
 
     @Test

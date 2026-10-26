@@ -163,7 +163,7 @@ jwt:
   expiration-seconds: ${JWT_EXPIRATION_SECONDS:900}
   refresh-expiration-days: ${JWT_REFRESH_EXPIRATION_DAYS:30}
   # Rotating the same oldToken again within N seconds returns the same pair, so cross-instance races and retries after a lost response are not flagged as reuse
-  refresh-grace-seconds: ${JWT_REFRESH_GRACE_SECONDS:60}
+  refresh-grace-seconds: ${JWT_REFRESH_GRACE_SECONDS:10}
 
 google:
   client-id: ${GOOGLE_CLIENT_ID:}

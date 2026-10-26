@@ -11,6 +11,7 @@ import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.data.redis.serializer.RedisSerializer;
+import org.springframework.data.redis.serializer.SerializationException;
 import org.springframework.stereotype.Service;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
@@ -87,14 +88,32 @@ public class RedisServiceImpl implements RedisService {
     @SuppressWarnings("unchecked")
     public <T> T getOrThrow(String cacheName, String key, Class<T> clazz) {
         String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
+        Object value;
         try {
-            Object value = redisTemplate.opsForValue().get(cacheKey);
-            if (value == null) return null;
-            if (clazz.isInstance(value)) return (T) value;
-            return objectMapper.convertValue(value, clazz);
+            value = redisTemplate.opsForValue().get(cacheKey);
+        } catch (SerializationException e) {
+            return dropUndecodable(cacheKey, e);
         } catch (Exception e) {
             throw new RedisOperationException("Redis GET failed, key=" + cacheKey, e);
         }
+        if (value == null) return null;
+        if (clazz.isInstance(value)) return (T) value;
+        try {
+            return objectMapper.convertValue(value, clazz);
+        } catch (RuntimeException e) {
+            return dropUndecodable(cacheKey, e);
+        }
+    }
+
+    /** A value that no longer decodes (bad bytes, changed type) reads as a miss and is deleted. */
+    private <T> T dropUndecodable(String cacheKey, Exception cause) {
+        log.warn("Redis value undecodable, dropping key={}: {}", cacheKey, cause.getMessage());
+        try {
+            redisTemplate.delete(cacheKey);
+        } catch (Exception e) {
+            throw new RedisOperationException("Redis DELETE failed, key=" + cacheKey, e);
+        }
+        return null;
     }
 
     @Override
@@ -194,13 +213,13 @@ public class RedisServiceImpl implements RedisService {
     }
 
     @Override
-    public boolean hDelete(String cacheName, String key, String field) {
+    public boolean hDelete(String cacheName, String key, String... fields) {
         String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
-            Long count = redisTemplate.opsForHash().delete(cacheKey, (Object) field);
+            Long count = redisTemplate.opsForHash().delete(cacheKey, (Object[]) fields);
             return count != null && count > 0;
         } catch (Exception e) {
-            throw new RedisOperationException("Redis HDEL failed, key=" + cacheKey + ", field=" + field, e);
+            throw new RedisOperationException("Redis HDEL failed, key=" + cacheKey + ", fields=" + fields.length, e);
         }
     }
 
@@ -213,6 +232,17 @@ public class RedisServiceImpl implements RedisService {
         } catch (Exception e) {
             log.error("Redis HGETALL error: key={}, error={}", cacheKey, e.getMessage());
             return Map.of();
+        }
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> hGetAllOrThrow(String cacheName, String key) {
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
+        try {
+            return (Map<String, Object>) (Map<?, ?>) redisTemplate.opsForHash().entries(cacheKey);
+        } catch (Exception e) {
+            throw new RedisOperationException("Redis HGETALL failed, key=" + cacheKey, e);
         }
     }
 

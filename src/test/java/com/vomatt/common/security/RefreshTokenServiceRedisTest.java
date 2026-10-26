@@ -2,6 +2,7 @@ package com.vomatt.common.security;
 
 import com.vomatt.common.config.RedisConfig;
 import com.vomatt.common.redis.RedisOperationException;
+import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.redis.RedisServiceImpl;
 import com.vomatt.entity.User;
 import com.vomatt.repository.UserRepository;
@@ -181,5 +182,45 @@ class RefreshTokenServiceRedisTest {
         assertThatThrownBy(() -> service.rotate(t0)).isInstanceOf(RedisOperationException.class);
 
         assertThat(template.keys("*")).containsExactlyInAnyOrder("refresh:" + keyOf(t0), "refresh:idx:" + userId);
+    }
+
+    @Test
+    void shouldStopSuccessorWhenLoggingOutWithAlreadyRotatedToken() {
+        String t0 = service.generate(userId, List.of("user"), false);
+        String t1 = service.rotate(t0).newRefreshToken();
+
+        service.revoke(t0);
+
+        assertThat(service.rotate(t0)).isNull();
+        assertThat(service.rotate(t1)).isNull();
+        assertThat(redisService.hasKey("refresh", keyOf(t1))).isFalse();
+    }
+
+    @Test
+    void shouldStopSuccessorWrittenAfterSnapshotWhenRevokingAll() {
+        String t0 = service.generate(userId, List.of("user"), false);
+        String t1 = service.rotate(t0).newRefreshToken();
+        // As seen by a revokeAll that read the index just before that rotation: T0 listed, T1 not yet
+        template.opsForHash().delete("refresh:idx:" + userId, keyOf(t1));
+        template.opsForHash().put("refresh:idx:" + userId, keyOf(t0), sessionOf(t1));
+
+        service.revokeAllForUser(userId);
+
+        assertThat(service.rotate(t1)).isNull();
+        assertThat(service.rotate(t0)).isNull();
+    }
+
+    @Test
+    void shouldRevokeSessionOfLegacyIndexEntryWhenRevokingAll() {
+        String t0 = service.generate(userId, List.of("user"), false);
+        String session = sessionOf(t0);
+        // Written before index values named the session
+        redisService.execInTransaction(List.of(RedisService.RedisWrite.hput("refresh:idx", userId, keyOf(t0), "1")));
+
+        service.revokeAllForUser(userId);
+
+        assertThat(redisService.hasKey("refresh:revoked-session", session)).isTrue();
+        assertThat(redisService.hasKey("refresh", keyOf(t0))).isFalse();
+        assertThat(redisService.hGetAll("refresh:idx", userId)).isEmpty();
     }
 }

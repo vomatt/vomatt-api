@@ -78,4 +78,51 @@ class RedisServiceImplTest {
         assertThatThrownBy(() -> redisService.execScript(failing, List.of("k"), List.of()))
                 .isInstanceOf(RedisOperationException.class);
     }
+
+    private void setRaw(String key, String bytes) {
+        template.execute((org.springframework.data.redis.core.RedisCallback<Object>) c -> c.stringCommands()
+                .set(key.getBytes(java.nio.charset.StandardCharsets.UTF_8), bytes.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void shouldReadMissAndDropKeyWhenValueIsNotJson() {
+        setRaw("ns:bad", "not json");
+
+        assertThat(redisService.getOrThrow("ns", "bad", RefreshTokenService.RefreshTokenData.class)).isNull();
+        assertThat(template.hasKey("ns:bad")).isFalse();
+    }
+
+    @Test
+    void shouldReadMissAndDropKeyWhenValueHasAnotherShape() {
+        redisService.set("ns", "other", "a plain string", java.time.Duration.ofMinutes(5));
+
+        assertThat(redisService.getOrThrow("ns", "other", RefreshTokenService.RefreshTokenData.class)).isNull();
+        assertThat(template.hasKey("ns:other")).isFalse();
+    }
+
+    @Test
+    void shouldThrowWhenGettingKeyOfWrongType() {
+        template.opsForHash().put("ns:hash", "f", "v");
+
+        // WRONGTYPE is a Redis error, not an undecodable value: the key stays
+        assertThatThrownBy(() -> redisService.getOrThrow("ns", "hash", String.class))
+                .isInstanceOf(RedisOperationException.class);
+        assertThat(template.hasKey("ns:hash")).isTrue();
+    }
+
+    @Test
+    void shouldThrowWhenReadingHashOfWrongType() {
+        redisService.set("idx", "u", "not-a-hash", java.time.Duration.ofMinutes(5));
+
+        assertThatThrownBy(() -> redisService.hGetAllOrThrow("idx", "u")).isInstanceOf(RedisOperationException.class);
+    }
+
+    @Test
+    void shouldDeleteEveryGivenFieldWhenDeletingHashFields() {
+        template.opsForHash().putAll("idx:u", java.util.Map.of("a", "1", "b", "2", "c", "3"));
+
+        assertThat(redisService.hDelete("idx", "u", "a", "b")).isTrue();
+
+        assertThat(redisService.hGetAll("idx", "u")).containsOnlyKeys("c");
+    }
 }

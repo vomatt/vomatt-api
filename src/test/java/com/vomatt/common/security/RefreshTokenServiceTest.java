@@ -23,6 +23,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CyclicBarrier;
@@ -43,6 +44,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -53,6 +55,7 @@ class RefreshTokenServiceTest {
     private static final String GRACE_NS = "refresh:grace";
     private static final String USER_IDX_NS = "refresh:idx";
     private static final String REVOKED_SESSION_NS = "refresh:revoked-session";
+    private static final String ENDED_SESSION_NS = "refresh:ended-session";
 
     @Mock
     RedisService redisService;
@@ -84,13 +87,18 @@ class RefreshTokenServiceTest {
                 .build();
     }
 
-    /** A grace pair of an active user's live session. */
+    /** A grace pair of a live session. */
     private RefreshTokenService.RotateResult standingPair(String access, String refresh) {
-        String userId = UUID.randomUUID().toString();
-        RefreshTokenService.RotateResult pair = new RefreshTokenService.RotateResult(access, refresh,
-                new RefreshTokenService.RefreshTokenData(userId, List.of("user"), "session-1", false));
-        when(userRepository.findById(UUID.fromString(userId))).thenReturn(Optional.of(userWithRoles(userId, false)));
-        return pair;
+        return new RefreshTokenService.RotateResult(access, refresh,
+                new RefreshTokenService.RefreshTokenData(UUID.randomUUID().toString(), List.of("user"), "session-1", false));
+    }
+
+    /** The writes that end a session: the grace-only marker, plus the long-lived revoked flag when revoked. */
+    private static List<RedisService.RedisWrite> ending(String sessionId, boolean revoke) {
+        RedisService.RedisWrite ended = RedisService.RedisWrite.set(ENDED_SESSION_NS, sessionId, "1", Duration.ofSeconds(10));
+        return revoke
+                ? List.of(ended, RedisService.RedisWrite.set(REVOKED_SESSION_NS, sessionId, "1", Duration.ofDays(30)))
+                : List.of(ended);
     }
 
     /** Stubs the rotation script's reply; the captor holds its ARGV (session id, new token data, grace pair, ...). */
@@ -208,26 +216,24 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    void shouldRejectGracePairWhenItsSessionWasRevokedOnReuse() {
+    void shouldRejectGracePairWhenItsSessionHasEnded() {
         String oldToken = "stolen-just-rotated";
-        RefreshTokenService.RotateResult cached = new RefreshTokenService.RotateResult("access", "live-refresh",
-                new RefreshTokenService.RefreshTokenData(UUID.randomUUID().toString(), List.of("user"), "session-1", false));
-        when(redisService.getOrThrow(GRACE_NS, k(oldToken), RefreshTokenService.RotateResult.class)).thenReturn(cached);
-        when(redisService.hasKeyOrThrow(REVOKED_SESSION_NS, "session-1")).thenReturn(true);
+        when(redisService.getOrThrow(GRACE_NS, k(oldToken), RefreshTokenService.RotateResult.class))
+                .thenReturn(standingPair("access", "live-refresh"));
+        when(redisService.hasKeyOrThrow(ENDED_SESSION_NS, "session-1")).thenReturn(true);
 
         assertThat(service.rotate(oldToken)).isNull();
     }
 
     @Test
-    void shouldRejectGracePairWhenUserIsSuspended() {
-        String oldToken = "stolen-just-rotated";
-        String userId = UUID.randomUUID().toString();
-        RefreshTokenService.RotateResult cached = new RefreshTokenService.RotateResult("access", "live-refresh",
-                new RefreshTokenService.RefreshTokenData(userId, List.of("user"), "session-1", false));
+    void shouldServeGracePairWithoutLoadingUserWhenSessionStands() {
+        String oldToken = "just-rotated";
+        RefreshTokenService.RotateResult cached = standingPair("access", "live-refresh");
         when(redisService.getOrThrow(GRACE_NS, k(oldToken), RefreshTokenService.RotateResult.class)).thenReturn(cached);
-        when(userRepository.findById(UUID.fromString(userId))).thenReturn(Optional.of(userWithRoles(userId, true)));
 
-        assertThat(service.rotate(oldToken)).isNull();
+        assertThat(service.rotate(oldToken)).isSameAs(cached);
+        // Suspension ends the session through revokeAllForUser, so the marker alone decides
+        verifyNoInteractions(userRepository);
     }
 
     @Test
@@ -242,11 +248,9 @@ class RefreshTokenServiceTest {
                 .thenReturn(new RefreshTokenService.RefreshTokenData(userId, List.of("user"), "session-1", false));
         when(userRepository.findById(UUID.fromString(userId))).thenReturn(Optional.of(userWithRoles(userId, false)));
         when(redisService.execScript(any(), anyList(), anyList())).thenReturn(0L);
-        when(redisService.hasKeyOrThrow(REVOKED_SESSION_NS, "session-1")).thenReturn(true);
+        when(redisService.hasKeyOrThrow(ENDED_SESSION_NS, "session-1")).thenReturn(true);
 
         assertThat(service.rotate(oldToken)).isNull();
-        // The user loaded for the rotation is reused for the grace check
-        verify(userRepository).findById(UUID.fromString(userId));
     }
 
     @Test
@@ -259,8 +263,8 @@ class RefreshTokenServiceTest {
 
         // Read as "no legacy marker" it would revoke the wrong thing; a 503 revokes nothing
         assertThatThrownBy(() -> service.rotate(oldToken)).isInstanceOf(RedisOperationException.class);
-        verify(redisService, never()).setOrThrow(anyString(), anyString(), any(), any());
-        verify(redisService, never()).hGetAll(anyString(), anyString());
+        verify(redisService, never()).execInTransaction(any());
+        verify(redisService, never()).hGetAllOrThrow(anyString(), anyString());
     }
 
     // ── rotate: concurrent race ───────────────────────────────────────
@@ -370,9 +374,10 @@ class RefreshTokenServiceTest {
 
         assertThatThrownBy(() -> service.rotate(oldToken)).isInstanceOf(RefreshTokenReuseException.class);
 
-        verify(redisService).setOrThrow(REVOKED_SESSION_NS, "session-1", "1", Duration.ofDays(30));
+        // Revoked, and its grace pairs (of tokens rotated within the window) are no longer served either
+        verify(redisService).execInTransaction(ending("session-1", true));
         // The user's other sessions survive
-        verify(redisService, never()).hGetAll(anyString(), anyString());
+        verify(redisService, never()).hGetAllOrThrow(anyString(), anyString());
         verify(redisService, never()).delete(eq(USER_IDX_NS), anyString());
     }
 
@@ -417,12 +422,13 @@ class RefreshTokenServiceTest {
         when(redisService.getOrThrow(NAMESPACE, k(oldToken), RefreshTokenService.RefreshTokenData.class)).thenReturn(null);
         when(redisService.getOrThrow(CONSUMED_NS, k(oldToken), String.class)).thenReturn("user-legacy");
         when(redisService.hasKeyOrThrow(USER_IDX_NS, "user-legacy")).thenReturn(true);
-        when(redisService.hGetAll(USER_IDX_NS, "user-legacy")).thenReturn(Map.of("t1", "1"));
+        when(redisService.hGetAllOrThrow(USER_IDX_NS, "user-legacy")).thenReturn(Map.of("t1", "session-1"));
 
         assertThatThrownBy(() -> service.rotate(oldToken)).isInstanceOf(RefreshTokenReuseException.class);
 
-        verify(redisService).delete(NAMESPACE, "t1");
-        verify(redisService).delete(USER_IDX_NS, "user-legacy");
+        verify(redisService).execInTransaction(ending("session-1", true));
+        verify(redisService).deleteAll(NAMESPACE, Set.of("t1"));
+        verify(redisService).hDelete(USER_IDX_NS, "user-legacy", "t1");
     }
 
     // ── rotate: Step 4 reload User -- ban blocks ────────────────────────
@@ -436,7 +442,7 @@ class RefreshTokenServiceTest {
 
         when(redisService.getOrThrow(GRACE_NS, k(oldToken), RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getOrThrow(NAMESPACE, k(oldToken), RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
-        when(redisService.hGetAll(USER_IDX_NS, userId)).thenReturn(Map.of("t1", "1"));
+        when(redisService.hGetAllOrThrow(USER_IDX_NS, userId)).thenReturn(Map.of("t1", "session-1"));
         // Reload returns a suspended User
         when(userRepository.findById(UUID.fromString(userId)))
                 .thenReturn(Optional.of(userWithRoles(userId, true, "admin")));
@@ -447,8 +453,8 @@ class RefreshTokenServiceTest {
         // The old token goes even if the user index doesn't list it
         verify(redisService).delete(NAMESPACE, k(oldToken));
         // Banned users must have all sessions revoked
-        verify(redisService).delete(NAMESPACE, "t1");
-        verify(redisService).delete(USER_IDX_NS, userId);
+        verify(redisService).execInTransaction(ending("session-1", true));
+        verify(redisService).deleteAll(NAMESPACE, Set.of("t1"));
         // Must not issue a new access token
         verify(jwtUtil, never()).generateToken(anyString(), any(), anyBoolean());
     }
@@ -462,13 +468,15 @@ class RefreshTokenServiceTest {
 
         when(redisService.getOrThrow(GRACE_NS, k(oldToken), RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getOrThrow(NAMESPACE, k(oldToken), RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
-        when(redisService.hGetAll(USER_IDX_NS, userId)).thenReturn(Map.of());
+        when(redisService.hGetAllOrThrow(USER_IDX_NS, userId)).thenReturn(Map.of());
         when(userRepository.findById(UUID.fromString(userId))).thenReturn(Optional.empty());
 
         RefreshTokenService.RotateResult result = service.rotate(oldToken);
 
         assertThat(result).isNull();
-        verify(redisService).delete(USER_IDX_NS, userId);
+        verify(redisService).delete(NAMESPACE, k(oldToken));
+        // Nothing listed, nothing more to delete (an HDEL of no fields is a Redis error)
+        verify(redisService, never()).hDelete(eq(USER_IDX_NS), anyString(), any(String[].class));
         verify(jwtUtil, never()).generateToken(anyString(), any(), anyBoolean());
     }
 
@@ -594,20 +602,47 @@ class RefreshTokenServiceTest {
 
         verify(redisService).hDelete(USER_IDX_NS, "user-6", k(token));
         // Ends the session for the grace window, so a grace pair of it is no longer handed out
-        verify(redisService).setIfAbsent(REVOKED_SESSION_NS, "session-1", "1", Duration.ofSeconds(10));
+        verify(redisService).execInTransaction(ending("session-1", false));
     }
 
     @Test
-    void revokeAllForUser_deletesEveryActiveToken() {
-        // "1": an entry written before index values named the session
-        when(redisService.hGetAll(USER_IDX_NS, "user-7")).thenReturn(Map.of("ta", "session-a", "tb", "1"));
+    void shouldRevokeSessionWhenLoggingOutWithAlreadyRotatedToken() {
+        String token = "rotated-then-logout";
+        when(redisService.getAndDelete(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class)).thenReturn(null);
+        when(redisService.getOrThrow(CONSUMED_NS, k(token), String.class)).thenReturn("session-1");
+
+        service.revoke(token);
+
+        // Its successor can no longer rotate, and no grace pair of the session is served
+        verify(redisService).execInTransaction(ending("session-1", true));
+    }
+
+    @Test
+    void shouldFlagSessionsBeforeDeletingOnlySnapshotTokensWhenRevokingAll() {
+        // "1": an entry written before index values named the session; its token names it
+        when(redisService.hGetAllOrThrow(USER_IDX_NS, "user-7")).thenReturn(Map.of("ta", "session-a", "tb", "1"));
+        when(redisService.getOrThrow(NAMESPACE, "tb", RefreshTokenService.RefreshTokenData.class))
+                .thenReturn(new RefreshTokenService.RefreshTokenData("user-7", List.of("user"), "session-b", false));
 
         service.revokeAllForUser("user-7");
 
-        verify(redisService).setIfAbsent(REVOKED_SESSION_NS, "session-a", "1", Duration.ofSeconds(10));
-        verify(redisService, never()).setIfAbsent(REVOKED_SESSION_NS, "1", "1", Duration.ofSeconds(10));
-        verify(redisService).delete(NAMESPACE, "ta");
-        verify(redisService).delete(NAMESPACE, "tb");
-        verify(redisService).delete(USER_IDX_NS, "user-7");
+        InOrder order = inOrder(redisService);
+        ArgumentCaptor<List<RedisService.RedisWrite>> writes = ArgumentCaptor.captor();
+        order.verify(redisService).execInTransaction(writes.capture());
+        order.verify(redisService).deleteAll(NAMESPACE, Set.of("ta", "tb"));
+        order.verify(redisService).hDelete(eq(USER_IDX_NS), eq("user-7"), any(String[].class));
+        assertThat(writes.getValue()).containsExactlyInAnyOrderElementsOf(
+                java.util.stream.Stream.concat(ending("session-a", true).stream(), ending("session-b", true).stream()).toList());
+        // An entry a concurrent rotation wrote after the snapshot is kept
+        verify(redisService, never()).delete(eq(USER_IDX_NS), anyString());
+    }
+
+    @Test
+    void shouldPropagateExceptionWhenRevokeAllCannotReadIndex() {
+        when(redisService.hGetAllOrThrow(USER_IDX_NS, "user-8")).thenThrow(new RedisOperationException("redis timeout", null));
+
+        // An empty answer would revoke nothing and report success
+        assertThatThrownBy(() -> service.revokeAllForUser("user-8")).isInstanceOf(RedisOperationException.class);
+        verify(redisService, never()).deleteAll(anyString(), any());
     }
 }

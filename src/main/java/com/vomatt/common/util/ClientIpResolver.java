@@ -15,7 +15,8 @@ import java.util.List;
  *
  * <p>vomatt-web calls this API from its own servers, so the peer and {@code X-Forwarded-For} name vomatt-web, not the
  * user. It passes the user's IP in {@link #CLIENT_IP_HEADER}, honored only with the shared secret
- * ({@code app.security.client-ip-secret}) in {@link #CLIENT_IP_SECRET_HEADER}; anyone else could set the header to dodge
+ * ({@code app.security.client-ip-secret}) in {@link #CLIENT_IP_SECRET_HEADER} and from a trusted proxy peer (the
+ * platform ingress in front of the API, see below); anyone else could set the header to dodge
  * rate limits and OTP lockouts, or to lock out someone else's IP.</p>
  *
  * <p>Otherwise this service runs behind a platform proxy; {@code X-Forwarded-For} is appended by a trusted edge.
@@ -123,6 +124,12 @@ public final class ClientIpResolver {
     private static String trustedClientIp(HttpServletRequest request) {
         String ip = request.getHeader(CLIENT_IP_HEADER);
         if (ip == null) {
+            return null;
+        }
+        // vomatt-web reaches the API through the platform ingress like any client, so its peer is a trusted proxy; a peer
+        // outside them reached the app directly and is not vomatt-web, whatever secret it sends
+        if (!isTrustedProxy(request.getRemoteAddr())) {
+            log.debug("{} ignored: untrusted peer", CLIENT_IP_HEADER);
             return null;
         }
         byte[] secret = clientIpSecret;

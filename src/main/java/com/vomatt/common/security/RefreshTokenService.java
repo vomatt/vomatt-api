@@ -32,14 +32,15 @@ public class RefreshTokenService {
     private static final String REVOKED_SESSION_NS = "refresh:revoked-session";
     // User -> active token index, used to revoke all
     private static final String USER_IDX_NS = "refresh:idx";
-    // In-flight race grace cache: the same oldToken returns the same pair within the TTL, so a cross-instance race does not trigger a reuse alert
+    // In-flight race grace cache: the same oldToken returns the same pair within the TTL, so a cross-instance race, or a
+    // retry after the response carrying the new pair was lost, does not trigger a reuse alert
     private static final String GRACE_NS = "refresh:grace";
     private static final int SHA_PREFIX_LEN = 8;
 
     @Value("${jwt.refresh-expiration-days:30}")
     private long refreshExpirationDays;
 
-    @Value("${jwt.refresh-grace-seconds:10}")
+    @Value("${jwt.refresh-grace-seconds:60}")
     private long refreshGraceSeconds;
 
     /**
@@ -78,28 +79,37 @@ public class RefreshTokenService {
      *
      * Flow (order must not change):
      *   1. Grace cache hit -> return the already issued pair (no reuse alert, no namespace writes)
-     *   2. Atomic GETDEL to take the old token data
-     *   3. data == null -> check CONSUMED_NS for reuse; on a hit, mark the token's session revoked and throw
-     *      RefreshTokenReuseException (the user's other sessions are untouched)
+     *   2. Read the old token data without consuming it
+     *   3. data == null -> a concurrent caller may have just committed, so check the grace cache again; then check
+     *      CONSUMED_NS for reuse; on a hit, mark the token's session revoked and throw RefreshTokenReuseException
+     *      (the user's other sessions are untouched)
      *   3b. data's session is revoked -> return null (the session's live token cannot rotate any more)
-     *   4. data != null -> generate a new pair, write grace -> consumed -> namespace -> userIdx
+     *   4. data != null -> generate a new pair
+     *   5. One atomic step consumes the old token and writes grace, consumed, the new token and the user index.
+     *      Racing callers each get here; exactly one consumes the token, the others return the pair it wrote to grace.
+     *      The token disappears only together with its grace pair, so a concurrent caller can never find neither
+     *      (which used to answer 401 and sign the user out).
      *
      * Returns null if the token is invalid or expired (not reused).
      */
     public RotateResult rotate(String oldToken) {
         String oldKey = keyOf(oldToken);
         // Step 1: return on grace cache hit (must come before the reuse detector)
-        RotateResult cached = redisService.get(GRACE_NS, oldKey, RotateResult.class);
+        RotateResult cached = graceHit(oldKey);
         if (cached != null) {
-            log.info("refresh.cache_hit refreshToken_sha={}", oldKey.substring(0, SHA_PREFIX_LEN));
             return cached;
         }
 
-        // Step 2: atomic GETDEL so two instances cannot both get the data
-        RefreshTokenData data = redisService.getAndDelete(NAMESPACE, oldKey, RefreshTokenData.class);
+        // Step 2: throws on Redis failure, so an outage is a 503 rather than a sign-out
+        RefreshTokenData data = redisService.getOrThrow(NAMESPACE, oldKey, RefreshTokenData.class);
         if (data == null) {
-            // Step 3: reuse detection
-            String sessionId = redisService.get(CONSUMED_NS, oldKey, String.class);
+            // Step 3: a concurrent rotation may have committed since step 1
+            cached = graceHit(oldKey);
+            if (cached != null) {
+                return cached;
+            }
+            // Reuse detection; throws on Redis failure so a replay during an outage can't pass as merely invalid
+            String sessionId = redisService.getOrThrow(CONSUMED_NS, oldKey, String.class);
             if (sessionId != null) {
                 // Markers written before 2026-10-17 hold the userId instead of a session id: fall back to revoking all.
                 // Remove after 2026-11-16, when the last of them has expired with its refresh lifetime.
@@ -119,6 +129,7 @@ public class RefreshTokenService {
 
         // Step 3b: the session was ended by reuse detection; fails closed so a Redis error cannot revive it
         if (data.sessionId() != null && redisService.hasKeyOrThrow(REVOKED_SESSION_NS, data.sessionId())) {
+            redisService.delete(NAMESPACE, oldKey);
             redisService.hDelete(USER_IDX_NS, data.userId(), oldKey);
             log.warn("Refresh rotation rejected (session revoked after reuse) userId={}", data.userId());
             return null;
@@ -132,6 +143,8 @@ public class RefreshTokenService {
             // Account missing or banned -> revoke all of the user's sessions and return null so the caller returns 401
             log.warn("Refresh rotation rejected (user missing or banned), revoking all sessions for userId={}",
                     data.userId());
+            // Explicitly too: revokeAllForUser only finds tokens listed in the user index
+            redisService.delete(NAMESPACE, oldKey);
             revokeAllForUser(data.userId());
             return null;
         }
@@ -150,23 +163,34 @@ public class RefreshTokenService {
         Duration refreshTtl = Duration.ofDays(refreshExpirationDays);
         Duration graceTtl = Duration.ofSeconds(refreshGraceSeconds);
 
-        // Order: grace first (where both sides of a race meet) -> then atomically write the remaining correctness-critical items.
-        // GRACE is an optimization for cross-instance races; if it fails the reuse detector takes over (fail-safe), so it stays fail-soft and is written separately.
-        redisService.set(GRACE_NS, oldKey, result, graceTtl);
-
-        // P1-#17: CONSUMED (reuse detection), NAMESPACE (the new token), USER_IDX (revocation index + TTL refresh + old token removal)
-        // are correctness-critical and used to take one round-trip each. They are now applied atomically in a single MULTI/EXEC: one round-trip,
-        // fully atomic (no intermediate "partially written then threw" state), and a connection failure throws for the whole batch (fail-fast, no weaker than the old per-write throwing).
-        redisService.execInTransaction(List.of(
+        // Step 5: GRACE (where racing callers meet), CONSUMED (reuse detection), NAMESPACE (the new token), USER_IDX
+        // (revocation index + TTL refresh + old token removal), written only if this caller is the one consuming the old token
+        boolean consumed = redisService.consumeAndExec(NAMESPACE, oldKey, List.of(
+                RedisService.RedisWrite.set(GRACE_NS, oldKey, result, graceTtl),
                 RedisService.RedisWrite.set(CONSUMED_NS, oldKey, sessionId, refreshTtl),
                 RedisService.RedisWrite.set(NAMESPACE, newKey, freshData, refreshTtl),
                 RedisService.RedisWrite.hput(USER_IDX_NS, freshData.userId(), newKey, "1"),
                 RedisService.RedisWrite.expire(USER_IDX_NS, freshData.userId(), refreshTtl),
                 RedisService.RedisWrite.hdelete(USER_IDX_NS, freshData.userId(), oldKey)
         ));
+        if (!consumed) {
+            // A concurrent caller consumed it first and wrote its pair to grace in the same step. Null only if the
+            // token was revoked (logout) in the meantime.
+            log.info("refresh.race_lost refreshToken_sha={}", oldKey.substring(0, SHA_PREFIX_LEN));
+            return redisService.getOrThrow(GRACE_NS, oldKey, RotateResult.class);
+        }
 
         log.debug("Refresh token rotated for userId={}", freshData.userId());
         return result;
+    }
+
+    /** Throws on Redis failure: a read error taken for a miss would answer 401 (or a reuse alert) to a live session. */
+    private RotateResult graceHit(String oldKey) {
+        RotateResult cached = redisService.getOrThrow(GRACE_NS, oldKey, RotateResult.class);
+        if (cached != null) {
+            log.info("refresh.cache_hit refreshToken_sha={}", oldKey.substring(0, SHA_PREFIX_LEN));
+        }
+        return cached;
     }
 
     /**

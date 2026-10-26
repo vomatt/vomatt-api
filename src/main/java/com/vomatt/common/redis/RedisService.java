@@ -29,6 +29,9 @@ public interface RedisService {
 
     <T> T get(String cacheName, String key, TypeReference<T> typeRef);
 
+    /** Same as {@link #get(String, String, Class)}, but throws RedisOperationException on Redis failure, where a miss must be real. */
+    <T> T getOrThrow(String cacheName, String key, Class<T> clazz);
+
     /** Returns true on successful delete; throws RedisOperationException on Redis failure. */
     boolean delete(String cacheName, String key);
 
@@ -91,6 +94,13 @@ public interface RedisService {
      * should not go in this transaction; the caller must write them separately with {@link #set}.</p>
      */
     void execInTransaction(java.util.List<RedisWrite> writes);
+
+    /**
+     * Atomically (one Lua script): if the key exists, deletes it and applies {@code writes}; otherwise writes nothing.
+     * Returns whether the key existed, so of several callers racing to consume the same key exactly one wins.
+     * Throws {@link RedisOperationException} on Redis failure.
+     */
+    boolean consumeAndExec(String cacheName, String key, java.util.List<RedisWrite> writes);
 
     /** A single write descriptor for {@link #execInTransaction}. */
     record RedisWrite(Op op, String cacheName, String key, String field, Object value, Duration ttl) {

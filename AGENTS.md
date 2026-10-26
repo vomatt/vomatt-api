@@ -18,7 +18,7 @@ cp .env.example .env                 # fill in JWT_SECRET etc.
 ./mvnw test -Dsnapshot.update=true   # regenerate docs/frontend/openapi.json and error-codes.md
 ```
 
-Swagger UI: <http://localhost:8080/swagger-ui.html>. `*PostgresTest` and `OpenApiSnapshotTest` start Postgres 17 with Testcontainers and need Docker.
+Swagger UI: <http://localhost:8080/swagger-ui.html>. `*PostgresTest` and `OpenApiSnapshotTest` start Postgres 17, and `RedisServiceImplTest` starts Redis 7, with Testcontainers; they need Docker.
 
 ## Architecture
 

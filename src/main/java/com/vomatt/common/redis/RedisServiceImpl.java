@@ -35,6 +35,21 @@ public class RedisServiceImpl implements RedisService {
             + "if c == tonumber(ARGV[2]) then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end "
             + "return c").getBytes(StandardCharsets.UTF_8);
 
+    // KEYS[1] is consumed; KEYS[2..] are the written keys, one per write, all declared as Redis requires of scripts.
+    // ARGV holds each write's op and arguments in the same order. Values arrive already serialized.
+    private static final byte[] CONSUME_AND_EXEC_LUA = (
+            "if redis.call('DEL', KEYS[1]) == 0 then return 0 end "
+            + "local a = 1 "
+            + "for k = 2, #KEYS do "
+            + "  local op = ARGV[a] "
+            + "  if op == 'SET' then redis.call('SET', KEYS[k], ARGV[a+1], 'PX', ARGV[a+2]) a = a + 3 "
+            + "  elseif op == 'HPUT' then redis.call('HSET', KEYS[k], ARGV[a+1], ARGV[a+2]) a = a + 3 "
+            + "  elseif op == 'EXPIRE' then redis.call('PEXPIRE', KEYS[k], ARGV[a+1]) a = a + 2 "
+            + "  elseif op == 'HDELETE' then redis.call('HDEL', KEYS[k], ARGV[a+1]) a = a + 2 "
+            + "  else return redis.error_reply('unknown op ' .. op) end "
+            + "end "
+            + "return 1").getBytes(StandardCharsets.UTF_8);
+
     // ── Basic String value ───────────────────────────────────────────
 
     @Override
@@ -60,16 +75,11 @@ public class RedisServiceImpl implements RedisService {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public <T> T get(String cacheName, String key, Class<T> clazz) {
-        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
-            Object value = redisTemplate.opsForValue().get(cacheKey);
-            if (value == null) return null;
-            if (clazz.isInstance(value)) return (T) value;
-            return objectMapper.convertValue(value, clazz);
-        } catch (Exception e) {
-            log.error("Redis GET error: key={}, error={}", cacheKey, e.getMessage());
+            return getOrThrow(cacheName, key, clazz);
+        } catch (RedisOperationException e) {
+            log.error("Redis GET error: key={}, error={}", CacheKeyUtil.buildKey(cacheName, key), e.getCause().getMessage());
             return null;
         }
     }
@@ -84,6 +94,20 @@ public class RedisServiceImpl implements RedisService {
         } catch (Exception e) {
             log.error("Redis GET (TypeReference) error: key={}, error={}", cacheKey, e.getMessage());
             return null;
+        }
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> T getOrThrow(String cacheName, String key, Class<T> clazz) {
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
+        try {
+            Object value = redisTemplate.opsForValue().get(cacheKey);
+            if (value == null) return null;
+            if (clazz.isInstance(value)) return (T) value;
+            return objectMapper.convertValue(value, clazz);
+        } catch (Exception e) {
+            throw new RedisOperationException("Redis GET failed, key=" + cacheKey, e);
         }
     }
 
@@ -261,6 +285,55 @@ public class RedisServiceImpl implements RedisService {
         } catch (Exception e) {
             throw new RedisOperationException("Redis MULTI/EXEC transaction failed", e);
         }
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public boolean consumeAndExec(String cacheName, String key, List<RedisWrite> writes) {
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
+        try {
+            // Serialized exactly as the template would, so get/hGet read these values back unchanged
+            RedisSerializer<String> keySer = (RedisSerializer<String>) redisTemplate.getKeySerializer();
+            RedisSerializer<String> hashKeySer = (RedisSerializer<String>) redisTemplate.getHashKeySerializer();
+            RedisSerializer<Object> valueSer = (RedisSerializer<Object>) redisTemplate.getValueSerializer();
+            RedisSerializer<Object> hashValueSer = (RedisSerializer<Object>) redisTemplate.getHashValueSerializer();
+            List<byte[]> keys = new ArrayList<>();
+            List<byte[]> args = new ArrayList<>();
+            keys.add(keySer.serialize(cacheKey));
+            for (RedisWrite w : writes) {
+                keys.add(keySer.serialize(CacheKeyUtil.buildKey(w.cacheName(), w.key())));
+                args.add(w.op().name().getBytes(StandardCharsets.UTF_8));
+                switch (w.op()) {
+                    case SET -> {
+                        args.add(valueSer.serialize(w.value()));
+                        args.add(millis(w.ttl()));
+                    }
+                    case HPUT -> {
+                        args.add(hashKeySer.serialize(w.field()));
+                        args.add(hashValueSer.serialize(w.value()));
+                    }
+                    case EXPIRE -> args.add(millis(w.ttl()));
+                    case HDELETE -> args.add(hashKeySer.serialize(w.field()));
+                }
+            }
+            int numKeys = keys.size();
+            keys.addAll(args);
+            byte[][] keysAndArgs = keys.toArray(new byte[0][]);
+            Long result = redisTemplate.execute((RedisCallback<Long>) connection -> connection.scriptingCommands()
+                    .eval(CONSUME_AND_EXEC_LUA, ReturnType.INTEGER, numKeys, keysAndArgs));
+            if (result == null) {
+                throw new RedisOperationException("Redis consume returned null, key=" + cacheKey, null);
+            }
+            return result == 1;
+        } catch (RedisOperationException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RedisOperationException("Redis consume failed, key=" + cacheKey, e);
+        }
+    }
+
+    private static byte[] millis(Duration ttl) {
+        return Long.toString(ttl.toMillis()).getBytes(StandardCharsets.UTF_8);
     }
 
     // ── TTL / existence ───────────────────────────────────────────────

@@ -2,6 +2,10 @@
 
 Contract changes that affect the frontend. 💥 BREAKING means frontend code must change. See [openapi.json](openapi.json) for the contract snapshot and [error-codes.md](error-codes.md) for error codes.
 
+## 2026-10-26
+
+- `POST /api/auth/refresh`: two requests sending the same refresh token at the same moment both get the same new pair. Before, the second could get 401 `auth.refresh_token.invalid` while the first was still rotating, which signed the user out. The grace window (same token again returns the same pair) is now 60 seconds instead of 10 (`JWT_REFRESH_GRACE_SECONDS`), so a retry after a lost response is no longer treated as reuse.
+
 ## 2026-10-25
 
 - `GET /api/users/{username}` adds `id` and the viewer relation `isFollowing` / `isBlocked`: whether the caller follows / has blocked the user, `null` when signed out (an invalid or expired token is treated as signed out, not 401), `false` on the caller's own profile. The `PATCH /api/users/me` response carries the same fields (`id` set, both flags `false`).

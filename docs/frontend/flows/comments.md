@@ -40,6 +40,7 @@ sequenceDiagram
 | 4 | `PUT /api/votes/{voteId}/comments/{commentId}` | Author only; returns the updated CommentDto |
 | 5 | `DELETE /api/votes/{voteId}/comments/{commentId}` | Author only; soft delete |
 | 6 | `POST` / `DELETE /api/votes/{voteId}/comments/{commentId}/like` | Like / unlike; both idempotent |
+| 7 | `POST /api/votes/{voteId}/comments/{commentId}/report` | Login required. Body `{ reason, note? }`, `reason` one of `SPAM`, `HARASSMENT`, `HATE`, `MISINFORMATION`, `OTHER`, `note` up to 500 characters. Idempotent: a repeat keeps the first report. Not on your own Comments (hide the action there). The author is not told and the Comment stays until a moderator acts |
 
 For pagination rules see [conventions.md](../conventions.md#3-pagination-cursor): pass `nextCursor` back unchanged as `cursor`; `null` means the last page.
 
@@ -67,6 +68,7 @@ Key points:
 | errorCode | HTTP | When | Suggested UI |
 |-----------|------|------|--------------|
 | `common.validation_failed` | 400 | `text` is blank or over 2000 characters | Highlight the input, keep the draft |
+| `comment.report.self` | 400 | Reporting your own Comment | Hide the report action on your own Comments |
 | `comment.parent.invalid` | 400 | `parentId` does not exist, is deleted, or belongs to another Poll | Show "The comment you are replying to no longer exists" and refresh the list |
 | `common.cursor_invalid` | 400 | `cursor` was not returned by the server | Drop the cursor and reload from the first page |
 | `auth.token.expired` | 401 | Access token expired | Follow the refresh flow in [conventions.md](../conventions.md#2-http-status-and-frontend-handling), then retry |

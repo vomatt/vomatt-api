@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.vomatt.comments.dto.CreateCommentRequest;
 import com.vomatt.comments.dto.UpdateCommentRequest;
+import com.vomatt.comments.dto.ReportCommentRequest;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.response.SimpleResultResponse;
@@ -455,6 +456,69 @@ public class VoteCommentController {
             @AuthenticationPrincipal UserPrincipal principal) {
         commentService.likeComment(commentId, principal.userId());
         log.info("Comment {} liked by user {}", commentId, principal.userId());
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
+    @PostMapping("/{commentId}/report")
+    @Auditable(action = "REPORT", resourceType = "COMMENT")
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Reported (or already reported by the caller)",
+            content = @Content(examples = @ExampleObject(name = "reported", value = """
+                            {
+                              "success": true,
+                              "data": {
+                              "success": true,
+                              "id": null,
+                              "status": null,
+                              "message": null
+                            },
+                              "message": null,
+                              "errorCode": null,
+                              "error": null
+                            }
+                            """)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "The caller wrote the Comment (errorCode `comment.report.self`), or the body is invalid (`common.validation_failed`, `common.bad_request`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "ownComment", value = """
+                            {
+                              "success": false,
+                              "data": null,
+                              "message": "You cannot report your own comment",
+                              "errorCode": "comment.report.self",
+                              "error": "You cannot report your own comment"
+                            }
+                            """)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Comment not found or deleted (errorCode `comment.not_found`), or its Poll is Deleted (`vote.not_found`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(ref = "#/components/examples/" + OpenAPIConfig.EX_NOT_FOUND)))
+    @Operation(summary = "Report a Comment or Reply",
+            description = """
+                    **Auth**: required
+                    **Precondition**: the Comment or Reply exists, is not deleted, was written by someone else, and its Poll is reachable by the caller
+                    **Behavior**: records the report for moderators with `reason` (SPAM, HARASSMENT, HATE, MISINFORMATION or OTHER) and an optional `note` (max 500 characters; blank is stored as none). Idempotent: reporting the same Comment again succeeds and keeps the first report. The author is not told, and the Comment stays visible until a moderator acts
+                    **Side effects**: the report is listed in `GET /api/admin/comment-reports` and written to the audit log
+                    **Errors**:
+                    - 400 `comment.report.self`: the caller wrote the Comment
+                    - 400 `common.validation_failed`: `reason` missing, or `note` over 500 characters
+                    - 400 `common.bad_request`: `reason` is not one of the values above
+                    - 404 `comment.not_found`: Comment does not exist or is deleted
+                    - 404 `vote.not_found`: the Comment's Poll is Deleted or not reachable by the caller
+                    """,
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
+                    examples = {
+                            @ExampleObject(name = "withNote", value = """
+                                    { "reason": "HARASSMENT", "note": "Insults me in every thread." }
+                                    """),
+                            @ExampleObject(name = "reasonOnly", value = """
+                                    { "reason": "SPAM" }
+                                    """)
+                    })))
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> reportComment(
+            @Parameter(description = "Poll ID", required = true) @PathVariable String voteId,
+            @Parameter(description = "Comment ID", required = true) @PathVariable UUID commentId,
+            @Valid @RequestBody ReportCommentRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        commentService.reportComment(commentId, principal.userId(), request);
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 

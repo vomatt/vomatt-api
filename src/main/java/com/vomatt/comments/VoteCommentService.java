@@ -5,6 +5,7 @@ import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.comments.dto.CreateCommentRequest;
 import com.vomatt.comments.dto.UpdateCommentRequest;
 import com.vomatt.comments.dto.CommentDto;
+import com.vomatt.comments.dto.ReportCommentRequest;
 import com.vomatt.comments.CommentMapper;
 import com.vomatt.entity.User;
 import com.vomatt.repository.UserRepository;
@@ -13,7 +14,9 @@ import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
 import com.vomatt.common.response.Cursor;
 import com.vomatt.common.response.CursorResponse;
+import com.vomatt.common.util.UUIDv7Generator;
 import com.vomatt.repository.CommentLikeRepository;
+import com.vomatt.repository.CommentReportRepository;
 import com.vomatt.repository.IdCount;
 import com.vomatt.repository.UserBlockRepository;
 import com.vomatt.repository.VoteCommentRepository;
@@ -43,6 +46,7 @@ public class VoteCommentService {
     private final CommentLikeRepository commentLikeRepository;
     private final UserBlockRepository blockRepository;
     private final CommentMapper commentMapper;
+    private final CommentReportRepository commentReportRepository;
 
     /** Replies shown under each top-level Comment in a Poll's Comment list. */
     static final int REPLY_PREVIEW_SIZE = 2;
@@ -207,6 +211,20 @@ public class VoteCommentService {
         commentLikeRepository.save(like);
 
         log.info("User {} liked comment {}", userId, commentId);
+    }
+
+    /** Reports a live Comment or Reply of someone else; idempotent, a repeat report keeps the first one. */
+    public void reportComment(UUID commentId, String userId, ReportCommentRequest request) {
+        VoteComment comment = findComment(commentId, userId);
+        UUID reporterId = UUID.fromString(userId);
+        if (comment.getUser().getId().equals(reporterId)) {
+            throw ApiException.badRequest(MessageKey.COMMENT_REPORT_SELF);
+        }
+        String note = request.note() == null || request.note().isBlank() ? null : request.note().strip();
+        if (commentReportRepository.insertIfAbsent(UUIDv7Generator.generateId(), commentId, reporterId,
+                request.reason().name(), note) > 0) {
+            log.info("User {} reported comment {} as {}", userId, commentId, request.reason());
+        }
     }
 
     public void unlikeComment(UUID commentId, String userId) {

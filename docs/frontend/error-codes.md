@@ -89,6 +89,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `comment.not_found` | 404 | 找不到留言 | Comment not found | Show resource not found | AdminCommentService, VoteCommentService |
 | `comment.forbidden` | 403 | 只能修改或刪除自己的留言 | You can only modify your own comments | Show a permission-denied notice | VoteCommentService |
 | `comment.parent.invalid` | 400 | 要回覆的留言不存在或不屬於此投票 | The comment being replied to does not exist in this poll | Show message so the user can fix the input | VoteCommentService |
+| `comment.report.self` | 400 | 不能檢舉自己的留言 | You cannot report your own comment | Show message so the user can fix the input | VoteCommentService |
 | `notification.not_found` | 404 | 找不到此通知 | Notification not found | Show resource not found | NotificationId, NotificationService |
 | `invite_list.not_found` | 404 | 找不到邀請名單 | Invite List not found | Show resource not found | InviteListService |
 | `invite_list.max_reached` | 400 | 最多只能建立 {0} 份邀請名單 | You can keep at most {0} Invite Lists | Show message so the user can fix the input | InviteListService |

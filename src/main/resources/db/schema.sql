@@ -183,6 +183,17 @@ CREATE TABLE IF NOT EXISTS vomatt.comment_likes (
     UNIQUE (comment_id, user_id)
 );
 
+-- One report per user per Comment; read only by admins (GET /api/admin/comment-reports)
+CREATE TABLE IF NOT EXISTS vomatt.comment_reports (
+    id          UUID         PRIMARY KEY,
+    comment_id  UUID         NOT NULL REFERENCES vomatt.vote_comments (id) ON DELETE CASCADE,
+    reporter_id UUID         NOT NULL REFERENCES vomatt.users (id)         ON DELETE CASCADE,
+    reason      VARCHAR(20)  NOT NULL,
+    note        VARCHAR(500),
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    UNIQUE (comment_id, reporter_id)
+);
+
 -- =============================================================================
 -- USER BLOCKS: one-way; the blocker no longer sees Polls (public lists) or Comments authored by the blocked user
 -- =============================================================================
@@ -324,6 +335,9 @@ CREATE INDEX IF NOT EXISTS idx_user_ratings_vote_id        ON vomatt.user_rating
 CREATE INDEX IF NOT EXISTS idx_vote_comments_vote_created  ON vomatt.vote_comments (vote_id, created_at) WHERE is_deleted = FALSE;
 CREATE INDEX IF NOT EXISTS idx_vote_comments_user_id       ON vomatt.vote_comments (user_id);
 CREATE INDEX IF NOT EXISTS idx_comment_likes_user_id       ON vomatt.comment_likes (user_id);
+-- Admin report list, newest first (CommentReportRepository.findPage); reporter FK cascade
+CREATE INDEX IF NOT EXISTS idx_comment_reports_created     ON vomatt.comment_reports (created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_comment_reports_reporter    ON vomatt.comment_reports (reporter_id);
 -- Blocked-user FK: the UNIQUE (blocker_id, blocked_id) cannot serve ON DELETE CASCADE from the blocked side
 CREATE INDEX IF NOT EXISTS idx_user_blocks_blocked         ON vomatt.user_blocks (blocked_id);
 -- Block list page (UserBlockRepository.findPage)

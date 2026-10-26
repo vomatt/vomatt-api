@@ -48,6 +48,80 @@
       }
     },
     "schemas" : {
+      "AdminCommentReportResponse" : {
+        "description" : "A user's report of a Comment or Reply, with the Comment as it is now (deleted ones keep author and text)",
+        "properties" : {
+          "authorId" : {
+            "description" : "Comment author's user ID",
+            "example" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
+            "type" : "string"
+          },
+          "authorUsername" : {
+            "description" : "Comment author's username",
+            "example" : "troll",
+            "type" : "string"
+          },
+          "commentDeleted" : {
+            "description" : "Whether the Comment has since been deleted",
+            "example" : false,
+            "type" : "boolean"
+          },
+          "commentId" : {
+            "description" : "Reported Comment ID",
+            "example" : "0199f3b1-2c4d-7e5f-8a9b-0c1d2e3f4a5b",
+            "type" : "string"
+          },
+          "commentText" : {
+            "description" : "Comment text, also when deleted",
+            "example" : "You are an idiot.",
+            "type" : "string"
+          },
+          "createdAt" : {
+            "description" : "When it was reported",
+            "example" : "2026-10-26T10:00:00+08:00",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "id" : {
+            "description" : "Report ID (UUIDv7)",
+            "example" : "0199f4c2-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+            "type" : "string"
+          },
+          "note" : {
+            "description" : "Reporter's note; null when none was given",
+            "example" : "Insults me in every thread.",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "parentId" : {
+            "description" : "Top-level Comment the reported Reply belongs to; null for a top-level Comment",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "reason" : {
+            "description" : "Reason given",
+            "enum" : [ "SPAM", "HARASSMENT", "HATE", "MISINFORMATION", "OTHER" ],
+            "example" : "HARASSMENT",
+            "type" : "string"
+          },
+          "reporterId" : {
+            "description" : "Reporter's user ID",
+            "example" : "0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f",
+            "type" : "string"
+          },
+          "reporterUsername" : {
+            "description" : "Reporter's username",
+            "example" : "alice",
+            "type" : "string"
+          },
+          "voteId" : {
+            "description" : "Poll the Comment belongs to",
+            "example" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "AdminCommentResponse" : {
         "description" : "A Comment or Reply as seen in the back office; deleted ones keep their author and text",
         "properties" : {
@@ -1265,6 +1339,38 @@
         "properties" : {
           "data" : {
             "$ref" : "#/components/schemas/NotificationPreferencesResponse"
+          },
+          "error" : {
+            "description" : "Legacy duplicate of `message` on errors; null on success. Use `message` instead",
+            "example" : "Poll not found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "errorCode" : {
+            "description" : "Stable machine-readable error code (lowercase, dot-separated); branch on this, not on `message`. Null on success",
+            "example" : "vote.not_found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "message" : {
+            "description" : "Localized text following Accept-Language. On success it is usually null, except operations that attach a toast-ready text; on error it is the error message",
+            "example" : "Operation completed",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "success" : {
+            "description" : "true on success, false on error",
+            "example" : true,
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponsePageResponseAdminCommentReportResponse" : {
+        "description" : "Envelope of every API response, success or error",
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/PageResponseAdminCommentReportResponse"
           },
           "error" : {
             "description" : "Legacy duplicate of `message` on errors; null on success. Use `message` instead",
@@ -3115,6 +3221,38 @@
         },
         "type" : "object"
       },
+      "PageResponseAdminCommentReportResponse" : {
+        "description" : "Offset-style page container (page number and total count); most list endpoints use CursorResponse instead",
+        "nullable" : true,
+        "properties" : {
+          "content" : {
+            "description" : "Items of this page",
+            "items" : {
+              "$ref" : "#/components/schemas/AdminCommentReportResponse"
+            },
+            "type" : "array"
+          },
+          "limit" : {
+            "description" : "Page size",
+            "example" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "page" : {
+            "description" : "Current page number (1-based)",
+            "example" : 1,
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "total" : {
+            "description" : "Total number of items across all pages",
+            "example" : 123,
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "PageResponseAdminCommentResponse" : {
         "description" : "Offset-style page container (page number and total count); most list endpoints use CursorResponse instead",
         "nullable" : true,
@@ -3496,6 +3634,27 @@
             "type" : "string"
           }
         },
+        "type" : "object"
+      },
+      "ReportCommentRequest" : {
+        "description" : "Why the caller reports a Comment or Reply",
+        "properties" : {
+          "note" : {
+            "description" : "Optional details for the moderators, max 500 characters",
+            "example" : "Insults me in every thread.",
+            "maxLength" : 500,
+            "minLength" : 0,
+            "nullable" : true,
+            "type" : "string"
+          },
+          "reason" : {
+            "description" : "Reason",
+            "enum" : [ "SPAM", "HARASSMENT", "HATE", "MISINFORMATION", "OTHER" ],
+            "example" : "HARASSMENT",
+            "type" : "string"
+          }
+        },
+        "required" : [ "reason" ],
         "type" : "object"
       },
       "SendOtpRequest" : {
@@ -4866,6 +5025,120 @@
         },
         "summary" : "List Audit Logs",
         "tags" : [ "Admin - Overview" ]
+      }
+    },
+    "/api/admin/comment-reports" : {
+      "get" : {
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: offset page of reports from all users, newest first, each with the reported Comment as it is now (text and author kept when deleted), its author, the reporter, `reason` and `note`. A user reports a Comment at most once. Reports go away with the Comment's or the reporter's account. `page` is 1-based (default 1), `limit` 1-50 (default 20)\n**Side effects**: written to the audit log (action `VIEW`, resource `COMMENT_REPORT`), since notes may hold personal data\n**Errors**: none specific to this endpoint",
+        "operationId" : "listReports",
+        "parameters" : [ {
+          "description" : "Page number, 1-based (default 1)",
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "description" : "Page size (1-50, default 20)",
+          "in" : "query",
+          "name" : "limit",
+          "required" : false,
+          "schema" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "Reports" : {
+                    "description" : "Reports",
+                    "value" : {
+                      "data" : {
+                        "content" : [ {
+                          "authorId" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
+                          "authorUsername" : "troll",
+                          "commentDeleted" : false,
+                          "commentId" : "0199f3b1-2c4d-7e5f-8a9b-0c1d2e3f4a5b",
+                          "commentText" : "You are an idiot.",
+                          "createdAt" : "2026-10-26T10:00:00+08:00",
+                          "id" : "0199f4c2-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+                          "note" : "Insults me in every thread.",
+                          "parentId" : null,
+                          "reason" : "HARASSMENT",
+                          "reporterId" : "0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f",
+                          "reporterUsername" : "alice",
+                          "voteId" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05"
+                        } ],
+                        "limit" : 20,
+                        "page" : 1,
+                        "total" : 1
+                      },
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePageResponseAdminCommentReportResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "List Comment reports",
+        "tags" : [ "Admin - Comment Report" ]
       }
     },
     "/api/admin/comments" : {
@@ -15621,6 +15894,141 @@
         "tags" : [ "Vote Comment" ]
       }
     },
+    "/api/votes/{voteId}/comments/{commentId}/report" : {
+      "post" : {
+        "description" : "**Auth**: required\n**Precondition**: the Comment or Reply exists, is not deleted, was written by someone else, and its Poll is reachable by the caller\n**Behavior**: records the report for moderators with `reason` (SPAM, HARASSMENT, HATE, MISINFORMATION or OTHER) and an optional `note` (max 500 characters; blank is stored as none). Idempotent: reporting the same Comment again succeeds and keeps the first report. The author is not told, and the Comment stays visible until a moderator acts\n**Side effects**: the report is listed in `GET /api/admin/comment-reports` and written to the audit log\n**Errors**:\n- 400 `comment.report.self`: the caller wrote the Comment\n- 400 `common.validation_failed`: `reason` missing, or `note` over 500 characters\n- 400 `common.bad_request`: `reason` is not one of the values above\n- 404 `comment.not_found`: Comment does not exist or is deleted\n- 404 `vote.not_found`: the Comment's Poll is Deleted or not reachable by the caller\n",
+        "operationId" : "reportComment",
+        "parameters" : [ {
+          "description" : "Poll ID",
+          "in" : "path",
+          "name" : "voteId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "description" : "Comment ID",
+          "in" : "path",
+          "name" : "commentId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "examples" : {
+                "reasonOnly" : {
+                  "description" : "reasonOnly",
+                  "value" : {
+                    "reason" : "SPAM"
+                  }
+                },
+                "withNote" : {
+                  "description" : "withNote",
+                  "value" : {
+                    "note" : "Insults me in every thread.",
+                    "reason" : "HARASSMENT"
+                  }
+                }
+              },
+              "schema" : {
+                "$ref" : "#/components/schemas/ReportCommentRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "reported" : {
+                    "description" : "reported",
+                    "value" : {
+                      "data" : {
+                        "id" : null,
+                        "message" : null,
+                        "status" : null,
+                        "success" : true
+                      },
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseSimpleResultResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Comment not found or deleted (errorCode `comment.not_found`), or its Poll is Deleted (`vote.not_found`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Report a Comment or Reply",
+        "tags" : [ "Vote Comment" ]
+      }
+    },
     "/api/votes/{voteId}/creator" : {
       "get" : {
         "description" : "**Auth**: public (login is ignored)\n**Precondition**: the Poll is INVITE_ONLY and not Deleted\n**Behavior**: returns only the owner's `username` and `avatarUrl`, so an Invitation link can show \"<username> invited you\" to a caller who cannot open the Poll yet (signed out, or signed in but not yet an Invitee). Reveals nothing else about the Poll.\n**Side effects**: none\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist, is Deleted, or is PUBLIC / UNLISTED\n",
@@ -17259,6 +17667,9 @@
   }, {
     "description" : "Invite Lists: the caller's private, reusable invite lists of users and email addresses",
     "name" : "Invite List"
+  }, {
+    "description" : "Reading users' reports of Comments (Admin)",
+    "name" : "Admin - Comment Report"
   }, {
     "description" : "Poll moderation APIs (Admin)",
     "name" : "Admin - Poll"

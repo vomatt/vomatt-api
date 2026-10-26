@@ -414,7 +414,7 @@ public class AuthController {
                     **Precondition**: a refresh token from a previous login or refresh
                     **Behavior**: rotates the refresh token: the old one is spent and a new access token and refresh token are returned. \
                     The response `user` is null; keep the user info from login. Roles are re-read from the database, so a role change takes effect on refresh; the token keeps the scope of its sign-in, so only an admin console session refreshes into a token that grants the admin role. \
-                    A second call with the same old token within the grace window (default 10 s) returns the same new pair instead of failing, so concurrent refreshes are safe; \
+                    A second call with the same old token within the grace window (default 60 s) returns the same new pair instead of failing, so concurrent refreshes are safe; \
                     not once that sign-in was logged out or revoked or its user suspended (401 `auth.refresh_token.invalid`)
                     **Side effects**: the old refresh token is spent. If a spent token is presented again after the grace window, that sign-in is ended: \
                     its latest refresh token can no longer be refreshed (401 `auth.refresh_token.invalid`), so it must sign in again once its access token expires; the user's other devices stay signed in. \

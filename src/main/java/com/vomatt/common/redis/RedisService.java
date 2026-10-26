@@ -14,6 +14,8 @@ import java.util.Map;
  *   hGetAllOrThrow, multiGetOrThrow, hasKeyOrThrow, execInTransaction, execScript): throw RedisOperationException.
  *   A value they cannot decode (bad bytes, changed type) is not a Redis error: it is logged and read as null (a miss),
  *   and the key is left in place, so one bad value is never an outage and the caller decides what a miss means.
+ *   getAndDelete is the exception: GETDEL removes the key before decoding, so an undecodable value is gone (OTP
+ *   verification relies on this: a bad record reads as no code and cannot be retried).
  */
 public interface RedisService {
 

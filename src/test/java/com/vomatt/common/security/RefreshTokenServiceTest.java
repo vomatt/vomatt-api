@@ -599,22 +599,20 @@ class RefreshTokenServiceTest {
         String token = "revoke-token";
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
                 "user-6", List.of("user"), "session-1", false);
-        when(redisService.getOrThrow(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
         when(redisService.getAndDelete(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
 
         service.revoke(token);
 
-        // Ends the session for the grace window before the token goes, so a grace replay in between gets nothing
-        InOrder order = inOrder(redisService);
-        order.verify(redisService).execInTransaction(ending("session-1", false));
-        order.verify(redisService).getAndDelete(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class);
         verify(redisService).hDelete(USER_IDX_NS, "user-6", k(token));
+        // Ends the session for the grace window, so a grace pair of it is no longer handed out
+        verify(redisService).execInTransaction(ending("session-1", false));
+        // One read of the token
+        verify(redisService, never()).getOrThrow(eq(NAMESPACE), anyString(), any());
     }
 
     @Test
     void shouldRevokeAllSessionsWhenLoggingOutWithTokenWhoseLegacyMarkerHoldsUserId() {
         String token = "pre-deploy-rotated-then-logout";
-        when(redisService.getOrThrow(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class)).thenReturn(null);
         when(redisService.getOrThrow(CONSUMED_NS, k(token), String.class)).thenReturn("user-legacy");
         when(redisService.hasKeyOrThrow(USER_IDX_NS, "user-legacy")).thenReturn(true);
         when(redisService.hGetAllOrThrow(USER_IDX_NS, "user-legacy")).thenReturn(Map.of("t1", "session-1"));
@@ -628,7 +626,6 @@ class RefreshTokenServiceTest {
     @Test
     void shouldRevokeSessionWhenLoggingOutWithAlreadyRotatedToken() {
         String token = "rotated-then-logout";
-        when(redisService.getOrThrow(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class)).thenReturn(null);
         when(redisService.getAndDelete(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class)).thenReturn(null);
         when(redisService.getOrThrow(CONSUMED_NS, k(token), String.class)).thenReturn("session-1");
 
@@ -693,6 +690,20 @@ class RefreshTokenServiceTest {
         // Plain 401, not a reuse alert: the live successor stays
         assertThat(service.rotate(oldToken)).isNull();
         verify(redisService, never()).execInTransaction(any());
+    }
+
+    @Test
+    void shouldSkipSessionWritesWhenRevokeAllNamesNoSession() {
+        // A legacy entry whose token and consumed marker are both gone
+        when(redisService.hGetAllOrThrow(USER_IDX_NS, "user-10")).thenReturn(Map.of("te", "1"));
+        when(redisService.multiGetOrThrow(NAMESPACE, List.of("te"), RefreshTokenService.RefreshTokenData.class))
+                .thenReturn(java.util.Arrays.asList((RefreshTokenService.RefreshTokenData) null));
+        when(redisService.multiGetOrThrow(CONSUMED_NS, List.of("te"), String.class)).thenReturn(java.util.Arrays.asList((String) null));
+
+        service.revokeAllForUser("user-10");
+
+        verify(redisService, never()).execInTransaction(any());
+        verify(redisService).hDelete(USER_IDX_NS, "user-10", "te");
     }
 
     @Test

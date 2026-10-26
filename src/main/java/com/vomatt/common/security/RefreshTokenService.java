@@ -81,7 +81,7 @@ public class RefreshTokenService {
     @Value("${jwt.refresh-expiration-days:30}")
     private long refreshExpirationDays;
 
-    @Value("${jwt.refresh-grace-seconds:10}")
+    @Value("${jwt.refresh-grace-seconds:60}")
     private long refreshGraceSeconds;
 
     /** Redis refuses a zero or negative expiry, so such a grace window would fail every refresh with 503. */
@@ -278,8 +278,11 @@ public class RefreshTokenService {
      * rotate either. One transaction, so a revoked session never keeps its grace pairs.
      */
     private void endSessions(Collection<String> sessionIds, boolean revoke) {
+        if (sessionIds.isEmpty()) {
+            return;
+        }
         List<RedisService.RedisWrite> writes = new ArrayList<>();
-        // Covers grace pairs written with the earlier 60 s default too (instances still running it in a rolling deploy)
+        // At least the 60 s default, so it outlives any grace pair even while instances with another setting still run
         Duration endedTtl = Duration.ofSeconds(Math.max(refreshGraceSeconds, 60));
         for (String sessionId : sessionIds) {
             writes.add(RedisService.RedisWrite.set(ENDED_SESSION_NS, sessionId, "1", endedTtl));
@@ -301,15 +304,13 @@ public class RefreshTokenService {
      */
     public void revoke(String token) {
         String key = keyOf(token);
-        // Ended before the token goes, so a grace replay in between cannot get a pair of this session
-        RefreshTokenData live = redisService.getOrThrow(NAMESPACE, key, RefreshTokenData.class);
-        if (live != null) {
-            endSessions(List.of(sessionIdOf(live, key)), false);
-        }
         RefreshTokenData data = redisService.getAndDelete(NAMESPACE, key, RefreshTokenData.class);
         if (data != null) {
             redisService.hDelete(USER_IDX_NS, data.userId(), key);
+            endSessions(List.of(sessionIdOf(data, key)), false);
         } else {
+            // Already rotated, or undecodable (GETDEL removed it; its user, so its index field, is unknown and the field
+            // is dropped by the next revokeAllForUser): end what the consumed marker names
             String sessionId = redisService.getOrThrow(CONSUMED_NS, key, String.class);
             // Markers written before 2026-10-17 hold the userId (see rotate); remove with that branch
             if (sessionId != null && redisService.hasKeyOrThrow(USER_IDX_NS, sessionId)) {

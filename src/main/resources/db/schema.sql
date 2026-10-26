@@ -218,13 +218,24 @@ CREATE TABLE IF NOT EXISTS vomatt.feedback (
 );
 
 -- =============================================================================
--- NOTIFICATIONS: "Poll ended" notifications are derived at read time; only read state is stored (ADR 0003)
+-- NOTIFICATIONS: derived at read time from the rows they are about; only read state is stored (ADR 0003, ADR 0005).
+-- A notification is identified by its kind (NotificationKind) and the id of its source row: the Poll, Invitee row,
+-- follow or Comment. source_id has no foreign key, as it points into different tables; a read row whose source is
+-- gone names no notification any more and is never matched.
+-- Databases created before 2026-10-26 hold (user_id, vote_id, read_at): run db/migrations/2026-10-26-notification-reads-by-kind.sql
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS vomatt.notification_reads (
-    user_id UUID        NOT NULL REFERENCES vomatt.users (id) ON DELETE CASCADE,
-    vote_id UUID        NOT NULL REFERENCES vomatt.votes (id) ON DELETE CASCADE,
-    read_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (user_id, vote_id)
+    user_id   UUID        NOT NULL REFERENCES vomatt.users (id) ON DELETE CASCADE,
+    kind      VARCHAR(20) NOT NULL,
+    source_id UUID        NOT NULL,
+    read_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, kind, source_id)
+);
+
+-- "Mark all read": every notification created at or before read_at counts as read
+CREATE TABLE IF NOT EXISTS vomatt.notification_read_all (
+    user_id UUID        PRIMARY KEY REFERENCES vomatt.users (id) ON DELETE CASCADE,
+    read_at TIMESTAMPTZ NOT NULL
 );
 
 -- =============================================================================
@@ -293,6 +304,8 @@ CREATE TABLE IF NOT EXISTS vomatt.audit_logs (
 CREATE INDEX IF NOT EXISTS idx_votes_creator_start_id      ON vomatt.votes (creator_id, start_time DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_votes_start_id              ON vomatt.votes (start_time DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_votes_end_id                ON vomatt.votes (end_time, id);
+-- CLOSING_SOON notifications (NotificationRepository): a followed user's Polls ending within the next day
+CREATE INDEX IF NOT EXISTS idx_votes_creator_end           ON vomatt.votes (creator_id, end_time);
 CREATE INDEX IF NOT EXISTS idx_vote_options_vote_order     ON vomatt.vote_options (vote_id, display_order);
 CREATE INDEX IF NOT EXISTS idx_user_votes_vote_option      ON vomatt.user_votes (vote_id, option_id);
 CREATE INDEX IF NOT EXISTS idx_user_votes_vote_created     ON vomatt.user_votes (vote_id, created_at, id);
@@ -311,8 +324,6 @@ CREATE INDEX IF NOT EXISTS idx_user_ratings_vote_id        ON vomatt.user_rating
 CREATE INDEX IF NOT EXISTS idx_vote_comments_vote_created  ON vomatt.vote_comments (vote_id, created_at) WHERE is_deleted = FALSE;
 CREATE INDEX IF NOT EXISTS idx_vote_comments_user_id       ON vomatt.vote_comments (user_id);
 CREATE INDEX IF NOT EXISTS idx_comment_likes_user_id       ON vomatt.comment_likes (user_id);
--- Poll FK: the primary key (user_id, vote_id) cannot serve ON DELETE CASCADE from votes
-CREATE INDEX IF NOT EXISTS idx_notification_reads_vote     ON vomatt.notification_reads (vote_id);
 -- Blocked-user FK: the UNIQUE (blocker_id, blocked_id) cannot serve ON DELETE CASCADE from the blocked side
 CREATE INDEX IF NOT EXISTS idx_user_blocks_blocked         ON vomatt.user_blocks (blocked_id);
 -- Block list page (UserBlockRepository.findPage)

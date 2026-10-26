@@ -59,7 +59,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.apple.not_configured` | 400 | Apple 登入尚未設定 | Apple Sign In is not configured | Show message so the user can fix the input | AuthService |
 | `auth.email_not_verified` | 401 | 此 OAuth 帳號的 email 尚未驗證，無法登入或合併既有帳號 | This OAuth account's email is not verified; cannot sign in or merge an existing account | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.account_banned` | 403 | 此帳號已被停權，無法登入 | This account has been banned and cannot sign in | Show a permission-denied notice | AuthService, JwtAuthFilter |
-| `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | AdminUserService, FeedbackService, InviteListService, UserService, VoteCommentService, VoteService |
+| `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | AdminUserService, FeedbackService, InviteListService, NotificationService, UserService, VoteCommentService, VoteService |
 | `user.username.taken` | 409 | 使用者名稱已被使用 | Username already taken | Show message (resource state conflict) | UserService |
 | `user.delete.forbidden` | 403 | 只能刪除自己的帳號 | You can only delete your own account | Show a permission-denied notice | UserService |
 | `user.follow.blocked` | 400 | 不能追蹤已封鎖的使用者，請先解除封鎖 | You cannot follow a user you blocked; unblock them first | Show message so the user can fix the input | UserService |
@@ -89,7 +89,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `comment.not_found` | 404 | 找不到留言 | Comment not found | Show resource not found | AdminCommentService, VoteCommentService |
 | `comment.forbidden` | 403 | 只能修改或刪除自己的留言 | You can only modify your own comments | Show a permission-denied notice | VoteCommentService |
 | `comment.parent.invalid` | 400 | 要回覆的留言不存在或不屬於此投票 | The comment being replied to does not exist in this poll | Show message so the user can fix the input | VoteCommentService |
-| `notification.not_found` | 404 | 找不到此通知 | Notification not found | Show resource not found | NotificationService |
+| `notification.not_found` | 404 | 找不到此通知 | Notification not found | Show resource not found | NotificationId, NotificationService |
 | `invite_list.not_found` | 404 | 找不到邀請名單 | Invite List not found | Show resource not found | InviteListService |
 | `invite_list.max_reached` | 400 | 最多只能建立 {0} 份邀請名單 | You can keep at most {0} Invite Lists | Show message so the user can fix the input | InviteListService |
 | `invite_list.members.max` | 400 | 每份邀請名單最多 {0} 位成員 | An Invite List can hold at most {0} members | Show message so the user can fix the input | InviteListService |

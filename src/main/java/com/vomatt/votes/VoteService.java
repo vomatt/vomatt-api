@@ -61,7 +61,7 @@ import com.vomatt.repository.BallotSelection;
 import com.vomatt.repository.IdCount;
 import com.vomatt.repository.InviteeRepository;
 import com.vomatt.repository.LockTimeout;
-import com.vomatt.repository.NotificationReadRepository;
+import com.vomatt.repository.NotificationRepository;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.repository.VoteListRepository;
 import com.vomatt.repository.VoteRepository;
@@ -85,7 +85,7 @@ public class VoteService {
     private final VoteMapper voteMapper;
     private final VoteListRepository voteListRepository;
     private final VoteCommentRepository voteCommentRepository;
-    private final NotificationReadRepository notificationReadRepository;
+    private final NotificationRepository notificationRepository;
     private final InviteeRepository inviteeRepository;
     private final EmailService emailService;
     private final RedisService redisService;
@@ -301,7 +301,7 @@ public class VoteService {
     // Unread when the Poll's current notification (Invitation while not Ended, then Ended Notification) is not read
     private List<VoteResponse> withUnread(List<Vote> page, List<VoteResponse> responses, UUID userId,
                                           OffsetDateTime now) {
-        Set<UUID> unread = notificationReadRepository.findUnreadVoteIds(userId, page.stream().map(Vote::getId).toList(), now);
+        Set<UUID> unread = notificationRepository.findUnreadVoteIds(userId, page.stream().map(Vote::getId).toList(), now);
         for (int i = 0; i < page.size(); i++) {
             responses.get(i).setUnread(unread.contains(page.get(i).getId()));
         }
@@ -624,10 +624,8 @@ public class VoteService {
         if (added.isEmpty()) {
             return;
         }
+        // A removed and re-added Invitee is a new row, so their Invitation is a new notification, unread
         inviteeRepository.saveAllAndFlush(added);
-        // A removed and re-added Invitee sees the Invitation unread again
-        notificationReadRepository.deleteReads(vote.getId(),
-            added.stream().filter(i -> i.getUser() != null).map(i -> i.getUser().getId()).toList());
         sendInvitations(vote, added.stream().map(Invitee::getEmail).filter(Objects::nonNull).toList());
     }
 
@@ -740,7 +738,7 @@ public class VoteService {
     /**
      * Ties the pending email Invitees of the user's verified email to the user; each keeps its address. Called only
      * from the find-or-create by verified email in auth, inside its transaction; rerunning it binds nothing new.
-     * Steps 2-4 share {@link InviteeRepository#BINDABLE}, so they agree on which rows bind.
+     * Steps 2-3 share {@link InviteeRepository#BINDABLE}, so they agree on which rows bind.
      */
     public void bindEmailInvitees(User user) {
         String email = user.getEmail();
@@ -749,13 +747,11 @@ public class VoteService {
         if (voteIds.isEmpty()) {
             return;
         }
-        // 2. Invitation unread again, as for any newly added Invitee
-        notificationReadRepository.deleteReadsForEmailBinding(user.getId(), email, voteIds);
-        // 3. Bind
+        // 2. Bind; the Invitation is the Invitee row's, never read by this user before, so it arrives unread
         inviteeRepository.bindEmail(user.getId(), email, voteIds);
-        // 4. Pending rows already covered by a user row (or the owner's own address) go
+        // 3. Pending rows already covered by a user row (or the owner's own address) go
         if (inviteeRepository.deleteUnbindableEmail(user.getId(), email, voteIds) > 0) {
-            // 5. A dropped pending row may have been the only Invitee without a Ballot (binding itself adds none)
+            // 4. A dropped pending row may have been the only Invitee without a Ballot (binding itself adds none)
             // System path with no caller identity, so no access lookup; the Polls are locked by step 1
             voteRepository.findAllById(voteIds).forEach(this::endIfAllInviteesVoted);
         }

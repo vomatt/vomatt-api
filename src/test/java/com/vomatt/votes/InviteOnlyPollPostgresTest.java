@@ -22,7 +22,8 @@ import com.vomatt.entity.Invitee;
 import com.vomatt.entity.Tag;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
-import com.vomatt.repository.NotificationReadRepository;
+import com.vomatt.repository.NotificationRepository;
+import com.vomatt.repository.PollNotifications;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.votes.dto.CreateVoteRequest;
@@ -38,7 +39,7 @@ class InviteOnlyPollPostgresTest extends PostgresRepositoryTest {
     @Autowired VoteService voteService;
     @Autowired VoteCommentService commentService;
     @Autowired UserRepository userRepository;
-    @Autowired NotificationReadRepository notificationReadRepository;
+    @Autowired NotificationRepository notificationRepository;
 
     private final OffsetDateTime now = OffsetDateTime.now();
     private final String word = "zq" + System.nanoTime();
@@ -126,8 +127,8 @@ class InviteOnlyPollPostgresTest extends PostgresRepositoryTest {
     @DisplayName("should send the Ended Notification to an Invitee without a Ballot when an Invite-only Poll Ended")
     void shouldNotifyInviteeWhenInviteOnlyPollEnded() {
         // Ended Notification of invite-ended plus the Invitation to invite-open
-        assertThat(notificationReadRepository.countUnread(invitee.getId(), now)).isEqualTo(2);
-        assertThat(notificationReadRepository.countUnread(stranger.getId(), now)).isZero();
+        assertThat(reads().countUnread(invitee.getId(), now)).isEqualTo(2);
+        assertThat(reads().countUnread(stranger.getId(), now)).isZero();
         VoteResponse ended = voteService.getMyPolls(invitee.getId().toString(), "ended", null, 50).items().getFirst();
         assertThat(ended.getUnread()).isTrue();
     }
@@ -301,5 +302,9 @@ class InviteOnlyPollPostgresTest extends PostgresRepositoryTest {
         em.flush();
         em.clear();
         return em.find(Tag.class, tag.getId()).getUsageCount();
+    }
+
+    private PollNotifications reads() {
+        return new PollNotifications(notificationRepository);
     }
 }

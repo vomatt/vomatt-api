@@ -1,23 +1,47 @@
 package com.vomatt.notifications;
 
 import java.time.OffsetDateTime;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.common.response.Cursor;
+import com.vomatt.common.response.CursorResponse;
+import com.vomatt.common.util.UUIDv7Generator;
+import com.vomatt.entity.NotificationKind;
+import com.vomatt.entity.UserPreference;
+import com.vomatt.entity.Vote;
+import com.vomatt.entity.VoteComment;
+import com.vomatt.notifications.dto.NotificationPreferencesResponse;
+import com.vomatt.notifications.dto.NotificationResponse;
 import com.vomatt.notifications.dto.UnreadCountResponse;
-import com.vomatt.repository.NotificationReadRepository;
+import com.vomatt.notifications.dto.UpdateNotificationPreferencesRequest;
+import com.vomatt.repository.NotificationRepository;
+import com.vomatt.repository.NotificationRepository.NotificationRow;
+import com.vomatt.repository.UserPreferenceRepository;
+import com.vomatt.repository.UserRepository;
+import com.vomatt.repository.VoteCommentRepository;
+import com.vomatt.repository.VoteRepository;
+import com.vomatt.users.UserService;
+import com.vomatt.users.dto.UserDto;
 import com.vomatt.votes.VoteService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Invitations and Ended Notifications, derived on read (ADR 0003). The list itself is My Polls, whose items carry
- * {@code unread}; this service only counts and marks them read.
+ * The notification feed, its read state and the caller's switches. Notifications are derived on read (ADR 0003,
+ * ADR 0005): {@link NotificationRepository} finds them, this service applies the preferences and fills in the actor,
+ * Poll and Comment of each.
  */
 @Slf4j
 @Service
@@ -25,24 +49,156 @@ import lombok.extern.slf4j.Slf4j;
 @Transactional
 public class NotificationService {
 
-    private final NotificationReadRepository notificationReadRepository;
+    static final int EXCERPT_LENGTH = 120;
+
+    private final NotificationRepository notificationRepository;
+    private final UserPreferenceRepository preferenceRepository;
+    private final UserRepository userRepository;
+    private final VoteRepository voteRepository;
+    private final VoteCommentRepository commentRepository;
+    private final UserService userService;
     private final VoteService voteService;
+
+    /** The caller's feed, newest first, of the kinds their preferences leave on. */
+    @Transactional(readOnly = true)
+    public CursorResponse<NotificationResponse> list(String userId, String cursor, Integer limit) {
+        UUID userUuid = UUID.fromString(userId);
+        int size = CursorResponse.limit(limit);
+        List<NotificationRow> rows = notificationRepository.findPage(userUuid,
+                NotificationPreference.enabledKinds(preferences(userUuid)), Cursor.decode(cursor, Cursor.Scope.NOTIFICATIONS),
+                OffsetDateTime.now(), size + 1);
+        return CursorResponse.of(rows, size, Cursor.Scope.NOTIFICATIONS, row -> Cursor.of(row.createdAt(), row.sourceId()),
+                this::toResponses);
+    }
 
     @Transactional(readOnly = true)
     public UnreadCountResponse countUnread(String userId) {
-        return new UnreadCountResponse(
-                notificationReadRepository.countUnread(UUID.fromString(userId), OffsetDateTime.now()));
+        UUID userUuid = UUID.fromString(userId);
+        return new UnreadCountResponse(notificationRepository.countUnread(userUuid,
+                NotificationPreference.enabledKinds(preferences(userUuid)), OffsetDateTime.now()));
     }
 
-    /** Marks the current notification (Invitation or Ended) of one Poll read; idempotent. 404 when the user has none. */
-    public void markRead(String userId, String voteId) {
+    /**
+     * Marks one notification read; idempotent. {@code id} is a notification id, or (deprecated) a Poll id, which reads
+     * that Poll's current notification: the Invitation while it has not Ended, then its Result.
+     */
+    public void markRead(String userId, String id) {
         UUID userUuid = UUID.fromString(userId);
-        UUID voteUuid = voteService.findAccessibleVote(UUID.fromString(voteId), userId).getId();
         OffsetDateTime now = OffsetDateTime.now();
-        if (!notificationReadRepository.isNotified(userUuid, voteUuid, now)) {
+        NotificationId notification = isUuid(id) ? currentForPoll(userId, id, now) : NotificationId.parse(id);
+        if (!notificationRepository.exists(userUuid, notification.kind(), notification.sourceId(), now)) {
             throw ApiException.notFound(MessageKey.NOTIFICATION_NOT_FOUND);
         }
-        notificationReadRepository.markRead(userUuid, voteUuid, now);
-        log.info("User {} read notification of vote {}", userId, voteId);
+        notificationRepository.markRead(userUuid, notification.kind(), notification.sourceId(), now);
+        log.info("User {} read notification {}", userId, notification);
+    }
+
+    /** Marks every notification up to now read, those of switched-off kinds included. */
+    public void markAllRead(String userId) {
+        notificationRepository.markAllRead(UUID.fromString(userId), OffsetDateTime.now());
+        log.info("User {} read all notifications", userId);
+    }
+
+    @Transactional(readOnly = true)
+    public NotificationPreferencesResponse getPreferences(String userId) {
+        return toResponse(preferences(UUID.fromString(userId)));
+    }
+
+    /** Sets the given switches; null fields keep their value. Returns every switch after the change. */
+    public NotificationPreferencesResponse updatePreferences(String userId, UpdateNotificationPreferencesRequest request) {
+        UUID userUuid = UUID.fromString(userId);
+        if (!userRepository.existsById(userUuid)) {
+            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
+        }
+        Map<NotificationPreference, Boolean> changes = new EnumMap<>(NotificationPreference.class);
+        changes.put(NotificationPreference.RESULTS_IN, request.resultsIn());
+        changes.put(NotificationPreference.INVITATIONS, request.invitations());
+        changes.put(NotificationPreference.COMMENTS, request.comments());
+        changes.put(NotificationPreference.CLOSING_SOON, request.closingSoon());
+        changes.forEach((preference, on) -> {
+            if (on != null) {
+                preferenceRepository.upsert(UUIDv7Generator.generateId(), userUuid, preference.preferenceKey(), on.toString());
+            }
+        });
+        log.info("User {} updated notification preferences", userId);
+        return toResponse(preferences(userUuid));
+    }
+
+    /** Every switch, the stored value or its default. */
+    private Map<NotificationPreference, Boolean> preferences(UUID userId) {
+        Map<String, String> stored = preferenceRepository
+                .findByUserIdAndKeyStartingWith(userId, NotificationPreference.KEY_PREFIX).stream()
+                .collect(Collectors.toMap(UserPreference::getKey, UserPreference::getValue, (a, b) -> a));
+        Map<NotificationPreference, Boolean> settings = NotificationPreference.defaults();
+        settings.replaceAll((preference, on) -> {
+            String value = stored.get(preference.preferenceKey());
+            return value == null ? on : Boolean.parseBoolean(value);
+        });
+        return settings;
+    }
+
+    private static NotificationPreferencesResponse toResponse(Map<NotificationPreference, Boolean> settings) {
+        return new NotificationPreferencesResponse(settings.get(NotificationPreference.RESULTS_IN),
+                settings.get(NotificationPreference.INVITATIONS), settings.get(NotificationPreference.COMMENTS),
+                settings.get(NotificationPreference.CLOSING_SOON));
+    }
+
+    private NotificationId currentForPoll(String userId, String voteId, OffsetDateTime now) {
+        UUID voteUuid = voteService.findAccessibleVote(UUID.fromString(voteId), userId).getId();
+        return notificationRepository.findCurrentForPoll(UUID.fromString(userId), voteUuid, now)
+                .map(row -> new NotificationId(row.kind(), row.sourceId()))
+                .orElseThrow(() -> ApiException.notFound(MessageKey.NOTIFICATION_NOT_FOUND));
+    }
+
+    private static boolean isUuid(String value) {
+        try {
+            UUID.fromString(value);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    /** Loads the page's actors, Polls and Comments in one query each. */
+    private List<NotificationResponse> toResponses(List<NotificationRow> rows) {
+        Map<UUID, UserDto> actors = userService.toSearchResults(
+                        userRepository.findAllById(ids(rows, NotificationRow::actorId))).stream()
+                .collect(Collectors.toMap(user -> UUID.fromString(user.id()), Function.identity()));
+        Map<UUID, Vote> polls = voteRepository.findAllById(ids(rows, NotificationRow::voteId)).stream()
+                .collect(Collectors.toMap(Vote::getId, Function.identity()));
+        Map<UUID, VoteComment> comments = commentRepository.findAllById(ids(rows, NotificationRow::commentId)).stream()
+                .collect(Collectors.toMap(VoteComment::getId, Function.identity()));
+        OffsetDateTime now = OffsetDateTime.now();
+        return rows.stream().map(row -> new NotificationResponse(
+                new NotificationId(row.kind(), row.sourceId()).toString(),
+                row.kind(),
+                row.createdAt(),
+                row.read(),
+                row.actorId() == null ? null : actors.get(row.actorId()),
+                row.voteId() == null ? null : toPollSummary(polls.get(row.voteId()), now),
+                row.commentId() == null ? null : toCommentSummary(comments.get(row.commentId()))))
+                .toList();
+    }
+
+    private static List<UUID> ids(List<NotificationRow> rows, Function<NotificationRow, UUID> id) {
+        return rows.stream().map(id).filter(Objects::nonNull).distinct().toList();
+    }
+
+    // No per-option counts: the summary is the same whether or not the Poll's results are Sealed
+    private static NotificationResponse.PollSummary toPollSummary(Vote poll, OffsetDateTime now) {
+        return new NotificationResponse.PollSummary(poll.getId().toString(), poll.getTitle(), poll.getEndTime(),
+                poll.statusAt(now), poll.getTurnout());
+    }
+
+    private static NotificationResponse.CommentSummary toCommentSummary(VoteComment comment) {
+        return new NotificationResponse.CommentSummary(comment.getId().toString(), excerpt(comment.getContent()));
+    }
+
+    static String excerpt(String content) {
+        String text = content.strip().replaceAll("\\s+", " ");
+        if (text.codePointCount(0, text.length()) <= EXCERPT_LENGTH) {
+            return text;
+        }
+        return text.substring(0, text.offsetByCodePoints(0, EXCERPT_LENGTH)).stripTrailing() + "…";
     }
 }

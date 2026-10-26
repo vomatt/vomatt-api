@@ -85,49 +85,67 @@ public class RedisServiceImpl implements RedisService {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public <T> T getOrThrow(String cacheName, String key, Class<T> clazz) {
         String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
-        Object value;
         try {
-            value = redisTemplate.opsForValue().get(cacheKey);
-        } catch (SerializationException e) {
-            return dropUndecodable(cacheKey, e);
+            return decode(cacheKey, () -> redisTemplate.opsForValue().get(cacheKey), clazz);
         } catch (Exception e) {
             throw new RedisOperationException("Redis GET failed, key=" + cacheKey, e);
         }
-        if (value == null) return null;
-        if (clazz.isInstance(value)) return (T) value;
+    }
+
+    @Override
+    public <T> T getAndDelete(String cacheName, String key, Class<T> clazz) {
+        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
-            return objectMapper.convertValue(value, clazz);
-        } catch (RuntimeException e) {
-            return dropUndecodable(cacheKey, e);
+            return decode(cacheKey, () -> redisTemplate.opsForValue().getAndDelete(cacheKey), clazz);
+        } catch (Exception e) {
+            throw new RedisOperationException("Redis GETDEL failed, key=" + cacheKey, e);
         }
     }
 
-    /** A value that no longer decodes (bad bytes, changed type) reads as a miss and is deleted. */
-    private <T> T dropUndecodable(String cacheKey, Exception cause) {
-        log.warn("Redis value undecodable, dropping key={}: {}", cacheKey, cause.getMessage());
+    /** Reads a value; one that does not decode (see RedisService) is logged and read as null, the key left in place. */
+    @SuppressWarnings("unchecked")
+    private <T> T decode(String cacheKey, java.util.function.Supplier<Object> read, Class<T> clazz) {
+        Object value;
         try {
-            redisTemplate.delete(cacheKey);
-        } catch (Exception e) {
-            throw new RedisOperationException("Redis DELETE failed, key=" + cacheKey, e);
+            value = read.get();
+        } catch (SerializationException e) {
+            log.warn("Redis value undecodable, key={}: {}", cacheKey, e.getMessage());
+            return null;
         }
-        return null;
+        if (value == null || clazz.isInstance(value)) return (T) value;
+        try {
+            return objectMapper.convertValue(value, clazz);
+        } catch (RuntimeException e) {
+            log.warn("Redis value undecodable, key={}: {}", cacheKey, e.getMessage());
+            return null;
+        }
     }
 
     @Override
     @SuppressWarnings("unchecked")
-    public <T> T getAndDelete(String cacheName, String key, Class<T> clazz) {
-        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
-        try {
-            Object value = redisTemplate.opsForValue().getAndDelete(cacheKey);
-            if (value == null) return null;
-            if (clazz.isInstance(value)) return (T) value;
-            return objectMapper.convertValue(value, clazz);
-        } catch (Exception e) {
-            throw new RedisOperationException("Redis GETDEL failed, key=" + cacheKey, e);
+    public <T> List<T> multiGetOrThrow(String cacheName, List<String> keys, Class<T> clazz) {
+        if (keys.isEmpty()) {
+            return List.of();
         }
+        RedisSerializer<String> keySer = (RedisSerializer<String>) redisTemplate.getKeySerializer();
+        RedisSerializer<Object> valueSer = (RedisSerializer<Object>) redisTemplate.getValueSerializer();
+        List<String> cacheKeys = keys.stream().map(k -> CacheKeyUtil.buildKey(cacheName, k)).toList();
+        byte[][] rawKeys = cacheKeys.stream().map(keySer::serialize).toArray(byte[][]::new);
+        List<byte[]> raw;
+        try {
+            raw = redisTemplate.execute((RedisCallback<List<byte[]>>) c -> c.stringCommands().mGet(rawKeys));
+        } catch (Exception e) {
+            throw new RedisOperationException("Redis MGET failed, cacheName=" + cacheName + ", keys=" + keys.size(), e);
+        }
+        // Raw bytes, decoded one by one, so one bad value does not hide the others
+        List<T> values = new ArrayList<>(keys.size());
+        for (int i = 0; i < keys.size(); i++) {
+            byte[] bytes = raw == null ? null : raw.get(i);
+            values.add(bytes == null ? null : decode(cacheKeys.get(i), () -> valueSer.deserialize(bytes), clazz));
+        }
+        return values;
     }
 
     @Override
@@ -239,11 +257,22 @@ public class RedisServiceImpl implements RedisService {
     @SuppressWarnings("unchecked")
     public Map<String, Object> hGetAllOrThrow(String cacheName, String key) {
         String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
+        RedisSerializer<String> keySer = (RedisSerializer<String>) redisTemplate.getKeySerializer();
+        RedisSerializer<String> fieldSer = (RedisSerializer<String>) redisTemplate.getHashKeySerializer();
+        RedisSerializer<Object> valueSer = (RedisSerializer<Object>) redisTemplate.getHashValueSerializer();
+        Map<byte[], byte[]> raw;
         try {
-            return (Map<String, Object>) (Map<?, ?>) redisTemplate.opsForHash().entries(cacheKey);
+            raw = redisTemplate.execute((RedisCallback<Map<byte[], byte[]>>) c ->
+                    c.hashCommands().hGetAll(keySer.serialize(cacheKey)));
         } catch (Exception e) {
             throw new RedisOperationException("Redis HGETALL failed, key=" + cacheKey, e);
         }
+        // Decoded field by field: an undecodable value is kept as null, so its field is still listed
+        Map<String, Object> entries = new java.util.HashMap<>();
+        if (raw != null) {
+            raw.forEach((f, v) -> entries.put(fieldSer.deserialize(f), decode(cacheKey, () -> valueSer.deserialize(v), Object.class)));
+        }
+        return entries;
     }
 
     // ── Counter ───────────────────────────────────────────────────────

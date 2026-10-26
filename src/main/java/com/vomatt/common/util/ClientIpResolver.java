@@ -69,6 +69,8 @@ public final class ClientIpResolver {
     // Null when unset: the client IP header is then ignored
     private static volatile byte[] clientIpSecret;
 
+    private static volatile boolean untrustedPeerWarned;
+
     private ClientIpResolver() {}
 
     /**
@@ -126,17 +128,22 @@ public final class ClientIpResolver {
         if (ip == null) {
             return null;
         }
-        // vomatt-web reaches the API through the platform ingress like any client, so its peer is a trusted proxy; a peer
-        // outside them reached the app directly and is not vomatt-web, whatever secret it sends
-        if (!isTrustedProxy(request.getRemoteAddr())) {
-            log.debug("{} ignored: untrusted peer", CLIENT_IP_HEADER);
-            return null;
-        }
         byte[] secret = clientIpSecret;
         String sent = request.getHeader(CLIENT_IP_SECRET_HEADER);
         if (secret == null || sent == null || !MessageDigest.isEqual(secret, sent.getBytes(StandardCharsets.UTF_8))) {
             log.debug("{} ignored: {}", CLIENT_IP_HEADER,
                     secret == null ? "no secret configured" : sent == null ? "secret header missing" : "secret mismatch");
+            return null;
+        }
+        // vomatt-web reaches the API through the platform ingress like any client, so its peer is a trusted proxy; a peer
+        // outside them reached the app directly and is not vomatt-web, whatever secret it sends
+        if (!isTrustedProxy(request.getRemoteAddr())) {
+            // The right secret from outside: a TRUSTED_PROXIES missing the ingress, or a leaked secret. Once per process
+            if (!untrustedPeerWarned) {
+                untrustedPeerWarned = true;
+                log.warn("{} ignored: valid secret from untrusted peer {}; check TRUSTED_PROXIES", CLIENT_IP_HEADER,
+                        request.getRemoteAddr());
+            }
             return null;
         }
         String trimmed = ip.trim();

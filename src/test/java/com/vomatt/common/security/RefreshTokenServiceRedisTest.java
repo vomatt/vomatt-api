@@ -223,4 +223,34 @@ class RefreshTokenServiceRedisTest {
         assertThat(redisService.hasKey("refresh", keyOf(t0))).isFalse();
         assertThat(redisService.hGetAll("refresh:idx", userId)).isEmpty();
     }
+
+    @Test
+    void shouldRevokeSessionNamedAfterKeyWhenLegacyTokenIsRevokedOrRotated() {
+        String t0 = service.generate(userId, List.of("user"), false);
+        // Issued before session ids existed
+        redisService.set("refresh", keyOf(t0), new RefreshTokenService.RefreshTokenData(userId, List.of("user"), null, false),
+                Duration.ofDays(30));
+
+        // Its next rotation names the session after the key...
+        assertThat(service.rotate(t0).data().sessionId()).isEqualTo(keyOf(t0));
+        // ...the session revokeAllForUser flags for a legacy token it finds live, so a rotation racing it is refused
+        String t2 = service.generate(userId, List.of("user"), false);
+        redisService.set("refresh", keyOf(t2), new RefreshTokenService.RefreshTokenData(userId, List.of("user"), null, false),
+                Duration.ofDays(30));
+        template.opsForHash().put("refresh:idx:" + userId, keyOf(t2), "1");
+        service.revokeAllForUser(userId);
+        assertThat(redisService.hasKey("refresh:revoked-session", keyOf(t2))).isTrue();
+    }
+
+    @Test
+    void shouldLogOutWhenStoredTokenIsUndecodable() {
+        String t0 = service.generate(userId, List.of("user"), false);
+        template.execute((RedisCallback<Object>) c -> c.stringCommands().set(
+                ("refresh:" + keyOf(t0)).getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                "not json".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+
+        service.revoke(t0);
+
+        assertThat(redisService.hasKey("refresh", keyOf(t0))).isFalse();
+    }
 }

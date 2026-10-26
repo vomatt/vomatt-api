@@ -85,19 +85,48 @@ class RedisServiceImplTest {
     }
 
     @Test
-    void shouldReadMissAndDropKeyWhenValueIsNotJson() {
+    void shouldReadMissAndKeepKeyWhenValueIsNotJson() {
         setRaw("ns:bad", "not json");
 
         assertThat(redisService.getOrThrow("ns", "bad", RefreshTokenService.RefreshTokenData.class)).isNull();
+        // Left for its owner to judge (a consumed marker must keep failing closed)
+        assertThat(template.hasKey("ns:bad")).isTrue();
+    }
+
+    @Test
+    void shouldReadMissWhenGettingAndDeletingUndecodableValue() {
+        setRaw("ns:bad", "not json");
+
+        assertThat(redisService.getAndDelete("ns", "bad", RefreshTokenService.RefreshTokenData.class)).isNull();
         assertThat(template.hasKey("ns:bad")).isFalse();
     }
 
     @Test
-    void shouldReadMissAndDropKeyWhenValueHasAnotherShape() {
+    void shouldReadMissWhenValueHasAnotherShape() {
         redisService.set("ns", "other", "a plain string", java.time.Duration.ofMinutes(5));
 
         assertThat(redisService.getOrThrow("ns", "other", RefreshTokenService.RefreshTokenData.class)).isNull();
-        assertThat(template.hasKey("ns:other")).isFalse();
+    }
+
+    @Test
+    void shouldListFieldWithNullValueWhenHashValueIsUndecodable() {
+        redisService.execInTransaction(List.of(RedisService.RedisWrite.hput("idx", "u", "good", "session-1")));
+        template.execute((org.springframework.data.redis.core.RedisCallback<Object>) c -> c.hashCommands().hSet(
+                "idx:u".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                "bad".getBytes(java.nio.charset.StandardCharsets.UTF_8), "not json".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+
+        java.util.Map<String, Object> entries = redisService.hGetAllOrThrow("idx", "u");
+
+        assertThat(entries).containsEntry("good", "session-1").containsEntry("bad", null).hasSize(2);
+    }
+
+    @Test
+    void shouldReturnValuesInOrderWhenMultiGetting() {
+        redisService.set("ns", "a", "session-a", java.time.Duration.ofMinutes(5));
+        setRaw("ns:bad", "not json");
+
+        assertThat(redisService.multiGetOrThrow("ns", List.of("a", "missing", "bad"), String.class))
+                .containsExactly("session-a", null, null);
     }
 
     @Test

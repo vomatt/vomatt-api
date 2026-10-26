@@ -159,8 +159,19 @@ public class RefreshTokenService {
                 return sessionStands(cached) ? cached : null;
             }
             // Reuse detection; throws on Redis failure so a replay during an outage can't pass as merely invalid
+            // An undecodable marker reads as null: the token is rejected (401), the marker kept for later replays
             String sessionId = redisService.getOrThrow(CONSUMED_NS, oldKey, String.class);
             if (sessionId != null) {
+                // Consumed with no grace pair read: the window is over, a rotation committed since the read above, or
+                // the pair no longer decodes (it is kept, see RedisService). Only the first is reuse; an undecodable
+                // pair is a plain invalid token, and its live successor stays
+                if (redisService.hasKeyOrThrow(GRACE_NS, oldKey)) {
+                    cached = graceHit(oldKey);
+                    if (cached == null) {
+                        log.warn("refresh.grace_undecodable refreshToken_sha={}", oldKey.substring(0, SHA_PREFIX_LEN));
+                    }
+                    return cached != null && sessionStands(cached) ? cached : null;
+                }
                 // Markers written before 2026-10-17 hold the userId instead of a session id: fall back to revoking all.
                 // Remove after 2026-11-16, when the last of them has expired with its refresh lifetime.
                 if (redisService.hasKeyOrThrow(USER_IDX_NS, sessionId)) {
@@ -193,8 +204,9 @@ public class RefreshTokenService {
 
         // Use the latest roles from the DB so later rotations keep using current permissions
         List<String> freshRoles = List.of(user.getRoles());
-        // Tokens issued before session ids existed start a session on their next rotation
-        String sessionId = data.sessionId() != null ? data.sessionId() : UUID.randomUUID().toString();
+        // Tokens issued before session ids existed start a session named after their key, the one revokeAllForUser
+        // flags for them, so a rotation racing that revocation is refused too
+        String sessionId = sessionIdOf(data, oldKey);
         RefreshTokenData freshData = new RefreshTokenData(data.userId(), freshRoles, sessionId, data.grantsAdmin());
 
         String newRefreshToken = UUID.randomUUID().toString();
@@ -267,8 +279,10 @@ public class RefreshTokenService {
      */
     private void endSessions(Collection<String> sessionIds, boolean revoke) {
         List<RedisService.RedisWrite> writes = new ArrayList<>();
+        // Covers grace pairs written with the earlier 60 s default too (instances still running it in a rolling deploy)
+        Duration endedTtl = Duration.ofSeconds(Math.max(refreshGraceSeconds, 60));
         for (String sessionId : sessionIds) {
-            writes.add(RedisService.RedisWrite.set(ENDED_SESSION_NS, sessionId, "1", Duration.ofSeconds(refreshGraceSeconds)));
+            writes.add(RedisService.RedisWrite.set(ENDED_SESSION_NS, sessionId, "1", endedTtl));
             if (revoke) {
                 writes.add(RedisService.RedisWrite.set(REVOKED_SESSION_NS, sessionId, "1", Duration.ofDays(refreshExpirationDays)));
             }
@@ -276,10 +290,9 @@ public class RefreshTokenService {
         redisService.execInTransaction(writes);
     }
 
-    /** The session of a token, live or already rotated (then from its consumed marker); null if neither is left. */
-    private String sessionOf(String key) {
-        RefreshTokenData data = redisService.getOrThrow(NAMESPACE, key, RefreshTokenData.class);
-        return data != null ? data.sessionId() : redisService.getOrThrow(CONSUMED_NS, key, String.class);
+    /** A token's session; a token issued before session ids existed is named after its key (see rotate). */
+    private static String sessionIdOf(RefreshTokenData data, String key) {
+        return data.sessionId() != null ? data.sessionId() : key;
     }
 
     /**
@@ -288,15 +301,20 @@ public class RefreshTokenService {
      */
     public void revoke(String token) {
         String key = keyOf(token);
+        // Ended before the token goes, so a grace replay in between cannot get a pair of this session
+        RefreshTokenData live = redisService.getOrThrow(NAMESPACE, key, RefreshTokenData.class);
+        if (live != null) {
+            endSessions(List.of(sessionIdOf(live, key)), false);
+        }
         RefreshTokenData data = redisService.getAndDelete(NAMESPACE, key, RefreshTokenData.class);
         if (data != null) {
             redisService.hDelete(USER_IDX_NS, data.userId(), key);
-            if (data.sessionId() != null) {
-                endSessions(List.of(data.sessionId()), false);
-            }
         } else {
             String sessionId = redisService.getOrThrow(CONSUMED_NS, key, String.class);
-            if (sessionId != null) {
+            // Markers written before 2026-10-17 hold the userId (see rotate); remove with that branch
+            if (sessionId != null && redisService.hasKeyOrThrow(USER_IDX_NS, sessionId)) {
+                revokeAllForUser(sessionId);
+            } else if (sessionId != null) {
                 endSessions(List.of(sessionId), true);
             }
         }
@@ -312,14 +330,27 @@ public class RefreshTokenService {
         if (index.isEmpty()) {
             return;
         }
-        // Values are session ids, except "1" on entries written before they were stored there: read those from the token
+        // Values are session ids, except "1" on entries written before they were stored there (or null if undecodable):
+        // read those from the token, or from its consumed marker if it has rotated since
         Set<String> sessionIds = new HashSet<>();
+        List<String> unnamed = new ArrayList<>();
         index.forEach((key, value) -> {
-            String sessionId = value instanceof String v && !"1".equals(v) ? v : sessionOf(key);
-            if (sessionId != null) {
-                sessionIds.add(sessionId);
+            if (value instanceof String v && !"1".equals(v)) {
+                sessionIds.add(v);
+            } else {
+                unnamed.add(key);
             }
         });
+        if (!unnamed.isEmpty()) {
+            List<RefreshTokenData> tokens = redisService.multiGetOrThrow(NAMESPACE, unnamed, RefreshTokenData.class);
+            List<String> consumed = redisService.multiGetOrThrow(CONSUMED_NS, unnamed, String.class);
+            for (int i = 0; i < unnamed.size(); i++) {
+                String sessionId = tokens.get(i) != null ? sessionIdOf(tokens.get(i), unnamed.get(i)) : consumed.get(i);
+                if (sessionId != null) {
+                    sessionIds.add(sessionId);
+                }
+            }
+        }
         // Revoked before the tokens go, so a rotation of one of them running now is refused by the script, and a
         // successor it already wrote (not in this snapshot) belongs to a revoked session
         endSessions(sessionIds, true);

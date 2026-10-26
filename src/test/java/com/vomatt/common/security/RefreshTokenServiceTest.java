@@ -95,7 +95,7 @@ class RefreshTokenServiceTest {
 
     /** The writes that end a session: the grace-only marker, plus the long-lived revoked flag when revoked. */
     private static List<RedisService.RedisWrite> ending(String sessionId, boolean revoke) {
-        RedisService.RedisWrite ended = RedisService.RedisWrite.set(ENDED_SESSION_NS, sessionId, "1", Duration.ofSeconds(10));
+        RedisService.RedisWrite ended = RedisService.RedisWrite.set(ENDED_SESSION_NS, sessionId, "1", Duration.ofSeconds(60));
         return revoke
                 ? List.of(ended, RedisService.RedisWrite.set(REVOKED_SESSION_NS, sessionId, "1", Duration.ofDays(30)))
                 : List.of(ended);
@@ -259,6 +259,7 @@ class RefreshTokenServiceTest {
         when(redisService.getOrThrow(GRACE_NS, k(oldToken), RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getOrThrow(NAMESPACE, k(oldToken), RefreshTokenService.RefreshTokenData.class)).thenReturn(null);
         when(redisService.getOrThrow(CONSUMED_NS, k(oldToken), String.class)).thenReturn("session-1");
+        when(redisService.hasKeyOrThrow(GRACE_NS, k(oldToken))).thenReturn(false);
         when(redisService.hasKeyOrThrow(USER_IDX_NS, "session-1")).thenThrow(new RedisOperationException("redis timeout", null));
 
         // Read as "no legacy marker" it would revoke the wrong thing; a 503 revokes nothing
@@ -370,6 +371,7 @@ class RefreshTokenServiceTest {
         when(redisService.getOrThrow(GRACE_NS, k(oldToken), RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getOrThrow(NAMESPACE, k(oldToken), RefreshTokenService.RefreshTokenData.class)).thenReturn(null);
         when(redisService.getOrThrow(CONSUMED_NS, k(oldToken), String.class)).thenReturn("session-1");
+        when(redisService.hasKeyOrThrow(GRACE_NS, k(oldToken))).thenReturn(false);
         when(redisService.hasKeyOrThrow(USER_IDX_NS, "session-1")).thenReturn(false);
 
         assertThatThrownBy(() -> service.rotate(oldToken)).isInstanceOf(RefreshTokenReuseException.class);
@@ -421,6 +423,7 @@ class RefreshTokenServiceTest {
         when(redisService.getOrThrow(GRACE_NS, k(oldToken), RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getOrThrow(NAMESPACE, k(oldToken), RefreshTokenService.RefreshTokenData.class)).thenReturn(null);
         when(redisService.getOrThrow(CONSUMED_NS, k(oldToken), String.class)).thenReturn("user-legacy");
+        when(redisService.hasKeyOrThrow(GRACE_NS, k(oldToken))).thenReturn(false);
         when(redisService.hasKeyOrThrow(USER_IDX_NS, "user-legacy")).thenReturn(true);
         when(redisService.hGetAllOrThrow(USER_IDX_NS, "user-legacy")).thenReturn(Map.of("t1", "session-1"));
 
@@ -596,18 +599,36 @@ class RefreshTokenServiceTest {
         String token = "revoke-token";
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
                 "user-6", List.of("user"), "session-1", false);
+        when(redisService.getOrThrow(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
         when(redisService.getAndDelete(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
 
         service.revoke(token);
 
+        // Ends the session for the grace window before the token goes, so a grace replay in between gets nothing
+        InOrder order = inOrder(redisService);
+        order.verify(redisService).execInTransaction(ending("session-1", false));
+        order.verify(redisService).getAndDelete(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class);
         verify(redisService).hDelete(USER_IDX_NS, "user-6", k(token));
-        // Ends the session for the grace window, so a grace pair of it is no longer handed out
-        verify(redisService).execInTransaction(ending("session-1", false));
+    }
+
+    @Test
+    void shouldRevokeAllSessionsWhenLoggingOutWithTokenWhoseLegacyMarkerHoldsUserId() {
+        String token = "pre-deploy-rotated-then-logout";
+        when(redisService.getOrThrow(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class)).thenReturn(null);
+        when(redisService.getOrThrow(CONSUMED_NS, k(token), String.class)).thenReturn("user-legacy");
+        when(redisService.hasKeyOrThrow(USER_IDX_NS, "user-legacy")).thenReturn(true);
+        when(redisService.hGetAllOrThrow(USER_IDX_NS, "user-legacy")).thenReturn(Map.of("t1", "session-1"));
+
+        service.revoke(token);
+
+        verify(redisService).execInTransaction(ending("session-1", true));
+        verify(redisService).deleteAll(NAMESPACE, Set.of("t1"));
     }
 
     @Test
     void shouldRevokeSessionWhenLoggingOutWithAlreadyRotatedToken() {
         String token = "rotated-then-logout";
+        when(redisService.getOrThrow(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class)).thenReturn(null);
         when(redisService.getAndDelete(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class)).thenReturn(null);
         when(redisService.getOrThrow(CONSUMED_NS, k(token), String.class)).thenReturn("session-1");
 
@@ -621,8 +642,9 @@ class RefreshTokenServiceTest {
     void shouldFlagSessionsBeforeDeletingOnlySnapshotTokensWhenRevokingAll() {
         // "1": an entry written before index values named the session; its token names it
         when(redisService.hGetAllOrThrow(USER_IDX_NS, "user-7")).thenReturn(Map.of("ta", "session-a", "tb", "1"));
-        when(redisService.getOrThrow(NAMESPACE, "tb", RefreshTokenService.RefreshTokenData.class))
-                .thenReturn(new RefreshTokenService.RefreshTokenData("user-7", List.of("user"), "session-b", false));
+        when(redisService.multiGetOrThrow(NAMESPACE, List.of("tb"), RefreshTokenService.RefreshTokenData.class))
+                .thenReturn(List.of(new RefreshTokenService.RefreshTokenData("user-7", List.of("user"), "session-b", false)));
+        when(redisService.multiGetOrThrow(CONSUMED_NS, List.of("tb"), String.class)).thenReturn(java.util.Arrays.asList((String) null));
 
         service.revokeAllForUser("user-7");
 
@@ -635,6 +657,42 @@ class RefreshTokenServiceTest {
                 java.util.stream.Stream.concat(ending("session-a", true).stream(), ending("session-b", true).stream()).toList());
         // An entry a concurrent rotation wrote after the snapshot is kept
         verify(redisService, never()).delete(eq(USER_IDX_NS), anyString());
+    }
+
+    @Test
+    void shouldNameLegacySessionsAfterTheirKeyWhenRevokingAll() {
+        // A null value: undecodable. "tc" has a live token issued before session ids, "td" rotated since the snapshot
+        Map<String, Object> index = new java.util.HashMap<>();
+        index.put("tc", null);
+        index.put("td", "1");
+        when(redisService.hGetAllOrThrow(USER_IDX_NS, "user-9")).thenReturn(index);
+        when(redisService.multiGetOrThrow(eq(NAMESPACE), anyList(), eq(RefreshTokenService.RefreshTokenData.class)))
+                .thenAnswer(inv -> ((List<String>) inv.getArgument(1)).stream().map(key -> "tc".equals(key)
+                        ? new RefreshTokenService.RefreshTokenData("user-9", List.of("user"), null, false) : null).toList());
+        when(redisService.multiGetOrThrow(eq(CONSUMED_NS), anyList(), eq(String.class)))
+                .thenAnswer(inv -> ((List<String>) inv.getArgument(1)).stream().map(key -> "td".equals(key) ? "session-d" : null).toList());
+
+        service.revokeAllForUser("user-9");
+
+        // One MGET per namespace; the legacy live token's session is named after its key, as rotate names it
+        ArgumentCaptor<List<RedisService.RedisWrite>> writes = ArgumentCaptor.captor();
+        verify(redisService).execInTransaction(writes.capture());
+        assertThat(writes.getValue()).containsExactlyInAnyOrderElementsOf(
+                java.util.stream.Stream.concat(ending("tc", true).stream(), ending("session-d", true).stream()).toList());
+    }
+
+    @Test
+    void shouldRejectWithoutRevokingWhenGracePairIsUndecodable() {
+        String oldToken = "rotated-pair-undecodable";
+        // The grace read answers null although the key is there: the pair no longer decodes
+        when(redisService.getOrThrow(GRACE_NS, k(oldToken), RefreshTokenService.RotateResult.class)).thenReturn(null);
+        when(redisService.getOrThrow(NAMESPACE, k(oldToken), RefreshTokenService.RefreshTokenData.class)).thenReturn(null);
+        when(redisService.getOrThrow(CONSUMED_NS, k(oldToken), String.class)).thenReturn("session-1");
+        when(redisService.hasKeyOrThrow(GRACE_NS, k(oldToken))).thenReturn(true);
+
+        // Plain 401, not a reuse alert: the live successor stays
+        assertThat(service.rotate(oldToken)).isNull();
+        verify(redisService, never()).execInTransaction(any());
     }
 
     @Test

@@ -11,8 +11,9 @@ import java.util.Map;
  * Error handling strategy:
  * - Reads + idempotent writes (get, hGet, hGetAll, hasKey, set, expire): swallow-and-log; cache-aside can fail soft.
  * - Correctness-critical (getOrThrow, getAndDelete, setOrThrow, setIfAbsent, incrementAndExpire, delete, hDelete,
- *   hGetAllOrThrow, hasKeyOrThrow, execInTransaction, execScript): throw RedisOperationException. getOrThrow takes a
- *   value it cannot decode for a miss and deletes it, so one bad value is not an outage for as long as it lives.
+ *   hGetAllOrThrow, multiGetOrThrow, hasKeyOrThrow, execInTransaction, execScript): throw RedisOperationException.
+ *   A value they cannot decode (bad bytes, changed type) is not a Redis error: it is logged and read as null (a miss),
+ *   and the key is left in place, so one bad value is never an outage and the caller decides what a miss means.
  */
 public interface RedisService {
 
@@ -68,6 +69,9 @@ public interface RedisService {
 
     /** HGETALL; throws RedisOperationException on Redis failure instead of answering an empty map. */
     Map<String, Object> hGetAllOrThrow(String cacheName, String key);
+
+    /** MGET: one value per key, in order, null where missing; throws RedisOperationException on Redis failure. */
+    <T> java.util.List<T> multiGetOrThrow(String cacheName, java.util.List<String> keys, Class<T> clazz);
 
     // ── Counter ───────────────────────────────────────────────────────
 

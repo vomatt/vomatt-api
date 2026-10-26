@@ -204,7 +204,7 @@ public class UserService {
     }
 
     /** Public profile fields of a page of users, display name masked by each owner's setting. */
-    private List<UserDto> toSearchResults(List<User> users) {
+    public List<UserDto> toSearchResults(List<User> users) {
         Map<UUID, Boolean> shown = displayNameSettings(users);
         boolean byDefault = VisibilityField.DISPLAY_NAME.isVisibleByDefault();
         return users.stream().map(u -> userMapper.toSearchResult(u, shown.getOrDefault(u.getId(), byDefault))).toList();

@@ -11,16 +11,20 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.entity.Audience;
 import com.vomatt.entity.Invitee;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
-import com.vomatt.repository.NotificationReadRepository;
+import com.vomatt.repository.NotificationRepository;
 import com.vomatt.repository.PostgresRepositoryTest;
+import com.vomatt.users.UserMapper;
+import com.vomatt.users.UserService;
 import com.vomatt.votes.VoteService;
 import com.vomatt.votes.VoteServiceSlice;
 import com.vomatt.votes.dto.InviteesRequest;
@@ -28,10 +32,11 @@ import com.vomatt.votes.dto.VoteRequest;
 import com.vomatt.votes.dto.VoteResponse;
 
 /** Invitations and Ended Notifications derived on read (ADR 0003). */
-@Import({ NotificationService.class, VoteServiceSlice.class })
+@Import({ NotificationService.class, VoteServiceSlice.class, UserService.class, UserMapper.class })
 @DisplayName("Notifications (Postgres)")
 class NotificationPostgresTest extends PostgresRepositoryTest {
 
+    @MockitoBean RefreshTokenService refreshTokenService;
     @Autowired NotificationService notificationService;
     @Autowired VoteService voteService;
 
@@ -94,11 +99,11 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
     @Test
     @DisplayName("should stop counting at the cap when more notifications are unread")
     void shouldCapUnreadCountWhenMoreThanCapUnread() {
-        for (int i = 0; i <= NotificationReadRepository.UNREAD_COUNT_CAP; i++) {
+        for (int i = 0; i <= NotificationRepository.UNREAD_COUNT_CAP; i++) {
             ballot(participant, poll(now.minusDays(2), now.minusHours(1)));
         }
 
-        assertThat(unread(participant)).isEqualTo(NotificationReadRepository.UNREAD_COUNT_CAP);
+        assertThat(unread(participant)).isEqualTo(NotificationRepository.UNREAD_COUNT_CAP);
     }
 
     @Test

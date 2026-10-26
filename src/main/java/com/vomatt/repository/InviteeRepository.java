@@ -50,7 +50,7 @@ public interface InviteeRepository extends JpaRepository<Invitee, UUID> {
      * add that user; the lock also lets binding auto-end a Poll whose last pending row it drops. A Ballot on such a
      * Poll waits for the sign-in (and vice versa); both are short. Every other path locks a single Poll, so the id
      * order rules out a cycle. FOR UPDATE also blocks FOR KEY SHARE, so inserts that reference the Poll by foreign key
-     * without taking its lock (Comments, notification reads) briefly wait behind a binding; they lock nothing else
+     * without taking its lock (Comments) briefly wait behind a binding; they lock nothing else
      * first, so this adds no cycle either.
      */
     @Query(value = """
@@ -59,7 +59,7 @@ public interface InviteeRepository extends JpaRepository<Invitee, UUID> {
             ORDER BY v.id FOR UPDATE""", nativeQuery = true)
     List<UUID> lockVotesWithPendingEmail(@Param("email") String email);
 
-    /** Binding step 3: ties the bindable pending rows of the locked Polls to the user; each keeps its email. */
+    /** Binding step 2: ties the bindable pending rows of the locked Polls to the user; each keeps its email. */
     @Modifying(flushAutomatically = true)
     @Query(value = """
             UPDATE vomatt.vote_invitees i SET user_id = :userId, updated_at = now()
@@ -68,7 +68,7 @@ public interface InviteeRepository extends JpaRepository<Invitee, UUID> {
     int bindEmail(@Param("userId") UUID userId, @Param("email") String email, @Param("voteIds") Collection<UUID> voteIds);
 
     /**
-     * Binding step 4: drops the pending rows of the locked Polls left unbound, i.e. already covered by a user row
+     * Binding step 3: drops the pending rows of the locked Polls left unbound, i.e. already covered by a user row
      * (an Invitee added by ID) or the owner's own address.
      */
     @Modifying(flushAutomatically = true)

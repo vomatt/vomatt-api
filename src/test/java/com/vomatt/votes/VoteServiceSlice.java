@@ -10,13 +10,13 @@ import com.vomatt.common.redis.RedisService;
 import com.vomatt.invitelists.InviteListMapper;
 import com.vomatt.invitelists.InviteListService;
 import com.vomatt.repository.LockTimeout;
-import com.vomatt.repository.NotificationReadRepository;
+import com.vomatt.repository.NotificationRepository;
 import com.vomatt.repository.VoteListRepository;
 
 /** Beans VoteService needs on top of a @DataJpaTest slice (Spring Data repositories are already present). */
 @TestConfiguration
 @Import({ VoteService.class, VoteMapper.class, VoteConfigurationProperties.class, VoteListRepository.class,
-        NotificationReadRepository.class, LockTimeout.class, EmailServiceNoOp.class, InviteListService.class, InviteListMapper.class,
+        NotificationRepository.class, LockTimeout.class, EmailServiceNoOp.class, InviteListService.class, InviteListMapper.class,
         com.vomatt.lookups.LookupService.class, com.vomatt.lookups.LookupMapper.class })
 public class VoteServiceSlice {
 

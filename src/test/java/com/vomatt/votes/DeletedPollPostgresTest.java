@@ -20,7 +20,8 @@ import com.vomatt.entity.Tag;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
-import com.vomatt.repository.NotificationReadRepository;
+import com.vomatt.repository.NotificationRepository;
+import com.vomatt.repository.PollNotifications;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.votes.dto.VoteResponse;
@@ -31,7 +32,7 @@ class DeletedPollPostgresTest extends PostgresRepositoryTest {
 
     @Autowired VoteService voteService;
     @Autowired VoteCommentService commentService;
-    @Autowired NotificationReadRepository notificationReadRepository;
+    @Autowired NotificationRepository notificationRepository;
     @Autowired UserRepository userRepository;
 
     private final OffsetDateTime now = OffsetDateTime.now();
@@ -118,8 +119,8 @@ class DeletedPollPostgresTest extends PostgresRepositoryTest {
         String voterId = voter.getId().toString();
         assertThat(titles(voteService.getMyPolls(voterId, "open", null, 50).items())).containsExactly("live-open");
         assertThat(titles(voteService.getMyPolls(voterId, "ended", null, 50).items())).containsExactly("live-ended");
-        assertThat(notificationReadRepository.countUnread(voter.getId(), OffsetDateTime.now())).isEqualTo(1);
-        assertThat(notificationReadRepository.isNotified(voter.getId(), deletedEnded.getId(), OffsetDateTime.now()))
+        assertThat(reads().countUnread(voter.getId(), OffsetDateTime.now())).isEqualTo(1);
+        assertThat(reads().isNotified(voter.getId(), deletedEnded.getId(), OffsetDateTime.now()))
                 .isFalse();
     }
 
@@ -141,5 +142,9 @@ class DeletedPollPostgresTest extends PostgresRepositoryTest {
         assertThatThrownBy(() -> commentService.getCommentsByVote(id, null, null, null))
                 .isInstanceOfSatisfying(ApiException.class,
                         ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_NOT_FOUND));
+    }
+
+    private PollNotifications reads() {
+        return new PollNotifications(notificationRepository);
     }
 }

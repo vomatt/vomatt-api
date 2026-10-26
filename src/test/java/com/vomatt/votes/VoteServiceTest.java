@@ -13,7 +13,7 @@ import com.vomatt.entity.VoterVisibility;
 import com.vomatt.invitelists.InviteListService;
 import com.vomatt.repository.IdCount;
 import com.vomatt.repository.InviteeRepository;
-import com.vomatt.repository.NotificationReadRepository;
+import com.vomatt.repository.NotificationRepository;
 import com.vomatt.repository.TagRepository;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.UserVoteRepository;
@@ -72,7 +72,7 @@ class VoteServiceTest {
     @Mock VoteConfigurationProperties voteConfig;
     @Mock com.vomatt.repository.VoteCommentRepository voteCommentRepository;
     @Mock InviteeRepository inviteeRepository;
-    @Mock NotificationReadRepository notificationReadRepository;
+    @Mock NotificationRepository notificationRepository;
     @Mock com.vomatt.common.email.EmailService emailService;
     @Mock com.vomatt.common.redis.RedisService redisService;
     @Mock InviteListService inviteListService;
@@ -1607,7 +1607,6 @@ class VoteServiceTest {
                         && rows.stream().anyMatch(i -> i.getUser() == bob && "bob@example.com".equals(i.getEmail()))
                         && rows.stream().anyMatch(i -> i.getUser() == null && "carol@example.com".equals(i.getEmail()));
             }));
-            verify(notificationReadRepository).deleteReads(voteId, List.of(bob.getId()));
             verify(emailService).sendInvitationEmails(argThat(to -> Set.copyOf(to).equals(Set.of("carol@example.com", "bob@example.com"))),
                     eq("Alice"), eq("Test Vote"), eq(voteId), any());
             verify(inviteeRepository).recordInvitationsSent(eq(voteId),

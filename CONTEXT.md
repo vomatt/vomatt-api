@@ -98,6 +98,10 @@ _Avoid_: Anonymous poll, hidden vote
 The fraction of a Poll's Participants whose Ballot chose a given option. Only visible once the Poll has Ended.
 _Avoid_: Percentage, vote share
 
+**Notification**:
+An item in a user's notification feed, telling them something happened: a Poll Ended (Ended Notification), an Invitation, a new follower, a Comment on their Poll or a Reply to their Comment, or a Poll they can still cast a Ballot in closing within a day. Derived from what happened, never sent: there is no push or email. Each is read on its own, or all at once.
+_Avoid_: Alert, message
+
 **Ended Notification**:
 What a Poll's owner and its Participants receive once the Poll has Ended, pointing them to the results; for an Invite-only Poll, every Invitee too. Participants who Retracted receive none unless they are Invitees.
 _Avoid_: Alert, results notice

@@ -41,6 +41,13 @@ class ClientIpResolverTest {
     }
 
     @Test
+    void shouldNormalizeForwardedAndPeerIpWhenSpelledDifferently() {
+        assertThat(ClientIpResolver.resolve(request("10.0.0.5", "2001:DB8::1"))).isEqualTo("2001:db8:0:0:0:0:0:1");
+        assertThat(ClientIpResolver.resolve(request("2001:DB8::2", null))).isEqualTo("2001:db8:0:0:0:0:0:2");
+        assertThat(ClientIpResolver.resolve(request("::ffff:203.0.113.7", null))).isEqualTo("203.0.113.7");
+    }
+
+    @Test
     void shouldAcceptClientIpWhenConfiguredSecretHasSurroundingWhitespace() {
         // An env value ending in a newline; the container trims the header value
         ClientIpResolver.setClientIpSecret(" " + SECRET + "\n");

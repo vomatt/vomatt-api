@@ -83,7 +83,15 @@ public final class ClientIpResolver {
         trustedProxies = parse(cidrs == null || cidrs.isBlank() ? DEFAULT_TRUSTED_PROXIES : cidrs);
     }
 
+    /**
+     * Returned in canonical form, so every spelling of one address (IPv6 case or zero compression, IPv4-mapped) shares
+     * one rate-limit key.
+     */
     public static String resolve(HttpServletRequest request) {
+        return canonical(pick(request));
+    }
+
+    private static String pick(HttpServletRequest request) {
         String forwardedClient = trustedClientIp(request);
         if (forwardedClient != null) {
             return forwardedClient;
@@ -111,11 +119,7 @@ public final class ClientIpResolver {
         return remoteAddr;
     }
 
-    /**
-     * The IP vomatt-web named for its user, or null when the secret is unset, absent or wrong, or the IP isn't a literal.
-     * Returned in canonical form, so every spelling of one address (IPv6 case or zero compression, IPv4-mapped) shares
-     * one rate-limit key.
-     */
+    /** The IP vomatt-web named for its user, or null when the secret is unset, absent or wrong, or the IP isn't a literal. */
     private static String trustedClientIp(HttpServletRequest request) {
         String ip = request.getHeader(CLIENT_IP_HEADER);
         if (ip == null) {
@@ -128,16 +132,24 @@ public final class ClientIpResolver {
                     secret == null ? "no secret configured" : sent == null ? "secret header missing" : "secret mismatch");
             return null;
         }
-        byte[] addr = literalAddress(ip.trim());
-        if (addr == null) {
+        String trimmed = ip.trim();
+        if (literalAddress(trimmed) == null) {
             log.debug("{} ignored: not an IP literal", CLIENT_IP_HEADER);
             return null;
         }
+        return trimmed;
+    }
+
+    /** The canonical spelling of an IP literal, built from its bytes (no DNS lookup); anything else as is. */
+    private static String canonical(String ip) {
+        byte[] addr = literalAddress(ip);
+        if (addr == null) {
+            return ip;
+        }
         try {
-            // From raw bytes: no DNS lookup
             return InetAddress.getByAddress(addr).getHostAddress();
         } catch (UnknownHostException e) {
-            return null;
+            return ip;
         }
     }
 

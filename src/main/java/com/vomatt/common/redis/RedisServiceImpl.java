@@ -1,6 +1,5 @@
 package com.vomatt.common.redis;
 
-import com.vomatt.common.security.RefreshTokenService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.ReturnType;
@@ -36,25 +35,6 @@ public class RedisServiceImpl implements RedisService {
             "local c = redis.call('INCRBY', KEYS[1], ARGV[2]) "
             + "if c == tonumber(ARGV[2]) then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end "
             + "return c").getBytes(StandardCharsets.UTF_8);
-
-    // Refresh token rotation (RefreshTokenService.rotate). KEYS: 1 old token, 2 revoked-session flag, 3 consumed marker,
-    // 4 new token, 5 user index, 6 grace. ARGV: 1 session id, 2 new token data, 3 grace pair, 4 new index field,
-    // 5 old index field, 6 index value, 7 refresh TTL ms, 8 grace TTL ms. Values arrive already serialized.
-    // Returns 0 when the old token is gone, 2 when its session is revoked (the token is then dropped), 1 when rotated.
-    // Grace goes after the other writes and the old token is deleted last: Redis keeps a failed script's earlier writes,
-    // so a write error leaves the old token in place to retry and never exposes a pair whose token was not stored.
-    private static final RedisScript<Long> ROTATE_REFRESH_LUA = RedisScript.of(
-            "if redis.call('EXISTS', KEYS[1]) == 0 then return 0 end "
-            + "if redis.call('EXISTS', KEYS[2]) == 1 then "
-            + "  redis.call('DEL', KEYS[1]) redis.call('HDEL', KEYS[5], ARGV[5]) return 2 end "
-            + "redis.call('SET', KEYS[3], ARGV[1], 'PX', ARGV[7]) "
-            + "redis.call('SET', KEYS[4], ARGV[2], 'PX', ARGV[7]) "
-            + "redis.call('HSET', KEYS[5], ARGV[4], ARGV[6]) "
-            + "redis.call('PEXPIRE', KEYS[5], ARGV[7]) "
-            + "redis.call('HDEL', KEYS[5], ARGV[5]) "
-            + "redis.call('SET', KEYS[6], ARGV[3], 'PX', ARGV[8]) "
-            + "redis.call('DEL', KEYS[1]) "
-            + "return 1", Long.class);
 
     // ── Basic String value ───────────────────────────────────────────
 
@@ -281,7 +261,6 @@ public class RedisServiceImpl implements RedisService {
                             case SET -> ops.opsForValue().set(cacheKey, w.value(), w.ttl());
                             case HPUT -> ops.opsForHash().put(cacheKey, w.field(), w.value());
                             case EXPIRE -> ops.expire(cacheKey, w.ttl());
-                            case HDELETE -> ops.opsForHash().delete(cacheKey, w.field());
                         }
                     }
                     ops.exec();
@@ -295,48 +274,22 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     @SuppressWarnings("unchecked")
-    public RotationOutcome rotateRefreshToken(RefreshRotation r) {
-        String oldTokenKey = CacheKeyUtil.buildKey(RefreshTokenService.NAMESPACE, r.oldKey());
+    public long execScript(RedisScript<Long> script, List<String> keys, List<Object> args) {
         try {
-            // Serialized exactly as the template would, so get/hGet/hGetAll read these values back unchanged
-            RedisSerializer<String> hashKeySer = (RedisSerializer<String>) redisTemplate.getHashKeySerializer();
+            // Serialized as the template would, so get/hGet read the values back unchanged
             RedisSerializer<Object> valueSer = (RedisSerializer<Object>) redisTemplate.getValueSerializer();
-            RedisSerializer<Object> hashValueSer = (RedisSerializer<Object>) redisTemplate.getHashValueSerializer();
-            List<String> keys = List.of(
-                    oldTokenKey,
-                    CacheKeyUtil.buildKey(RefreshTokenService.REVOKED_SESSION_NS, r.sessionId()),
-                    CacheKeyUtil.buildKey(RefreshTokenService.CONSUMED_NS, r.oldKey()),
-                    CacheKeyUtil.buildKey(RefreshTokenService.NAMESPACE, r.newKey()),
-                    CacheKeyUtil.buildKey(RefreshTokenService.USER_IDX_NS, r.userId()),
-                    CacheKeyUtil.buildKey(RefreshTokenService.GRACE_NS, r.oldKey()));
-            // EVALSHA, falling back to EVAL once per connection; ARGV pass through as bytes, and an integer reply is
-            // returned as is, so no result serializer is needed
-            Long result = redisTemplate.execute(ROTATE_REFRESH_LUA, RedisSerializer.byteArray(), null, keys,
-                    valueSer.serialize(r.sessionId()),
-                    valueSer.serialize(r.newData()),
-                    valueSer.serialize(r.gracePair()),
-                    hashKeySer.serialize(r.newKey()),
-                    hashKeySer.serialize(r.oldKey()),
-                    hashValueSer.serialize("1"),
-                    millis(r.refreshTtl()),
-                    millis(r.graceTtl()));
+            Object[] argBytes = args.stream().map(a -> a instanceof byte[] ? a : valueSer.serialize(a)).toArray();
+            // EVALSHA, falling back to EVAL once per connection; an integer reply needs no result serializer
+            Long result = redisTemplate.execute(script, RedisSerializer.byteArray(), null, keys, argBytes);
             if (result == null) {
-                throw new RedisOperationException("Redis rotate returned null, key=" + oldTokenKey, null);
+                throw new RedisOperationException("Redis script returned null, keys=" + keys, null);
             }
-            return switch (result.intValue()) {
-                case 1 -> RotationOutcome.ROTATED;
-                case 2 -> RotationOutcome.SESSION_REVOKED;
-                default -> RotationOutcome.TOKEN_GONE;
-            };
+            return result;
         } catch (RedisOperationException e) {
             throw e;
         } catch (Exception e) {
-            throw new RedisOperationException("Redis rotate failed, key=" + oldTokenKey, e);
+            throw new RedisOperationException("Redis script failed, keys=" + keys, e);
         }
-    }
-
-    private static byte[] millis(Duration ttl) {
-        return Long.toString(ttl.toMillis()).getBytes(StandardCharsets.UTF_8);
     }
 
     // ── TTL / existence ───────────────────────────────────────────────

@@ -11,7 +11,7 @@ import java.util.Map;
  * Error handling strategy:
  * - Reads + idempotent writes (get, hGet, hGetAll, hasKey, set, expire): swallow-and-log; cache-aside can fail soft.
  * - Correctness-critical (getOrThrow, getAndDelete, setOrThrow, setIfAbsent, incrementAndExpire, delete, hDelete,
- *   hasKeyOrThrow, execInTransaction, rotateRefreshToken): throw RedisOperationException.
+ *   hasKeyOrThrow, execInTransaction, execScript): throw RedisOperationException.
  */
 public interface RedisService {
 
@@ -97,23 +97,16 @@ public interface RedisService {
     void execInTransaction(java.util.List<RedisWrite> writes);
 
     /**
-     * Refresh token rotation in one Lua script: unless the old token is gone or its session revoked, writes the consumed
-     * marker, the new token, the user index entry (renewing its TTL, dropping the old entry) and the grace pair, then
-     * deletes the old token. Of several callers racing on one token exactly one gets {@link RotationOutcome#ROTATED}.
-     * A revoked session's old token and index entry are deleted. Throws {@link RedisOperationException} on Redis failure,
-     * in which case the old token is still in place.
+     * Runs a Lua script (EVALSHA, falling back to EVAL) on full Redis keys ({@link CacheKeyUtil#buildKey}) and returns
+     * its integer reply. A {@code byte[]} arg is passed as is (hash fields, numbers); any other goes through the value
+     * serializer, so get/hGet read it back. Throws {@link RedisOperationException} on Redis failure or an error reply.
      */
-    RotationOutcome rotateRefreshToken(RefreshRotation rotation);
-
-    enum RotationOutcome { ROTATED, TOKEN_GONE, SESSION_REVOKED }
-
-    /** Keys are keyOf(token) digests, as RefreshTokenService stores them. */
-    record RefreshRotation(String userId, String sessionId, String oldKey, String newKey, Object newData,
-                           Object gracePair, Duration refreshTtl, Duration graceTtl) {}
+    long execScript(org.springframework.data.redis.core.script.RedisScript<Long> script, java.util.List<String> keys,
+                    java.util.List<Object> args);
 
     /** A single write descriptor for {@link #execInTransaction}. */
     record RedisWrite(Op op, String cacheName, String key, String field, Object value, Duration ttl) {
-        public enum Op { SET, HPUT, EXPIRE, HDELETE }
+        public enum Op { SET, HPUT, EXPIRE }
 
         public static RedisWrite set(String cacheName, String key, Object value, Duration ttl) {
             return new RedisWrite(Op.SET, cacheName, key, null, value, ttl);
@@ -125,10 +118,6 @@ public interface RedisService {
 
         public static RedisWrite expire(String cacheName, String key, Duration ttl) {
             return new RedisWrite(Op.EXPIRE, cacheName, key, null, null, ttl);
-        }
-
-        public static RedisWrite hdelete(String cacheName, String key, String field) {
-            return new RedisWrite(Op.HDELETE, cacheName, key, field, null, null);
         }
     }
 }

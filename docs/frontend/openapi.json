@@ -12488,7 +12488,7 @@
         "tags" : [ "User" ]
       },
       "post" : {
-        "description" : "**Auth**: required\n**Precondition**: `userId` is another existing, active account the caller has not blocked\n**Behavior**: one-way follow. From then on `GET /api/votes/following` lists PUBLIC Polls the followed user creates. The followed user is not told; the follow shows in `GET /api/users/{username}/followers` and `/following`. Idempotent: following an already followed user succeeds.\n**Side effects**: the follow is written to the audit log\n**Errors**:\n- 400 `user.follow.self`: `userId` is the caller's own id\n- 400 `user.follow.blocked`: the caller has blocked this user; unblock first\n- 400 `common.bad_request`: `userId` is not a valid id\n- 404 `user.not_found`: no account with this id, or it is suspended",
+        "description" : "**Auth**: required\n**Precondition**: `userId` is another existing, active account the caller has not blocked\n**Behavior**: one-way follow. From then on `GET /api/votes/following` lists PUBLIC Polls the followed user creates. The followed user gets a FOLLOWED notification in `GET /api/notifications` (gone again if the caller unfollows); the follow shows in `GET /api/users/{username}/followers` and `/following`. Idempotent: following an already followed user succeeds.\n**Side effects**: the follow is written to the audit log\n**Errors**:\n- 400 `user.follow.self`: `userId` is the caller's own id\n- 400 `user.follow.blocked`: the caller has blocked this user; unblock first\n- 400 `common.bad_request`: `userId` is not a valid id\n- 404 `user.not_found`: no account with this id, or it is suspended",
         "operationId" : "followUser",
         "parameters" : [ {
           "description" : "Id of the user to follow",

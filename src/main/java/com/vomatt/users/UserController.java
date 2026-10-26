@@ -452,7 +452,8 @@ public class UserController {
             **Auth**: required
             **Precondition**: `userId` is another existing, active account the caller has not blocked
             **Behavior**: one-way follow. From then on `GET /api/votes/following` lists PUBLIC Polls the followed user creates. \
-            The followed user is not told; the follow shows in `GET /api/users/{username}/followers` and `/following`. \
+            The followed user gets a FOLLOWED notification in `GET /api/notifications` (gone again if the caller unfollows); \
+            the follow shows in `GET /api/users/{username}/followers` and `/following`. \
             Idempotent: following an already followed user succeeds.
             **Side effects**: the follow is written to the audit log
             **Errors**:

@@ -9,9 +9,45 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ClientIpResolverTest {
 
+    private static final String SECRET = "client-ip-secret-0123456789abcdef";
+
     @AfterEach
     void restoreDefault() {
         ClientIpResolver.setTrustedProxies(null);
+        ClientIpResolver.setClientIpSecret(null);
+    }
+
+    private static MockHttpServletRequest fromWeb(String clientIp, String secret) {
+        MockHttpServletRequest req = request("203.0.113.7", null);
+        req.addHeader(ClientIpResolver.CLIENT_IP_HEADER, clientIp);
+        req.addHeader(ClientIpResolver.CLIENT_IP_SECRET_HEADER, secret);
+        return req;
+    }
+
+    @Test
+    void shouldUseClientIpHeaderWhenSecretMatches() {
+        ClientIpResolver.setClientIpSecret(SECRET);
+        assertThat(ClientIpResolver.resolve(fromWeb(" 198.51.100.9 ", SECRET))).isEqualTo("198.51.100.9");
+        assertThat(ClientIpResolver.resolve(fromWeb("2001:db8::1", SECRET))).isEqualTo("2001:db8::1");
+    }
+
+    @Test
+    void shouldIgnoreClientIpHeaderWhenSecretIsWrong() {
+        ClientIpResolver.setClientIpSecret(SECRET);
+        assertThat(ClientIpResolver.resolve(fromWeb("198.51.100.9", SECRET + "x"))).isEqualTo("203.0.113.7");
+    }
+
+    @Test
+    void shouldIgnoreClientIpHeaderWhenNoSecretIsConfigured() {
+        assertThat(ClientIpResolver.resolve(fromWeb("198.51.100.9", ""))).isEqualTo("203.0.113.7");
+        assertThat(ClientIpResolver.resolve(fromWeb("198.51.100.9", SECRET))).isEqualTo("203.0.113.7");
+    }
+
+    @Test
+    void shouldIgnoreClientIpHeaderWhenValueIsNotAnIpLiteral() {
+        ClientIpResolver.setClientIpSecret(SECRET);
+        assertThat(ClientIpResolver.resolve(fromWeb("example.com", SECRET))).isEqualTo("203.0.113.7");
+        assertThat(ClientIpResolver.resolve(fromWeb("1.2.3.4, 5.6.7.8", SECRET))).isEqualTo("203.0.113.7");
     }
 
     private static MockHttpServletRequest request(String remoteAddr, String xff) {

@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** consumeAndExec runs a Lua script on pre-serialized values, so it is checked against a real Redis 7. */
 class RedisServiceImplTest {
@@ -74,6 +75,18 @@ class RedisServiceImplTest {
         assertThat(redisService.hGetAll("idx", "user-1")).containsOnlyKeys("new");
         assertThat(redisService.hGet("idx", "user-1", "new", String.class)).isEqualTo("1");
         assertThat(template.getExpire("idx:user-1", TimeUnit.DAYS)).isBetween(29L, 30L);
+    }
+
+    @Test
+    void shouldKeepTheKeyWhenAWriteFails() {
+        redisService.set("ns", "old", "v", Duration.ofMinutes(5));
+
+        // Redis refuses a zero expiry; the script stops there, and its key must survive for a retry
+        assertThatThrownBy(() -> redisService.consumeAndExec("ns", "old", List.of(
+                RedisService.RedisWrite.set("grace", "old", "pair", Duration.ZERO))))
+                .isInstanceOf(RedisOperationException.class);
+
+        assertThat(redisService.get("ns", "old", String.class)).isEqualTo("v");
     }
 
     @Test

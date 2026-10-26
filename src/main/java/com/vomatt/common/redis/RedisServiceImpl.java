@@ -37,8 +37,9 @@ public class RedisServiceImpl implements RedisService {
 
     // KEYS[1] is consumed; KEYS[2..] are the written keys, one per write, all declared as Redis requires of scripts.
     // ARGV holds each write's op and arguments in the same order. Values arrive already serialized.
+    // KEYS[1] is deleted last: Redis keeps a failed script's earlier writes, so a write error leaves it in place to retry.
     private static final byte[] CONSUME_AND_EXEC_LUA = (
-            "if redis.call('DEL', KEYS[1]) == 0 then return 0 end "
+            "if redis.call('EXISTS', KEYS[1]) == 0 then return 0 end "
             + "local a = 1 "
             + "for k = 2, #KEYS do "
             + "  local op = ARGV[a] "
@@ -48,6 +49,7 @@ public class RedisServiceImpl implements RedisService {
             + "  elseif op == 'HDELETE' then redis.call('HDEL', KEYS[k], ARGV[a+1]) a = a + 2 "
             + "  else return redis.error_reply('unknown op ' .. op) end "
             + "end "
+            + "redis.call('DEL', KEYS[1]) "
             + "return 1").getBytes(StandardCharsets.UTF_8);
 
     // ── Basic String value ───────────────────────────────────────────

@@ -157,17 +157,17 @@ class RefreshTokenServiceTest {
         assertThat(result.data().userId()).isEqualTo(userId);
         assertThat(result.data().roles()).isEqualTo(List.of("user"));
 
-        // The old token is consumed together with every write, grace first (where racing callers meet)
+        // The old token is consumed together with every write; grace goes last, after the token it hands out is stored
         ArgumentCaptor<List<RedisService.RedisWrite>> writesCaptor = ArgumentCaptor.captor();
         verify(redisService).consumeAndExec(eq(NAMESPACE), eq(k(oldToken)), writesCaptor.capture());
         List<RedisService.RedisWrite> writes = writesCaptor.getValue();
         assertThat(writes).containsExactly(
-                RedisService.RedisWrite.set(GRACE_NS, k(oldToken), result, Duration.ofSeconds(10)),
                 RedisService.RedisWrite.set(CONSUMED_NS, k(oldToken), "session-1", Duration.ofDays(30)),
                 RedisService.RedisWrite.set(NAMESPACE, k(result.newRefreshToken()), result.data(), Duration.ofDays(30)),
                 RedisService.RedisWrite.hput(USER_IDX_NS, userId, k(result.newRefreshToken()), "1"),
                 RedisService.RedisWrite.expire(USER_IDX_NS, userId, Duration.ofDays(30)),
-                RedisService.RedisWrite.hdelete(USER_IDX_NS, userId, k(oldToken))
+                RedisService.RedisWrite.hdelete(USER_IDX_NS, userId, k(oldToken)),
+                RedisService.RedisWrite.set(GRACE_NS, k(oldToken), result, Duration.ofSeconds(10))
         );
     }
 
@@ -212,7 +212,8 @@ class RefreshTokenServiceTest {
         when(redisService.consumeAndExec(eq(NAMESPACE), eq(k(oldToken)), any())).thenAnswer(inv -> {
             if (!consumed.compareAndSet(false, true)) return false;
             List<RedisService.RedisWrite> writes = inv.getArgument(2);
-            graceStore.set((RefreshTokenService.RotateResult) writes.get(0).value());
+            graceStore.set((RefreshTokenService.RotateResult) writes.stream()
+                    .filter(w -> GRACE_NS.equals(w.cacheName())).findFirst().orElseThrow().value());
             return true;
         });
         when(jwtUtil.generateToken(eq(userId), eq(List.of("user")), eq(false))).thenReturn("access");
@@ -278,6 +279,15 @@ class RefreshTokenServiceTest {
 
         // A 503 rather than a plain 401 that would let a replayed token skip the session revocation
         assertThatThrownBy(() -> service.rotate(oldToken)).isInstanceOf(RedisOperationException.class);
+    }
+
+    @Test
+    void shouldRefuseToStartWhenGraceWindowIsBelowOneSecond() {
+        ReflectionTestUtils.setField(service, "refreshGraceSeconds", 0L);
+        assertThatThrownBy(() -> service.checkGraceWindow()).isInstanceOf(IllegalStateException.class);
+
+        ReflectionTestUtils.setField(service, "refreshGraceSeconds", 1L);
+        service.checkGraceWindow();
     }
 
     // ── rotate: reuse after grace ─────────────────────────────────────

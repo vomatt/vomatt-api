@@ -129,6 +129,9 @@ app:
     cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
     # Comma-separated CIDRs allowed to set X-Forwarded-For; blank uses ClientIpResolver.DEFAULT_TRUSTED_PROXIES
     trusted-proxies: ${TRUSTED_PROXIES:}
+    # Shared with vomatt-web (same name there), which sends it in X-Client-IP-Secret with the user's IP in X-Client-IP.
+    # At least 32 characters; blank ignores X-Client-IP, so every user behind vomatt-web shares its IP for rate limits
+    client-ip-secret: ${CLIENT_IP_SECRET:}
   vote:
     max-options-per-vote: ${VOTE_MAX_OPTIONS:10}
     min-options-per-vote: ${VOTE_MIN_OPTIONS:2}

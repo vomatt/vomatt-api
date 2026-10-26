@@ -3,6 +3,7 @@ package com.vomatt.common.security;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.entity.User;
 import com.vomatt.repository.UserRepository;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -42,6 +43,14 @@ public class RefreshTokenService {
 
     @Value("${jwt.refresh-grace-seconds:60}")
     private long refreshGraceSeconds;
+
+    /** Redis refuses a zero or negative expiry, so such a grace window would fail every refresh with 503. */
+    @PostConstruct
+    void checkGraceWindow() {
+        if (refreshGraceSeconds < 1) {
+            throw new IllegalStateException("JWT_REFRESH_GRACE_SECONDS must be at least 1, was " + refreshGraceSeconds);
+        }
+    }
 
     /**
      * {@code sessionId} names one sign-in and is kept across rotations; null on tokens issued before it existed.
@@ -163,15 +172,16 @@ public class RefreshTokenService {
         Duration refreshTtl = Duration.ofDays(refreshExpirationDays);
         Duration graceTtl = Duration.ofSeconds(refreshGraceSeconds);
 
-        // Step 5: GRACE (where racing callers meet), CONSUMED (reuse detection), NAMESPACE (the new token), USER_IDX
-        // (revocation index + TTL refresh + old token removal), written only if this caller is the one consuming the old token
+        // Step 5: CONSUMED (reuse detection), NAMESPACE (the new token), USER_IDX (revocation index + TTL refresh + old
+        // token removal), then GRACE (where racing callers meet), written only if this caller is the one consuming the old
+        // token. GRACE goes last: if an earlier write fails, no caller is handed a pair whose refresh token was never stored
         boolean consumed = redisService.consumeAndExec(NAMESPACE, oldKey, List.of(
-                RedisService.RedisWrite.set(GRACE_NS, oldKey, result, graceTtl),
                 RedisService.RedisWrite.set(CONSUMED_NS, oldKey, sessionId, refreshTtl),
                 RedisService.RedisWrite.set(NAMESPACE, newKey, freshData, refreshTtl),
                 RedisService.RedisWrite.hput(USER_IDX_NS, freshData.userId(), newKey, "1"),
                 RedisService.RedisWrite.expire(USER_IDX_NS, freshData.userId(), refreshTtl),
-                RedisService.RedisWrite.hdelete(USER_IDX_NS, freshData.userId(), oldKey)
+                RedisService.RedisWrite.hdelete(USER_IDX_NS, freshData.userId(), oldKey),
+                RedisService.RedisWrite.set(GRACE_NS, oldKey, result, graceTtl)
         ));
         if (!consumed) {
             // A concurrent caller consumed it first and wrote its pair to grace in the same step. Null only if the

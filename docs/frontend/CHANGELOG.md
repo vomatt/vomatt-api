@@ -4,6 +4,8 @@ Contract changes that affect the frontend. 💥 BREAKING means frontend code mus
 
 ## 2026-10-26
 
+- `POST /api/auth/refresh` can return 503 `common.service_unavailable` when Redis is unavailable; the token was not spent. Treat 503 and 429 on refresh as "keep the tokens and retry later": only 401 `auth.refresh_token.invalid` / `auth.suspicious_login` end the session (auth-flow.md §7 now says so; it used to say to sign out on any failure).
+- New optional request headers for server-side callers (vomatt-web): `X-Client-IP` names the end user's IP for rate limits and OTP lockouts, honored only together with `X-Client-IP-Secret` equal to the API's `CLIENT_IP_SECRET`. Without them every user behind a server-side caller shares its IP. Clients that call the API directly (the apps) don't send them. Deploy: set `CLIENT_IP_SECRET` (at least 32 characters) on the API and the same value on vomatt-web.
 - `POST /api/auth/refresh`: two requests sending the same refresh token at the same moment both get the same new pair. Before, the second could get 401 `auth.refresh_token.invalid` while the first was still rotating, which signed the user out. The grace window (same token again returns the same pair) is now 60 seconds instead of 10 (`JWT_REFRESH_GRACE_SECONDS`), so a retry after a lost response is no longer treated as reuse.
 
 ## 2026-10-25

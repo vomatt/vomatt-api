@@ -10,7 +10,8 @@ import java.util.Map;
  *
  * Error handling strategy:
  * - Reads + idempotent writes (get, hGet, hGetAll, hasKey, set, expire): swallow-and-log; cache-aside can fail soft.
- * - Correctness-critical (setIfAbsent, incrementAndExpire, delete, hDelete, hasKeyOrThrow): throw RedisOperationException.
+ * - Correctness-critical (getOrThrow, getAndDelete, setOrThrow, setIfAbsent, incrementAndExpire, delete, hDelete,
+ *   hasKeyOrThrow, execInTransaction, consumeAndExec): throw RedisOperationException.
  */
 public interface RedisService {
 
@@ -28,6 +29,9 @@ public interface RedisService {
     <T> T get(String cacheName, String key, Class<T> clazz);
 
     <T> T get(String cacheName, String key, TypeReference<T> typeRef);
+
+    /** Same as {@link #get(String, String, Class)}, but throws RedisOperationException on Redis failure, where a miss must be real. */
+    <T> T getOrThrow(String cacheName, String key, Class<T> clazz);
 
     /** Returns true on successful delete; throws RedisOperationException on Redis failure. */
     boolean delete(String cacheName, String key);
@@ -87,10 +91,18 @@ public interface RedisService {
      * P1-#17: atomically performs several correctness-critical writes in a single MULTI/EXEC transaction, collapsing several round-trips into one.
      *
      * <p>The batch is applied atomically (never partially); a connection-level failure throws {@link RedisOperationException} for the whole batch (fail-fast),
-     * semantically like calling {@code setOrThrow} for each write, but stronger (atomic). Fail-soft writes (such as the grace cache)
+     * semantically like calling {@code setOrThrow} for each write, but stronger (atomic). Fail-soft writes
      * should not go in this transaction; the caller must write them separately with {@link #set}.</p>
      */
     void execInTransaction(java.util.List<RedisWrite> writes);
+
+    /**
+     * Atomically (one Lua script): if the key exists, applies {@code writes} and then deletes it; otherwise writes nothing.
+     * The key goes last, so a failed write leaves it in place for a retry rather than consumed with nothing written.
+     * Returns whether the key existed, so of several callers racing to consume the same key exactly one wins.
+     * Throws {@link RedisOperationException} on Redis failure.
+     */
+    boolean consumeAndExec(String cacheName, String key, java.util.List<RedisWrite> writes);
 
     /** A single write descriptor for {@link #execInTransaction}. */
     record RedisWrite(Op op, String cacheName, String key, String field, Object value, Duration ttl) {

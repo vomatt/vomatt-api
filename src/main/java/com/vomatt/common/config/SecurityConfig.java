@@ -56,6 +56,15 @@ public class SecurityConfig {
         ClientIpResolver.setTrustedProxies(cidrs);
     }
 
+    // Shared with vomatt-web, which sends it with the user's IP (ClientIpResolver.CLIENT_IP_HEADER); blank ignores that header
+    @Value("${app.security.client-ip-secret:}")
+    void setClientIpSecret(String secret) {
+        if (secret != null && !secret.isBlank() && secret.length() < 32) {
+            throw new IllegalStateException("CLIENT_IP_SECRET must be at least 32 characters.");
+        }
+        ClientIpResolver.setClientIpSecret(secret);
+    }
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         return http.csrf(AbstractHttpConfigurer::disable)

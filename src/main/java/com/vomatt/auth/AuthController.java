@@ -404,19 +404,24 @@ public class AuthController {
             description = "Refresh token invalid/expired/revoked (`auth.refresh_token.invalid`), or reuse of an already-rotated token detected (`auth.suspicious_login`); either way the client must sign in again",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
                     {"success": false, "data": null, "message": "Security alert: this session was refreshed twice, so it has been signed out. Please log in again", "errorCode": "auth.suspicious_login", "error": "Security alert: this session was refreshed twice, so it has been signed out. Please log in again"}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503",
+            description = "Redis is unavailable, so the token couldn't be checked; it is not spent. Keep the tokens and retry later (`common.service_unavailable`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
+                    {"success": false, "data": null, "message": "Service temporarily unavailable, please try again later", "errorCode": "common.service_unavailable", "error": "Service temporarily unavailable, please try again later"}""")))
     @Operation(summary = "Refresh access token",
             description = """
                     **Auth**: public (authenticated by the refresh token in the body, not by the Authorization header)
                     **Precondition**: a refresh token from a previous login or refresh
                     **Behavior**: rotates the refresh token: the old one is spent and a new access token and refresh token are returned. \
                     The response `user` is null; keep the user info from login. Roles are re-read from the database, so a role change takes effect on refresh; the token keeps the scope of its sign-in, so only an admin console session refreshes into a token that grants the admin role. \
-                    A second call with the same old token within the grace window (default 10 s) returns the same new pair instead of failing, so concurrent refreshes are safe
+                    A second call with the same old token within the grace window (default 60 s) returns the same new pair instead of failing, so concurrent refreshes are safe
                     **Side effects**: the old refresh token is spent. If a spent token is presented again after the grace window, that sign-in is ended: \
                     its latest refresh token can no longer be refreshed (401 `auth.refresh_token.invalid`), so it must sign in again once its access token expires; the user's other devices stay signed in. \
                     If the user is missing or suspended, all their refresh tokens are revoked too
                     **Errors**:
                     - 401 `auth.refresh_token.invalid`: the token is unknown, expired, revoked, or its user is missing or suspended
-                    - 401 `auth.suspicious_login`: a spent token was reused after the grace window; the session it belonged to is now signed out""")
+                    - 401 `auth.suspicious_login`: a spent token was reused after the grace window; the session it belonged to is now signed out
+                    - 429 `common.rate_limited` / 503 `common.service_unavailable`: the token was not checked or spent; keep the tokens and retry later. Only the two 401s end the session""")
     public ResponseEntity<ApiResponse<AuthResponse>> refresh(@Valid @RequestBody RefreshRequest req) {
         return ResponseEntity.ok(ApiResponse.ok(authService.refresh(req.refreshToken())));
     }

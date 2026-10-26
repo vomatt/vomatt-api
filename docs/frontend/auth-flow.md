@@ -10,7 +10,7 @@ All `/api/auth/**` endpoints are public (no `Authorization`) and are rate limite
 |-------|----------|------|------|
 | access token (`token`) | 15 minutes | `JWT_EXPIRATION_SECONDS` (default 900) | JWT, stateless; send as `Authorization: Bearer <token>` to protected endpoints |
 | refresh token (`refreshToken`) | 30 days | `JWT_REFRESH_EXPIRATION_DAYS` (default 30) | Opaque string (UUID) stored in server-side Redis; **single use**, every refresh issues a new pair |
-| refresh grace window | 10 seconds | `JWT_REFRESH_GRACE_SECONDS` (default 10) | See §6 |
+| refresh grace window | 60 seconds | `JWT_REFRESH_GRACE_SECONDS` (default 60) | See §6 |
 
 Storage recommendations:
 
@@ -129,7 +129,7 @@ sequenceDiagram
 Rotation rules (`RefreshTokenService`):
 
 1. Every refresh **consumes** the refresh token passed in and returns a new access token and a new refresh token.
-2. **Grace window (default 10 seconds)**: if the same old refresh token is sent again within the window (e.g. two tabs or two requests refreshing at the same time), it gets **exactly the same new token pair**, without failing and without being treated as an attack.
+2. **Grace window (default 60 seconds)**: if the same old refresh token is sent again within the window (e.g. two tabs or two requests refreshing at the same time, or a retry after the response carrying the new pair was lost), it gets **exactly the same new token pair**, without failing and without being treated as an attack. This also holds for a request that arrives while the first rotation is still in progress.
 3. **Reuse detection**: if an old token that was already consumed is sent after the grace window (possibly a leaked token, or a very late retry), the backend ends **only that sign-in**: its latest refresh token then gets 401 `auth.refresh_token.invalid`, so that device must sign in again once its access token expires. The request itself returns 401 `auth.suspicious_login`. The user's other devices stay signed in. On receiving it, the frontend must clear local tokens, force logout, redirect to the login page, and show a message like "For your security, this session has been signed out. Please log in again."
 4. Refresh reloads the user's latest roles, so role changes take effect after the next refresh (at most one access token lifetime).
 5. If the user does not exist or is suspended, refresh returns 401 `auth.refresh_token.invalid` and revokes all of that user's refresh tokens.
@@ -163,7 +163,8 @@ async function request(input, init) {
 ```
 
 - Retry only **once**; if the retry still gets 401, log out.
-- If `doRefresh` fails (401, or any failure other than a network error) -> clear tokens, redirect to the login page, and fail all queued requests.
+- If `doRefresh` gets 401 `auth.refresh_token.invalid` or `auth.suspicious_login` -> clear tokens, redirect to the login page, and fail all queued requests.
+- If it gets 429 `common.rate_limited`, 503 `common.service_unavailable`, or a network error -> **keep** the tokens (the refresh token was not spent) and fail the queued requests; retry later. Signing out here would end a session that is still valid.
 - Even when several tabs refresh at once, the server's grace window gives them the same token pair; still, syncing via `BroadcastChannel` / storage events is recommended so a later tab does not overwrite with an older token.
 - Do not apply the refresh logic to 401s from `/api/auth/**` (it would cause an infinite loop).
 
@@ -203,7 +204,7 @@ The admin console signs in with its own endpoints, `POST /api/auth/admin/send-ot
 | `auth.account_banned` | 403 | Account is suspended (at login, or on a write with a still-valid access token) | Show that the account is suspended |
 | `auth.email_not_verified` | 401 | The OAuth provider's email is not verified | Suggest another login method |
 | `auth.google.*` / `auth.line.*` / `auth.apple.*` | 400 / 401 | Provider credential is invalid or the backend is not configured | Suggest another method or retry later |
-| `common.service_unavailable` | 503 | Apple key endpoint is down | Retry (exponential backoff) |
+| `common.service_unavailable` | 503 | Apple key endpoint is down, or Redis is unavailable (on `/api/auth/refresh` the token was not spent) | Retry (exponential backoff); on refresh, keep the tokens |
 | `auth.refresh_token.invalid` | 401 | Refresh token is invalid, expired, or the user is suspended | Clear tokens, redirect to login |
 | `auth.suspicious_login` | 401 | Refresh token reuse detected; that session has been signed out (other devices are unaffected) | Clear tokens, redirect to login and show a security notice |
 | `common.rate_limited` | 429 | Rate limit exceeded | Count down using `Retry-After` |

@@ -4,13 +4,20 @@ import jakarta.servlet.http.HttpServletRequest;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.List;
 
 /**
  * Shared utility for resolving the real client IP.
  *
- * <p>This service runs behind a platform proxy (Zeabur); {@code X-Forwarded-For} is appended by a trusted edge.
+ * <p>vomatt-web calls this API from its own servers, so the peer and {@code X-Forwarded-For} name vomatt-web, not the
+ * user. It passes the user's IP in {@link #CLIENT_IP_HEADER}, honored only with the shared secret
+ * ({@code app.security.client-ip-secret}) in {@link #CLIENT_IP_SECRET_HEADER}; anyone else could set the header to dodge
+ * rate limits and OTP lockouts, or to lock out someone else's IP.</p>
+ *
+ * <p>Otherwise this service runs behind a platform proxy; {@code X-Forwarded-For} is appended by a trusted edge.
  * XFF is honored only when the direct peer ({@code remoteAddr}) is inside a trusted proxy CIDR
  * ({@code app.security.trusted-proxies}), otherwise a client reaching the app directly could spoof its IP. When trusted,
  * walks XFF from the <strong>right</strong>, skipping entries that are themselves trusted proxies (e.g. a CDN hop in front
@@ -18,6 +25,9 @@ import java.util.List;
  * proxies appended. Falls back to {@code remoteAddr} when there is no XFF or the peer is untrusted.</p>
  */
 public final class ClientIpResolver {
+
+    public static final String CLIENT_IP_HEADER = "X-Client-IP";
+    public static final String CLIENT_IP_SECRET_HEADER = "X-Client-IP-Secret";
 
     /**
      * Loopback, RFC1918, IPv6 ULA (Docker and Zeabur internal networks) and CGNAT 100.64.0.0/10,
@@ -53,7 +63,15 @@ public final class ClientIpResolver {
 
     private static volatile List<Cidr> trustedProxies = parse(DEFAULT_TRUSTED_PROXIES);
 
+    // Null when unset: the client IP header is then ignored
+    private static volatile byte[] clientIpSecret;
+
     private ClientIpResolver() {}
+
+    /** Sets the secret that lets a caller name the client IP; blank turns that off. */
+    public static void setClientIpSecret(String secret) {
+        clientIpSecret = secret == null || secret.isBlank() ? null : secret.getBytes(StandardCharsets.UTF_8);
+    }
 
     /** Replaces the trusted proxy list (comma-separated CIDRs); blank keeps the default. Throws on a malformed CIDR. */
     public static void setTrustedProxies(String cidrs) {
@@ -61,6 +79,10 @@ public final class ClientIpResolver {
     }
 
     public static String resolve(HttpServletRequest request) {
+        String forwardedClient = trustedClientIp(request);
+        if (forwardedClient != null) {
+            return forwardedClient;
+        }
         String remoteAddr = request.getRemoteAddr();
         String forwarded = request.getHeader("X-Forwarded-For");
         if (forwarded != null && !forwarded.isBlank() && isTrustedProxy(remoteAddr)) {
@@ -82,6 +104,19 @@ public final class ClientIpResolver {
             }
         }
         return remoteAddr;
+    }
+
+    /** The IP vomatt-web named for its user, or null when the secret is unset, absent or wrong, or the IP isn't a literal. */
+    private static String trustedClientIp(HttpServletRequest request) {
+        byte[] secret = clientIpSecret;
+        String sent = request.getHeader(CLIENT_IP_SECRET_HEADER);
+        String ip = request.getHeader(CLIENT_IP_HEADER);
+        if (secret == null || sent == null || ip == null
+                || !MessageDigest.isEqual(secret, sent.getBytes(StandardCharsets.UTF_8))) {
+            return null;
+        }
+        String trimmed = ip.trim();
+        return literalAddress(trimmed) != null ? trimmed : null;
     }
 
     static boolean isTrustedProxy(String remoteAddr) {

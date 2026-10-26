@@ -127,16 +127,18 @@ public class UserController {
     @PublicApiResponse
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"followersCount":12,"followingCount":8,"firstName":"Alice","lastName":null,"location":null,"points":null,"membershipLevel":null,"isFollowing":true,"followsYou":true,"isBlocked":false},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"followersCount":12,"followingCount":8,"firstName":"Alice","lastName":null,"location":null,"points":null,"membershipLevel":null,"isFollowing":true,"followsYou":true,"isBlocked":false,"mutualFollowersCount":3,"mutualFollowersPreview":[{"id":"0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f","username":"jtan","displayName":"J Tan","avatarUrl":"bot:boba"},{"id":"0199c1a3-1a2b-7c3d-8e4f-5a6b7c8d9e0f","username":"mia","displayName":null,"avatarUrl":"bot:pip"},{"id":"0199c1a3-2b3c-7d4e-9f5a-6b7c8d9e0f1a","username":"ken","displayName":"Ken","avatarUrl":null}]},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No user with this username (errorCode `user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Get user public profile", description = """
-            **Auth**: public; optional login fills `isFollowing`, `followsYou` and `isBlocked`. An invalid or expired token is treated as signed out
+            **Auth**: public; optional login fills `isFollowing`, `followsYou`, `isBlocked`, `mutualFollowersCount` and `mutualFollowersPreview`. An invalid or expired token is treated as signed out
             **Precondition**: none
             **Behavior**: returns the public view of a user. `isFollowing` / `isBlocked` say whether the caller follows / has blocked \
             the user, and `followsYou` whether the user follows the caller: `null` when signed out, `false` on the caller's own profile. \
+            `mutualFollowersCount` counts the users in `GET /api/users/{username}/mutual-followers` (this user's followers whom the caller follows) \
+            and `mutualFollowersPreview` holds the first 3 of them (most recently followed first; `[]` when there are none): both `null` when signed out and on the caller's own profile. \
             `followersCount` / `followingCount` count the users in `GET /api/users/{username}/followers` / `/following` \
             (suspended accounts left out, blocks not filtered). Profile fields do not depend on the caller. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` (Public, non-Deleted Polls only) are always present \
             (`avatarUrl` is `null` when never set). \
@@ -181,6 +183,35 @@ public class UserController {
             @Parameter(description = "Page size, 1-50 (default 20); out-of-range values are clamped", example = "20") @RequestParam(required = false) Integer limit,
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(userService.listFollowers(username, cursor, limit, principal.userId())));
+    }
+
+    @GetMapping("/{username}/mutual-followers")
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of mutual followers",
+            content = @Content(examples = @ExampleObject(value = """
+                    {"success":true,"data":{"items":[{"id":"0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f","username":"jtan","displayName":"J Tan","avatarUrl":"bot:boba","isFollowing":true,"followsYou":false}],"nextCursor":null},"message":null,"errorCode":null,"error":null}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No active user with this username (errorCode `user.not_found`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(value = """
+                            {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
+    @Operation(summary = "List a user's followers whom the caller follows", description = """
+            **Auth**: required
+            **Precondition**: the user exists and is not suspended
+            **Behavior**: the users in `GET /api/users/{username}/followers` whom the caller follows ("Followed by ... you follow"), \
+            in the same order (most recently followed the user first), cursor-paged (`limit` 1-50, default 20; out-of-range values are clamped). \
+            `nextCursor` is `null` on the last page. Suspended users and users with a block between them and the caller (either direction) are left out. \
+            Always empty on the caller's own profile. Items are shaped like the follower list; `isFollowing` is therefore always `true`. \
+            `mutualFollowersCount` of `GET /api/users/{username}` is the length of this list.
+            **Side effects**: none
+            **Errors**:
+            - 404 `user.not_found`: no user has this username, or the user is suspended
+            - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list""")
+    public ResponseEntity<ApiResponse<CursorResponse<FollowUserDto>>> listMutualFollowers(
+            @Parameter(description = "Username of the followed user", required = true, example = "alice") @PathVariable String username,
+            @Parameter(description = "`nextCursor` from the previous page; omit for the first page") @RequestParam(required = false) String cursor,
+            @Parameter(description = "Page size, 1-50 (default 20); out-of-range values are clamped", example = "20") @RequestParam(required = false) Integer limit,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(userService.listMutualFollowers(username, cursor, limit, principal.userId())));
     }
 
     @GetMapping("/{username}/following")

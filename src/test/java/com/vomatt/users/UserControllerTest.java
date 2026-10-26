@@ -84,7 +84,7 @@ class UserControllerTest {
         signIn("u1");
         when(userService.updateMyProfile(eq("u1"), any())).thenAnswer(inv -> new UserProfileResponse("id-1", "alice", null, null,
                 inv.<com.vomatt.users.dto.UpdateProfileRequest>getArgument(1).getAvatarUrl(), null, 0, 0, 0, 0,
-                null, null, null, null, null, false, false, false));
+                null, null, null, null, null, false, false, false, null, null));
 
         for (String kind : BotAvatar.KINDS) {
             mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
@@ -101,7 +101,7 @@ class UserControllerTest {
         signIn("u1");
         when(userService.updateMyProfile(eq("u1"), any())).thenAnswer(inv -> new UserProfileResponse("id-1", "alice", null, null,
                 inv.<com.vomatt.users.dto.UpdateProfileRequest>getArgument(1).getAvatarUrl(), null, 0, 0, 0, 0,
-                null, null, null, null, null, false, false, false));
+                null, null, null, null, null, false, false, false, null, null));
 
         mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"avatarUrl\":\"bot:none\"}"))
@@ -129,7 +129,7 @@ class UserControllerTest {
         signIn("u1");
         when(userService.updateMyProfile(eq("u1"), argThat(r -> r.getAvatarUrl() == null && "Al".equals(r.getDisplayName()))))
                 .thenReturn(new UserProfileResponse("id-1", "alice", "Al", null, "bot:boba", null, 0, 0, 0, 0,
-                        null, null, null, null, null, false, false, false));
+                        null, null, null, null, null, false, false, false, null, null));
 
         mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON).content("{\"displayName\":\"Al\"}"))
                 .andExpect(status().isOk())
@@ -143,7 +143,7 @@ class UserControllerTest {
         when(userService.updateMyProfile(eq("u1"), argThat(r -> "Alice".equals(r.getFirstName())
                 && "Chen".equals(r.getLastName()) && java.time.LocalDate.of(1995, 4, 12).equals(r.getBirthday()))))
                 .thenReturn(new UserProfileResponse("id-1", "alice", null, null, "bot:boba", null, 0, 0, 0, 0,
-                        "Alice", "Chen", null, null, null, false, false, false));
+                        "Alice", "Chen", null, null, null, false, false, false, null, null));
 
         mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"firstName\":\"Alice\",\"lastName\":\"Chen\",\"birthday\":\"1995-04-12\"}"))
@@ -260,7 +260,7 @@ class UserControllerTest {
 
     private static UserProfileResponse profile(Boolean isFollowing, Boolean isBlocked) {
         return new UserProfileResponse("id-1", "alice", null, null, "bot:boba", null, 0, 0, 0, 0,
-                null, null, null, null, null, isFollowing, isFollowing, isBlocked);
+                null, null, null, null, null, isFollowing, isFollowing, isBlocked, null, null);
     }
 
     @Test
@@ -334,9 +334,51 @@ class UserControllerTest {
         assertThat(matches.test(SecurityEndpoints.AUTHENTICATED_USERS, "/api/users/alice")).isFalse();
         assertThat(matches.test(SecurityEndpoints.AUTHENTICATED_USERS, "/api/users/alice/votes")).isFalse();
         // AUTHENTICATED_USERS is matched before PUBLIC_GET, so these require sign-in
-        for (String path : List.of("/api/users/alice/followers", "/api/users/alice/following", "/api/users/me",
+        for (String path : List.of("/api/users/alice/followers", "/api/users/alice/following", "/api/users/alice/mutual-followers", "/api/users/me",
                 "/api/users/me/follows", "/api/users/search", "/api/users/search/followers")) {
             assertThat(matches.test(SecurityEndpoints.AUTHENTICATED_USERS, path)).as(path).isTrue();
         }
+    }
+
+    @Test
+    @DisplayName("should return mutual follower count and preview under their keys, null when signed out")
+    void shouldReturnMutualFollowerKeysWhenReadingProfile() throws Exception {
+        signIn("u1");
+        when(userService.getUserProfile("alice", false, "u1")).thenReturn(new UserProfileResponse("id-1", "alice", null, null,
+                "bot:boba", null, 0, 0, 1204, 0, null, null, null, null, null, true, false, false,
+                3, List.of(new UserDto("id-2", "jtan", "J Tan", "bot:boba"))));
+
+        mockMvc.perform(get("/api/users/alice"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.mutualFollowersCount").value(3))
+                .andExpect(jsonPath("$.data.mutualFollowersPreview", hasSize(1)))
+                .andExpect(jsonPath("$.data.mutualFollowersPreview[0].id").value("id-2"))
+                .andExpect(jsonPath("$.data.mutualFollowersPreview[0].username").value("jtan"))
+                .andExpect(jsonPath("$.data.mutualFollowersPreview[0].displayName").value("J Tan"))
+                .andExpect(jsonPath("$.data.mutualFollowersPreview[0].avatarUrl").value("bot:boba"));
+
+        SecurityContextHolder.clearContext();
+        when(userService.getUserProfile("alice", false, null)).thenReturn(profile(null, null));
+        mockMvc.perform(get("/api/users/alice"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", org.hamcrest.Matchers.hasKey("mutualFollowersCount")))
+                .andExpect(jsonPath("$.data", org.hamcrest.Matchers.hasKey("mutualFollowersPreview")))
+                .andExpect(jsonPath("$.data.mutualFollowersCount").isEmpty())
+                .andExpect(jsonPath("$.data.mutualFollowersPreview").isEmpty());
+    }
+
+    @Test
+    @DisplayName("should pass cursor, limit and caller through when listing mutual followers")
+    void shouldPassCursorWhenListingMutualFollowers() throws Exception {
+        signIn("u1");
+        FollowUserDto jtan = new FollowUserDto("id-2", "jtan", "J Tan", "bot:boba", true, false);
+        when(userService.listMutualFollowers("alice", "c1", 10, "u1")).thenReturn(new CursorResponse<>(List.of(jtan), "next"));
+
+        mockMvc.perform(get("/api/users/alice/mutual-followers").param("cursor", "c1").param("limit", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].username").value("jtan"))
+                .andExpect(jsonPath("$.data.items[0].isFollowing").value(true))
+                .andExpect(jsonPath("$.data.items[0].followsYou").value(false))
+                .andExpect(jsonPath("$.data.nextCursor").value("next"));
     }
 }

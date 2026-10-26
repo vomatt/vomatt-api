@@ -224,6 +224,55 @@ class UserFollowPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should page the user's followers whom the viewer follows in follower list order, leaving out suspended and blocked users")
+    void shouldListMutualFollowersWhenViewerFollowsSomeFollowers() {
+        User target = persistUser("uf-target-" + UUID.randomUUID());
+        List<User> mutuals = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            mutuals.add(persistUser("uf-mutual-" + UUID.randomUUID()));
+        }
+        // The viewer followed them newest first; the list follows when they followed the target
+        for (User m : mutuals.reversed()) {
+            em.persist(new UserFollow(viewer, m));
+            em.flush();
+        }
+        for (User m : mutuals) {
+            em.persist(new UserFollow(m, target));
+            em.flush();
+        }
+        User stranger = persistUser("uf-stranger-" + UUID.randomUUID());
+        User suspended = persistUser("uf-suspended-" + UUID.randomUUID());
+        suspended.setActive(false);
+        User blockedByViewer = persistUser("uf-blocked-" + UUID.randomUUID());
+        User blocksViewer = persistUser("uf-blocker-" + UUID.randomUUID());
+        for (User u : List.of(stranger, suspended, blockedByViewer, blocksViewer)) {
+            em.persist(new UserFollow(u, target));
+        }
+        for (User u : List.of(suspended, blockedByViewer, blocksViewer)) {
+            em.persist(new UserFollow(viewer, u));
+        }
+        em.persist(new UserBlock(viewer, blockedByViewer));
+        em.persist(new UserBlock(blocksViewer, viewer));
+        // The viewer also follows `followed` (setUp), who does not follow the target
+        em.flush();
+        em.clear();
+
+        List<UserFollow> first = followRepository.findMutualFollowersPage(target.getId(), viewer.getId(), null, null, Limit.of(2));
+        UserFollow last = first.getLast();
+        List<UserFollow> rest = followRepository.findMutualFollowersPage(target.getId(), viewer.getId(),
+                last.getCreatedAt(), last.getId(), Limit.of(10));
+
+        List<UUID> all = new ArrayList<>();
+        first.forEach(f -> all.add(f.getFollower().getId()));
+        rest.forEach(f -> all.add(f.getFollower().getId()));
+        assertThat(all).containsExactlyElementsOf(mutuals.reversed().stream().map(User::getId).toList());
+        assertThat(followRepository.countMutualFollowers(target.getId(), viewer.getId())).isEqualTo(3L);
+        // The stranger follows none of the target's followers; swapping the roles finds nobody
+        assertThat(followRepository.countMutualFollowers(target.getId(), stranger.getId())).isZero();
+        assertThat(followRepository.findMutualFollowersPage(viewer.getId(), target.getId(), null, null, Limit.of(10))).isEmpty();
+    }
+
+    @Test
     @DisplayName("should return only the follows between the viewer and the given users, in both directions")
     void shouldReturnBothDirectionsWhenFindingEdgesWithViewer() {
         User stranger = persistUser("uf-stranger-" + UUID.randomUUID());

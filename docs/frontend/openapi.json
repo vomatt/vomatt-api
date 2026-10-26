@@ -3860,6 +3860,21 @@
             "nullable" : true,
             "type" : "string"
           },
+          "mutualFollowersCount" : {
+            "description" : "Number of this user's followers whom the caller follows, as in `GET /api/users/{username}/mutual-followers` (suspended accounts and users with a block between them and the caller left out); null when signed out and on the caller's own profile",
+            "example" : 3,
+            "format" : "int32",
+            "nullable" : true,
+            "type" : "integer"
+          },
+          "mutualFollowersPreview" : {
+            "description" : "First 3 of those mutual followers, most recently followed first; empty when there are none, null when signed out and on the caller's own profile",
+            "items" : {
+              "$ref" : "#/components/schemas/UserDto"
+            },
+            "nullable" : true,
+            "type" : "array"
+          },
           "points" : {
             "description" : "Points; null when hidden (default)",
             "example" : 120,
@@ -12351,7 +12366,7 @@
     },
     "/api/users/{username}" : {
       "get" : {
-        "description" : "**Auth**: public; optional login fills `isFollowing`, `followsYou` and `isBlocked`. An invalid or expired token is treated as signed out\n**Precondition**: none\n**Behavior**: returns the public view of a user. `isFollowing` / `isBlocked` say whether the caller follows / has blocked the user, and `followsYou` whether the user follows the caller: `null` when signed out, `false` on the caller's own profile. `followersCount` / `followingCount` count the users in `GET /api/users/{username}/followers` / `/following` (suspended accounts left out, blocks not filtered). Profile fields do not depend on the caller. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` (Public, non-Deleted Polls only) are always present (`avatarUrl` is `null` when never set). Every optional field is `null` unless the owner made it visible: `displayName` and `bio` are visible by default, `firstName`, `lastName`, `location`, `points` and `membershipLevel` are hidden by default; email and birthday are never returned. `totalPolls` counts only Polls that have opened (Open and Ended), matching `GET /api/users/{username}/votes`.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended",
+        "description" : "**Auth**: public; optional login fills `isFollowing`, `followsYou`, `isBlocked`, `mutualFollowersCount` and `mutualFollowersPreview`. An invalid or expired token is treated as signed out\n**Precondition**: none\n**Behavior**: returns the public view of a user. `isFollowing` / `isBlocked` say whether the caller follows / has blocked the user, and `followsYou` whether the user follows the caller: `null` when signed out, `false` on the caller's own profile. `mutualFollowersCount` counts the users in `GET /api/users/{username}/mutual-followers` (this user's followers whom the caller follows) and `mutualFollowersPreview` holds the first 3 of them (most recently followed first; `[]` when there are none): both `null` when signed out and on the caller's own profile. `followersCount` / `followingCount` count the users in `GET /api/users/{username}/followers` / `/following` (suspended accounts left out, blocks not filtered). Profile fields do not depend on the caller. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` (Public, non-Deleted Polls only) are always present (`avatarUrl` is `null` when never set). Every optional field is `null` unless the owner made it visible: `displayName` and `bio` are visible by default, `firstName`, `lastName`, `location`, `points` and `membershipLevel` are hidden by default; email and birthday are never returned. `totalPolls` counts only Polls that have opened (Open and Ended), matching `GET /api/users/{username}/votes`.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended",
         "operationId" : "getUserProfile",
         "parameters" : [ {
           "description" : "Username of the user to look up",
@@ -12383,6 +12398,23 @@
                     "lastName" : null,
                     "location" : null,
                     "membershipLevel" : null,
+                    "mutualFollowersCount" : 3,
+                    "mutualFollowersPreview" : [ {
+                      "avatarUrl" : "bot:boba",
+                      "displayName" : "J Tan",
+                      "id" : "0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f",
+                      "username" : "jtan"
+                    }, {
+                      "avatarUrl" : "bot:pip",
+                      "displayName" : null,
+                      "id" : "0199c1a3-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+                      "username" : "mia"
+                    }, {
+                      "avatarUrl" : null,
+                      "displayName" : "Ken",
+                      "id" : "0199c1a3-2b3c-7d4e-9f5a-6b7c8d9e0f1a",
+                      "username" : "ken"
+                    } ],
                     "points" : null,
                     "totalPolls" : 4,
                     "totalVotes" : 17,
@@ -12687,6 +12719,132 @@
           }
         },
         "summary" : "List users a user follows",
+        "tags" : [ "User" ]
+      }
+    },
+    "/api/users/{username}/mutual-followers" : {
+      "get" : {
+        "description" : "**Auth**: required\n**Precondition**: the user exists and is not suspended\n**Behavior**: the users in `GET /api/users/{username}/followers` whom the caller follows (\"Followed by ... you follow\"), in the same order (most recently followed the user first), cursor-paged (`limit` 1-50, default 20; out-of-range values are clamped). `nextCursor` is `null` on the last page. Suspended users and users with a block between them and the caller (either direction) are left out. Always empty on the caller's own profile. Items are shaped like the follower list; `isFollowing` is therefore always `true`. `mutualFollowersCount` of `GET /api/users/{username}` is the length of this list.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended\n- 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list",
+        "operationId" : "listMutualFollowers",
+        "parameters" : [ {
+          "description" : "Username of the followed user",
+          "example" : "alice",
+          "in" : "path",
+          "name" : "username",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "description" : "`nextCursor` from the previous page; omit for the first page",
+          "in" : "query",
+          "name" : "cursor",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "description" : "Page size, 1-50 (default 20); out-of-range values are clamped",
+          "example" : 20,
+          "in" : "query",
+          "name" : "limit",
+          "required" : false,
+          "schema" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : {
+                    "items" : [ {
+                      "avatarUrl" : "bot:boba",
+                      "displayName" : "J Tan",
+                      "followsYou" : false,
+                      "id" : "0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f",
+                      "isFollowing" : true,
+                      "username" : "jtan"
+                    } ],
+                    "nextCursor" : null
+                  },
+                  "error" : null,
+                  "errorCode" : null,
+                  "message" : null,
+                  "success" : true
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseCursorResponseFollowUserDto"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : null,
+                  "error" : "User not found",
+                  "errorCode" : "user.not_found",
+                  "message" : "User not found",
+                  "success" : false
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No active user with this username (errorCode `user.not_found`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "List a user's followers whom the caller follows",
         "tags" : [ "User" ]
       }
     },

@@ -3,6 +3,7 @@ package com.vomatt.users.dto;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 
 @Schema(description = "Public view of a user; optional fields are null when the owner has not made them visible")
 public record UserProfileResponse(
@@ -47,5 +48,12 @@ public record UserProfileResponse(
         Boolean followsYou,
         @Schema(description = "Whether the caller has blocked this user; null when signed out, false on the caller's own profile",
                 example = "false", nullable = true)
-        Boolean isBlocked
+        Boolean isBlocked,
+        @Schema(description = "Number of this user's followers whom the caller follows, as in `GET /api/users/{username}/mutual-followers` "
+                + "(suspended accounts and users with a block between them and the caller left out); null when signed out and on the caller's own profile",
+                example = "3", nullable = true)
+        Integer mutualFollowersCount,
+        @Schema(description = "First 3 of those mutual followers, most recently followed first; empty when there are none, "
+                + "null when signed out and on the caller's own profile", nullable = true)
+        List<UserDto> mutualFollowersPreview
 ) {}

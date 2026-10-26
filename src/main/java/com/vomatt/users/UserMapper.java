@@ -8,6 +8,7 @@ import com.vomatt.entity.User;
 import com.vomatt.repository.UserProfileProjection;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Map;
 
 @Component
@@ -73,7 +74,8 @@ public class UserMapper {
      */
     public UserProfileResponse toPublicProfileResponse(UserProfileProjection projection,
                                                         Map<String, Boolean> visibility,
-                                                        Boolean isFollowing, Boolean isBlocked, Boolean followsYou) {
+                                                        Boolean isFollowing, Boolean isBlocked, Boolean followsYou,
+                                                        Integer mutualFollowersCount, List<UserDto> mutualFollowersPreview) {
         return new UserProfileResponse(
                 projection.getId().toString(),
                 projection.getUsername(),
@@ -92,7 +94,9 @@ public class UserMapper {
                 visibility.getOrDefault("membershipLevel", false) ? projection.getMembershipLevel() : null,
                 isFollowing,
                 followsYou,
-                isBlocked
+                isBlocked,
+                mutualFollowersCount,
+                mutualFollowersPreview
         );
     }
 }

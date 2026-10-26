@@ -682,4 +682,117 @@ class UserServiceTest {
         assertThat(userService.listFollowing("alice", null, null, UUID.randomUUID().toString()).items()).isEmpty();
         verify(followRepository, never()).findEdgesWithViewer(any(), any());
     }
+
+    @Test
+    @DisplayName("should leave mutual followers null and skip their queries when signed out")
+    void shouldReturnNullMutualFollowersWhenSignedOut() {
+        activeProfile(UUID.randomUUID(), null);
+
+        UserProfileResponse profile = userService.getUserProfile("alice", false, null);
+
+        assertThat(profile.mutualFollowersCount()).isNull();
+        assertThat(profile.mutualFollowersPreview()).isNull();
+        verify(followRepository, never()).countMutualFollowers(any(), any());
+        verify(followRepository, never()).findMutualFollowersPage(any(), any(), any(), any(), any(Limit.class));
+    }
+
+    @Test
+    @DisplayName("should leave mutual followers null and skip their queries on the caller's own profile")
+    void shouldReturnNullMutualFollowersWhenViewingOwnProfile() {
+        UUID me = UUID.randomUUID();
+        activeProfile(me, me);
+
+        UserProfileResponse profile = userService.getUserProfile("alice", false, me.toString());
+
+        assertThat(profile.mutualFollowersCount()).isNull();
+        assertThat(profile.mutualFollowersPreview()).isNull();
+        verify(followRepository, never()).countMutualFollowers(any(), any());
+    }
+
+    @Test
+    @DisplayName("should return zero mutual followers and an empty preview without reading the preview when there are none")
+    void shouldReturnEmptyPreviewWhenNoMutualFollowers() {
+        UUID target = UUID.randomUUID();
+        UUID viewer = UUID.randomUUID();
+        activeProfile(target, viewer);
+        when(followRepository.countMutualFollowers(target, viewer)).thenReturn(0L);
+
+        UserProfileResponse profile = userService.getUserProfile("alice", false, viewer.toString());
+
+        assertThat(profile.mutualFollowersCount()).isZero();
+        assertThat(profile.mutualFollowersPreview()).isEmpty();
+        verify(followRepository, never()).findMutualFollowersPage(any(), any(), any(), any(), any(Limit.class));
+    }
+
+    @Test
+    @DisplayName("should return the full mutual follower count with only the first 3 as the preview, display names masked")
+    void shouldPreviewFirstThreeWhenMoreThanThreeMutualFollowers() {
+        UUID target = UUID.randomUUID();
+        UUID viewer = UUID.randomUUID();
+        User alice = User.builder().id(target).username("alice").build();
+        activeProfile(target, viewer);
+        List<User> mutuals = List.of("jtan", "mia", "ken").stream()
+                .<User>map(n -> User.builder().id(UUID.randomUUID()).username(n).displayName(n.toUpperCase()).avatarUrl("bot:boba").build())
+                .toList();
+        when(followRepository.countMutualFollowers(target, viewer)).thenReturn(5L);
+        when(followRepository.findMutualFollowersPage(target, viewer, null, null, Limit.of(3)))
+                .thenReturn(mutuals.stream().map(m -> new UserFollow(m, alice)).toList());
+        UserPreference hidden = new UserPreference();
+        hidden.setUser(mutuals.get(1));
+        hidden.setKey(VisibilityField.DISPLAY_NAME.preferenceKey());
+        hidden.setValue("false");
+        when(preferenceRepository.findByUserIdInAndKey(any(), eq(VisibilityField.DISPLAY_NAME.preferenceKey())))
+                .thenReturn(List.of(hidden));
+
+        UserProfileResponse profile = userService.getUserProfile("alice", false, viewer.toString());
+
+        assertThat(profile.mutualFollowersCount()).isEqualTo(5);
+        assertThat(profile.mutualFollowersPreview()).extracting(UserDto::username, UserDto::displayName, UserDto::avatarUrl)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("jtan", "JTAN", "bot:boba"),
+                        org.assertj.core.groups.Tuple.tuple("mia", null, "bot:boba"),
+                        org.assertj.core.groups.Tuple.tuple("ken", "KEN", "bot:boba"));
+    }
+
+    @Test
+    @DisplayName("should return an empty mutual follower list without querying it on the caller's own profile")
+    void shouldReturnEmptyListWhenListingOwnMutualFollowers() {
+        User me = User.builder().id(UUID.randomUUID()).username("alice").build();
+        when(userRepository.findActiveByUsername("alice")).thenReturn(Optional.of(me));
+
+        CursorResponse<FollowUserDto> page = userService.listMutualFollowers("alice", null, null, me.getId().toString());
+
+        assertThat(page.items()).isEmpty();
+        assertThat(page.nextCursor()).isNull();
+        verify(followRepository, never()).findMutualFollowersPage(any(), any(), any(), any(), any(Limit.class));
+    }
+
+    @Test
+    @DisplayName("should page mutual followers with a cursor bound to the user, rejecting a follower list cursor")
+    void shouldBindCursorToUserWhenPagingMutualFollowers() {
+        User alice = User.builder().id(UUID.randomUUID()).username("alice").build();
+        User viewer = User.builder().id(UUID.randomUUID()).username("dave").build();
+        UserFollow f1 = new UserFollow(User.builder().id(UUID.randomUUID()).username("b").build(), alice);
+        UserFollow f2 = new UserFollow(User.builder().id(UUID.randomUUID()).username("c").build(), alice);
+        org.springframework.test.util.ReflectionTestUtils.setField(f1, "id", UUID.randomUUID());
+        org.springframework.test.util.ReflectionTestUtils.setField(f1, "createdAt", java.time.OffsetDateTime.now());
+        when(userRepository.findActiveByUsername("alice")).thenReturn(Optional.of(alice));
+        when(followRepository.findMutualFollowersPage(eq(alice.getId()), eq(viewer.getId()), any(), any(), any(Limit.class)))
+                .thenReturn(List.of(f1, f2));
+        when(followRepository.findEdgesWithViewer(eq(viewer.getId()), any()))
+                .thenReturn(List.of(new FollowEdge(viewer.getId(), f1.getFollower().getId())));
+        String caller = viewer.getId().toString();
+
+        CursorResponse<FollowUserDto> first = userService.listMutualFollowers("alice", null, 1, caller);
+        userService.listMutualFollowers("alice", first.nextCursor(), 1, caller);
+
+        assertThat(first.items()).extracting(FollowUserDto::username, FollowUserDto::isFollowing)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("b", true));
+        verify(followRepository).findMutualFollowersPage(eq(alice.getId()), eq(viewer.getId()),
+                eq(f1.getCreatedAt().withOffsetSameInstant(java.time.ZoneOffset.UTC)), eq(f1.getId()), any(Limit.class));
+        String followersCursor = com.vomatt.common.response.Cursor.of(f1.getCreatedAt(), f1.getId())
+                .encode(com.vomatt.common.response.Cursor.Scope.USER_FOLLOWERS, alice.getId());
+        assertThatThrownBy(() -> userService.listMutualFollowers("alice", followersCursor, 1, caller))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.COMMON_CURSOR_INVALID));
+    }
 }

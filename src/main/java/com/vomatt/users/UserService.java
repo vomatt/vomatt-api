@@ -65,6 +65,8 @@ public class UserService {
     /** One export per user per UTC day: the response is the account's whole footprint and is not cheap to build. */
     private static final String EXPORT_COUNTER_NS = "export:daily";
 
+    private static final int MUTUAL_PREVIEW_SIZE = 3;
+
     /**
      * The user themself or an active admin can delete the account; deletion also revokes all of the user's refresh tokens.
      * Deleting someone else needs both an admin-scope token (admin console login) and an active admin in the database,
@@ -264,24 +266,55 @@ public class UserService {
     }
 
     /**
+     * Followers of the given user whom the caller follows (see {@link UserFollowRepository#MUTUAL_FOLLOWER}), in follower
+     * list order. Empty on the caller's own profile.
+     */
+    @Transactional(readOnly = true)
+    public CursorResponse<FollowUserDto> listMutualFollowers(String username, String cursor, Integer limit, String viewerId) {
+        UUID userId = userRepository.findActiveByUsername(username)
+            .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND)).getId();
+        UUID viewer = UUID.fromString(viewerId);
+        int size = CursorResponse.limit(limit);
+        Cursor after = Cursor.decode(cursor, Cursor.Scope.USER_MUTUAL_FOLLOWERS, userId);
+        if (userId.equals(viewer)) {
+            return new CursorResponse<>(List.of(), null);
+        }
+        List<UserFollow> rows = followRepository.findMutualFollowersPage(userId, viewer,
+            after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
+        return CursorResponse.of(rows, size, Cursor.Scope.USER_MUTUAL_FOLLOWERS, userId,
+            f -> Cursor.of(f.getCreatedAt(), f.getId()),
+            page -> toFollowItems(page.stream().map(UserFollow::getFollower).toList(), viewer));
+    }
+
+    /**
      * @param viewerId the signed-in caller, or null when signed out: {@code isFollowing} / {@code isBlocked} /
-     *                 {@code followsYou} are then null, and false on the caller's own profile
+     *                 {@code followsYou} are then null, and false on the caller's own profile; the mutual followers
+     *                 are null both when signed out and on the caller's own profile
      */
     @Transactional(readOnly = true)
     public UserProfileResponse getUserProfile(String username, boolean isVisibility, String viewerId) {
         // Use Projection to fetch profile and statistics in one query, avoiding N+1
         // Suspended users are hidden, same as user search and their Poll list
         boolean signedIn = viewerId != null;
-        UserProfileProjection projection = userRepository.findProfileForViewer(username,
-                signedIn ? UUID.fromString(viewerId) : null)
+        UUID viewer = signedIn ? UUID.fromString(viewerId) : null;
+        UserProfileProjection projection = userRepository.findProfileForViewer(username, viewer)
             .filter(p -> Boolean.TRUE.equals(p.getActive()))
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
+
+        Integer mutualCount = null;
+        List<UserDto> mutualPreview = null;
+        if (signedIn && !projection.getId().equals(viewer)) {
+            mutualCount = Math.toIntExact(followRepository.countMutualFollowers(projection.getId(), viewer));
+            mutualPreview = mutualCount == 0 ? List.of() : toSearchResults(followRepository
+                .findMutualFollowersPage(projection.getId(), viewer, null, null, Limit.of(MUTUAL_PREVIEW_SIZE))
+                .stream().map(UserFollow::getFollower).toList());
+        }
 
         // Query target user's visibility settings
         Map<String, Boolean> visibility = loadVisibilitySettings(projection.getId(), isVisibility);
         return userMapper.toPublicProfileResponse(projection, visibility,
                 signedIn ? projection.getFollowing() : null, signedIn ? projection.getBlocked() : null,
-                signedIn ? projection.getFollowsViewer() : null);
+                signedIn ? projection.getFollowsViewer() : null, mutualCount, mutualPreview);
     }
 
     @Transactional(readOnly = true)
@@ -404,7 +437,8 @@ public class UserService {
         UserProfileProjection projection = userRepository.findProfileByUsername(user.getUsername())
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
         // The owner's own profile: no follow or block of oneself exists
-        return userMapper.toPublicProfileResponse(projection, loadVisibilitySettings(user.getId(), true), false, false, false);
+        return userMapper.toPublicProfileResponse(projection, loadVisibilitySettings(user.getId(), true), false, false, false,
+                null, null);
     }
 
     /**

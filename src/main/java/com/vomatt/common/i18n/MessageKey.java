@@ -113,6 +113,7 @@ public enum MessageKey {
     COMMENT_NOT_FOUND("comment.not_found"),
     COMMENT_FORBIDDEN("comment.forbidden"),
     COMMENT_PARENT_INVALID("comment.parent.invalid"),
+    COMMENT_REPORT_SELF("comment.report.self"),
     NOTIFICATION_NOT_FOUND("notification.not_found"),
 
     // === Invite List ===

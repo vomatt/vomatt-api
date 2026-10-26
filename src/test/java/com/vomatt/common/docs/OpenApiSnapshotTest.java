@@ -73,7 +73,8 @@ class OpenApiSnapshotTest {
     void shouldReturn401WhenReadingFollowListsSignedOut() throws Exception {
         MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(context)
                 .apply(org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity()).build();
-        for (String path : java.util.List.of("/api/users/alice/followers", "/api/users/alice/following", "/api/users/me/follows",
+        for (String path : java.util.List.of("/api/users/alice/followers", "/api/users/alice/following",
+                "/api/users/alice/mutual-followers", "/api/users/me/follows",
                 "/api/users/search")) {
             mockMvc.perform(get(path)).andExpect(status().isUnauthorized());
         }

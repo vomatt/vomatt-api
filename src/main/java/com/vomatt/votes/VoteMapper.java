@@ -10,6 +10,7 @@ import com.vomatt.entity.VoteOption;
 import com.vomatt.entity.VoterVisibility;
 import org.springframework.stereotype.Component;
 
+import java.util.Comparator;
 import java.util.List;
 
 @Component
@@ -69,6 +70,21 @@ public class VoteMapper {
         resp.setCreatedAt(option.getCreatedAt());
         resp.setVotes(sealed ? null : (long) option.getVoteCount());
         return resp;
+    }
+
+    /**
+     * The option(s) with the most Ballots, in display order; more than one is a tie, none means no Ballot named an
+     * option. Null while Sealed, like the counts it comes from.
+     */
+    public List<VoteOption> toWinners(Vote vote) {
+        if (vote.isResultsSealed()) {
+            return null;
+        }
+        int top = vote.getOptions().stream().mapToInt(VoteOption::getVoteCount).max().orElse(0);
+        return vote.getOptions().stream()
+                .filter(option -> top > 0 && option.getVoteCount() == top)
+                .sorted(Comparator.comparingInt(VoteOption::getDisplayOrder))
+                .toList();
     }
 
     /** Results of an Ended Poll; Support uses the number of Participants as denominator. */

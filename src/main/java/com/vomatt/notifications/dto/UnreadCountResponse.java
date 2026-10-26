@@ -2,7 +2,7 @@ package com.vomatt.notifications.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-@Schema(description = "Number of unread notifications (Invitations and Ended Notifications)")
-public record UnreadCountResponse(@Schema(description = "Unread Invitations to Scheduled or Open INVITE_ONLY Polls plus unread Ended Notifications "
-        + "of Polls the caller owns, holds a Ballot in or is an Invitee of; capped at 100 (100 means 100 or more)", example = "3") long count) {
+@Schema(description = "Number of unread notifications in the feed")
+public record UnreadCountResponse(@Schema(description = "Unread notifications of the kinds the caller's preferences leave on, as listed by GET /api/notifications; "
+        + "capped at 100 (100 means 100 or more)", example = "3") long count) {
 }

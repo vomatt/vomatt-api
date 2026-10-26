@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.Getter;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 
 @Data
 @Schema(description = "A Comment (top-level) or a Reply (parentId set) on a Poll")
@@ -57,6 +58,15 @@ public class CommentDto {
     @Schema(description = "Number of non-deleted Replies. Only filled on top-level Comments in the Poll's Comment list; "
             + "0 on Replies and on responses of create / update", example = "2")
     private long replyCount;
+
+    @Schema(description = "First Replies under this Comment, oldest first, at most 2, filtered like the Reply list. "
+            + "Only filled on top-level Comments in the Poll's Comment list; [] on Replies and on responses of create / update")
+    private List<CommentDto> replies = List.of();
+
+    @Schema(description = "Cursor for `GET /api/votes/{voteId}/comments/{commentId}/replies` that continues right after the "
+            + "last of `replies`, so no Reply is listed twice. Null when `replies` holds every Reply (replyCount equals its length)",
+            example = "UkVQTElFU3wwMTk5YzNhMi03YjFlLTdjNGQtOWExMC0zZjVlOGQyYjZhNDF8MjAyNi0xMC0wOVQwNDozNDo1Nlo", nullable = true)
+    private String repliesNextCursor;
 
     @Getter(onMethod_ = @Schema(description = "True for a deleted top-level Comment kept as a placeholder because it still has Replies; "
             + "userId, author, authorAvatarUrl and text are then null. Deleted Comments without Replies are not returned at all",

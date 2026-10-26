@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.stereotype.Component;
 
+import com.vomatt.admin.dto.AdminCommentReportResponse;
 import com.vomatt.admin.dto.AdminCommentResponse;
 import com.vomatt.admin.dto.AdminFeedbackResponse;
 import com.vomatt.admin.dto.AdminUserBlockResponse;
@@ -12,6 +13,7 @@ import com.vomatt.admin.dto.AdminUserResponse;
 import com.vomatt.admin.dto.AuditLogResponse;
 import com.vomatt.common.audit.AuditLog;
 import com.vomatt.common.util.TextUtil;
+import com.vomatt.entity.CommentReport;
 import com.vomatt.entity.Feedback;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserBlock;
@@ -53,6 +55,16 @@ public class AdminMapper {
                 comment.getVote().getTitle(), comment.getParent() == null ? null : comment.getParent().getId().toString(),
                 comment.getUser().getId().toString(), comment.getUser().getUsername(), comment.getContent(),
                 comment.isDeleted(), comment.getCreatedAt(), comment.getUpdatedAt());
+    }
+
+    public AdminCommentReportResponse toCommentReportResponse(CommentReport report) {
+        VoteComment comment = report.getComment();
+        return new AdminCommentReportResponse(report.getId().toString(), comment.getId().toString(),
+                comment.getVote().getId().toString(),
+                comment.getParent() == null ? null : comment.getParent().getId().toString(), comment.getContent(),
+                comment.isDeleted(), comment.getUser().getId().toString(), comment.getUser().getUsername(),
+                report.getReporter().getId().toString(), report.getReporter().getUsername(), report.getReason(),
+                report.getNote(), report.getCreatedAt());
     }
 
     public AdminFeedbackResponse toFeedbackResponse(Feedback feedback) {

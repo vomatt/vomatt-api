@@ -11,7 +11,7 @@ import java.util.Map;
  * Error handling strategy:
  * - Reads + idempotent writes (get, hGet, hGetAll, hasKey, set, expire): swallow-and-log; cache-aside can fail soft.
  * - Correctness-critical (getOrThrow, getAndDelete, setOrThrow, setIfAbsent, incrementAndExpire, delete, hDelete,
- *   hasKeyOrThrow, execInTransaction, consumeAndExec): throw RedisOperationException.
+ *   hasKeyOrThrow, execInTransaction, rotateRefreshToken): throw RedisOperationException.
  */
 public interface RedisService {
 
@@ -97,12 +97,19 @@ public interface RedisService {
     void execInTransaction(java.util.List<RedisWrite> writes);
 
     /**
-     * Atomically (one Lua script): if the key exists, applies {@code writes} and then deletes it; otherwise writes nothing.
-     * The key goes last, so a failed write leaves it in place for a retry rather than consumed with nothing written.
-     * Returns whether the key existed, so of several callers racing to consume the same key exactly one wins.
-     * Throws {@link RedisOperationException} on Redis failure.
+     * Refresh token rotation in one Lua script: unless the old token is gone or its session revoked, writes the consumed
+     * marker, the new token, the user index entry (renewing its TTL, dropping the old entry) and the grace pair, then
+     * deletes the old token. Of several callers racing on one token exactly one gets {@link RotationOutcome#ROTATED}.
+     * A revoked session's old token and index entry are deleted. Throws {@link RedisOperationException} on Redis failure,
+     * in which case the old token is still in place.
      */
-    boolean consumeAndExec(String cacheName, String key, java.util.List<RedisWrite> writes);
+    RotationOutcome rotateRefreshToken(RefreshRotation rotation);
+
+    enum RotationOutcome { ROTATED, TOKEN_GONE, SESSION_REVOKED }
+
+    /** Keys are keyOf(token) digests, as RefreshTokenService stores them. */
+    record RefreshRotation(String userId, String sessionId, String oldKey, String newKey, Object newData,
+                           Object gracePair, Duration refreshTtl, Duration graceTtl) {}
 
     /** A single write descriptor for {@link #execInTransaction}. */
     record RedisWrite(Op op, String cacheName, String key, String field, Object value, Duration ttl) {

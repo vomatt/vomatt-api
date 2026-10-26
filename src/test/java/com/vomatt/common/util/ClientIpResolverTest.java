@@ -28,7 +28,23 @@ class ClientIpResolverTest {
     void shouldUseClientIpHeaderWhenSecretMatches() {
         ClientIpResolver.setClientIpSecret(SECRET);
         assertThat(ClientIpResolver.resolve(fromWeb(" 198.51.100.9 ", SECRET))).isEqualTo("198.51.100.9");
-        assertThat(ClientIpResolver.resolve(fromWeb("2001:db8::1", SECRET))).isEqualTo("2001:db8::1");
+        assertThat(ClientIpResolver.resolve(fromWeb("2001:db8::1", SECRET))).isEqualTo("2001:db8:0:0:0:0:0:1");
+    }
+
+    @Test
+    void shouldNormalizeClientIpWhenSpelledDifferently() {
+        ClientIpResolver.setClientIpSecret(SECRET);
+        String canonical = ClientIpResolver.resolve(fromWeb("2001:db8:0:0:0:0:0:1", SECRET));
+        assertThat(ClientIpResolver.resolve(fromWeb("2001:DB8::1", SECRET))).isEqualTo(canonical);
+        assertThat(ClientIpResolver.resolve(fromWeb("2001:0db8::0001", SECRET))).isEqualTo(canonical);
+        assertThat(ClientIpResolver.resolve(fromWeb("::ffff:198.51.100.9", SECRET))).isEqualTo("198.51.100.9");
+    }
+
+    @Test
+    void shouldAcceptClientIpWhenConfiguredSecretHasSurroundingWhitespace() {
+        // An env value ending in a newline; the container trims the header value
+        ClientIpResolver.setClientIpSecret(" " + SECRET + "\n");
+        assertThat(ClientIpResolver.resolve(fromWeb("198.51.100.9", SECRET))).isEqualTo("198.51.100.9");
     }
 
     @Test

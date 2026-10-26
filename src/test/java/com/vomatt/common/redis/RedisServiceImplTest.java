@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** consumeAndExec runs a Lua script on pre-serialized values, so it is checked against a real Redis 7. */
+/** rotateRefreshToken runs a Lua script on pre-serialized values, so it is checked against a real Redis 7. */
 class RedisServiceImplTest {
 
     static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7").withExposedPorts(6379);
@@ -55,60 +55,83 @@ class RedisServiceImplTest {
         redisService = new RedisServiceImpl(template, JsonMapper.builder().build());
     }
 
-    @Test
-    void shouldConsumeKeyAndApplyWritesWhenKeyExists() {
-        RefreshTokenService.RotateResult pair = new RefreshTokenService.RotateResult("access", "refresh",
-                new RefreshTokenService.RefreshTokenData("user-1", List.of("user"), "session-1", false));
-        redisService.set("ns", "old", "v", Duration.ofMinutes(5));
-        template.opsForHash().put("idx:user-1", "old", "1");
+    private static final RefreshTokenService.RotateResult PAIR = new RefreshTokenService.RotateResult("access", "refresh",
+            new RefreshTokenService.RefreshTokenData("user-1", List.of("user"), "session-1", false));
 
-        boolean consumed = redisService.consumeAndExec("ns", "old", List.of(
-                RedisService.RedisWrite.set("grace", "old", pair, Duration.ofSeconds(60)),
-                RedisService.RedisWrite.hput("idx", "user-1", "new", "1"),
-                RedisService.RedisWrite.expire("idx", "user-1", Duration.ofDays(30)),
-                RedisService.RedisWrite.hdelete("idx", "user-1", "old")));
+    private static RedisService.RefreshRotation rotation(Object gracePair, Duration graceTtl) {
+        return new RedisService.RefreshRotation("user-1", "session-1", "old", "new", PAIR.data(), gracePair,
+                Duration.ofDays(30), graceTtl);
+    }
 
-        assertThat(consumed).isTrue();
-        assertThat(redisService.get("ns", "old", String.class)).isNull();
-        assertThat(redisService.get("grace", "old", RefreshTokenService.RotateResult.class)).isEqualTo(pair);
-        assertThat(template.getExpire("grace:old", TimeUnit.SECONDS)).isBetween(55L, 60L);
-        assertThat(redisService.hGetAll("idx", "user-1")).containsOnlyKeys("new");
-        assertThat(redisService.hGet("idx", "user-1", "new", String.class)).isEqualTo("1");
-        assertThat(template.getExpire("idx:user-1", TimeUnit.DAYS)).isBetween(29L, 30L);
+    /** The old token as rotate finds it: stored and listed in the user index. */
+    private void storeOldToken() {
+        redisService.set("refresh", "old", PAIR.data(), Duration.ofMinutes(5));
+        template.opsForHash().put("refresh:idx:user-1", "old", "1");
     }
 
     @Test
-    void shouldKeepTheKeyWhenAWriteFails() {
-        redisService.set("ns", "old", "v", Duration.ofMinutes(5));
+    void shouldConsumeTokenAndApplyWritesWhenTokenExists() {
+        storeOldToken();
 
-        // Redis refuses a zero expiry; the script stops there, and its key must survive for a retry
-        assertThatThrownBy(() -> redisService.consumeAndExec("ns", "old", List.of(
-                RedisService.RedisWrite.set("grace", "old", "pair", Duration.ZERO))))
+        RedisService.RotationOutcome outcome = redisService.rotateRefreshToken(rotation(PAIR, Duration.ofSeconds(60)));
+
+        assertThat(outcome).isEqualTo(RedisService.RotationOutcome.ROTATED);
+        assertThat(redisService.hasKey("refresh", "old")).isFalse();
+        assertThat(redisService.get("refresh:consumed", "old", String.class)).isEqualTo("session-1");
+        assertThat(redisService.get("refresh", "new", RefreshTokenService.RefreshTokenData.class)).isEqualTo(PAIR.data());
+        assertThat(template.getExpire("refresh:new", TimeUnit.DAYS)).isBetween(29L, 30L);
+        assertThat(redisService.get("refresh:grace", "old", RefreshTokenService.RotateResult.class)).isEqualTo(PAIR);
+        assertThat(template.getExpire("refresh:grace:old", TimeUnit.SECONDS)).isBetween(55L, 60L);
+        // Unquoted fields, so revokeAllForUser finds the token through the index
+        assertThat(redisService.hGetAll("refresh:idx", "user-1")).containsOnlyKeys("new");
+        assertThat(redisService.hGet("refresh:idx", "user-1", "new", String.class)).isEqualTo("1");
+        assertThat(template.getExpire("refresh:idx:user-1", TimeUnit.DAYS)).isBetween(29L, 30L);
+    }
+
+    @Test
+    void shouldDropTokenAndWriteNothingWhenSessionIsRevoked() {
+        storeOldToken();
+        redisService.set("refresh:revoked-session", "session-1", "1", Duration.ofMinutes(5));
+
+        RedisService.RotationOutcome outcome = redisService.rotateRefreshToken(rotation(PAIR, Duration.ofSeconds(60)));
+
+        assertThat(outcome).isEqualTo(RedisService.RotationOutcome.SESSION_REVOKED);
+        assertThat(redisService.hasKey("refresh", "old")).isFalse();
+        assertThat(redisService.hGetAll("refresh:idx", "user-1")).isEmpty();
+        assertThat(redisService.hasKey("refresh", "new")).isFalse();
+        assertThat(redisService.hasKey("refresh:consumed", "old")).isFalse();
+        assertThat(redisService.hasKey("refresh:grace", "old")).isFalse();
+    }
+
+    @Test
+    void shouldKeepTheTokenWhenAWriteFails() {
+        storeOldToken();
+
+        // Redis refuses a zero expiry; the script stops at the grace write, and the old token must survive for a retry
+        assertThatThrownBy(() -> redisService.rotateRefreshToken(rotation(PAIR, Duration.ZERO)))
                 .isInstanceOf(RedisOperationException.class);
 
-        assertThat(redisService.get("ns", "old", String.class)).isEqualTo("v");
+        assertThat(redisService.hasKey("refresh", "old")).isTrue();
     }
 
     @Test
-    void shouldWriteNothingWhenKeyIsAlreadyConsumed() {
-        boolean consumed = redisService.consumeAndExec("ns", "gone", List.of(
-                RedisService.RedisWrite.set("grace", "gone", "pair", Duration.ofSeconds(60))));
+    void shouldWriteNothingWhenTokenIsAlreadyConsumed() {
+        RedisService.RotationOutcome outcome = redisService.rotateRefreshToken(rotation(PAIR, Duration.ofSeconds(60)));
 
-        assertThat(consumed).isFalse();
-        assertThat(redisService.get("grace", "gone", String.class)).isNull();
+        assertThat(outcome).isEqualTo(RedisService.RotationOutcome.TOKEN_GONE);
+        assertThat(redisService.hasKey("refresh:grace", "old")).isFalse();
+        assertThat(redisService.hasKey("refresh", "new")).isFalse();
     }
 
     @Test
-    void shouldWriteNothingWhenAnotherCallerConsumedTheKeyFirst() {
-        redisService.set("ns", "old", "v", Duration.ofMinutes(5));
+    void shouldWriteNothingWhenAnotherCallerConsumedTheTokenFirst() {
+        storeOldToken();
 
-        boolean first = redisService.consumeAndExec("ns", "old",
-                List.of(RedisService.RedisWrite.set("grace", "old", "first", Duration.ofSeconds(60))));
-        boolean second = redisService.consumeAndExec("ns", "old",
-                List.of(RedisService.RedisWrite.set("grace", "old", "second", Duration.ofSeconds(60))));
+        RedisService.RotationOutcome first = redisService.rotateRefreshToken(rotation("first", Duration.ofSeconds(60)));
+        RedisService.RotationOutcome second = redisService.rotateRefreshToken(rotation("second", Duration.ofSeconds(60)));
 
-        assertThat(first).isTrue();
-        assertThat(second).isFalse();
-        assertThat(redisService.get("grace", "old", String.class)).isEqualTo("first");
+        assertThat(first).isEqualTo(RedisService.RotationOutcome.ROTATED);
+        assertThat(second).isEqualTo(RedisService.RotationOutcome.TOKEN_GONE);
+        assertThat(redisService.get("refresh:grace", "old", String.class)).isEqualTo("first");
     }
 }

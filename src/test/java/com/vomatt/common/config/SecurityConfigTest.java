@@ -38,4 +38,26 @@ class SecurityConfigTest {
         // Outside prod the blank value keeps the default list
         new SecurityConfig(null, null, null, null, new MockEnvironment()).setTrustedProxies("");
     }
+
+    @Test
+    void shouldFailStartupWhenProdHasNoClientIpSecret() {
+        MockEnvironment prod = new MockEnvironment();
+        prod.setActiveProfiles("prod");
+        SecurityConfig securityConfig = new SecurityConfig(null, null, null, null, prod);
+
+        assertThatThrownBy(() -> securityConfig.setClientIpSecret(" "))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("CLIENT_IP_SECRET");
+        // Outside prod the blank value ignores the client IP header
+        new SecurityConfig(null, null, null, null, new MockEnvironment()).setClientIpSecret("");
+    }
+
+    @Test
+    void shouldFailStartupWhenClientIpSecretIsShortAfterTrimming() {
+        SecurityConfig securityConfig = new SecurityConfig(null, null, null, null, new MockEnvironment());
+
+        assertThatThrownBy(() -> securityConfig.setClientIpSecret("short-secret" + " ".repeat(30)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("at least 32");
+    }
 }

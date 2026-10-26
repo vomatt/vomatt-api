@@ -1,6 +1,7 @@
 package com.vomatt.common.util;
 
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -24,6 +25,7 @@ import java.util.List;
  * of the ingress), and takes the first other one: the client can forge the left segments freely, but not the ones our
  * proxies appended. Falls back to {@code remoteAddr} when there is no XFF or the peer is untrusted.</p>
  */
+@Slf4j
 public final class ClientIpResolver {
 
     public static final String CLIENT_IP_HEADER = "X-Client-IP";
@@ -68,9 +70,12 @@ public final class ClientIpResolver {
 
     private ClientIpResolver() {}
 
-    /** Sets the secret that lets a caller name the client IP; blank turns that off. */
+    /**
+     * Sets the secret that lets a caller name the client IP; blank turns that off. Trimmed, as the servlet container trims
+     * the header value, so a trailing newline in the env value cannot reject every request.
+     */
     public static void setClientIpSecret(String secret) {
-        clientIpSecret = secret == null || secret.isBlank() ? null : secret.getBytes(StandardCharsets.UTF_8);
+        clientIpSecret = secret == null || secret.isBlank() ? null : secret.trim().getBytes(StandardCharsets.UTF_8);
     }
 
     /** Replaces the trusted proxy list (comma-separated CIDRs); blank keeps the default. Throws on a malformed CIDR. */
@@ -106,17 +111,34 @@ public final class ClientIpResolver {
         return remoteAddr;
     }
 
-    /** The IP vomatt-web named for its user, or null when the secret is unset, absent or wrong, or the IP isn't a literal. */
+    /**
+     * The IP vomatt-web named for its user, or null when the secret is unset, absent or wrong, or the IP isn't a literal.
+     * Returned in canonical form, so every spelling of one address (IPv6 case or zero compression, IPv4-mapped) shares
+     * one rate-limit key.
+     */
     private static String trustedClientIp(HttpServletRequest request) {
-        byte[] secret = clientIpSecret;
-        String sent = request.getHeader(CLIENT_IP_SECRET_HEADER);
         String ip = request.getHeader(CLIENT_IP_HEADER);
-        if (secret == null || sent == null || ip == null
-                || !MessageDigest.isEqual(secret, sent.getBytes(StandardCharsets.UTF_8))) {
+        if (ip == null) {
             return null;
         }
-        String trimmed = ip.trim();
-        return literalAddress(trimmed) != null ? trimmed : null;
+        byte[] secret = clientIpSecret;
+        String sent = request.getHeader(CLIENT_IP_SECRET_HEADER);
+        if (secret == null || sent == null || !MessageDigest.isEqual(secret, sent.getBytes(StandardCharsets.UTF_8))) {
+            log.debug("{} ignored: {}", CLIENT_IP_HEADER,
+                    secret == null ? "no secret configured" : sent == null ? "secret header missing" : "secret mismatch");
+            return null;
+        }
+        byte[] addr = literalAddress(ip.trim());
+        if (addr == null) {
+            log.debug("{} ignored: not an IP literal", CLIENT_IP_HEADER);
+            return null;
+        }
+        try {
+            // From raw bytes: no DNS lookup
+            return InetAddress.getByAddress(addr).getHostAddress();
+        } catch (UnknownHostException e) {
+            return null;
+        }
     }
 
     static boolean isTrustedProxy(String remoteAddr) {

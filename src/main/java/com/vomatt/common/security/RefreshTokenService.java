@@ -25,17 +25,18 @@ public class RefreshTokenService {
 
     // Every key and index field below is keyOf(token) = SHA-256(token), never the token itself: a Redis dump cannot
     // mint access tokens, and the client-held value alone is what the server never stores
-    private static final String NAMESPACE = "refresh";
+    public static final String NAMESPACE = "refresh";
     // Consumed (rotated) token -> its session id, used for reuse detection; kept as long as the refresh token
     // itself could have lived, so a stolen token replayed at any point in its lifetime still trips the detector
-    private static final String CONSUMED_NS = "refresh:consumed";
+    public static final String CONSUMED_NS = "refresh:consumed";
     // Sessions ended by reuse detection: their live token can no longer rotate
-    private static final String REVOKED_SESSION_NS = "refresh:revoked-session";
+    public static final String REVOKED_SESSION_NS = "refresh:revoked-session";
     // User -> active token index, used to revoke all
-    private static final String USER_IDX_NS = "refresh:idx";
+    public static final String USER_IDX_NS = "refresh:idx";
     // In-flight race grace cache: the same oldToken returns the same pair within the TTL, so a cross-instance race, or a
-    // retry after the response carrying the new pair was lost, does not trigger a reuse alert
-    private static final String GRACE_NS = "refresh:grace";
+    // retry after the response carrying the new pair was lost, does not trigger a reuse alert. A pair is handed out only
+    // while its session stands (see graceHit), so the window cannot outlive a logout, a ban or a session revocation
+    public static final String GRACE_NS = "refresh:grace";
     private static final int SHA_PREFIX_LEN = 8;
 
     @Value("${jwt.refresh-expiration-days:30}")
@@ -87,15 +88,16 @@ public class RefreshTokenService {
      * Token rotation: revokes the old token and issues a new one.
      *
      * Flow (order must not change):
-     *   1. Grace cache hit -> return the already issued pair (no reuse alert, no namespace writes)
+     *   1. Grace cache hit -> return the already issued pair (no reuse alert, no namespace writes), or null if its session
+     *      has since been revoked
      *   2. Read the old token data without consuming it
      *   3. data == null -> a concurrent caller may have just committed, so check the grace cache again; then check
      *      CONSUMED_NS for reuse; on a hit, mark the token's session revoked and throw RefreshTokenReuseException
      *      (the user's other sessions are untouched)
-     *   3b. data's session is revoked -> return null (the session's live token cannot rotate any more)
      *   4. data != null -> generate a new pair
-     *   5. One atomic step consumes the old token and writes grace, consumed, the new token and the user index.
-     *      Racing callers each get here; exactly one consumes the token, the others return the pair it wrote to grace.
+     *   5. One atomic step checks the session is not revoked (else drops the token and returns null), then consumes the
+     *      old token and writes grace, consumed, the new token and the user index. Racing callers each get here; exactly
+     *      one consumes the token, the others return the pair it wrote to grace.
      *      The token disappears only together with its grace pair, so a concurrent caller can never find neither
      *      (which used to answer 401 and sign the user out).
      *
@@ -106,7 +108,7 @@ public class RefreshTokenService {
         // Step 1: return on grace cache hit (must come before the reuse detector)
         RotateResult cached = graceHit(oldKey);
         if (cached != null) {
-            return cached;
+            return sessionStands(cached) ? cached : null;
         }
 
         // Step 2: throws on Redis failure, so an outage is a 503 rather than a sign-out
@@ -115,14 +117,14 @@ public class RefreshTokenService {
             // Step 3: a concurrent rotation may have committed since step 1
             cached = graceHit(oldKey);
             if (cached != null) {
-                return cached;
+                return sessionStands(cached) ? cached : null;
             }
             // Reuse detection; throws on Redis failure so a replay during an outage can't pass as merely invalid
             String sessionId = redisService.getOrThrow(CONSUMED_NS, oldKey, String.class);
             if (sessionId != null) {
                 // Markers written before 2026-10-17 hold the userId instead of a session id: fall back to revoking all.
                 // Remove after 2026-11-16, when the last of them has expired with its refresh lifetime.
-                if (redisService.hasKey(USER_IDX_NS, sessionId)) {
+                if (redisService.hasKeyOrThrow(USER_IDX_NS, sessionId)) {
                     log.warn("SECURITY_BREACH: Refresh token reuse detected (legacy marker), revoking all sessions for userId={}", sessionId);
                     revokeAllForUser(sessionId);
                 } else {
@@ -133,14 +135,6 @@ public class RefreshTokenService {
                 }
                 throw new RefreshTokenReuseException("Refresh token reuse detected");
             }
-            return null;
-        }
-
-        // Step 3b: the session was ended by reuse detection; fails closed so a Redis error cannot revive it
-        if (data.sessionId() != null && redisService.hasKeyOrThrow(REVOKED_SESSION_NS, data.sessionId())) {
-            redisService.delete(NAMESPACE, oldKey);
-            redisService.hDelete(USER_IDX_NS, data.userId(), oldKey);
-            log.warn("Refresh rotation rejected (session revoked after reuse) userId={}", data.userId());
             return null;
         }
 
@@ -172,22 +166,21 @@ public class RefreshTokenService {
         Duration refreshTtl = Duration.ofDays(refreshExpirationDays);
         Duration graceTtl = Duration.ofSeconds(refreshGraceSeconds);
 
-        // Step 5: CONSUMED (reuse detection), NAMESPACE (the new token), USER_IDX (revocation index + TTL refresh + old
-        // token removal), then GRACE (where racing callers meet), written only if this caller is the one consuming the old
-        // token. GRACE goes last: if an earlier write fails, no caller is handed a pair whose refresh token was never stored
-        boolean consumed = redisService.consumeAndExec(NAMESPACE, oldKey, List.of(
-                RedisService.RedisWrite.set(CONSUMED_NS, oldKey, sessionId, refreshTtl),
-                RedisService.RedisWrite.set(NAMESPACE, newKey, freshData, refreshTtl),
-                RedisService.RedisWrite.hput(USER_IDX_NS, freshData.userId(), newKey, "1"),
-                RedisService.RedisWrite.expire(USER_IDX_NS, freshData.userId(), refreshTtl),
-                RedisService.RedisWrite.hdelete(USER_IDX_NS, freshData.userId(), oldKey),
-                RedisService.RedisWrite.set(GRACE_NS, oldKey, result, graceTtl)
-        ));
-        if (!consumed) {
+        // Step 5: the revoked-session check runs inside the script, so reuse detection landing after step 2 still stops
+        // this rotation. CONSUMED (reuse detection), NAMESPACE (the new token) and USER_IDX are written before GRACE
+        // (where racing callers meet): if an earlier write fails, no caller is handed a pair whose token was never stored
+        RedisService.RotationOutcome outcome = redisService.rotateRefreshToken(new RedisService.RefreshRotation(
+                freshData.userId(), sessionId, oldKey, newKey, freshData, result, refreshTtl, graceTtl));
+        if (outcome == RedisService.RotationOutcome.SESSION_REVOKED) {
+            log.warn("Refresh rotation rejected (session revoked after reuse) userId={}", data.userId());
+            return null;
+        }
+        if (outcome == RedisService.RotationOutcome.TOKEN_GONE) {
             // A concurrent caller consumed it first and wrote its pair to grace in the same step. Null only if the
             // token was revoked (logout) in the meantime.
             log.info("refresh.race_lost refreshToken_sha={}", oldKey.substring(0, SHA_PREFIX_LEN));
-            return redisService.getOrThrow(GRACE_NS, oldKey, RotateResult.class);
+            cached = graceHit(oldKey);
+            return cached != null && sessionStands(cached) ? cached : null;
         }
 
         log.debug("Refresh token rotated for userId={}", freshData.userId());
@@ -201,6 +194,25 @@ public class RefreshTokenService {
             log.info("refresh.cache_hit refreshToken_sha={}", oldKey.substring(0, SHA_PREFIX_LEN));
         }
         return cached;
+    }
+
+    /**
+     * Whether the session a grace pair belongs to still stands. Rather than clearing grace entries on every revocation
+     * path (they are keyed by the consumed token, which the user index no longer lists), each hit checks what those
+     * paths leave behind: logout and revokeAllForUser (suspend, role change, delete) delete the pair's refresh token,
+     * reuse detection flags the session, and a ban or deletion also shows in the DB. A refresh token that was rotated
+     * again since leaves a consumed marker and still counts, so a late duplicate request is not mistaken for a revocation.
+     * Throws on Redis failure, so an outage cannot hand out a revoked pair.
+     */
+    private boolean sessionStands(RotateResult pair) {
+        String newKey = keyOf(pair.newRefreshToken());
+        boolean stands = (redisService.hasKeyOrThrow(NAMESPACE, newKey) || redisService.hasKeyOrThrow(CONSUMED_NS, newKey))
+                && !redisService.hasKeyOrThrow(REVOKED_SESSION_NS, pair.data().sessionId())
+                && userRepository.findById(UUID.fromString(pair.data().userId())).filter(User::isActive).isPresent();
+        if (!stands) {
+            log.warn("refresh.grace_rejected (session revoked) userId={}", pair.data().userId());
+        }
+        return stands;
     }
 
     /**

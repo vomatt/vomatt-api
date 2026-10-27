@@ -116,6 +116,43 @@ class CommentLikePostgresTest extends PostgresRepositoryTest {
                 .setParameter("id", comment.getId()).getSingleResult()).longValue()).isEqualTo(1);
     }
 
+    private void unlike() {
+        commentService.unlikeComment(comment.getId(), liker.getId().toString());
+        em.flush();
+    }
+
+    @Test
+    @DisplayName("should succeed for both and remove the like when the same user unlikes twice at the same moment")
+    void shouldRemoveLikeWhenSameUserUnlikesConcurrently() throws Exception {
+        tx.executeWithoutResult(s -> like());
+        CountDownLatch unliked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Future<?> first = pool.submit(() -> tx.executeWithoutResult(s -> {
+            unlike();
+            unliked.countDown();
+            try {
+                release.await(10, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }));
+        assertThat(unliked.await(10, TimeUnit.SECONDS)).isTrue();
+
+        Future<?> second = pool.submit(() -> tx.executeWithoutResult(s -> unlike()));
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (!waitsOnLock("delete from vomatt.comment\\_likes") && System.nanoTime() < deadline) {
+            Thread.sleep(20);
+        }
+        assertThat(waitsOnLock("delete from vomatt.comment\\_likes"))
+                .as("second unlike waits on the first one's uncommitted delete").isTrue();
+        release.countDown();
+        first.get(10, TimeUnit.SECONDS);
+        second.get(10, TimeUnit.SECONDS);
+
+        assertThat(((Number) em.createNativeQuery("SELECT COUNT(*) FROM vomatt.comment_likes WHERE comment_id = :id")
+                .setParameter("id", comment.getId()).getSingleResult()).longValue()).isZero();
+    }
+
     @Test
     @DisplayName("should return 404 user.not_found when the signed-in user no longer exists")
     void shouldThrowUserNotFoundWhenLikerIsGone() {

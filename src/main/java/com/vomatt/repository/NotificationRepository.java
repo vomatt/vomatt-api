@@ -38,7 +38,7 @@ public class NotificationRepository {
     public static final int UNREAD_COUNT_CAP = 100;
 
     /** How long before its end an Open Poll gives a CLOSING_SOON notification. */
-    public static final int CLOSING_SOON_HOURS = 24;
+    private static final int CLOSING_SOON_HOURS = 24;
 
     private static final String NONE = "CAST(NULL AS uuid)";
 

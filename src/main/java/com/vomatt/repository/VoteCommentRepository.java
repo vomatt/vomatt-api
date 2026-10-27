@@ -30,12 +30,6 @@ public interface VoteCommentRepository extends JpaRepository<VoteComment, UUID> 
     @Query("SELECT c FROM VoteComment c WHERE c.id = :id AND c.isDeleted = false")
     Optional<VoteComment> findByIdAndNotDeleted(@Param("id") UUID id);
 
-    /**
-     * Count comments for a vote
-     */
-    @Query("SELECT COUNT(c) FROM VoteComment c WHERE c.vote.id = :voteId AND c.isDeleted = false")
-    long countByVoteId(@Param("voteId") UUID voteId);
-
     /** Visible message counts (Comments and Replies, not deleted) for a page of Polls. */
     @Query("SELECT c.vote.id AS id, COUNT(c) AS count FROM VoteComment c "
             + "WHERE c.vote.id IN :voteIds AND c.isDeleted = false GROUP BY c.vote.id")

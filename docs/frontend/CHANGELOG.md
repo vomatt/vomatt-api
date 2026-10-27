@@ -4,6 +4,8 @@ Contract changes that affect the frontend. 💥 BREAKING means frontend code mus
 
 ## 2026-10-27
 
+- `PUT /api/votes/{voteId}/comments/{commentId}`: the response's `likedByCurrentUser` now reflects the caller's like. Before, it was always `false`, so editing a Comment you had liked showed it as not liked until the next read.
+- `POST /api/votes/{voteId}/comments/{commentId}/like`: two likes from the same user at the same moment (e.g. a double tap) now both succeed with one like kept. Before, the second could fail with 500.
 - `GET /api/votes/{voteId}` now counts a View when the caller is signed in, not the Poll's owner, and the Poll is Open and PUBLIC, at most once per user and Poll per 24 hours (input for a future Trending list; not exposed in any response). No client change: the response and errors are unchanged, and the View is counted asynchronously, so it never fails or slows the request. Deploy: Flyway `V4__vote_view_hours.sql` adds `vote_view_hours` at startup.
 
 - New `POST /api/votes/{voteId}/share` (sign-in required): call it after the user shared the Poll's link with the share button. Body `{ "channel": "COPY_LINK" | "NATIVE" | "LINE" | "FACEBOOK" | "X" | "THREADS" | "OTHER" }` (`NATIVE` is the system share sheet, e.g. `navigator.share`), responds 200 `{ "shareCount": 18 }`. Idempotent per user and Poll: a repeat share succeeds, keeps the first `channel` and leaves the count unchanged. Any Poll the caller can reach counts, Scheduled and Ended included. Errors: 400 `common.validation_failed` (`channel` missing), 400 `common.bad_request` (unknown `channel`), 404 `vote.not_found` (Deleted or unreachable Poll). Signed-out viewers can still share the link but are not counted, so don't call it (it would be 401).

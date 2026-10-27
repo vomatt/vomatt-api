@@ -2,35 +2,24 @@ package com.vomatt.repository;
 
 import com.vomatt.entity.CommentLike;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 @Repository
 public interface CommentLikeRepository extends JpaRepository<CommentLike, UUID> {
 
-    /**
-     * Check if user has liked a comment
-     */
-    @Query("SELECT CASE WHEN COUNT(cl) > 0 THEN true ELSE false END FROM CommentLike cl WHERE cl.comment.id = :commentId AND cl.user.id = :userId")
-    boolean existsByCommentIdAndUserId(@Param("commentId") UUID commentId, @Param("userId") UUID userId);
-
-    /**
-     * Find like by comment and user
-     */
-    @Query("SELECT cl FROM CommentLike cl WHERE cl.comment.id = :commentId AND cl.user.id = :userId")
-    Optional<CommentLike> findByCommentIdAndUserId(@Param("commentId") UUID commentId, @Param("userId") UUID userId);
-
-    /**
-     * Count likes for a comment
-     */
-    @Query("SELECT COUNT(cl) FROM CommentLike cl WHERE cl.comment.id = :commentId")
-    long countByCommentId(@Param("commentId") UUID commentId);
+    /** Idempotent, also under concurrent requests; returns 1 when the like is new, 0 when it already existed. */
+    @Modifying
+    @Query(value = """
+            INSERT INTO vomatt.comment_likes (id, comment_id, user_id) VALUES (:id, :commentId, :userId)
+            ON CONFLICT (comment_id, user_id) DO NOTHING""", nativeQuery = true)
+    int insertIfAbsent(@Param("id") UUID id, @Param("commentId") UUID commentId, @Param("userId") UUID userId);
 
     /** Like counts for a page of comments. */
     @Query("SELECT cl.comment.id AS id, COUNT(cl) AS count FROM CommentLike cl "

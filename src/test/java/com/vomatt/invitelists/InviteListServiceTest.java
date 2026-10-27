@@ -3,7 +3,10 @@ package com.vomatt.invitelists;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -32,6 +35,7 @@ import com.vomatt.entity.InviteListMember;
 import com.vomatt.entity.User;
 import com.vomatt.invitelists.dto.InviteListMembersRequest;
 import com.vomatt.invitelists.dto.InviteListRequest;
+import com.vomatt.lookups.LookupService;
 import com.vomatt.repository.InviteListMemberRepository;
 import com.vomatt.repository.InviteListRepository;
 import com.vomatt.repository.UserRepository;
@@ -44,7 +48,7 @@ class InviteListServiceTest {
     @Mock InviteListMemberRepository inviteListMemberRepository;
     @Mock UserRepository userRepository;
     @Spy InviteListMapper inviteListMapper = new InviteListMapper();
-    @Mock com.vomatt.lookups.LookupService lookupService;
+    @Mock LookupService lookupService;
 
     @InjectMocks
     InviteListService inviteListService;
@@ -59,7 +63,7 @@ class InviteListServiceTest {
         owner = User.builder().id(ownerId).username("alice").email("alice@example.com").build();
         inviteList = new InviteList(owner, "Book club");
         ReflectionTestUtils.setField(inviteList, "id", inviteListId);
-        org.mockito.Mockito.lenient().when(lookupService.configInt(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyInt()))
+        lenient().when(lookupService.configInt(anyString(), anyInt()))
                 .thenAnswer(inv -> inv.getArgument(1));
     }
 

@@ -16,9 +16,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -65,7 +68,7 @@ public class LookupService {
     }
 
     /** {@link #configInt} for a duration stored as a count of {@code unit}; without a valid override, {@code defaultValue} as is. */
-    public Duration configDuration(String key, java.time.temporal.ChronoUnit unit, Duration defaultValue) {
+    public Duration configDuration(String key, ChronoUnit unit, Duration defaultValue) {
         Integer value = configOverride(key);
         return value != null ? Duration.of(value, unit) : defaultValue;
     }
@@ -76,7 +79,7 @@ public class LookupService {
                 .findFirst()
                 .map(l -> {
                     try {
-                        long v = new java.math.BigDecimal(l.lookupValue().toString().trim()).longValueExact();
+                        long v = new BigDecimal(l.lookupValue().toString().trim()).longValueExact();
                         return v > 0 && v <= Integer.MAX_VALUE ? (Integer) (int) v : null;
                     } catch (NumberFormatException | ArithmeticException e) {
                         log.warn("Ignoring invalid config lookup {}: {}", key, l.lookupValue());
@@ -129,11 +132,11 @@ public class LookupService {
         lookup.setLookupType(type);
         lookup.setLookupKey(key);
         lookup.setLookupValue(request.getLookupValue());
-        lookup.setSeq(request.getSeq() != null ? request.getSeq() : 0);
+        lookup.setSeq(Objects.requireNonNullElse(request.getSeq(), 0));
         lookup.setParentType(request.getParentType());
         lookup.setParentKey(request.getParentKey());
         lookup.setDescription(request.getDescription());
-        lookup.setFrontendUsing(request.getFrontendUsing() != null ? request.getFrontendUsing() : false);
+        lookup.setFrontendUsing(Boolean.TRUE.equals(request.getFrontendUsing()));
         lookup.setIsActive(true);
 
         Lookup saved = lookupRepository.save(lookup);
@@ -179,20 +182,12 @@ public class LookupService {
 
     @Transactional
     public void activate(String id) {
-        Lookup lookup = findById(id);
-        lookup.setIsActive(true);
-        lookupRepository.save(lookup);
-        evictCacheForType(lookup.getLookupType(), Boolean.TRUE.equals(lookup.getFrontendUsing()));
-        log.info("Dictionary item activated: id={}, type={}", id, lookup.getLookupType());
+        setActive(id, true);
     }
 
     @Transactional
     public void deactivate(String id) {
-        Lookup lookup = findById(id);
-        lookup.setIsActive(false);
-        lookupRepository.save(lookup);
-        evictCacheForType(lookup.getLookupType(), Boolean.TRUE.equals(lookup.getFrontendUsing()));
-        log.info("Dictionary item deactivated: id={}, type={}", id, lookup.getLookupType());
+        setActive(id, false);
     }
 
     @Transactional
@@ -210,6 +205,14 @@ public class LookupService {
     private Lookup findById(String id) {
         return lookupRepository.findById(UUID.fromString(id))
                 .orElseThrow(() -> ApiException.notFound(MessageKey.LOOKUP_NOT_FOUND));
+    }
+
+    private void setActive(String id, boolean active) {
+        Lookup lookup = findById(id);
+        lookup.setIsActive(active);
+        lookupRepository.save(lookup);
+        evictCacheForType(lookup.getLookupType(), Boolean.TRUE.equals(lookup.getFrontendUsing()));
+        log.info("Dictionary item {}: id={}, type={}", active ? "activated" : "deactivated", id, lookup.getLookupType());
     }
 
     // After commit: evicting earlier lets a concurrent read re-cache the old rows for LOOKUP_CACHE_DURATION

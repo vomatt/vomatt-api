@@ -71,6 +71,11 @@ public class ApiException extends RuntimeException {
         return new ApiException(HttpStatus.TOO_MANY_REQUESTS, key, args);
     }
 
+    /** 503 Service Unavailable: an upstream dependency failed or answered abnormally; the client may retry. */
+    public static ApiException serviceUnavailable(MessageKey key, Object... args) {
+        return new ApiException(HttpStatus.SERVICE_UNAVAILABLE, key, args);
+    }
+
     /**
      * Creates an exception carrying structured {@code data}; usable with any status code (not just 422).
      *

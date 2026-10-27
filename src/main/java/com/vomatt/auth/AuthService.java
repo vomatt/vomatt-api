@@ -22,7 +22,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.i18n.LocaleContextHolder;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -720,7 +719,7 @@ public class AuthService {
             if (verifyResponse == null || !(verifyResponse.get("sub") instanceof String sub)
                     || (emailValue != null && !(emailValue instanceof String))) {
                 log.warn("LINE id_token verify returned an empty or malformed body");
-                throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+                throw ApiException.serviceUnavailable(MessageKey.COMMON_SERVICE_UNAVAILABLE);
             }
             if (!sub.equals(userId)) {
                 log.warn("LINE id_token belongs to another user than the profile: sub={}, userId={}", sub, userId);
@@ -759,13 +758,13 @@ public class AuthService {
             // 429 (rate limited) and 408 are transient on LINE's side, not a rejected credential
             if (ex.getStatusCode().value() == 429 || ex.getStatusCode().value() == 408) {
                 log.warn("LINE call failed (transient {}): {}", ex.getStatusCode().value(), ex.getMessage());
-                throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+                throw ApiException.serviceUnavailable(MessageKey.COMMON_SERVICE_UNAVAILABLE);
             }
             log.warn("LINE rejected the request ({}): {}", rejected, ex.getMessage());
             throw ApiException.unauthorized(rejected);
         } catch (RestClientException ex) {
             log.warn("LINE call failed (external service): {}", ex.getMessage());
-            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+            throw ApiException.serviceUnavailable(MessageKey.COMMON_SERVICE_UNAVAILABLE);
         }
     }
 
@@ -932,18 +931,18 @@ public class AuthService {
         } catch (RestClientException ex) {
             // JWKS endpoint 5xx / connection timeout / DNS failure -> upstream/external service failure, retryable (503), not a credential problem
             log.warn("Failed to fetch {} JWKS (external service): {}", provider, ex.getMessage());
-            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+            throw ApiException.serviceUnavailable(MessageKey.COMMON_SERVICE_UNAVAILABLE);
         }
 
         if (jwks == null || jwks.get("keys") == null) {
             log.warn("Abnormal {} JWKS response: body or keys is null", provider);
-            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+            throw ApiException.serviceUnavailable(MessageKey.COMMON_SERVICE_UNAVAILABLE);
         }
 
         List<Map<String, Object>> keys = (List<Map<String, Object>>) jwks.get("keys");
         if (keys.isEmpty()) {
             log.warn("Abnormal {} JWKS response: keys is empty", provider);
-            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+            throw ApiException.serviceUnavailable(MessageKey.COMMON_SERVICE_UNAVAILABLE);
         }
 
         jwksCache.put(url, new JwksCache(keys, Instant.now()));

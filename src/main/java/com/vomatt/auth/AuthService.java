@@ -714,7 +714,7 @@ public class AuthService {
             }
         }
 
-        if (email.isBlank()) {
+        if (!StringUtils.hasText(email)) {
             email = "line_" + lineProfile.get("userId") + "@line.oauth";
         }
 
@@ -737,7 +737,6 @@ public class AuthService {
 
     // ── Apple OAuth ───────────────────────────────────────────────────
 
-    @SuppressWarnings("unchecked")
     public AuthResponse appleLogin(String idToken, String fullName, String nonce) {
         // Without a configured client id the audience cannot be checked, so a token minted for any app would pass
         if (!StringUtils.hasText(appleClientId)) {
@@ -981,7 +980,7 @@ public class AuthService {
     }
 
     /** @param isNewUser whether the account was created by this very sign-in (reported to the client, see AuthResponse) */
-    AuthResponse buildAuthResponse(User user, boolean adminScope, boolean isNewUser) {
+    private AuthResponse buildAuthResponse(User user, boolean adminScope, boolean isNewUser) {
         // Ban check: all login paths (OTP/Google/LINE/Apple, phone) funnel through here, so they are blocked in one place
         if (!user.isActive()) {
             throw ApiException.forbidden(MessageKey.AUTH_ACCOUNT_BANNED);

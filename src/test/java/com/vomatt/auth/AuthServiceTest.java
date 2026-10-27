@@ -1178,14 +1178,23 @@ class AuthServiceTest {
         assertThat(authService.findOrCreateUserByPhone("0912345678").user()).isSameAs(existing);
     }
 
-    // ── buildAuthResponse: active=false (suspended) check ───────────────────────────
+    // ── Sign-in response: active=false (suspended) check ────────────────────────────
+
+    /** Stubs a valid email OTP for an existing account, so verifyOtp reaches the sign-in response for {@code user}. */
+    private void stubValidEmailOtpFor(User user) {
+        OtpRecord otpRecord = new OtpRecord(h(user.getEmail(), "123456"), "login", Instant.now(), 0);
+        when(redisService.get(eq("otp:email"), eq(k(user.getEmail())), eq(OtpRecord.class))).thenReturn(otpRecord);
+        when(redisService.getAndDelete("otp:email", k(user.getEmail()), OtpRecord.class)).thenReturn(otpRecord);
+        when(userRepository.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
+    }
 
     @Test
-    void buildAuthResponse_inactiveUser_shouldThrowForbidden() {
+    void shouldThrowForbiddenWhenSuspendedUserSignsIn() {
         User banned = User.builder().id(UUID.randomUUID()).email("banned@example.com")
                 .displayName("Banned").roles(new String[] { "user" }).active(false).build();
+        stubValidEmailOtpFor(banned);
 
-        assertThatThrownBy(() -> authService.buildAuthResponse(banned, false, false))
+        assertThatThrownBy(() -> authService.verifyOtp("banned@example.com", null, "123456", IP))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey())
                         .isEqualTo(MessageKey.AUTH_ACCOUNT_BANNED));
@@ -1195,14 +1204,15 @@ class AuthServiceTest {
     }
 
     @Test
-    void buildAuthResponse_activeUser_shouldReturnAuthResponse() {
+    void shouldReturnAuthResponseWhenActiveUserSignsIn() {
         User user = User.builder().id(UUID.randomUUID()).email("ok@example.com").username("ok_user")
                 .displayName("OK User").roles(new String[] { "user" }).active(true)
                 .build();
+        stubValidEmailOtpFor(user);
         when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("ok-token");
         when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("ok-refresh");
 
-        AuthResponse response = authService.buildAuthResponse(user, false, false);
+        AuthResponse response = authService.verifyOtp("ok@example.com", null, "123456", IP);
 
         assertThat(response.token()).isEqualTo("ok-token");
         assertThat(response.refreshToken()).isEqualTo("ok-refresh");

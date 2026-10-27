@@ -48,7 +48,8 @@ class CommentEditedPostgresTest extends PostgresRepositoryTest {
         return UUID.fromString(dto.getId());
     }
 
-    private CommentDto reload(UUID id) {
+    // Timestamps and the edited flag only: likes are passed as none, not read
+    private CommentDto reloadIgnoringLikes(UUID id) {
         em.flush();
         em.clear();
         return commentMapper.toDto(commentRepository.findById(id).orElseThrow(), 0, false);
@@ -57,7 +58,7 @@ class CommentEditedPostgresTest extends PostgresRepositoryTest {
     @Test
     @DisplayName("should have identical created and updated times when a new comment is written")
     void shouldStoreEqualTimestampsOnInsert() {
-        CommentDto dto = reload(post("hi"));
+        CommentDto dto = reloadIgnoringLikes(post("hi"));
 
         assertThat(dto.getUpdatedAt()).isEqualTo(dto.getCreatedAt());
         assertThat(dto.isEdited()).isFalse();
@@ -71,7 +72,7 @@ class CommentEditedPostgresTest extends PostgresRepositoryTest {
         request.setText("hi, fixed");
         commentService.updateComment(id, user.getId().toString(), request);
 
-        assertThat(reload(id).isEdited()).isTrue();
+        assertThat(reloadIgnoringLikes(id).isEdited()).isTrue();
     }
 
     @Test

@@ -1178,23 +1178,14 @@ class AuthServiceTest {
         assertThat(authService.findOrCreateUserByPhone("0912345678").user()).isSameAs(existing);
     }
 
-    // ── Sign-in response: active=false (suspended) check ────────────────────────────
-
-    /** Stubs a valid email OTP for an existing account, so verifyOtp reaches the sign-in response for {@code user}. */
-    private void stubValidEmailOtpFor(User user) {
-        OtpRecord otpRecord = new OtpRecord(h(user.getEmail(), "123456"), "login", Instant.now(), 0);
-        when(redisService.get(eq("otp:email"), eq(k(user.getEmail())), eq(OtpRecord.class))).thenReturn(otpRecord);
-        when(redisService.getAndDelete("otp:email", k(user.getEmail()), OtpRecord.class)).thenReturn(otpRecord);
-        when(userRepository.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
-    }
+    // ── buildAuthResponse: active=false (suspended) check ───────────────────────────
 
     @Test
-    void shouldThrowForbiddenWhenSuspendedUserSignsIn() {
+    void buildAuthResponse_inactiveUser_shouldThrowForbidden() {
         User banned = User.builder().id(UUID.randomUUID()).email("banned@example.com")
                 .displayName("Banned").roles(new String[] { "user" }).active(false).build();
-        stubValidEmailOtpFor(banned);
 
-        assertThatThrownBy(() -> authService.verifyOtp("banned@example.com", null, "123456", IP))
+        assertThatThrownBy(() -> authService.buildAuthResponse(banned, false, false))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey())
                         .isEqualTo(MessageKey.AUTH_ACCOUNT_BANNED));
@@ -1204,15 +1195,14 @@ class AuthServiceTest {
     }
 
     @Test
-    void shouldReturnAuthResponseWhenActiveUserSignsIn() {
+    void buildAuthResponse_activeUser_shouldReturnAuthResponse() {
         User user = User.builder().id(UUID.randomUUID()).email("ok@example.com").username("ok_user")
                 .displayName("OK User").roles(new String[] { "user" }).active(true)
                 .build();
-        stubValidEmailOtpFor(user);
         when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("ok-token");
         when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("ok-refresh");
 
-        AuthResponse response = authService.verifyOtp("ok@example.com", null, "123456", IP);
+        AuthResponse response = authService.buildAuthResponse(user, false, false);
 
         assertThat(response.token()).isEqualTo("ok-token");
         assertThat(response.refreshToken()).isEqualTo("ok-refresh");
@@ -1361,6 +1351,354 @@ class AuthServiceTest {
     private static String base64Url(String json) {
         return java.util.Base64.getUrlEncoder().withoutPadding()
                 .encodeToString(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+
+    // ── lineLogin ────────────────────────────────────────────────────
+
+    private static final String LINE_TOKEN_URL = "https://api.line.me/oauth2/v2.1/token";
+    private static final String LINE_VERIFY_URL = "https://api.line.me/oauth2/v2.1/verify";
+    private static final String LINE_PROFILE_URL = "https://api.line.me/v2/profile";
+
+    /** Swaps the mocked RestClient for a real one bound to a mock LINE server. */
+    private org.springframework.test.web.client.MockRestServiceServer lineServer() {
+        ReflectionTestUtils.setField(authService, "lineChannelId", "channel-id");
+        ReflectionTestUtils.setField(authService, "lineChannelSecret", "channel-secret");
+        ReflectionTestUtils.setField(authService, "lineTokenUrl", LINE_TOKEN_URL);
+        ReflectionTestUtils.setField(authService, "lineVerifyUrl", LINE_VERIFY_URL);
+        ReflectionTestUtils.setField(authService, "lineProfileUrl", LINE_PROFILE_URL);
+        var builder = org.springframework.web.client.RestClient.builder();
+        var server = org.springframework.test.web.client.MockRestServiceServer.bindTo(builder).build();
+        ReflectionTestUtils.setField(authService, "restClient", builder.build());
+        return server;
+    }
+
+    private static org.springframework.test.web.client.response.DefaultResponseCreator lineJson(String json) {
+        return org.springframework.test.web.client.response.MockRestResponseCreators
+                .withSuccess(json, org.springframework.http.MediaType.APPLICATION_JSON);
+    }
+
+    private static void assertApiError(Throwable ex, org.springframework.http.HttpStatus status, MessageKey key) {
+        assertThat(ex).isInstanceOf(ApiException.class);
+        assertThat(((ApiException) ex).getStatus()).isEqualTo(status);
+        assertThat(((ApiException) ex).getMessageKey()).isEqualTo(key);
+    }
+
+    @Test
+    void shouldSignInWithVerifiedEmailWhenLineLoginSucceeds() {
+        var server = lineServer();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_TOKEN_URL))
+                .andRespond(lineJson("{\"access_token\":\"at\",\"id_token\":\"it\"}"));
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_PROFILE_URL))
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.header("Authorization", "Bearer at"))
+                .andRespond(lineJson("{\"userId\":\"U123\",\"displayName\":\"Dave\"}"));
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_VERIFY_URL))
+                .andRespond(lineJson("{\"sub\":\"U123\",\"email\":\"Dave@Example.com\"}"));
+        User dave = User.builder().id(UUID.randomUUID()).email("dave@example.com").displayName("Dave")
+                .roles(new String[] { "user" }).build();
+        when(userRepository.findByEmail("dave@example.com")).thenReturn(Optional.of(dave));
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
+
+        AuthResponse response = authService.lineLogin("code", "https://app.example.com/cb");
+
+        assertThat(response.user().id()).isEqualTo(dave.getId().toString());
+        server.verify();
+    }
+
+    @Test
+    void shouldThrow401TokenExchangeFailedWhenLineTokenEndpointReturns4xx() {
+        var server = lineServer();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_TOKEN_URL))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withBadRequest());
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("bad", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.UNAUTHORIZED, MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
+        server.verify();
+    }
+
+    @Test
+    void shouldThrow503WhenLineTokenEndpointReturns5xx() {
+        var server = lineServer();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_TOKEN_URL))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withServerError());
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+        server.verify();
+    }
+
+    @Test
+    void shouldThrow503WhenLineTokenEndpointIsUnreachable() {
+        var server = lineServer();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_TOKEN_URL))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators
+                        .withException(new java.net.SocketTimeoutException("Read timed out")));
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+        server.verify();
+    }
+
+    @Test
+    void shouldThrow401ProfileFailedWhenLineProfileEndpointReturns4xx() {
+        var server = lineServer();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_TOKEN_URL))
+                .andRespond(lineJson("{\"access_token\":\"at\"}"));
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_PROFILE_URL))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withUnauthorizedRequest());
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.UNAUTHORIZED, MessageKey.AUTH_LINE_PROFILE_FAILED);
+        server.verify();
+    }
+
+    @Test
+    void shouldThrow503WhenLineProfileEndpointReturns5xx() {
+        var server = lineServer();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_TOKEN_URL))
+                .andRespond(lineJson("{\"access_token\":\"at\"}"));
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_PROFILE_URL))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators
+                        .withStatus(org.springframework.http.HttpStatus.BAD_GATEWAY));
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+        server.verify();
+    }
+
+
+    /** Expects the token and profile calls to succeed, the token carrying an id_token so the verify call follows. */
+    private org.springframework.test.web.client.MockRestServiceServer lineServerUpToVerify() {
+        var server = lineServer();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_TOKEN_URL))
+                .andRespond(lineJson("{\"access_token\":\"at\",\"id_token\":\"it\"}"));
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_PROFILE_URL))
+                .andRespond(lineJson("{\"userId\":\"U123\",\"displayName\":\"Dave\"}"));
+        return server;
+    }
+
+    @Test
+    void shouldThrow503WhenLineTokenEndpointRateLimits() {
+        var server = lineServer();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_TOKEN_URL))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withTooManyRequests());
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+        server.verify();
+    }
+
+    @Test
+    void shouldThrow503WhenLineProfileEndpointReturns408() {
+        var server = lineServer();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_TOKEN_URL))
+                .andRespond(lineJson("{\"access_token\":\"at\"}"));
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_PROFILE_URL))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withStatus(org.springframework.http.HttpStatus.REQUEST_TIMEOUT));
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+        server.verify();
+    }
+
+    @Test
+    void shouldThrow503WithoutCreatingUserWhenLineVerifyEndpointReturns5xx() {
+        var server = lineServerUpToVerify();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_VERIFY_URL))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withServerError());
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+        server.verify();
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldThrow503WithoutCreatingUserWhenLineVerifyEndpointIsUnreachable() {
+        var server = lineServerUpToVerify();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_VERIFY_URL))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withException(new java.net.SocketTimeoutException("Read timed out")));
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+        server.verify();
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldUseSyntheticEmailWhenLineVerifyReturnsNoEmail() {
+        var server = lineServerUpToVerify();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_VERIFY_URL))
+                .andRespond(lineJson("{\"sub\":\"U123\"}"));
+        User dave = User.builder().id(UUID.randomUUID()).email("line_u123@line.oauth").displayName("Dave")
+                .roles(new String[] { "user" }).build();
+        when(userRepository.findByEmail("line_u123@line.oauth")).thenReturn(Optional.of(dave));
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
+
+        AuthResponse response = authService.lineLogin("code", "https://app.example.com/cb");
+
+        assertThat(response.user().id()).isEqualTo(dave.getId().toString());
+        server.verify();
+    }
+
+    @Test
+    void shouldThrow401TokenExchangeFailedWhenLineAccessTokenIsNotAString() {
+        var server = lineServer();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_TOKEN_URL))
+                .andRespond(lineJson("{\"access_token\":42}"));
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.UNAUTHORIZED, MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
+        server.verify();
+    }
+
+
+    /** Stubs the user lookup and token issuing for a LINE sign-in that ends on {@code email}. */
+    private User existingLineUser(String email) {
+        User user = User.builder().id(UUID.randomUUID()).email(email).displayName("Dave")
+                .roles(new String[] { "user" }).build();
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("mock-token");
+        when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("mock-refresh-token");
+        return user;
+    }
+
+    @Test
+    void shouldThrow401WithoutCreatingUserWhenLineVerifyEndpointReturns400() {
+        var server = lineServerUpToVerify();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_VERIFY_URL)).andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withBadRequest());
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.UNAUTHORIZED, MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
+        server.verify();
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldThrow401WithoutCreatingUserWhenLineVerifyEndpointReturns404() {
+        var server = lineServerUpToVerify();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_VERIFY_URL)).andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withResourceNotFound());
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.UNAUTHORIZED, MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
+        server.verify();
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldThrow503WithoutCreatingUserWhenLineVerifyEndpointRateLimits() {
+        var server = lineServerUpToVerify();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_VERIFY_URL)).andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withTooManyRequests());
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+        server.verify();
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldThrow401ProfileFailedWhenLineUserIdIsBlank() {
+        var server = lineServer();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_TOKEN_URL)).andRespond(lineJson("{\"access_token\":\"at\"}"));
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_PROFILE_URL)).andRespond(lineJson("{\"userId\":\"  \",\"displayName\":\"Dave\"}"));
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.UNAUTHORIZED, MessageKey.AUTH_LINE_PROFILE_FAILED);
+        server.verify();
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldThrow401TokenExchangeFailedWhenLineAccessTokenIsBlank() {
+        var server = lineServer();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_TOKEN_URL)).andRespond(lineJson("{\"access_token\":\"\"}"));
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.UNAUTHORIZED, MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
+        server.verify();
+    }
+
+
+    @Test
+    void shouldThrow503WithoutCreatingUserWhenLineVerifyBodyIsEmpty() {
+        var server = lineServerUpToVerify();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_VERIFY_URL)).andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess());
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+        server.verify();
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldThrow401WithoutCallingVerifyWhenLineIdTokenIsBlank() {
+        var server = lineServer();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_TOKEN_URL)).andRespond(lineJson("{\"access_token\":\"at\",\"id_token\":\" \"}"));
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_PROFILE_URL)).andRespond(lineJson("{\"userId\":\"U123\"}"));
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.UNAUTHORIZED, MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
+        server.verify();
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldThrow401WithoutCallingVerifyWhenLineIdTokenIsNotAString() {
+        var server = lineServer();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_TOKEN_URL)).andRespond(lineJson("{\"access_token\":\"at\",\"id_token\":42}"));
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_PROFILE_URL)).andRespond(lineJson("{\"userId\":\"U123\"}"));
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.UNAUTHORIZED, MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
+        server.verify();
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldUseSyntheticEmailWithoutCallingVerifyWhenLineReturnsNoIdToken() {
+        var server = lineServer();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_TOKEN_URL)).andRespond(lineJson("{\"access_token\":\"at\"}"));
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_PROFILE_URL)).andRespond(lineJson("{\"userId\":\"U123\"}"));
+        User dave = existingLineUser("line_u123@line.oauth");
+
+        assertThat(authService.lineLogin("code", "https://app.example.com/cb").user().id()).isEqualTo(dave.getId().toString());
+        server.verify();
+    }
+
+
+    @Test
+    void shouldThrow503WithoutCreatingUserWhenLineVerifyEmailIsNotAString() {
+        var server = lineServerUpToVerify();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_VERIFY_URL)).andRespond(lineJson("{\"sub\":\"U123\",\"email\":42}"));
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+        server.verify();
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldThrow503WithoutCreatingUserWhenLineVerifyLacksSub() {
+        var server = lineServerUpToVerify();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_VERIFY_URL)).andRespond(lineJson("{\"email\":\"dave@example.com\"}"));
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+        server.verify();
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldThrow401WithoutCreatingUserWhenLineVerifySubDiffersFromProfile() {
+        var server = lineServerUpToVerify();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_VERIFY_URL)).andRespond(lineJson("{\"sub\":\"U999\",\"email\":\"dave@example.com\"}"));
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.UNAUTHORIZED, MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
+        server.verify();
+        verify(userRepository, never()).save(any());
     }
 
 }

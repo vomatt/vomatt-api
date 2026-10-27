@@ -1,9 +1,24 @@
 package com.vomatt.auth;
 
+import com.webauthn4j.WebAuthnManager;
+import com.webauthn4j.converter.util.ObjectConverter;
+import com.webauthn4j.credential.CredentialRecord;
+import com.webauthn4j.credential.CredentialRecordImpl;
+import com.webauthn4j.data.AttestationConveyancePreference;
 import com.webauthn4j.data.AuthenticatorAttestationResponse;
+import com.webauthn4j.data.AuthenticatorSelectionCriteria;
 import com.webauthn4j.data.AuthenticatorTransport;
 import com.webauthn4j.data.PublicKeyCredential;
 import com.webauthn4j.data.PublicKeyCredentialCreationOptions;
+import com.webauthn4j.data.PublicKeyCredentialParameters;
+import com.webauthn4j.data.PublicKeyCredentialRpEntity;
+import com.webauthn4j.data.PublicKeyCredentialType;
+import com.webauthn4j.data.PublicKeyCredentialUserEntity;
+import com.webauthn4j.data.RegistrationData;
+import com.webauthn4j.data.ResidentKeyRequirement;
+import com.webauthn4j.data.UserVerificationRequirement;
+import com.webauthn4j.data.attestation.statement.COSEAlgorithmIdentifier;
+import com.webauthn4j.data.client.challenge.DefaultChallenge;
 import com.webauthn4j.data.client.Origin;
 import com.webauthn4j.data.extension.client.RegistrationExtensionClientOutput;
 import com.webauthn4j.test.authenticator.webauthn.NoneAttestationAuthenticator;
@@ -12,8 +27,10 @@ import com.webauthn4j.test.client.ClientPlatform;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.Base64;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 
 /** A browser with a fresh "none" attestation authenticator, answering as {@code credential.toJSON()} would. */
 final class PasskeyEmulator {
@@ -40,6 +57,21 @@ final class PasskeyEmulator {
                 "transports", response.getTransports().stream().map(AuthenticatorTransport::getValue).toList()));
         json.put("clientExtensionResults", Map.of());
         return json;
+    }
+
+    /** A credential from the emulator, parsed the way registration parses it (signature checks are 04's concern). */
+    static CredentialRecord registeredRecord() {
+        PublicKeyCredentialCreationOptions options = new PublicKeyCredentialCreationOptions(
+                new PublicKeyCredentialRpEntity("vomatt.com", "Vomatt"),
+                new PublicKeyCredentialUserEntity(UUID.randomUUID().toString().getBytes(), "user", "User"),
+                new DefaultChallenge(),
+                List.of(new PublicKeyCredentialParameters(PublicKeyCredentialType.PUBLIC_KEY, COSEAlgorithmIdentifier.ES256)),
+                null, List.of(), new AuthenticatorSelectionCriteria(null, ResidentKeyRequirement.REQUIRED,
+                        UserVerificationRequirement.PREFERRED), AttestationConveyancePreference.NONE, null);
+        String json = PasskeyEmulator.toJson(new PasskeyEmulator("https://vomatt.com").create(options));
+        RegistrationData data = WebAuthnManager.createNonStrictWebAuthnManager(new ObjectConverter()).parseRegistrationResponseJSON(json);
+        return new CredentialRecordImpl(data.getAttestationObject(), data.getCollectedClientData(), data.getClientExtensions(),
+                data.getTransports());
     }
 
     static String toJson(Map<String, Object> value) {

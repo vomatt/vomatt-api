@@ -1590,6 +1590,38 @@
         },
         "type" : "object"
       },
+      "ApiResponsePasskeyRegistrationOptionsResponse" : {
+        "description" : "Envelope of every API response, success or error",
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/PasskeyRegistrationOptionsResponse"
+          },
+          "error" : {
+            "description" : "Legacy duplicate of `message` on errors; null on success. Use `message` instead",
+            "example" : "Poll not found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "errorCode" : {
+            "description" : "Stable machine-readable error code (lowercase, dot-separated); branch on this, not on `message`. Null on success",
+            "example" : "vote.not_found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "message" : {
+            "description" : "Localized text following Accept-Language. On success it is usually null, except operations that attach a toast-ready text; on error it is the error message",
+            "example" : "Operation completed",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "success" : {
+            "description" : "true on success, false on error",
+            "example" : true,
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseSimpleResultResponse" : {
         "description" : "Envelope of every API response, success or error",
         "properties" : {
@@ -3473,6 +3505,156 @@
             "example" : 123,
             "format" : "int64",
             "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "PasskeyAuthenticatorSelection" : {
+        "description" : "Discoverable credential required (usernameless sign-in); user verification preferred",
+        "properties" : {
+          "requireResidentKey" : {
+            "description" : "Level 1 spelling of residentKey=required, for older browsers",
+            "example" : true,
+            "type" : "boolean"
+          },
+          "residentKey" : {
+            "example" : "required",
+            "type" : "string"
+          },
+          "userVerification" : {
+            "example" : "preferred",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PasskeyCredentialDescriptor" : {
+        "description" : "Passkeys the user already has, so the same authenticator is not registered twice; empty when none",
+        "properties" : {
+          "id" : {
+            "description" : "Credential ID, base64url",
+            "example" : "RBBLHcqGtSGftlCq_9zzjSpKZIdZvgpor7plCJ4BJbI",
+            "type" : "string"
+          },
+          "transports" : {
+            "description" : "Transports reported when it was registered",
+            "example" : [ "internal", "hybrid" ],
+            "items" : {
+              "description" : "Transports reported when it was registered",
+              "example" : "[\"internal\",\"hybrid\"]",
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "type" : {
+            "example" : "public-key",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PasskeyCredentialParameters" : {
+        "description" : "Accepted key algorithms: ES256 (-7), then RS256 (-257)",
+        "properties" : {
+          "alg" : {
+            "example" : -7,
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "type" : {
+            "example" : "public-key",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PasskeyRegistrationOptionsResponse" : {
+        "description" : "PublicKeyCredentialCreationOptionsJSON for navigator.credentials.create(); binary fields are base64url without padding",
+        "nullable" : true,
+        "properties" : {
+          "attestation" : {
+            "description" : "Attestation conveyance; always `none`",
+            "example" : "none",
+            "type" : "string"
+          },
+          "authenticatorSelection" : {
+            "$ref" : "#/components/schemas/PasskeyAuthenticatorSelection"
+          },
+          "challenge" : {
+            "description" : "One-time challenge (base64url); expires after 5 minutes and is spent by one register/verify call",
+            "example" : "Qm8AYkRgZ3B1c2hxS1d0X0Nmc2Vh",
+            "type" : "string"
+          },
+          "excludeCredentials" : {
+            "description" : "Passkeys the user already has, so the same authenticator is not registered twice; empty when none",
+            "items" : {
+              "$ref" : "#/components/schemas/PasskeyCredentialDescriptor"
+            },
+            "type" : "array"
+          },
+          "hints" : {
+            "description" : "WebAuthn Level 3 hints, in order of preference",
+            "example" : [ "client-device", "hybrid", "security-key" ],
+            "items" : {
+              "description" : "WebAuthn Level 3 hints, in order of preference",
+              "example" : "[\"client-device\",\"hybrid\",\"security-key\"]",
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "pubKeyCredParams" : {
+            "description" : "Accepted key algorithms: ES256 (-7), then RS256 (-257)",
+            "items" : {
+              "$ref" : "#/components/schemas/PasskeyCredentialParameters"
+            },
+            "type" : "array"
+          },
+          "rp" : {
+            "$ref" : "#/components/schemas/PasskeyRpEntity"
+          },
+          "timeout" : {
+            "description" : "Milliseconds the browser may wait for the user; matches the challenge lifetime",
+            "example" : 300000,
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "user" : {
+            "$ref" : "#/components/schemas/PasskeyUserEntity"
+          }
+        },
+        "type" : "object"
+      },
+      "PasskeyRpEntity" : {
+        "description" : "Relying party; `id` is always the configured RP ID (vomatt.com), never the API host",
+        "properties" : {
+          "id" : {
+            "example" : "vomatt.com",
+            "type" : "string"
+          },
+          "name" : {
+            "example" : "Vomatt",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PasskeyUserEntity" : {
+        "description" : "The signed-in user the passkey is created for",
+        "properties" : {
+          "displayName" : {
+            "description" : "Display name, or the username when there is none",
+            "example" : "Ming Wang",
+            "type" : "string"
+          },
+          "id" : {
+            "description" : "User handle: the user's UUID bytes, base64url",
+            "example" : "AZCosh_lJBh4kKvN7wEjRWeJ",
+            "type" : "string"
+          },
+          "name" : {
+            "description" : "Account name shown in the passkey picker: the email, or the username when there is none",
+            "example" : "user@example.com",
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -9406,6 +9588,125 @@
           }
         },
         "summary" : "Sign out",
+        "tags" : [ "Auth" ]
+      }
+    },
+    "/api/auth/passkey/register/options" : {
+      "post" : {
+        "description" : "**Auth**: required (Bearer token)\n**Precondition**: none; a user may register several passkeys\n**Behavior**: returns WebAuthn creation options for the caller: pass `data` to `PublicKeyCredential.parseCreationOptionsFromJSON` and then `navigator.credentials.create({ publicKey })`, and send `credential.toJSON()` to `POST /api/auth/passkey/register/verify`. `rp.id` is always vomatt.com (the configured RP ID), so the passkey works on vomatt.com, admin.vomatt.com and the iOS app. The passkey must be discoverable (`residentKey: required`); `excludeCredentials` lists the caller's existing passkeys\n**Side effects**: issues a one-time challenge that expires after 5 minutes; calling again issues another one and leaves earlier ones valid until they expire or are spent\n**Errors**:\n- 401 `common.unauthorized`: no or invalid access token\n- 404 `user.not_found`: the account no longer exists",
+        "operationId" : "registrationOptions",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : {
+                    "attestation" : "none",
+                    "authenticatorSelection" : {
+                      "requireResidentKey" : true,
+                      "residentKey" : "required",
+                      "userVerification" : "preferred"
+                    },
+                    "challenge" : "Qm8AYkRgZ3B1c2hxS1d0X0Nmc2VhLWtPZ2V3UjN2cTQ",
+                    "excludeCredentials" : [ {
+                      "id" : "RBBLHcqGtSGftlCq_9zzjSpKZIdZvgpor7plCJ4BJbI",
+                      "transports" : [ "hybrid", "internal" ],
+                      "type" : "public-key"
+                    } ],
+                    "hints" : [ "client-device", "hybrid", "security-key" ],
+                    "pubKeyCredParams" : [ {
+                      "alg" : -7,
+                      "type" : "public-key"
+                    }, {
+                      "alg" : -257,
+                      "type" : "public-key"
+                    } ],
+                    "rp" : {
+                      "id" : "vomatt.com",
+                      "name" : "Vomatt"
+                    },
+                    "timeout" : 300000,
+                    "user" : {
+                      "displayName" : "Ming Wang",
+                      "id" : "AZCosh_lJBh4kKvN7wEjRWeJ",
+                      "name" : "user@example.com"
+                    }
+                  },
+                  "error" : null,
+                  "errorCode" : null,
+                  "message" : null,
+                  "success" : true
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePasskeyRegistrationOptionsResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : null,
+                  "error" : "User not found",
+                  "errorCode" : "user.not_found",
+                  "message" : "User not found",
+                  "success" : false
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Account no longer exists (errorCode `user.not_found`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Get passkey registration options",
         "tags" : [ "Auth" ]
       }
     },

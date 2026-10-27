@@ -31,7 +31,9 @@ import tools.jackson.databind.json.JsonMapper;
         "app.openapi.dev-url=http://localhost:8080",
         "app.openapi.prod-url=https://api.example.com",
         "jwt.secret=openapi-snapshot-test-secret-0123456789-0123456789",
-        "app.key=openapi-snapshot-test-app-key-0123456789-0123456789"
+        "app.key=openapi-snapshot-test-app-key-0123456789-0123456789",
+        // No Redis here, and /api/auth/** fails closed (429) without it; the 401 checks need the request to reach auth
+        "rate-limit.enabled=false"
 })
 class OpenApiSnapshotTest {
 
@@ -76,6 +78,11 @@ class OpenApiSnapshotTest {
             mockMvc.perform(get(path)).andExpect(status().isUnauthorized());
         }
         mockMvc.perform(get("/api/users/nobody-here")).andExpect(status().isNotFound());
+        // Passkey registration is for signed-in users only
+        for (String path : java.util.List.of("/api/auth/passkey/register/options")) {
+            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path))
+                    .andExpect(status().isUnauthorized());
+        }
     }
 
     @Autowired

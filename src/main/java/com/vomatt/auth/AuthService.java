@@ -31,6 +31,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigInteger;
@@ -64,6 +65,8 @@ public class AuthService {
     // (each build recreates the serializer/deserializer caches, which is wasteful). Apple login
     // shares this singleton for parsing the JWT header / payload.
     private static final JsonMapper JSON_MAPPER = JsonMapper.builder().build();
+    /** Upstream label for LINE calls in logs. */
+    private static final String LINE = "LINE";
 
     // P6-#21: short-TTL in-memory cache for the Apple / Google JWKS, so each login does not hit the JWKS endpoint.
     // Self-contained in AuthService (no Redis); one holder + timestamp per JWKS URL. With mostly
@@ -681,7 +684,7 @@ public class AuthService {
         tokenBody.add("client_id", lineChannelId);
         tokenBody.add("client_secret", lineChannelSecret);
 
-        Map<String, Object> tokenResponse = callUpstream("LINE", () -> postForm(lineTokenUrl, tokenBody),
+        Map<String, Object> tokenResponse = callLine(() -> postForm(lineTokenUrl, tokenBody),
                 MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
 
         // instanceof, not a cast: a malformed LINE response is a failed exchange (401), not a ClassCastException (500)
@@ -690,7 +693,7 @@ public class AuthService {
             throw ApiException.unauthorized(MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
         }
 
-        Map<String, Object> lineProfile = callUpstream("LINE", () -> restClient.get().uri(lineProfileUrl)
+        Map<String, Object> lineProfile = callLine(() -> restClient.get().uri(lineProfileUrl)
                 .header("Authorization", "Bearer " + accessToken).retrieve().body(Map.class),
                 MessageKey.AUTH_LINE_PROFILE_FAILED);
 
@@ -713,7 +716,7 @@ public class AuthService {
             verifyBody.add("id_token", idToken);
             verifyBody.add("client_id", lineChannelId);
 
-            Map<String, Object> verifyResponse = callUpstream("LINE", () -> postForm(lineVerifyUrl, verifyBody),
+            Map<String, Object> verifyResponse = callLine(() -> postForm(lineVerifyUrl, verifyBody),
                     MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
             Object emailValue = verifyResponse == null ? null : verifyResponse.get("email");
             if (verifyResponse == null || !(verifyResponse.get("sub") instanceof String sub)
@@ -748,26 +751,39 @@ public class AuthService {
     }
 
     /**
-     * Runs a call to an external provider and classifies its failures. A 4xx means the provider rejected the user's
-     * code or token -> 401 {@code rejected}; with {@code rejected} null the call carries no user input (a JWKS fetch),
-     * so a 4xx is an upstream problem like the rest. A 429 / 408, a 5xx or a connection failure / timeout -> 503.
+     * Runs a call to LINE: a 4xx means LINE rejected the code or token -> 401 {@code rejected}; a 429 / 408 is
+     * transient on LINE's side and, like any other failure, goes through {@link #callUpstream} -> 503.
      */
-    private static <T> T callUpstream(String upstream, Supplier<T> call, MessageKey rejected) {
-        try {
-            return call.get();
-        } catch (HttpClientErrorException ex) {
-            int status = ex.getStatusCode().value();
-            // The full response body goes to DEBUG only; WARN keeps the status
-            log.debug("{} answered {}: {}", upstream, status, ex.getResponseBodyAsString());
-            // 429 (rate limited) and 408 are transient on the provider's side, not a rejected credential
-            if (rejected != null && status != 429 && status != 408) {
-                log.warn("{} rejected the request ({}): {} {}", upstream, rejected, status, ex.getStatusText());
+    private static <T> T callLine(Supplier<T> call, MessageKey rejected) {
+        return callUpstream(LINE, () -> {
+            try {
+                return call.get();
+            } catch (HttpClientErrorException ex) {
+                int status = ex.getStatusCode().value();
+                if (status == 429 || status == 408) {
+                    throw ex;
+                }
+                // The response body goes to DEBUG only; WARN keeps the status
+                log.atDebug().setMessage("{} answered {}: {}").addArgument(LINE).addArgument(status)
+                        .addArgument(ex::getResponseBodyAsString).log();
+                log.warn("{} rejected the request ({}): {} {}", LINE, rejected, status, ex.getStatusText());
                 throw ApiException.unauthorized(rejected);
             }
-            log.warn("{} call failed ({} {})", upstream, status, ex.getStatusText());
-            throw ApiException.serviceUnavailable(MessageKey.COMMON_SERVICE_UNAVAILABLE);
+        });
+    }
+
+    /**
+     * Runs a call to an external provider where any failure, a 4xx included, is upstream and retryable: a
+     * {@link RestClientException} -> 503. Spring's exception message carries the response body, so WARN logs only
+     * the exception type and status and the full message goes to DEBUG.
+     */
+    private static <T> T callUpstream(String upstream, Supplier<T> call) {
+        try {
+            return call.get();
         } catch (RestClientException ex) {
-            log.warn("{} call failed (external service): {}", upstream, ex.getMessage());
+            String status = ex instanceof RestClientResponseException response ? " " + response.getStatusCode().value() : "";
+            log.warn("{} call failed ({}{})", upstream, ex.getClass().getSimpleName(), status);
+            log.atDebug().setMessage("{} call failure: {}").addArgument(upstream).addArgument(ex::getMessage).log();
             throw ApiException.serviceUnavailable(MessageKey.COMMON_SERVICE_UNAVAILABLE);
         }
     }
@@ -913,9 +929,10 @@ public class AuthService {
      * <p>P6-#16 / P6-#21:</p>
      * <ul>
      *   <li><b>Cache</b>: returns directly on a fresh hit (10-minute TTL, per URL), so each login does not hit the JWKS endpoint.</li>
-     *   <li><b>External failure classification</b>: 5xx / connection failures talking to the JWKS endpoint (all
-     *       {@link RestClientException} subclasses, including {@code HttpServerErrorException}, {@code ResourceAccessException})
-     *       -> throw 503 {@link MessageKey#COMMON_SERVICE_UNAVAILABLE}, <b>not</b> misreported as a 401 login failure.</li>
+     *   <li><b>External failure classification</b>: any failure talking to the JWKS endpoint (every
+     *       {@link RestClientException}: a 4xx or 5xx response, a connection failure or timeout) -> throw 503
+     *       {@link MessageKey#COMMON_SERVICE_UNAVAILABLE}, <b>not</b> misreported as a 401 login failure; the request
+     *       carries no user input, so even a 4xx is the provider's problem.</li>
      *   <li><b>Null guard</b>: a null response body, or null or empty {@code keys} -> treated as an abnormal upstream response -> 503.</li>
      * </ul>
      *
@@ -929,8 +946,7 @@ public class AuthService {
             return cached.keys();
         }
 
-        // Any JWKS endpoint failure, 4xx included, is upstream and retryable (503), not a credential problem
-        Map<String, Object> jwks = callUpstream(provider + " JWKS", () -> restClient.get().uri(url).retrieve().body(Map.class), null);
+        Map<String, Object> jwks = callUpstream(provider + " JWKS", () -> restClient.get().uri(url).retrieve().body(Map.class));
 
         if (jwks == null || jwks.get("keys") == null) {
             log.warn("Abnormal {} JWKS response: body or keys is null", provider);

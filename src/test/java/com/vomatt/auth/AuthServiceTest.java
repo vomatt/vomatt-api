@@ -1489,6 +1489,19 @@ class AuthServiceTest {
                 .noneSatisfy(line -> assertThat(line).contains("secret-body"));
     }
 
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    void shouldKeepLineResponseBodyOutOfWarnLogWhenLineReturns5xx(CapturedOutput output) {
+        var server = lineServer();
+        server.expect(requestTo(LINE_TOKEN_URL)).andRespond(withServerError().body("{\"message\":\"secret-body\"}"));
+
+        assertLineLoginFails(server, HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+        assertThat(output.getOut().lines().filter(line -> line.contains("WARN")))
+                .anySatisfy(line -> assertThat(line).contains("LINE call failed").contains("500")
+                        .contains("InternalServerError"))
+                .noneSatisfy(line -> assertThat(line).contains("secret-body"));
+    }
+
     static Stream<Arguments> lineTokenFailures() {
         return Stream.of(
                 Arguments.of("400", withBadRequest(), HttpStatus.UNAUTHORIZED, MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED),

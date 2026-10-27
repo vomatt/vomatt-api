@@ -1,0 +1,15 @@
+package com.vomatt.repository;
+
+import java.util.List;
+import java.util.UUID;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import com.vomatt.entity.PasskeyCredential;
+
+@Repository
+public interface PasskeyCredentialRepository extends JpaRepository<PasskeyCredential, UUID> {
+
+    List<PasskeyCredential> findByUserIdOrderByCreatedAt(UUID userId);
+}

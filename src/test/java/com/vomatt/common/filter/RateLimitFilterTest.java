@@ -60,6 +60,24 @@ class RateLimitFilterTest {
         assertThat(response.getStatus()).isEqualTo(200);
     }
 
+    /** Passkey sign-in shares the per-IP auth bucket with the OTP endpoints (application.yml: /api/auth/**). */
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = { "/api/auth/passkey/login/options",
+            "/api/auth/passkey/login/verify" })
+    void shouldReturn429WhenPasskeySignInOverLimit(String path) throws Exception {
+        when(redisService.incrementAndExpire(eq("rate:limit"), anyString(), any(Duration.class))).thenReturn(301L);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", path);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        verify(chain, never()).doFilter(any(), any());
+        assertThat(response.getStatus()).isEqualTo(429);
+        assertThat(response.getContentAsString()).contains("\"errorCode\":\"common.rate_limited\"");
+    }
+
     @Test
     void whenOverLimit_shouldReturn429() throws Exception {
         when(redisService.incrementAndExpire(eq("rate:limit"), anyString(), any(Duration.class))).thenReturn(301L);

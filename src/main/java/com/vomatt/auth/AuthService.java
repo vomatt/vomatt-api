@@ -1,6 +1,7 @@
 package com.vomatt.auth;
 
 import com.vomatt.auth.dto.AuthResponse;
+import com.vomatt.auth.dto.PasskeyLoginVerifyRequest;
 import com.vomatt.common.constant.LoginUnlock;
 import com.vomatt.common.constant.ReservedUsernames;
 import com.vomatt.common.email.EmailService;
@@ -103,6 +104,7 @@ public class AuthService {
     private final RestClient restClient;
     private final RefreshTokenService refreshTokenService;
     private final AppKey appKey;
+    private final PasskeyService passkeyService;
 
     @Value("${google.client-id:}")
     private String googleClientId;
@@ -271,6 +273,13 @@ public class AuthService {
             throw ApiException.forbidden(MessageKey.AUTH_ACCOUNT_BANNED);
         }
         return user;
+    }
+
+    // ── Passkey ──────────────────────────────────────────────────────
+
+    /** Usernameless passkey sign-in; like every consumer login it never grants admin scope. */
+    public AuthResponse verifyPasskey(PasskeyLoginVerifyRequest request) {
+        return buildAuthResponse(passkeyService.authenticate(request), false, false);
     }
 
     private AuthResponse verifyEmailOtp(String normalizedEmail, String code, String clientIp) {

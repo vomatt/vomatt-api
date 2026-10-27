@@ -1,5 +1,7 @@
 package com.vomatt.auth;
 
+import com.vomatt.auth.dto.PasskeyLoginOptionsResponse;
+import com.vomatt.auth.dto.PasskeyLoginVerifyRequest;
 import com.vomatt.auth.dto.PasskeyRegistrationOptionsResponse;
 import com.vomatt.auth.dto.PasskeyRegistrationVerifyRequest;
 import com.vomatt.auth.dto.PasskeyResponse;
@@ -15,6 +17,8 @@ import com.webauthn4j.converter.AttestedCredentialDataConverter;
 import com.webauthn4j.converter.util.ObjectConverter;
 import com.webauthn4j.credential.CredentialRecord;
 import com.webauthn4j.credential.CredentialRecordImpl;
+import com.webauthn4j.data.AuthenticationData;
+import com.webauthn4j.data.AuthenticationParameters;
 import com.webauthn4j.data.AuthenticatorTransport;
 import com.webauthn4j.data.PublicKeyCredentialParameters;
 import com.webauthn4j.data.PublicKeyCredentialType;
@@ -35,6 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.nio.ByteBuffer;
 import java.security.SecureRandom;
 import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
@@ -61,6 +66,13 @@ public class PasskeyService {
 
     private static final WebAuthnManager WEB_AUTHN_MANAGER = WebAuthnManager.createNonStrictWebAuthnManager(OBJECT_CONVERTER);
 
+    static {
+        // A sign count that did not increase may mean a cloned authenticator, but synced passkeys report 0 or reuse
+        // counts, so it is only logged; the new count is still stored
+        WEB_AUTHN_MANAGER.getAuthenticationDataVerifier().setMaliciousCounterValueHandler(
+                object -> log.warn("Passkey sign count did not increase (recorded, not rejected)"));
+    }
+
     private static final String RP_NAME = "Vomatt";
     private static final String PUBLIC_KEY = "public-key";
     /** Offered in the options and enforced at verify: ES256 (-7), then RS256 (-257). */
@@ -72,7 +84,7 @@ public class PasskeyService {
 
     /** What an issued challenge is for and whom; verify rejects a challenge issued for another purpose or user. */
     record PasskeyChallenge(Purpose purpose, String userId) {
-        enum Purpose { REGISTRATION }
+        enum Purpose { REGISTRATION, AUTHENTICATION }
     }
 
     private final PasskeyCredentialRepository passkeyCredentialRepository;
@@ -162,6 +174,61 @@ public class PasskeyService {
         String name = request.name() == null || request.name().isBlank() ? null : request.name().strip();
         PasskeyCredential saved = passkeyCredentialRepository.saveAndFlush(toEntity(user, record, name));
         return new PasskeyResponse(saved.getId(), saved.getName(), saved.getCreatedAt(), saved.getLastUsedAt());
+    }
+
+    /** Usernameless sign-in options: no allowCredentials, so the user picks any passkey for this RP. */
+    public PasskeyLoginOptionsResponse loginOptions() {
+        String challenge = newChallenge(new PasskeyChallenge(PasskeyChallenge.Purpose.AUTHENTICATION, null));
+        return new PasskeyLoginOptionsResponse(challenge, CHALLENGE_TTL.toMillis(), rpId, List.of(), "preferred");
+    }
+
+    /**
+     * Verifies {@code credential.toJSON()} from a sign-in and returns the passkey's owner, after recording the new sign
+     * count and last use. Any malformed, forged, replayed or expired response, or an unknown passkey, is 401
+     * {@code auth.passkey.invalid}; the caller issues the tokens.
+     */
+    @Transactional
+    public User authenticate(PasskeyLoginVerifyRequest request) {
+        AuthenticationData data;
+        try {
+            PasskeyLoginVerifyRequest.Credential c = request.credential();
+            data = WEB_AUTHN_MANAGER.parseAuthenticationResponseJSON(OBJECT_CONVERTER.getJsonConverter().writeValueAsString(
+                    c.clientExtensionResults() != null ? c : new PasskeyLoginVerifyRequest.Credential(c.id(), c.rawId(),
+                            c.type(), c.response(), c.authenticatorAttachment(), Map.of())));
+        } catch (WebAuthnException | JacksonException | IllegalArgumentException e) {
+            throw loginRejected("unparseable authentication response", e);
+        }
+        Challenge challenge = data.getCollectedClientData() == null ? null : data.getCollectedClientData().getChallenge();
+        PasskeyChallenge issued = challenge == null ? null
+                : redisService.getAndDelete(CHALLENGE_NS, BASE64URL.encodeToString(challenge.getValue()), PasskeyChallenge.class);
+        if (issued == null || issued.purpose() != PasskeyChallenge.Purpose.AUTHENTICATION) {
+            throw loginRejected("unknown, spent, expired or registration challenge", null);
+        }
+        PasskeyCredential credential = passkeyCredentialRepository.findByCredentialId(data.getCredentialId())
+                .orElseThrow(() -> loginRejected("unknown credential", null));
+        // The authenticator names the account the passkey was created for; it must be the passkey's owner
+        if (data.getUserHandle() != null && !Arrays.equals(data.getUserHandle(), uuidBytes(credential.getUser().getId()))) {
+            throw loginRejected("user handle does not match the credential's owner", null);
+        }
+        CredentialRecord record = toRecord(credential);
+        ServerProperty serverProperty = ServerProperty.builder().origins(allowedOrigins).rpId(rpId).challenge(challenge).build();
+        try {
+            WEB_AUTHN_MANAGER.verify(data, new AuthenticationParameters(serverProperty, record, null, false, true));
+        } catch (WebAuthnException e) {
+            throw loginRejected("authentication response failed verification", e);
+        }
+        // verify() updated the record from the authenticator data
+        credential.setSignCount(record.getCounter());
+        credential.setBackedUp(Boolean.TRUE.equals(record.isBackedUp()));
+        credential.setUvInitialized(Boolean.TRUE.equals(record.isUvInitialized()));
+        credential.setLastUsedAt(OffsetDateTime.now());
+        passkeyCredentialRepository.save(credential);
+        return credential.getUser();
+    }
+
+    private static ApiException loginRejected(String reason, Exception cause) {
+        log.info("Passkey sign-in rejected: {}{}", reason, cause == null ? "" : " (" + cause.getMessage() + ")");
+        return ApiException.unauthorized(MessageKey.AUTH_PASSKEY_INVALID);
     }
 
     private static PasskeyRegistrationVerifyRequest.Credential withEmptyExtensions(PasskeyRegistrationVerifyRequest.Credential c) {

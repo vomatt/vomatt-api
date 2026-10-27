@@ -4,6 +4,8 @@ import com.vomatt.auth.dto.AppleAuthRequest;
 import com.vomatt.auth.dto.AuthResponse;
 import com.vomatt.auth.dto.GoogleAuthRequest;
 import com.vomatt.auth.dto.LineAuthRequest;
+import com.vomatt.auth.dto.PasskeyLoginOptionsResponse;
+import com.vomatt.auth.dto.PasskeyLoginVerifyRequest;
 import com.vomatt.auth.dto.PhoneSendOtpRequest;
 import com.vomatt.auth.dto.PhoneVerifyOtpRequest;
 import com.vomatt.auth.dto.RefreshRequest;
@@ -99,7 +101,41 @@ public class AuthController {
     private static final String ADMIN_FORBIDDEN = """
             {"success": false, "data": null, "message": "This account does not have admin privileges", "errorCode": "auth.admin.forbidden", "error": "This account does not have admin privileges"}""";
 
+    private static final String OK_PASSKEY_LOGIN_OPTIONS = """
+            {
+              "success": true,
+              "data": {"challenge": "Qm8AYkRgZ3B1c2hxS1d0X0Nmc2VhLWtPZ2V3UjN2cTQ", "timeout": 300000, "rpId": "vomatt.com",
+                       "allowCredentials": [], "userVerification": "preferred"},
+              "message": null,
+              "errorCode": null,
+              "error": null
+            }""";
+
+    private static final String PASSKEY_LOGIN_BODY = """
+                    {
+                      "credential": {
+                        "id": "RBBLHcqGtSGftlCq_9zzjSpKZIdZvgpor7plCJ4BJbI",
+                        "rawId": "RBBLHcqGtSGftlCq_9zzjSpKZIdZvgpor7plCJ4BJbI",
+                        "type": "public-key",
+                        "response": {
+                          "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiUW04QSJ9",
+                          "authenticatorData": "SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2MFAAAAAQ",
+                          "signature": "MEUCIQDq4f0Q3E4lhVb3hYQm9TLu",
+                          "userHandle": "AZCosh_lJBh4kKvN7wEjRWeJ"
+                        },
+                        "authenticatorAttachment": "platform",
+                        "clientExtensionResults": {}
+                      }
+                    }""";
+
+    private static final String PASSKEY_INVALID = """
+            {"success": false, "data": null, "message": "Passkey verification failed. Please try again", "errorCode": "auth.passkey.invalid", "error": "Passkey verification failed. Please try again"}""";
+
+    private static final String ACCOUNT_BANNED = """
+            {"success": false, "data": null, "message": "This account has been banned and cannot sign in", "errorCode": "auth.account_banned", "error": "This account has been banned and cannot sign in"}""";
+
     private final AuthService authService;
+    private final PasskeyService passkeyService;
 
     @PostMapping("/send-otp")
     @PublicApiResponse
@@ -221,6 +257,54 @@ public class AuthController {
     public ResponseEntity<ApiResponse<AuthResponse>> adminVerifyOtp(@Valid @RequestBody VerifyOtpRequest req, HttpServletRequest httpRequest) {
         return ResponseEntity.ok(ApiResponse.ok(authService.verifyAdminOtp(req.email(), req.code(), ClientIpResolver.resolve(httpRequest))));
     }
+
+    @PostMapping("/passkey/login/options")
+    @PublicApiResponse
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
+            content = @Content(examples = @ExampleObject(value = OK_PASSKEY_LOGIN_OPTIONS)))
+    @Operation(summary = "Get passkey sign-in options",
+            description = """
+                    **Auth**: public
+                    **Precondition**: none; the user does not enter an email or username (usernameless sign-in)
+                    **Behavior**: returns WebAuthn request options: pass `data` to `PublicKeyCredential.parseRequestOptionsFromJSON` \
+                    and then `navigator.credentials.get({ publicKey })`, and send `credential.toJSON()` to `POST /api/auth/passkey/login/verify` `allowCredentials` is always empty, so the user picks any passkey for vomatt.com
+                    **Side effects**: issues a one-time challenge that expires after 5 minutes
+                    **Errors**:
+                    - 429 `common.rate_limited`: too many auth requests from this IP""")
+    public ResponseEntity<ApiResponse<PasskeyLoginOptionsResponse>> passkeyLoginOptions() {
+        return ResponseEntity.ok(ApiResponse.ok(passkeyService.loginOptions()));
+    }
+
+    @PostMapping("/passkey/login/verify")
+    @PublicApiResponse
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
+            content = @Content(examples = @ExampleObject(value = OK_AUTH)))
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = PASSKEY_LOGIN_BODY)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+            description = "The passkey sign-in was not accepted (`auth.passkey.invalid`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = PASSKEY_INVALID)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+            description = "Account suspended (`auth.account_banned`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = ACCOUNT_BANNED)))
+    @Operation(summary = "Sign in with a passkey",
+            description = """
+                    **Auth**: public
+                    **Precondition**: a challenge from `POST /api/auth/passkey/login/options`, at most 5 minutes old and not yet used, and a passkey registered with `POST /api/auth/passkey/register/verify`
+                    **Behavior**: send `credential.toJSON()` from `navigator.credentials.get()` as `credential` (iOS: the same fields from \
+                    `ASAuthorizationPlatformPublicKeyCredentialAssertion`, base64url). The server checks the challenge, the origin, the RP ID, \
+                    user presence and the signature against the stored passkey, and signs its owner in: the response has the same shape as `POST /api/auth/verify-otp` \
+                    (`isNewUser` is always false). The tokens never grant the admin role, even for an admin
+                    **Side effects**: the challenge is spent whether or not the sign-in succeeds; the passkey's sign count and last use, and the user's `lastLoginAt`, are updated. \
+                    A sign count that did not increase is logged, not rejected
+                    **Errors**:
+                    - 400 `common.validation_failed`: `credential` or one of its required fields is missing
+                    - 401 `auth.passkey.invalid`: the response is malformed or fails verification (unknown passkey, wrong signature, origin or RP ID, unknown, spent or expired challenge); get new options and retry
+                    - 403 `auth.account_banned`: the account is suspended
+                    - 429 `common.rate_limited`: too many auth requests from this IP""")
+    public ResponseEntity<ApiResponse<AuthResponse>> passkeyLoginVerify(@Valid @RequestBody PasskeyLoginVerifyRequest req) {
+        return ResponseEntity.ok(ApiResponse.ok(authService.verifyPasskey(req)));
+    }
+
 
 
     @PostMapping("/phone/send-otp")

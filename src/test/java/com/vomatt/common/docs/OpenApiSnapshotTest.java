@@ -78,6 +78,14 @@ class OpenApiSnapshotTest {
             mockMvc.perform(get(path)).andExpect(status().isUnauthorized());
         }
         mockMvc.perform(get("/api/users/nobody-here")).andExpect(status().isNotFound());
+        // Passkey sign-in is public: without a token the request reaches the controller (400 validation, or 503 for
+        // options as this context has no Redis) instead of the 401 entry point
+        for (String path : java.util.List.of("/api/auth/passkey/login/options", "/api/auth/passkey/login/verify")) {
+            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path)
+                            .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{}"))
+                    .andExpect(result -> org.assertj.core.api.Assertions.assertThat(result.getResponse().getStatus())
+                            .as(path).isNotIn(401, 403));
+        }
         // Passkey registration is for signed-in users only
         for (String path : java.util.List.of("/api/auth/passkey/register/options", "/api/auth/passkey/register/verify")) {
             mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path))

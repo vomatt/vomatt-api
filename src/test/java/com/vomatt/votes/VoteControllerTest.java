@@ -10,7 +10,10 @@ import com.vomatt.common.security.UserPrincipal;
 import com.vomatt.votes.dto.CreateVoteRequest;
 import com.vomatt.votes.dto.InviteeResponse;
 import com.vomatt.votes.dto.InviteesRequest;
+import com.vomatt.entity.ShareChannel;
+import com.vomatt.votes.dto.ShareVoteRequest;
 import com.vomatt.votes.dto.VoteCreatorResponse;
+import com.vomatt.votes.dto.VoteShareResponse;
 import com.vomatt.votes.dto.VoteResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,6 +56,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -229,6 +233,58 @@ class VoteControllerTest {
             mockMvc.perform(get("/api/votes/{voteId}/creator", voteId))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.errorCode").value(MessageKey.VOTE_NOT_FOUND.code()));
+        }
+    }
+
+    // ─── POST /api/votes/{voteId}/share ───────────────────────────────────────
+
+    @Nested
+    @DisplayName("POST /api/votes/{voteId}/share")
+    class ShareTests {
+
+        private final String voteId = UUID.randomUUID().toString();
+
+        @Test
+        @DisplayName("should require sign-in")
+        void shouldRequireSignInWhenSharing() {
+            assertThat(isPublic("POST", "/api/votes/" + voteId + "/share")).isFalse();
+        }
+
+        @Test
+        @DisplayName("should return 200 with the share count when the channel is valid")
+        void shouldReturnShareCountWhenChannelIsValid() throws Exception {
+            authenticate();
+            when(voteService.share(voteId, new ShareVoteRequest(ShareChannel.LINE), USER_ID))
+                    .thenReturn(new VoteShareResponse(18));
+
+            mockMvc.perform(post("/api/votes/{voteId}/share", voteId)
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"channel\":\"LINE\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.shareCount").value(18));
+        }
+
+        @Test
+        @DisplayName("should return 400 when the channel is missing")
+        void shouldReturn400WhenChannelIsMissing() throws Exception {
+            authenticate();
+
+            mockMvc.perform(post("/api/votes/{voteId}/share", voteId)
+                            .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errorCode").value(MessageKey.COMMON_VALIDATION_FAILED.code()));
+            verifyNoInteractions(voteService);
+        }
+
+        @Test
+        @DisplayName("should return 400 when the channel is unknown")
+        void shouldReturn400WhenChannelIsUnknown() throws Exception {
+            authenticate();
+
+            mockMvc.perform(post("/api/votes/{voteId}/share", voteId)
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"channel\":\"EMAIL\"}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errorCode").value(MessageKey.COMMON_BAD_REQUEST.code()));
+            verifyNoInteractions(voteService);
         }
     }
 

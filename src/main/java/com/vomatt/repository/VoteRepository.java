@@ -1,5 +1,6 @@
 package com.vomatt.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -8,12 +9,16 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.vomatt.entity.Vote;
 
+import org.hibernate.jpa.HibernateHints;
+
 import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
 
 /** List queries live in {@link VoteListRepository}. */
 @Repository
@@ -54,4 +59,22 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
             FROM vomatt.user_votes uv
             WHERE uv.vote_id = v.id AND uv.user_id = :userId AND v.end_time > now()""", nativeQuery = true)
     void decrementTurnoutForUserBallots(@Param("userId") UUID userId);
+
+    /** Idempotent, also under concurrent requests: a user's later shares of the same Poll are dropped. */
+    @Modifying
+    @Query(value = """
+            INSERT INTO vomatt.vote_shares (vote_id, user_id, channel)
+            VALUES (:voteId, :userId, :channel)
+            ON CONFLICT (vote_id, user_id) DO NOTHING""", nativeQuery = true)
+    int insertShareIfAbsent(@Param("voteId") UUID voteId, @Param("userId") UUID userId, @Param("channel") String channel);
+
+    /**
+     * Share count (distinct sharers) per Poll; Polls nobody shared are absent. The query space hint keeps this native
+     * query from flushing and resetting the session's batch fetching, which would load each Poll's options and tags one by one.
+     */
+    @QueryHints(@QueryHint(name = HibernateHints.HINT_NATIVE_SPACES, value = "vomatt.vote_shares"))
+    @Query(value = """
+            SELECT vote_id AS id, count(*) AS count FROM vomatt.vote_shares
+            WHERE vote_id IN (:voteIds) GROUP BY vote_id""", nativeQuery = true)
+    List<IdCount> countSharesByVoteIds(@Param("voteIds") Collection<UUID> voteIds);
 }

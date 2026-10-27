@@ -17,7 +17,9 @@ import com.vomatt.votes.dto.CreateVoteRequest;
 import com.vomatt.votes.dto.InviteeResponse;
 import com.vomatt.votes.dto.InviteesRequest;
 import com.vomatt.votes.dto.VoteCreatorResponse;
+import com.vomatt.votes.dto.ShareVoteRequest;
 import com.vomatt.votes.dto.VoteRequest;
+import com.vomatt.votes.dto.VoteShareResponse;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.response.SimpleResultResponse;
@@ -92,6 +94,7 @@ public class VoteController {
     private static final String POLL_2 = """
                 "tags": [ { "id": "0199f2a4-6c3e-7a1b-9d52-3f8e1b7c4a10", "name": "Tech", "slug": "tech", "description": null, "displayOrder": 1, "usageCount": 18 } ],
                 "commentCount": 7,
+                "shareCount": 18,
                 "voterVisibility": "OWNER",
                 "audience": "PUBLIC",
                 "inviteeCount": null,
@@ -275,6 +278,45 @@ public class VoteController {
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
             @PathVariable String voteId) {
         return ResponseEntity.ok(ApiResponse.ok(voteService.getInviteOnlyCreator(voteId)));
+    }
+
+    @PostMapping("/{voteId}/share")
+    @CommonApiResponses
+    @Operation(summary = "Count a share of a Poll", description = """
+            **Auth**: required
+            **Precondition**: the caller can reach the Poll (any state: Scheduled, Open or Ended)
+            **Behavior**: call after the caller shared the Poll's link with the share button; `channel` says where \
+            (COPY_LINK, NATIVE for the system share sheet, LINE, FACEBOOK, X, THREADS or OTHER). Idempotent per user and Poll: \
+            a repeat share succeeds, keeps the first `channel` and leaves the count unchanged, so the count is distinct sharers. \
+            Returns the Poll's `shareCount`, the same value the Poll response carries. A signed-out viewer can still share the link, \
+            but nothing is counted.
+            **Side effects**: none besides the count; nobody is notified
+            **Errors**:
+            - 400 `common.validation_failed`: `channel` missing
+            - 400 `common.bad_request`: `channel` is not one of the values above
+            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
+            """,
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = {
+                    @ExampleObject(name = "LINE", value = """
+                            { "channel": "LINE" }
+                            """),
+                    @ExampleObject(name = "Copy link", value = """
+                            { "channel": "COPY_LINK" }
+                            """) })))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Share counted (or already counted for the caller)",
+            content = @Content(examples = @ExampleObject(name = "Counted", value = """
+                    { "success": true, "data": { "shareCount": 18 },
+                      "message": null, "errorCode": null, "error": null }
+                    """)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller (`vote.not_found`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
+    public ResponseEntity<ApiResponse<VoteShareResponse>> share(
+            @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
+            @PathVariable String voteId,
+            @Valid @RequestBody ShareVoteRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(voteService.share(voteId, request, principal.userId())));
     }
 
     @GetMapping

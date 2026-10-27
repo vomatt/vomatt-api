@@ -80,6 +80,10 @@ public class VoteResponse {
     @Schema(description = "Number of Comments and Replies on the Poll, excluding deleted ones", example = "7")
     private long commentCount;
 
+    @Schema(description = "Number of distinct users who shared the Poll through its share button (`POST /api/votes/{voteId}/share`); "
+            + "repeat shares by the same user count once. Signed-out shares are not counted", example = "18")
+    private long shareCount;
+
     @Schema(description = "Who may see which option each Participant chose once the Poll has Ended: NOBODY, OWNER or SIGNED_IN (anyone who can see the Poll). "
             + "Visible at all times so Participants know it before casting a Ballot; fixed once the Poll is Open", example = "OWNER")
     private VoterVisibility voterVisibility;

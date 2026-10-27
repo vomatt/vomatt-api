@@ -19,10 +19,12 @@ import com.vomatt.admin.dto.AdminCommentReportResponse;
 import com.vomatt.comments.dto.ReportCommentRequest;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.common.util.UUIDv7Generator;
 import com.vomatt.entity.CommentReportReason;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
+import com.vomatt.repository.CommentReportRepository;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.votes.VoteServiceSlice;
 
@@ -33,6 +35,7 @@ class CommentReportPostgresTest extends PostgresRepositoryTest {
 
     @Autowired VoteCommentService commentService;
     @Autowired AdminCommentReportService reportService;
+    @Autowired CommentReportRepository reportRepository;
 
     private User author;
     private User reporter;
@@ -137,6 +140,30 @@ class CommentReportPostgresTest extends PostgresRepositoryTest {
         assertThatThrownBy(() -> commentService.reportComment(comment.getId(), gone,
                 new ReportCommentRequest(CommentReportReason.SPAM, null)))
                 .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND));
+    }
+
+    // The insert alone, as the service runs it once the Comment lookup has passed
+    private int insertReport() {
+        return reportRepository.insertIfAbsent(UUIDv7Generator.generateId(), comment.getId(), reporter.getId(),
+                CommentReportReason.SPAM.name(), null);
+    }
+
+    @Test
+    @DisplayName("should insert nothing when the Comment was hard-deleted after it was looked up")
+    void shouldInsertNothingWhenReportedCommentHardDeleted() {
+        em.createNativeQuery("DELETE FROM vomatt.vote_comments WHERE id = :id").setParameter("id", comment.getId())
+                .executeUpdate();
+
+        assertThat(insertReport()).isZero();
+    }
+
+    @Test
+    @DisplayName("should insert nothing when the Comment was soft-deleted after it was looked up")
+    void shouldInsertNothingWhenReportedCommentSoftDeleted() {
+        em.createNativeQuery("UPDATE vomatt.vote_comments SET is_deleted = true WHERE id = :id")
+                .setParameter("id", comment.getId()).executeUpdate();
+
+        assertThat(insertReport()).isZero();
     }
 
     @Test

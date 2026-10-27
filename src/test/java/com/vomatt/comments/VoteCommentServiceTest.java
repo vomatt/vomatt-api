@@ -24,13 +24,16 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.vomatt.comments.dto.CommentDto;
+import com.vomatt.comments.dto.ReportCommentRequest;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.CursorResponse;
+import com.vomatt.entity.CommentReportReason;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
 import com.vomatt.repository.CommentLikeRepository;
+import com.vomatt.repository.CommentReportRepository;
 import com.vomatt.repository.IdCount;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.VoteCommentRepository;
@@ -44,6 +47,7 @@ class VoteCommentServiceTest {
     @Mock VoteService voteService;
     @Mock UserRepository userRepository;
     @Mock CommentLikeRepository commentLikeRepository;
+    @Mock CommentReportRepository commentReportRepository;
     @Spy CommentMapper commentMapper = new CommentMapper();
     @InjectMocks VoteCommentService commentService;
 
@@ -156,6 +160,22 @@ class VoteCommentServiceTest {
         when(userRepository.existsById(viewerId)).thenReturn(true);
 
         assertThatThrownBy(() -> commentService.likeComment(target.getId(), viewerId.toString()))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMENT_NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("should return comment.not_found when the Comment goes between its lookup and the report")
+    void shouldThrowCommentNotFoundWhenCommentGoesBeforeReport() {
+        Vote vote = new Vote();
+        ReflectionTestUtils.setField(vote, "id", voteId);
+        VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "hi");
+        when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(Optional.of(target), Optional.empty());
+        when(commentReportRepository.insertIfAbsent(any(), eq(target.getId()), eq(viewerId), any(), any())).thenReturn(0);
+        when(userRepository.existsById(viewerId)).thenReturn(true);
+
+        assertThatThrownBy(() -> commentService.reportComment(target.getId(), viewerId.toString(),
+                new ReportCommentRequest(CommentReportReason.SPAM, null)))
                 .isInstanceOfSatisfying(ApiException.class,
                         ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMENT_NOT_FOUND));
     }

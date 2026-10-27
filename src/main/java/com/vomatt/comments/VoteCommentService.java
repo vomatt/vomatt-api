@@ -222,6 +222,9 @@ public class VoteCommentService {
         } else if (!userRepository.existsById(reporterId)) {
             // An access token outlives account deletion, so the signed-in user may be gone
             throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
+        } else if (commentRepository.findByIdAndNotDeleted(commentId).isEmpty()) {
+            // Deleted since the lookup above
+            throw ApiException.notFound(MessageKey.COMMENT_NOT_FOUND);
         }
     }
 

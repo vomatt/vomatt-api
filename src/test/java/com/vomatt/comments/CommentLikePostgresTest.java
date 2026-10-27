@@ -27,7 +27,9 @@ import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
+import com.vomatt.common.util.UUIDv7Generator;
 import com.vomatt.entity.VoteComment;
+import com.vomatt.repository.CommentLikeRepository;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.votes.VoteServiceSlice;
 
@@ -39,6 +41,7 @@ class CommentLikePostgresTest extends PostgresRepositoryTest {
 
     @Autowired VoteCommentService commentService;
     @Autowired TransactionTemplate tx;
+    @Autowired CommentLikeRepository likeRepository;
 
     private final List<UUID> createdUsers = new ArrayList<>();
     private final ExecutorService pool = Executors.newFixedThreadPool(2);
@@ -151,6 +154,25 @@ class CommentLikePostgresTest extends PostgresRepositoryTest {
 
         assertThat(((Number) em.createNativeQuery("SELECT COUNT(*) FROM vomatt.comment_likes WHERE comment_id = :id")
                 .setParameter("id", comment.getId()).getSingleResult()).longValue()).isZero();
+    }
+
+    // The insert alone, as the service runs it once the Comment lookup has passed
+    private int insertLike() {
+        return tx.execute(s -> likeRepository.insertIfAbsent(UUIDv7Generator.generateId(), comment.getId(), liker.getId()));
+    }
+
+    private long likeCount() {
+        return ((Number) em.createNativeQuery("SELECT COUNT(*) FROM vomatt.comment_likes WHERE comment_id = :id")
+                .setParameter("id", comment.getId()).getSingleResult()).longValue();
+    }
+
+    @Test
+    @DisplayName("should insert nothing when the Comment was hard-deleted after it was looked up")
+    void shouldInsertNothingWhenCommentHardDeleted() {
+        tx.executeWithoutResult(s -> em.createNativeQuery("DELETE FROM vomatt.vote_comments WHERE id = :id")
+                .setParameter("id", comment.getId()).executeUpdate());
+
+        assertThat(insertLike()).isZero();
     }
 
     @Test

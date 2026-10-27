@@ -148,6 +148,21 @@ class VoteCommentServiceTest {
     }
 
     @Test
+    @DisplayName("should return comment.not_found when the Comment goes between its lookup and the like")
+    void shouldThrowCommentNotFoundWhenCommentGoesBeforeLike() {
+        Vote vote = new Vote();
+        ReflectionTestUtils.setField(vote, "id", voteId);
+        VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "hi");
+        when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(Optional.of(target), Optional.empty());
+        when(commentLikeRepository.insertIfAbsent(any(), eq(target.getId()), eq(viewerId))).thenReturn(0);
+        when(userRepository.existsById(viewerId)).thenReturn(true);
+
+        assertThatThrownBy(() -> commentService.likeComment(target.getId(), viewerId.toString()))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMENT_NOT_FOUND));
+    }
+
+    @Test
     @DisplayName("should look up a block once when the Comment and its thread have the same author")
     void shouldCheckBlockOnceWhenThreadAuthorIsCommentAuthor() {
         Vote vote = new Vote();

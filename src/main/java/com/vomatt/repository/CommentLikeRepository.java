@@ -16,12 +16,14 @@ public interface CommentLikeRepository extends JpaRepository<CommentLike, UUID> 
 
     /**
      * Idempotent, also under concurrent requests; returns 1 when the like is new, 0 when it already existed or the
-     * user does not exist.
+     * user or the Comment does not exist. The Comment row is share-locked, so a delete still in flight is waited for.
      */
     @Modifying
     @Query(value = """
             INSERT INTO vomatt.comment_likes (id, comment_id, user_id)
-            SELECT :id, :commentId, :userId WHERE EXISTS (SELECT 1 FROM vomatt.users WHERE id = :userId)
+            SELECT :id, :commentId, :userId
+            WHERE EXISTS (SELECT 1 FROM vomatt.users WHERE id = :userId)
+              AND EXISTS (SELECT 1 FROM vomatt.vote_comments WHERE id = :commentId FOR SHARE)
             ON CONFLICT (comment_id, user_id) DO NOTHING""", nativeQuery = true)
     int insertIfAbsent(@Param("id") UUID id, @Param("commentId") UUID commentId, @Param("userId") UUID userId);
 

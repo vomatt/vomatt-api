@@ -226,9 +226,9 @@ public class VoteCommentService {
         // Taking back one's own like reveals nothing, so a block does not stop it
         findComment(commentId, userId);
 
-        commentLikeRepository.deleteByCommentIdAndUserId(commentId, UUID.fromString(userId));
-
-        log.info("User {} unliked comment {}", userId, commentId);
+        if (commentLikeRepository.deleteByCommentIdAndUserId(commentId, UUID.fromString(userId)) > 0) {
+            log.info("User {} unliked comment {}", userId, commentId);
+        }
     }
 
     private List<CommentDto> toDtos(List<VoteComment> comments, String currentUserId) {

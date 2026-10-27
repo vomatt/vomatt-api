@@ -79,7 +79,7 @@ class OpenApiSnapshotTest {
         }
         mockMvc.perform(get("/api/users/nobody-here")).andExpect(status().isNotFound());
         // Passkey registration is for signed-in users only
-        for (String path : java.util.List.of("/api/auth/passkey/register/options")) {
+        for (String path : java.util.List.of("/api/auth/passkey/register/options", "/api/auth/passkey/register/verify")) {
             mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path))
                     .andExpect(status().isUnauthorized());
         }
@@ -99,6 +99,14 @@ class OpenApiSnapshotTest {
         var data = appMapper.convertValue(java.util.Map.of("userId", "u", "email", "e", "roles", java.util.List.of("user"),
                 "sessionId", "s"), com.vomatt.common.security.RefreshTokenService.RefreshTokenData.class);
         org.assertj.core.api.Assertions.assertThat(data.grantsAdmin()).isFalse();
+        // A browser's credential.toJSON() carries fields the API does not read; they must be ignored, not rejected
+        var passkey = appMapper.readValue("""
+                {"credential": {"id": "a", "rawId": "a", "type": "public-key", "authenticatorAttachment": "platform",
+                  "clientExtensionResults": {"credProps": {"rk": true}},
+                  "response": {"clientDataJSON": "b", "attestationObject": "c", "transports": ["internal"],
+                    "authenticatorData": "d", "publicKey": "e", "publicKeyAlgorithm": -7}}}""",
+                com.vomatt.auth.dto.PasskeyRegistrationVerifyRequest.class);
+        org.assertj.core.api.Assertions.assertThat(passkey.credential().response().attestationObject()).isEqualTo("c");
     }
 
     /** ORDER_MAP_ENTRIES_BY_KEYS ignores ObjectNode, so rebuild the tree through a sorted Map. */

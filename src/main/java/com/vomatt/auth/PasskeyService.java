@@ -1,6 +1,8 @@
 package com.vomatt.auth;
 
 import com.vomatt.auth.dto.PasskeyRegistrationOptionsResponse;
+import com.vomatt.auth.dto.PasskeyRegistrationVerifyRequest;
+import com.vomatt.auth.dto.PasskeyResponse;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.redis.RedisService;
@@ -8,12 +10,24 @@ import com.vomatt.entity.PasskeyCredential;
 import com.vomatt.entity.User;
 import com.vomatt.repository.PasskeyCredentialRepository;
 import com.vomatt.repository.UserRepository;
+import com.webauthn4j.WebAuthnManager;
 import com.webauthn4j.converter.AttestedCredentialDataConverter;
 import com.webauthn4j.converter.util.ObjectConverter;
 import com.webauthn4j.credential.CredentialRecord;
 import com.webauthn4j.credential.CredentialRecordImpl;
 import com.webauthn4j.data.AuthenticatorTransport;
+import com.webauthn4j.data.PublicKeyCredentialParameters;
+import com.webauthn4j.data.PublicKeyCredentialType;
+import com.webauthn4j.data.RegistrationData;
+import com.webauthn4j.data.RegistrationParameters;
 import com.webauthn4j.data.attestation.authenticator.AttestedCredentialData;
+import com.webauthn4j.data.attestation.statement.COSEAlgorithmIdentifier;
+import com.webauthn4j.data.client.Origin;
+import com.webauthn4j.data.client.challenge.Challenge;
+import com.webauthn4j.server.ServerProperty;
+import com.webauthn4j.util.exception.WebAuthnException;
+import lombok.extern.slf4j.Slf4j;
+import tools.jackson.core.JacksonException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,11 +38,13 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 /** Passkeys (WebAuthn). All webauthn4j code lives here, so a webauthn4j upgrade touches only this class. */
+@Slf4j
 @Service
 public class PasskeyService {
 
@@ -43,10 +59,14 @@ public class PasskeyService {
     static final String CHALLENGE_NS = "passkey:challenge";
     static final Duration CHALLENGE_TTL = Duration.ofMinutes(5);
 
+    private static final WebAuthnManager WEB_AUTHN_MANAGER = WebAuthnManager.createNonStrictWebAuthnManager(OBJECT_CONVERTER);
+
     private static final String RP_NAME = "Vomatt";
     private static final String PUBLIC_KEY = "public-key";
-    private static final int ES256 = -7;
-    private static final int RS256 = -257;
+    /** Offered in the options and enforced at verify: ES256 (-7), then RS256 (-257). */
+    private static final List<PublicKeyCredentialParameters> PUB_KEY_CRED_PARAMS = List.of(
+            new PublicKeyCredentialParameters(PublicKeyCredentialType.PUBLIC_KEY, COSEAlgorithmIdentifier.ES256),
+            new PublicKeyCredentialParameters(PublicKeyCredentialType.PUBLIC_KEY, COSEAlgorithmIdentifier.RS256));
     // Platform authenticators first, phones next, security keys still offered (admins may use one)
     private static final List<String> HINTS = List.of("client-device", "hybrid", "security-key");
 
@@ -59,7 +79,7 @@ public class PasskeyService {
     private final UserRepository userRepository;
     private final RedisService redisService;
     private final String rpId;
-    private final Set<String> allowedOrigins;
+    private final Set<Origin> allowedOrigins;
 
     public PasskeyService(PasskeyCredentialRepository passkeyCredentialRepository, UserRepository userRepository,
                           RedisService redisService, @Value("${passkey.rp-id}") String rpId,
@@ -68,7 +88,8 @@ public class PasskeyService {
         this.userRepository = userRepository;
         this.redisService = redisService;
         this.rpId = rpId;
-        this.allowedOrigins = Set.copyOf(allowedOrigins);
+        // Parsed at startup, so a malformed PASSKEY_ALLOWED_ORIGINS fails the boot instead of every verify
+        this.allowedOrigins = allowedOrigins.stream().map(String::strip).map(Origin::new).collect(Collectors.toUnmodifiableSet());
     }
 
     @Transactional(readOnly = true)
@@ -88,13 +109,69 @@ public class PasskeyService {
                 new PasskeyRegistrationOptionsResponse.Rp(rpId, RP_NAME),
                 new PasskeyRegistrationOptionsResponse.User(BASE64URL.encodeToString(uuidBytes(user.getId())), name, displayName),
                 challenge,
-                List.of(new PasskeyRegistrationOptionsResponse.PubKeyCredParam(PUBLIC_KEY, ES256),
-                        new PasskeyRegistrationOptionsResponse.PubKeyCredParam(PUBLIC_KEY, RS256)),
+                PUB_KEY_CRED_PARAMS.stream()
+                        .map(p -> new PasskeyRegistrationOptionsResponse.PubKeyCredParam(PUBLIC_KEY, (int) p.getAlg().getValue()))
+                        .toList(),
                 CHALLENGE_TTL.toMillis(),
                 exclude,
                 new PasskeyRegistrationOptionsResponse.AuthenticatorSelection("required", true, "preferred"),
                 HINTS,
                 "none");
+    }
+
+    /**
+     * Verifies {@code credential.toJSON()} against a challenge this user was issued and stores the passkey. Any
+     * malformed, forged, replayed or expired response is 400 {@code auth.passkey.invalid}.
+     */
+    @Transactional
+    public PasskeyResponse verifyRegistration(String userId, PasskeyRegistrationVerifyRequest request) {
+        RegistrationData data;
+        try {
+            data = WEB_AUTHN_MANAGER.parseRegistrationResponseJSON(OBJECT_CONVERTER.getJsonConverter().writeValueAsString(
+                    request.credential().clientExtensionResults() == null
+                            ? withEmptyExtensions(request.credential()) : request.credential()));
+        } catch (WebAuthnException | JacksonException | IllegalArgumentException e) {
+            // webauthn4j lets some decoding errors through raw (bad base64, truncated CBOR / JSON)
+            throw invalid("unparseable registration response", e);
+        }
+        if (data.getCollectedClientData() == null) {
+            throw invalid("registration response without client data", null);
+        }
+        // The key is the challenge itself, so webauthn4j's own challenge check is a tautology: the security is that
+        // the challenge was issued (present), is spent here (getAndDelete) and was issued to this user for registration
+        Challenge challenge = data.getCollectedClientData().getChallenge();
+        PasskeyChallenge issued = challenge == null ? null
+                : redisService.getAndDelete(CHALLENGE_NS, BASE64URL.encodeToString(challenge.getValue()), PasskeyChallenge.class);
+        if (issued == null || issued.purpose() != PasskeyChallenge.Purpose.REGISTRATION || !userId.equals(issued.userId())) {
+            throw invalid("unknown, spent, expired or foreign challenge", null);
+        }
+        ServerProperty serverProperty = ServerProperty.builder()
+                .origins(allowedOrigins)
+                .rpId(rpId)
+                .challenge(challenge)
+                .build();
+        try {
+            WEB_AUTHN_MANAGER.verify(data, new RegistrationParameters(serverProperty, PUB_KEY_CRED_PARAMS, false, true));
+        } catch (WebAuthnException e) {
+            throw invalid("registration response failed verification", e);
+        }
+        User user = userRepository.findById(UUID.fromString(userId))
+                .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
+        CredentialRecord record = new CredentialRecordImpl(data.getAttestationObject(), data.getCollectedClientData(),
+                data.getClientExtensions(), data.getTransports());
+        String name = request.name() == null || request.name().isBlank() ? null : request.name().strip();
+        PasskeyCredential saved = passkeyCredentialRepository.saveAndFlush(toEntity(user, record, name));
+        return new PasskeyResponse(saved.getId(), saved.getName(), saved.getCreatedAt(), saved.getLastUsedAt());
+    }
+
+    private static PasskeyRegistrationVerifyRequest.Credential withEmptyExtensions(PasskeyRegistrationVerifyRequest.Credential c) {
+        return new PasskeyRegistrationVerifyRequest.Credential(c.id(), c.rawId(), c.type(), c.response(),
+                c.authenticatorAttachment(), Map.of());
+    }
+
+    private static ApiException invalid(String reason, Exception cause) {
+        log.info("Passkey rejected: {}{}", reason, cause == null ? "" : " (" + cause.getMessage() + ")");
+        return ApiException.badRequest(MessageKey.AUTH_PASSKEY_INVALID);
     }
 
     private String newChallenge(PasskeyChallenge purpose) {

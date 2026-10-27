@@ -1,6 +1,7 @@
 package com.vomatt.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,8 +26,13 @@ import org.springframework.boot.env.YamlPropertySourceLoader;
 import org.springframework.core.env.MutablePropertySources;
 import org.springframework.core.env.PropertySourcesPropertyResolver;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.http.HttpStatus;
 
 import com.vomatt.auth.dto.PasskeyRegistrationOptionsResponse;
+import com.vomatt.auth.dto.PasskeyRegistrationVerifyRequest;
+import com.vomatt.auth.dto.PasskeyResponse;
+import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.entity.PasskeyCredential;
 import com.vomatt.entity.User;
@@ -162,5 +169,124 @@ class PasskeyServicePostgresTest extends PostgresRepositoryTest {
                 eq(new PasskeyService.PasskeyChallenge(PasskeyService.PasskeyChallenge.Purpose.REGISTRATION, user.getId().toString())),
                 eq(Duration.ofMinutes(5)));
         assertThat(Base64.getUrlDecoder().decode(challenge)).hasSize(32);
+    }
+
+    // ── register/verify ──────────────────────────────────────────────
+
+    private String userId() {
+        return user.getId().toString();
+    }
+
+    /** options -> emulator at {@code origin} -> the verify request the client would send. */
+    private PasskeyRegistrationVerifyRequest register(PasskeyService service, String origin, String name) {
+        Map<String, Object> json = new PasskeyEmulator(origin).create(toWebAuthn(service.registrationOptions(userId())));
+        return request(json, name);
+    }
+
+    private static PasskeyRegistrationVerifyRequest request(Map<String, Object> json, String name) {
+        return new PasskeyRegistrationVerifyRequest(
+                JsonMapper.builder().build().convertValue(json, PasskeyRegistrationVerifyRequest.Credential.class), name);
+    }
+
+    private static void assertInvalid(ThrowingCallable call) {
+        assertThatThrownBy(call).isInstanceOfSatisfying(ApiException.class, e -> {
+            assertThat(e.getMessageKey()).isEqualTo(MessageKey.AUTH_PASSKEY_INVALID);
+            assertThat(e.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+        });
+    }
+
+    @Test
+    @DisplayName("should store the passkey for the caller when options -> create -> verify succeeds")
+    void shouldStoreCredentialWhenRegistrationVerifies() {
+        PasskeyRegistrationVerifyRequest request = register(passkeyService, "https://vomatt.com", "  MacBook  ");
+
+        PasskeyResponse response = passkeyService.verifyRegistration(userId(), request);
+        em.clear();
+
+        PasskeyCredential stored = passkeyCredentialRepository.findById(response.id()).orElseThrow();
+        assertThat(stored.getUser().getId()).isEqualTo(user.getId());
+        assertThat(Base64.getUrlEncoder().withoutPadding().encodeToString(stored.getCredentialId()))
+                .isEqualTo(request.credential().rawId());
+        assertThat(stored.getName()).isEqualTo("MacBook");
+        assertThat(response.name()).isEqualTo("MacBook");
+        assertThat(response.createdAt()).isNotNull();
+        assertThat(PasskeyService.toRecord(stored).getAttestedCredentialData().getCOSEKey()).isNotNull();
+        assertThat(redis).isEmpty();
+    }
+
+    @Test
+    @DisplayName("should reject a passkey created on another origin (https://vomatt.co)")
+    void shouldRejectWhenOriginIsWrong() {
+        PasskeyRegistrationVerifyRequest request = register(passkeyService, "https://vomatt.co", null);
+
+        assertInvalid(() -> passkeyService.verifyRegistration(userId(), request));
+        assertThat(passkeyCredentialRepository.findByUserIdOrderByCreatedAt(user.getId())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("should reject a challenge the server never issued")
+    void shouldRejectWhenChallengeWasNotIssued() {
+        PublicKeyCredentialCreationOptions options = toWebAuthn(passkeyService.registrationOptions(userId()));
+        PublicKeyCredentialCreationOptions forged = new PublicKeyCredentialCreationOptions(options.getRp(), options.getUser(),
+                new DefaultChallenge(), options.getPubKeyCredParams(), options.getTimeout(), List.of(),
+                options.getAuthenticatorSelection(), options.getAttestation(), null);
+        PasskeyRegistrationVerifyRequest request = request(new PasskeyEmulator("https://vomatt.com").create(forged), null);
+
+        assertInvalid(() -> passkeyService.verifyRegistration(userId(), request));
+    }
+
+    @Test
+    @DisplayName("should reject the same response a second time: the challenge was spent by getAndDelete")
+    void shouldRejectWhenChallengeReused() {
+        PasskeyRegistrationVerifyRequest request = register(passkeyService, "https://vomatt.com", null);
+        passkeyService.verifyRegistration(userId(), request);
+
+        assertInvalid(() -> passkeyService.verifyRegistration(userId(), request));
+        assertThat(passkeyCredentialRepository.findByUserIdOrderByCreatedAt(user.getId())).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("should reject a challenge that expired in Redis")
+    void shouldRejectWhenChallengeExpired() {
+        PasskeyRegistrationVerifyRequest request = register(passkeyService, "https://vomatt.com", null);
+        redis.clear(); // the 5-minute TTL elapsed
+
+        assertInvalid(() -> passkeyService.verifyRegistration(userId(), request));
+    }
+
+    @Test
+    @DisplayName("should reject a challenge issued to another user")
+    void shouldRejectWhenChallengeBelongsToAnotherUser() {
+        PasskeyRegistrationVerifyRequest request = register(passkeyService, "https://vomatt.com", null);
+        User other = persistUser("passkey-thief-" + UUID.randomUUID().toString().substring(0, 8));
+
+        assertInvalid(() -> passkeyService.verifyRegistration(other.getId().toString(), request));
+        assertThat(passkeyCredentialRepository.findByUserIdOrderByCreatedAt(other.getId())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("should accept https://vomatt.test only when the configured origins include it")
+    void shouldAcceptLocalOriginOnlyWhenConfigured() {
+        assertInvalid(() -> passkeyService.verifyRegistration(userId(), register(passkeyService, "https://vomatt.test", null)));
+
+        List<String> local = new java.util.ArrayList<>(PROD_ORIGINS);
+        local.add("https://vomatt.test");
+        PasskeyService localService = service(local);
+        assertThat(localService.verifyRegistration(userId(), register(localService, "https://vomatt.test", null)).id()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("should answer auth.passkey.invalid, not 500, for a malformed attestation")
+    void shouldRejectWhenResponseMalformed() {
+        PasskeyRegistrationVerifyRequest valid = register(passkeyService, "https://vomatt.com", null);
+        PasskeyRegistrationVerifyRequest.Credential c = valid.credential();
+        PasskeyRegistrationVerifyRequest garbled = new PasskeyRegistrationVerifyRequest(new PasskeyRegistrationVerifyRequest.Credential(
+                c.id(), c.rawId(), c.type(), new PasskeyRegistrationVerifyRequest.Response(c.response().clientDataJSON(),
+                "bm90LWNib3I", c.response().transports()), null, null), null);
+        PasskeyRegistrationVerifyRequest notBase64 = new PasskeyRegistrationVerifyRequest(new PasskeyRegistrationVerifyRequest.Credential(
+                c.id(), c.rawId(), c.type(), new PasskeyRegistrationVerifyRequest.Response("%%%", "%%%", null), null, null), null);
+
+        assertInvalid(() -> passkeyService.verifyRegistration(userId(), garbled));
+        assertInvalid(() -> passkeyService.verifyRegistration(userId(), notBase64));
     }
 }

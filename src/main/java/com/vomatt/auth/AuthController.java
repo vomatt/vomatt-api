@@ -326,25 +326,34 @@ public class AuthController {
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
                     {"code": "abc123def456", "redirectUri": "https://app.example.com/auth/line/callback"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
-            description = "LINE authorization code could not be exchanged, or the LINE profile could not be read",
+            description = "LINE rejected the code or the access token, rejected the id_token or returned an unusable one (`auth.line.token_exchange_failed`), or the LINE profile could not be read (`auth.line.profile_failed`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
                     {"success": false, "data": null, "message": "LINE token exchange failed", "errorCode": "auth.line.token_exchange_failed", "error": "LINE token exchange failed"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
             description = "Account suspended (`auth.account_banned`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
                     {"success": false, "data": null, "message": "This account has been banned and cannot sign in", "errorCode": "auth.account_banned", "error": "This account has been banned and cannot sign in"}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503",
+            description = "LINE failed (5xx), rate limited (429 / 408), did not answer in time, or returned an empty or malformed id_token verify body (`common.service_unavailable`). The authorization code may already be spent, so restart LINE Login for a new code instead of resending this request",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
+                    {"success": false, "data": null, "message": "Service temporarily unavailable, please try again later", "errorCode": "common.service_unavailable", "error": "Service temporarily unavailable, please try again later"}""")))
     @Operation(summary = "Sign in with LINE",
             description = """
                     **Auth**: public
                     **Precondition**: the client completed LINE Login and holds the authorization `code` and the `redirectUri` it used
                     **Behavior**: exchanges the code with LINE, reads the LINE profile and signs in the matching user, creating it if new. \
-                    If LINE provides no email, a synthetic `line_<userId>@line.oauth` email is used, so `user.email` in the response is never null for LINE logins
+                    When LINE returns an id_token, it is verified with LINE and the login fails rather than proceed without that result. \
+                    A synthetic `line_<userId>@line.oauth` email is used only when LINE returns no id_token, or verifies it but returns no email \
+                    (the user granted no email scope), so `user.email` in the response is never null for LINE logins
                     **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated
                     **Errors**:
                     - 400 `auth.line.not_configured`: LINE login is not configured on the server
-                    - 401 `auth.line.token_exchange_failed`: LINE did not return an access token for this code
-                    - 401 `auth.line.profile_failed`: the LINE profile could not be read
-                    - 403 `auth.account_banned`: the user is suspended (`active=false`)""")
+                    - 401 `auth.line.token_exchange_failed`: LINE rejected the code or the id_token (4xx), returned no access token or an unusable id_token, \
+                    or the id_token belongs to another LINE user than the profile
+                    - 401 `auth.line.profile_failed`: LINE rejected the access token (4xx) or returned no profile
+                    - 403 `auth.account_banned`: the user is suspended (`active=false`)
+                    - 503 `common.service_unavailable`: LINE's token, profile or id_token verify endpoint failed (5xx), \
+                    rate limited (429 / 408), did not answer in time or returned an empty or malformed verify body. The code is single-use and may already be spent: restart LINE Login for a new code""")
     public ResponseEntity<ApiResponse<AuthResponse>> lineLogin(@Valid @RequestBody LineAuthRequest req) {
         return ResponseEntity.ok(ApiResponse.ok(authService.lineLogin(req.code(), req.redirectUri())));
     }

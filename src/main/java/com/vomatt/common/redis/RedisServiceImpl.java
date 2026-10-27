@@ -104,7 +104,7 @@ public class RedisServiceImpl implements RedisService {
         }
     }
 
-    /** Reads a value; one that does not decode (see RedisService) is logged and read as null, the key left in place. */
+    /** Reads a value; one that does not decode (see RedisService) is logged and read as null; this does not touch the key (getAndDelete has already removed it). */
     @SuppressWarnings("unchecked")
     private <T> T decode(String cacheKey, java.util.function.Supplier<Object> read, Class<T> clazz) {
         Object value;

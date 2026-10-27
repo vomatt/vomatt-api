@@ -304,13 +304,22 @@ public class RefreshTokenService {
      */
     public void revoke(String token) {
         String key = keyOf(token);
-        RefreshTokenData data = redisService.getAndDelete(NAMESPACE, key, RefreshTokenData.class);
+        RefreshTokenData data = redisService.getOrThrow(NAMESPACE, key, RefreshTokenData.class);
         if (data != null) {
+            String sessionId = sessionIdOf(data, key);
+            // Ended and unlisted before the token goes: a grace replay in between cannot get a pair of this session,
+            // and a failure part way leaves the token for a retried logout
+            endSessions(List.of(sessionId), false);
             redisService.hDelete(USER_IDX_NS, data.userId(), key);
-            endSessions(List.of(sessionIdOf(data, key)), false);
+            if (!redisService.delete(NAMESPACE, key)) {
+                // A rotation consumed it in between: stop the successor
+                endSessions(List.of(sessionId), true);
+            }
+        } else if (redisService.delete(NAMESPACE, key)) {
+            // Undecodable: its user, so its index field, is unknown; the next revokeAllForUser drops the field
+            log.warn("Undecodable refresh token deleted on logout");
         } else {
-            // Already rotated, or undecodable (GETDEL removed it; its user, so its index field, is unknown and the field
-            // is dropped by the next revokeAllForUser): end what the consumed marker names
+            // Already rotated: end what the consumed marker names
             String sessionId = redisService.getOrThrow(CONSUMED_NS, key, String.class);
             // Markers written before 2026-10-17 hold the userId (see rotate); remove with that branch
             if (sessionId != null && redisService.hasKeyOrThrow(USER_IDX_NS, sessionId)) {

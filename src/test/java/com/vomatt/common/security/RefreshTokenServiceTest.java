@@ -599,20 +599,57 @@ class RefreshTokenServiceTest {
         String token = "revoke-token";
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
                 "user-6", List.of("user"), "session-1", false);
-        when(redisService.getAndDelete(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
+        when(redisService.getOrThrow(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
+        when(redisService.delete(NAMESPACE, k(token))).thenReturn(true);
 
         service.revoke(token);
 
-        verify(redisService).hDelete(USER_IDX_NS, "user-6", k(token));
-        // Ends the session for the grace window, so a grace pair of it is no longer handed out
-        verify(redisService).execInTransaction(ending("session-1", false));
-        // One read of the token
-        verify(redisService, never()).getOrThrow(eq(NAMESPACE), anyString(), any());
+        // Session ended and index field removed before the token goes, so a grace replay in between gets nothing
+        InOrder order = inOrder(redisService);
+        order.verify(redisService).execInTransaction(ending("session-1", false));
+        order.verify(redisService).hDelete(USER_IDX_NS, "user-6", k(token));
+        order.verify(redisService).delete(NAMESPACE, k(token));
+        verify(redisService, never()).getOrThrow(eq(CONSUMED_NS), anyString(), any());
+    }
+
+    @Test
+    void shouldKeepTokenForRetryWhenLogoutFailsBeforeDelete() {
+        String token = "revoke-fails";
+        when(redisService.getOrThrow(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class)).thenReturn(
+                new RefreshTokenService.RefreshTokenData("user-6", List.of("user"), "session-1", false));
+        doThrow(new RedisOperationException("redis down", null)).when(redisService).execInTransaction(anyList());
+
+        assertThatThrownBy(() -> service.revoke(token)).isInstanceOf(RedisOperationException.class);
+        verify(redisService, never()).delete(eq(NAMESPACE), anyString());
+    }
+
+    @Test
+    void shouldRevokeSessionWhenRotationConsumesTokenDuringLogout() {
+        String token = "revoke-races-rotation";
+        when(redisService.getOrThrow(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class)).thenReturn(
+                new RefreshTokenService.RefreshTokenData("user-6", List.of("user"), "session-1", false));
+
+        service.revoke(token);
+
+        // The successor that rotation wrote can no longer rotate
+        verify(redisService).execInTransaction(ending("session-1", true));
+    }
+
+    @Test
+    void shouldDeleteOnlyTokenWhenLoggingOutWithUndecodableToken() {
+        String token = "revoke-undecodable";
+        when(redisService.delete(NAMESPACE, k(token))).thenReturn(true);
+
+        service.revoke(token);
+
+        verify(redisService, never()).getOrThrow(eq(CONSUMED_NS), anyString(), any());
+        verify(redisService, never()).execInTransaction(any());
     }
 
     @Test
     void shouldRevokeAllSessionsWhenLoggingOutWithTokenWhoseLegacyMarkerHoldsUserId() {
         String token = "pre-deploy-rotated-then-logout";
+        when(redisService.getOrThrow(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class)).thenReturn(null);
         when(redisService.getOrThrow(CONSUMED_NS, k(token), String.class)).thenReturn("user-legacy");
         when(redisService.hasKeyOrThrow(USER_IDX_NS, "user-legacy")).thenReturn(true);
         when(redisService.hGetAllOrThrow(USER_IDX_NS, "user-legacy")).thenReturn(Map.of("t1", "session-1"));
@@ -626,7 +663,7 @@ class RefreshTokenServiceTest {
     @Test
     void shouldRevokeSessionWhenLoggingOutWithAlreadyRotatedToken() {
         String token = "rotated-then-logout";
-        when(redisService.getAndDelete(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class)).thenReturn(null);
+        when(redisService.getOrThrow(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class)).thenReturn(null);
         when(redisService.getOrThrow(CONSUMED_NS, k(token), String.class)).thenReturn("session-1");
 
         service.revoke(token);

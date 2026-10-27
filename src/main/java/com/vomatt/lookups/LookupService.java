@@ -209,11 +209,11 @@ public class LookupService {
 
     private void setActive(String id, boolean active) {
         Lookup lookup = findById(id);
-        if (Boolean.valueOf(active).equals(lookup.getIsActive())) {
-            return;
+        // Unchanged: no write, but still evict, so toggling again clears a stale cache
+        if (!Boolean.valueOf(active).equals(lookup.getIsActive())) {
+            lookup.setIsActive(active);
+            lookupRepository.save(lookup);
         }
-        lookup.setIsActive(active);
-        lookupRepository.save(lookup);
         evictCacheForType(lookup.getLookupType(), Boolean.TRUE.equals(lookup.getFrontendUsing()));
         log.info("Dictionary item {}: id={}, type={}", active ? "activated" : "deactivated", id, lookup.getLookupType());
     }

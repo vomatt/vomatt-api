@@ -296,14 +296,16 @@ class LookupServiceTest {
         }
 
         @Test
-        @DisplayName("Should neither write nor evict the cache when already inactive")
-        void shouldSkipWriteWhenAlreadyInactive() {
+        @DisplayName("Should skip the write but still evict the cache when already inactive")
+        void shouldEvictWithoutWriteWhenAlreadyInactive() {
             when(lookupRepository.findById(LOOKUP_ID)).thenReturn(Optional.of(buildLookup("CITY", "TPE", false, true)));
 
             lookupService.deactivate(LOOKUP_ID.toString());
 
             verify(lookupRepository, never()).save(any());
-            verifyNoInteractions(redisService);
+            // Toggling again is how an admin clears a stale cache
+            verify(redisService).delete(CacheNamespaces.LOOKUP_BY_TYPE, "CITY");
+            verify(redisService).delete(eq(CacheNamespaces.LOOKUP_FRONTEND), anyString());
         }
     }
 
@@ -328,14 +330,16 @@ class LookupServiceTest {
         }
 
         @Test
-        @DisplayName("Should neither write nor evict the cache when already active")
-        void shouldSkipWriteWhenAlreadyActive() {
+        @DisplayName("Should skip the write but still evict the cache when already active")
+        void shouldEvictWithoutWriteWhenAlreadyActive() {
             when(lookupRepository.findById(LOOKUP_ID)).thenReturn(Optional.of(buildLookup("CITY", "TPE", true, true)));
 
             lookupService.activate(LOOKUP_ID.toString());
 
             verify(lookupRepository, never()).save(any());
-            verifyNoInteractions(redisService);
+            // Toggling again is how an admin clears a stale cache
+            verify(redisService).delete(CacheNamespaces.LOOKUP_BY_TYPE, "CITY");
+            verify(redisService).delete(eq(CacheNamespaces.LOOKUP_FRONTEND), anyString());
         }
 
         @Test

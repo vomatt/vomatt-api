@@ -8,7 +8,6 @@ import com.vomatt.comments.dto.CommentDto;
 import com.vomatt.comments.dto.ReportCommentRequest;
 import com.vomatt.entity.User;
 import com.vomatt.repository.UserRepository;
-import com.vomatt.entity.CommentLike;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
 import com.vomatt.common.response.Cursor;
@@ -163,7 +162,7 @@ public class VoteCommentService {
 
         log.info("Comment {} updated by user {}", commentId, userId);
 
-        return toDto(comment, null);
+        return toDto(comment, userId);
     }
 
     public void deleteComment(UUID commentId, String userId) {
@@ -179,29 +178,15 @@ public class VoteCommentService {
         log.info("Comment {} deleted by user {}", commentId, userId);
     }
 
-    @Transactional(readOnly = true)
-    public CommentDto getComment(UUID commentId, String currentUserId) {
-        VoteComment comment = findComment(commentId, currentUserId);
-
-        return toDto(comment, currentUserId);
-    }
-
     public void likeComment(UUID commentId, String userId) {
-        VoteComment comment = findComment(commentId, userId);
-
+        findComment(commentId, userId);
         UUID userUuid = UUID.fromString(userId);
-        User user = userRepository.findById(userUuid)
-            .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
-
-        if (commentLikeRepository.existsByCommentIdAndUserId(commentId, userUuid)) {
-            log.warn("User {} already liked comment {}", userId, commentId);
-            return;
+        if (commentLikeRepository.insertIfAbsent(UUIDv7Generator.generateId(), commentId, userUuid) > 0) {
+            log.info("User {} liked comment {}", userId, commentId);
+        } else if (!userRepository.existsById(userUuid)) {
+            // An access token outlives account deletion, so the signed-in user may be gone
+            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
         }
-
-        CommentLike like = new CommentLike(comment, user);
-        commentLikeRepository.save(like);
-
-        log.info("User {} liked comment {}", userId, commentId);
     }
 
     /** Reports a live Comment or Reply of someone else; idempotent, a repeat report keeps the first one. */

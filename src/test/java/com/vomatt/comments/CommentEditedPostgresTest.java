@@ -18,12 +18,15 @@ import com.vomatt.comments.dto.UpdateCommentRequest;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.repository.PostgresRepositoryTest;
+import com.vomatt.repository.VoteCommentRepository;
 
 @Import({ VoteCommentService.class, CommentMapper.class, VoteServiceSlice.class })
 @DisplayName("Comment edited flag (Postgres)")
 class CommentEditedPostgresTest extends PostgresRepositoryTest {
 
     @Autowired VoteCommentService commentService;
+    @Autowired VoteCommentRepository commentRepository;
+    @Autowired CommentMapper commentMapper;
 
     private User user;
     private Vote poll;
@@ -48,7 +51,7 @@ class CommentEditedPostgresTest extends PostgresRepositoryTest {
     private CommentDto reload(UUID id) {
         em.flush();
         em.clear();
-        return commentService.getComment(id, user.getId().toString());
+        return commentMapper.toDto(commentRepository.findById(id).orElseThrow(), 0, false);
     }
 
     @Test
@@ -69,5 +72,19 @@ class CommentEditedPostgresTest extends PostgresRepositoryTest {
         commentService.updateComment(id, user.getId().toString(), request);
 
         assertThat(reload(id).isEdited()).isTrue();
+    }
+
+    @Test
+    @DisplayName("should keep likedByCurrentUser true in the edit response when the author liked their own comment")
+    void shouldKeepLikedStateWhenAuthorEditsLikedComment() {
+        UUID id = post("hi");
+        commentService.likeComment(id, user.getId().toString());
+        UpdateCommentRequest request = new UpdateCommentRequest();
+        request.setText("hi, fixed");
+
+        CommentDto edited = commentService.updateComment(id, user.getId().toString(), request);
+
+        assertThat(edited.isLikedByCurrentUser()).isTrue();
+        assertThat(edited.getLikeCount()).isEqualTo(1);
     }
 }

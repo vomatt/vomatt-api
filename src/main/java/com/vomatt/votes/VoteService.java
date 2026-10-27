@@ -919,7 +919,7 @@ public class VoteService {
 
     // Popular tag counts include only Public Polls
     private static Set<UUID> countedTagIds(Vote vote) {
-        return vote.getAudience() != Audience.PUBLIC ? Set.of()
+        return vote.getAudience() != Audience.PUBLIC || vote.getTags() == null ? Set.of()
             : vote.getTags().stream().map(Tag::getId).collect(Collectors.toSet());
     }
 

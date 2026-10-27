@@ -47,7 +47,7 @@ public class VoteMapper {
         response.setOptions(options.stream()
                 .map(opt -> toOptionResponse(opt, sealed))
                 .toList());
-        response.setTags(vote.getTags().stream()
+        response.setTags(vote.getTags() == null ? List.of() : vote.getTags().stream()
                 .map(tag -> new TagDto(tag.getId().toString(), tag.getName(), tag.getSlug(), tag.getDescription(),
                         tag.getDisplayOrder(), tag.getUsageCount()))
                 .toList());

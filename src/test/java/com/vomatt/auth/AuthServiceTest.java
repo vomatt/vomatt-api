@@ -22,6 +22,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -1473,6 +1475,18 @@ class AuthServiceTest {
 
         assertThat(authService.lineLogin("code", "https://app.example.com/cb").user().id()).isEqualTo(dave.getId().toString());
         server.verify();
+    }
+
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    void shouldKeepLineResponseBodyOutOfWarnLogWhenLineRejectsRequest(CapturedOutput output) {
+        var server = lineServer();
+        server.expect(requestTo(LINE_TOKEN_URL)).andRespond(withBadRequest().body("{\"error_description\":\"secret-body\"}"));
+
+        assertLineLoginFails(server, HttpStatus.UNAUTHORIZED, MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
+        assertThat(output.getOut().lines().filter(line -> line.contains("WARN")))
+                .anySatisfy(line -> assertThat(line).contains("LINE rejected the request").contains("400"))
+                .noneSatisfy(line -> assertThat(line).contains("secret-body"));
     }
 
     static Stream<Arguments> lineTokenFailures() {

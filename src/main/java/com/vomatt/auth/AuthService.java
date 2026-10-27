@@ -757,12 +757,14 @@ public class AuthService {
             return call.get();
         } catch (HttpClientErrorException ex) {
             int status = ex.getStatusCode().value();
+            // The full response body goes to DEBUG only; WARN keeps the status
+            log.debug("{} answered {}: {}", upstream, status, ex.getResponseBodyAsString());
             // 429 (rate limited) and 408 are transient on the provider's side, not a rejected credential
             if (rejected != null && status != 429 && status != 408) {
-                log.warn("{} rejected the request ({}): {}", upstream, rejected, ex.getMessage());
+                log.warn("{} rejected the request ({}): {} {}", upstream, rejected, status, ex.getStatusText());
                 throw ApiException.unauthorized(rejected);
             }
-            log.warn("{} call failed ({}): {}", upstream, status, ex.getMessage());
+            log.warn("{} call failed ({} {})", upstream, status, ex.getStatusText());
             throw ApiException.serviceUnavailable(MessageKey.COMMON_SERVICE_UNAVAILABLE);
         } catch (RestClientException ex) {
             log.warn("{} call failed (external service): {}", upstream, ex.getMessage());

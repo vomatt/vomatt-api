@@ -16,11 +16,17 @@ import com.vomatt.entity.CommentReport;
 @Repository
 public interface CommentReportRepository extends JpaRepository<CommentReport, UUID> {
 
-    /** Idempotent, also under concurrent requests: a user's later reports of the same Comment are dropped. */
+    /**
+     * Idempotent, also under concurrent requests: a user's later reports of the same Comment are dropped. Returns 1
+     * when the report is new, 0 when it already existed, the reporter does not exist or the Comment is gone or deleted.
+     * The Comment row is share-locked, so a delete still in flight is waited for.
+     */
     @Modifying
     @Query(value = """
             INSERT INTO vomatt.comment_reports (id, comment_id, reporter_id, reason, note)
-            VALUES (:id, :commentId, :reporterId, :reason, :note)
+            SELECT :id, :commentId, :reporterId, :reason, CAST(:note AS varchar)
+            WHERE EXISTS (SELECT 1 FROM vomatt.users WHERE id = :reporterId)
+              AND EXISTS (SELECT 1 FROM vomatt.vote_comments WHERE id = :commentId AND NOT is_deleted FOR SHARE)
             ON CONFLICT (comment_id, reporter_id) DO NOTHING""", nativeQuery = true)
     int insertIfAbsent(@Param("id") UUID id, @Param("commentId") UUID commentId, @Param("reporterId") UUID reporterId,
                        @Param("reason") String reason, @Param("note") String note);

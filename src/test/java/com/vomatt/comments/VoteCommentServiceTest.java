@@ -24,15 +24,17 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.vomatt.comments.dto.CommentDto;
+import com.vomatt.comments.dto.ReportCommentRequest;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.CursorResponse;
+import com.vomatt.entity.CommentReportReason;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
 import com.vomatt.repository.CommentLikeRepository;
+import com.vomatt.repository.CommentReportRepository;
 import com.vomatt.repository.IdCount;
-import com.vomatt.repository.UserBlockRepository;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.votes.VoteService;
@@ -45,7 +47,7 @@ class VoteCommentServiceTest {
     @Mock VoteService voteService;
     @Mock UserRepository userRepository;
     @Mock CommentLikeRepository commentLikeRepository;
-    @Mock UserBlockRepository blockRepository;
+    @Mock CommentReportRepository commentReportRepository;
     @Spy CommentMapper commentMapper = new CommentMapper();
     @InjectMocks VoteCommentService commentService;
 
@@ -148,22 +150,49 @@ class VoteCommentServiceTest {
     }
 
     @Test
-    @DisplayName("should look up a block once when the Comment and its thread have the same author")
-    void shouldCheckBlockOnceWhenThreadAuthorIsCommentAuthor() {
+    @DisplayName("should return comment.not_found when the Comment goes between its lookup and the like")
+    void shouldThrowCommentNotFoundWhenCommentDeletedBeforeLikeInsert() {
         Vote vote = new Vote();
         ReflectionTestUtils.setField(vote, "id", voteId);
-        User author = User.builder().id(UUID.randomUUID()).username("author").build();
-        VoteComment root = comment(vote, author, "root");
-        VoteComment reply = comment(vote, author, "own reply");
-        reply.setParent(root);
-        when(commentRepository.findByIdAndNotDeleted(root.getId())).thenReturn(Optional.of(root));
-        when(commentRepository.findByIdAndNotDeleted(reply.getId())).thenReturn(Optional.of(reply));
-        when(commentLikeRepository.insertIfAbsent(any(), any(), eq(viewerId))).thenReturn(1);
+        VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "hi");
+        when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(Optional.of(target), Optional.empty());
+        when(commentLikeRepository.insertIfAbsent(any(), eq(target.getId()), eq(viewerId))).thenReturn(0);
+        when(userRepository.existsById(viewerId)).thenReturn(true);
 
-        commentService.likeComment(root.getId(), viewerId.toString());
-        commentService.likeComment(reply.getId(), viewerId.toString());
+        assertThatThrownBy(() -> commentService.likeComment(target.getId(), viewerId.toString()))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMENT_NOT_FOUND));
+    }
 
-        org.mockito.Mockito.verify(blockRepository, org.mockito.Mockito.times(2))
-                .existsByBlockerIdAndBlockedId(viewerId, author.getId());
+    @Test
+    @DisplayName("should return comment.not_found when the Comment goes between its lookup and the report")
+    void shouldThrowCommentNotFoundWhenCommentDeletedBeforeReportInsert() {
+        Vote vote = new Vote();
+        ReflectionTestUtils.setField(vote, "id", voteId);
+        VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "hi");
+        when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(Optional.of(target), Optional.empty());
+        when(commentReportRepository.insertIfAbsent(any(), eq(target.getId()), eq(viewerId), any(), any())).thenReturn(0);
+        when(userRepository.existsById(viewerId)).thenReturn(true);
+
+        assertThatThrownBy(() -> commentService.reportComment(target.getId(), viewerId.toString(),
+                new ReportCommentRequest(CommentReportReason.SPAM, null)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMENT_NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("should succeed without telling 404 causes apart when the caller already liked the Comment")
+    void shouldSkipNotFoundChecksWhenAlreadyLiked() {
+        Vote vote = new Vote();
+        ReflectionTestUtils.setField(vote, "id", voteId);
+        VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "hi");
+        when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(Optional.of(target));
+        when(commentLikeRepository.insertIfAbsent(any(), eq(target.getId()), eq(viewerId))).thenReturn(0);
+        when(commentLikeRepository.existsByCommentIdAndUserId(target.getId(), viewerId)).thenReturn(true);
+
+        commentService.likeComment(target.getId(), viewerId.toString());
+
+        org.mockito.Mockito.verify(userRepository, org.mockito.Mockito.never()).existsById(any());
+        org.mockito.Mockito.verify(commentRepository, org.mockito.Mockito.times(1)).findByIdAndNotDeleted(target.getId());
     }
 }

@@ -25,9 +25,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.common.util.UUIDv7Generator;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
+import com.vomatt.repository.CommentLikeRepository;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.votes.VoteServiceSlice;
 
@@ -39,6 +41,7 @@ class CommentLikePostgresTest extends PostgresRepositoryTest {
 
     @Autowired VoteCommentService commentService;
     @Autowired TransactionTemplate tx;
+    @Autowired CommentLikeRepository likeRepository;
 
     private final List<UUID> createdUsers = new ArrayList<>();
     private final ExecutorService pool = Executors.newFixedThreadPool(2);
@@ -73,12 +76,17 @@ class CommentLikePostgresTest extends PostgresRepositoryTest {
         em.flush();
     }
 
-    // true once a session is blocked on a lock while inserting into comment_likes
-    private boolean likeWaitsOnLock() {
+    // true once a session of this test database is blocked on a lock while running a statement that starts with
+    // the prefix (written with LIKE wildcards escaped)
+    private boolean waitsOnLock(String likePrefix) {
         return ((Number) em.createNativeQuery("""
                 SELECT COUNT(*) FROM pg_stat_activity
-                WHERE wait_event_type = 'Lock' AND query ILIKE 'insert into vomatt.comment_likes%'""")
-                .getSingleResult()).longValue() > 0;
+                WHERE datname = current_database() AND wait_event_type = 'Lock' AND query ILIKE :prefix || '%'""")
+                .setParameter("prefix", likePrefix).getSingleResult()).longValue() > 0;
+    }
+
+    private boolean likeWaitsOnLock() {
+        return waitsOnLock("insert into vomatt.comment\\_likes");
     }
 
     @Test
@@ -107,8 +115,103 @@ class CommentLikePostgresTest extends PostgresRepositoryTest {
         first.get(10, TimeUnit.SECONDS);
         second.get(10, TimeUnit.SECONDS);
 
-        assertThat(((Number) em.createNativeQuery("SELECT COUNT(*) FROM vomatt.comment_likes WHERE comment_id = :id")
-                .setParameter("id", comment.getId()).getSingleResult()).longValue()).isEqualTo(1);
+        assertThat(likeCount()).isEqualTo(1);
+    }
+
+    private void unlike() {
+        commentService.unlikeComment(comment.getId(), liker.getId().toString());
+        em.flush();
+    }
+
+    @Test
+    @DisplayName("should succeed for both and remove the like when the same user unlikes twice at the same moment")
+    void shouldRemoveLikeWhenSameUserUnlikesConcurrently() throws Exception {
+        tx.executeWithoutResult(s -> like());
+        CountDownLatch unliked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Future<?> first = pool.submit(() -> tx.executeWithoutResult(s -> {
+            unlike();
+            unliked.countDown();
+            try {
+                release.await(10, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }));
+        assertThat(unliked.await(10, TimeUnit.SECONDS)).isTrue();
+
+        Future<?> second = pool.submit(() -> tx.executeWithoutResult(s -> unlike()));
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (!waitsOnLock("delete from vomatt.comment\\_likes") && System.nanoTime() < deadline) {
+            Thread.sleep(20);
+        }
+        assertThat(waitsOnLock("delete from vomatt.comment\\_likes"))
+                .as("second unlike waits on the first one's uncommitted delete").isTrue();
+        release.countDown();
+        first.get(10, TimeUnit.SECONDS);
+        second.get(10, TimeUnit.SECONDS);
+
+        assertThat(likeCount()).isZero();
+    }
+
+    // The insert alone, as the service runs it once the Comment lookup has passed
+    private int insertLike() {
+        return tx.execute(s -> likeRepository.insertIfAbsent(UUIDv7Generator.generateId(), comment.getId(), liker.getId()));
+    }
+
+    private long likeCount() {
+        return ((Number) em.createNativeQuery("SELECT COUNT(*) FROM vomatt.comment_likes WHERE comment_id = :id")
+                .setParameter("id", comment.getId()).getSingleResult()).longValue();
+    }
+
+    @Test
+    @DisplayName("should insert nothing when the Comment was hard-deleted after it was looked up")
+    void shouldInsertNothingWhenCommentHardDeleted() {
+        tx.executeWithoutResult(s -> em.createNativeQuery("DELETE FROM vomatt.vote_comments WHERE id = :id")
+                .setParameter("id", comment.getId()).executeUpdate());
+
+        assertThat(insertLike()).isZero();
+    }
+
+    @Test
+    @DisplayName("should insert nothing when the Comment was soft-deleted after it was looked up")
+    void shouldInsertNothingWhenCommentSoftDeleted() {
+        tx.executeWithoutResult(s -> em.createNativeQuery("UPDATE vomatt.vote_comments SET is_deleted = true WHERE id = :id")
+                .setParameter("id", comment.getId()).executeUpdate());
+
+        assertThat(insertLike()).isZero();
+    }
+
+    @Test
+    @DisplayName("should return 404 and keep no like when the Comment is soft-deleted while it is being liked")
+    void shouldKeepNoLikeWhenCommentSoftDeletedConcurrently() throws Exception {
+        CountDownLatch deleted = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Future<?> delete = pool.submit(() -> tx.executeWithoutResult(s -> {
+            em.createNativeQuery("UPDATE vomatt.vote_comments SET is_deleted = true WHERE id = :id")
+                    .setParameter("id", comment.getId()).executeUpdate();
+            deleted.countDown();
+            try {
+                release.await(10, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }));
+        assertThat(deleted.await(10, TimeUnit.SECONDS)).isTrue();
+
+        // the lookup still sees the Comment live: its delete is not committed yet
+        Future<?> like = pool.submit(() -> tx.executeWithoutResult(s -> like()));
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (!likeWaitsOnLock() && System.nanoTime() < deadline) {
+            Thread.sleep(20);
+        }
+        assertThat(likeWaitsOnLock()).as("like waits on the uncommitted delete").isTrue();
+        release.countDown();
+        delete.get(10, TimeUnit.SECONDS);
+
+        assertThatThrownBy(() -> like.get(10, TimeUnit.SECONDS)).hasCauseInstanceOf(ApiException.class)
+                .cause().satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.COMMENT_NOT_FOUND));
+        assertThat(likeCount()).isZero();
     }
 
     @Test

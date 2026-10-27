@@ -16,7 +16,6 @@ import com.vomatt.common.util.UUIDv7Generator;
 import com.vomatt.repository.CommentLikeRepository;
 import com.vomatt.repository.CommentReportRepository;
 import com.vomatt.repository.IdCount;
-import com.vomatt.repository.UserBlockRepository;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.votes.VoteService;
 import lombok.RequiredArgsConstructor;
@@ -42,7 +41,6 @@ public class VoteCommentService {
     private final VoteService voteService;
     private final UserRepository userRepository;
     private final CommentLikeRepository commentLikeRepository;
-    private final UserBlockRepository blockRepository;
     private final CommentMapper commentMapper;
     private final CommentReportRepository commentReportRepository;
 
@@ -64,7 +62,8 @@ public class VoteCommentService {
 
         log.info("Comment created: {} on vote: {} by user: {}", comment.getId(), voteId, userId);
 
-        return toDto(comment, null);
+        // A new Comment has no likes yet
+        return commentMapper.toDto(comment, 0, false);
     }
 
     /** A Poll's comments, newest first, cursor-paged; likes are loaded per page, not per comment. */
@@ -91,7 +90,7 @@ public class VoteCommentService {
         VoteComment root = commentRepository.findById(commentId)
             .filter(c -> c.getParent() == null && c.getVote().getId().toString().equals(voteId))
             // A thread started by a user the viewer blocked is hidden from the list, so its Replies are too
-            .filter(c -> viewerId == null || !isHiddenFrom(c, viewerId))
+            .filter(c -> viewerId == null || !commentRepository.isHiddenFrom(c.getId(), viewerId))
             .orElseThrow(() -> ApiException.notFound(MessageKey.COMMENT_NOT_FOUND));
 
         int size = CursorResponse.limit(limit);
@@ -113,17 +112,10 @@ public class VoteCommentService {
     // As findComment, minus what the lists hide from the caller
     private VoteComment findVisibleComment(UUID commentId, String userId) {
         VoteComment comment = findComment(commentId, userId);
-        if (isHiddenFrom(comment, UUID.fromString(userId))) {
+        if (commentRepository.isHiddenFrom(comment.getId(), UUID.fromString(userId))) {
             throw ApiException.notFound(MessageKey.COMMENT_NOT_FOUND);
         }
         return comment;
-    }
-
-    // What the lists hide from a signed-in viewer: a Comment by a user they blocked, or any Reply in such a user's thread
-    private boolean isHiddenFrom(VoteComment comment, UUID viewerId) {
-        VoteComment root = comment.getParent() != null ? comment.getParent() : comment;
-        return Stream.of(comment.getUser().getId(), root.getUser().getId()).distinct()
-            .anyMatch(authorId -> blockRepository.existsByBlockerIdAndBlockedId(viewerId, authorId));
     }
 
     // Replies are one level deep: replying to a Reply attaches to the same top-level Comment
@@ -131,7 +123,7 @@ public class VoteCommentService {
         VoteComment target = commentRepository.findByIdAndNotDeleted(targetId)
             .filter(c -> c.getVote().getId().equals(voteId))
             .orElseThrow(() -> ApiException.badRequest(MessageKey.COMMENT_PARENT_INVALID));
-        if (isHiddenFrom(target, UUID.fromString(userId))) {
+        if (commentRepository.isHiddenFrom(target.getId(), UUID.fromString(userId))) {
             throw ApiException.notFound(MessageKey.COMMENT_NOT_FOUND);
         }
         return target.getParent() != null ? target.getParent() : target;
@@ -202,9 +194,15 @@ public class VoteCommentService {
         UUID userUuid = UUID.fromString(userId);
         if (commentLikeRepository.insertIfAbsent(UUIDv7Generator.generateId(), commentId, userUuid) > 0) {
             log.info("User {} liked comment {}", userId, commentId);
+        } else if (commentLikeRepository.existsByCommentIdAndUserId(commentId, userUuid)) {
+            // Already liked: the common no-op
+            return;
         } else if (!userRepository.existsById(userUuid)) {
             // An access token outlives account deletion, so the signed-in user may be gone
             throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
+        } else if (commentRepository.findByIdAndNotDeleted(commentId).isEmpty()) {
+            // Deleted since the lookup above
+            throw ApiException.notFound(MessageKey.COMMENT_NOT_FOUND);
         }
     }
 
@@ -219,6 +217,12 @@ public class VoteCommentService {
         if (commentReportRepository.insertIfAbsent(UUIDv7Generator.generateId(), commentId, reporterId,
                 request.reason().name(), note) > 0) {
             log.info("User {} reported comment {} as {}", userId, commentId, request.reason());
+        } else if (!userRepository.existsById(reporterId)) {
+            // An access token outlives account deletion, so the signed-in user may be gone
+            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
+        } else if (commentRepository.findByIdAndNotDeleted(commentId).isEmpty()) {
+            // Deleted since the lookup above
+            throw ApiException.notFound(MessageKey.COMMENT_NOT_FOUND);
         }
     }
 
@@ -226,9 +230,9 @@ public class VoteCommentService {
         // Taking back one's own like reveals nothing, so a block does not stop it
         findComment(commentId, userId);
 
-        commentLikeRepository.deleteByCommentIdAndUserId(commentId, UUID.fromString(userId));
-
-        log.info("User {} unliked comment {}", userId, commentId);
+        if (commentLikeRepository.deleteByCommentIdAndUserId(commentId, UUID.fromString(userId)) > 0) {
+            log.info("User {} unliked comment {}", userId, commentId);
+        }
     }
 
     private List<CommentDto> toDtos(List<VoteComment> comments, String currentUserId) {

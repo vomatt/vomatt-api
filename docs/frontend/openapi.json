@@ -15989,7 +15989,7 @@
     },
     "/api/votes/{voteId}/comments/{commentId}/report" : {
       "post" : {
-        "description" : "**Auth**: required\n**Precondition**: the Comment or Reply exists, is not deleted, was written by someone else, and its Poll is reachable by the caller\n**Behavior**: records the report for moderators with `reason` (SPAM, HARASSMENT, HATE, MISINFORMATION or OTHER) and an optional `note` (max 500 characters; blank is stored as none). Idempotent: reporting the same Comment again succeeds and keeps the first report. The author is not told, and the Comment stays visible until a moderator acts\n**Side effects**: the report is listed in `GET /api/admin/comment-reports` and written to the audit log\n**Errors**:\n- 400 `comment.report.self`: the caller wrote the Comment\n- 400 `common.validation_failed`: `reason` missing, or `note` over 500 characters\n- 400 `common.bad_request`: `reason` is not one of the values above\n- 404 `comment.not_found`: Comment does not exist, is deleted, or is hidden from the caller as in the lists (written by a user the caller blocked, or a Reply in a thread such a user started)\n- 404 `vote.not_found`: the Comment's Poll is Deleted or not reachable by the caller\n",
+        "description" : "**Auth**: required\n**Precondition**: the Comment or Reply exists, is not deleted, was written by someone else, and its Poll is reachable by the caller\n**Behavior**: records the report for moderators with `reason` (SPAM, HARASSMENT, HATE, MISINFORMATION or OTHER) and an optional `note` (max 500 characters; blank is stored as none). Idempotent: reporting the same Comment again succeeds and keeps the first report. The author is not told, and the Comment stays visible until a moderator acts\n**Side effects**: the report is listed in `GET /api/admin/comment-reports` and written to the audit log\n**Errors**:\n- 400 `comment.report.self`: the caller wrote the Comment\n- 400 `common.validation_failed`: `reason` missing, or `note` over 500 characters\n- 400 `common.bad_request`: `reason` is not one of the values above\n- 404 `comment.not_found`: Comment does not exist, is deleted, or is hidden from the caller as in the lists (written by a user the caller blocked, or a Reply in a thread such a user started)\n- 404 `vote.not_found`: the Comment's Poll is Deleted or not reachable by the caller\n- 404 `user.not_found`: signed-in user no longer exists\n",
         "operationId" : "reportComment",
         "parameters" : [ {
           "description" : "Poll ID",
@@ -16104,7 +16104,7 @@
                 }
               }
             },
-            "description" : "Comment not found or deleted (errorCode `comment.not_found`), or its Poll is Deleted (`vote.not_found`)"
+            "description" : "Comment not found or deleted (errorCode `comment.not_found`), its Poll is Deleted (`vote.not_found`), or the current user no longer exists (`user.not_found`)"
           },
           "429" : {
             "content" : {

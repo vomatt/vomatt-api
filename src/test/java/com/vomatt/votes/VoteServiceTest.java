@@ -33,7 +33,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.stubbing.Answer;
+import org.mockito.invocation.InvocationOnMock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
@@ -141,19 +141,24 @@ class VoteServiceTest {
         when(voteRepository.findByIdWithOptions(v.getId())).thenReturn(Optional.of(v));
     }
 
+    // Create saves
     private void stubSaveAssignsId() {
-        Answer<Vote> assignIds = inv -> {
-            Vote v = inv.getArgument(0);
-            if (v.getId() == null) {
-                setId(v, UUID.randomUUID()); // simulate DB-assigned ID
-                ReflectionTestUtils.setField(v, "createdAt", OffsetDateTime.now()); // simulate @PrePersist
-            }
-            v.getOptions().stream().filter(o -> o.getId() == null).forEach(o -> setId(o, UUID.randomUUID()));
-            return v;
-        };
-        // Create saves, Edit saves and flushes
-        lenient().when(voteRepository.save(any(Vote.class))).thenAnswer(assignIds);
-        lenient().when(voteRepository.saveAndFlush(any(Vote.class))).thenAnswer(assignIds);
+        when(voteRepository.save(any(Vote.class))).thenAnswer(VoteServiceTest::assignIds);
+    }
+
+    // Edit saves and flushes
+    private void stubSaveAndFlushAssignsId() {
+        when(voteRepository.saveAndFlush(any(Vote.class))).thenAnswer(VoteServiceTest::assignIds);
+    }
+
+    private static Vote assignIds(InvocationOnMock inv) {
+        Vote v = inv.getArgument(0);
+        if (v.getId() == null) {
+            setId(v, UUID.randomUUID()); // simulate DB-assigned ID
+            ReflectionTestUtils.setField(v, "createdAt", OffsetDateTime.now()); // simulate @PrePersist
+        }
+        v.getOptions().stream().filter(o -> o.getId() == null).forEach(o -> setId(o, UUID.randomUUID()));
+        return v;
     }
 
     private CreateVoteRequest.VoteOptionRequest buildOption(String text) {
@@ -917,7 +922,7 @@ class VoteServiceTest {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
-            stubSaveAssignsId();
+            stubSaveAndFlushAssignsId();
             CreateVoteRequest request = editRequest(null);
 
             request.setAnonymous(true);
@@ -944,7 +949,7 @@ class VoteServiceTest {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
-            stubSaveAssignsId();
+            stubSaveAndFlushAssignsId();
             CreateVoteRequest request = editRequest(null);
             request.setAnonymous(true);
             request.setVoterVisibility(VoterVisibility.SIGNED_IN);
@@ -963,7 +968,7 @@ class VoteServiceTest {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
-            stubSaveAssignsId();
+            stubSaveAndFlushAssignsId();
             CreateVoteRequest request = editRequest(null);
             request.setAudience(Audience.UNLISTED);
 
@@ -993,7 +998,7 @@ class VoteServiceTest {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
-            stubSaveAssignsId();
+            stubSaveAndFlushAssignsId();
 
             CreateVoteRequest request = editRequest(null);
 
@@ -1016,7 +1021,7 @@ class VoteServiceTest {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
-            stubSaveAssignsId();
+            stubSaveAndFlushAssignsId();
             CreateVoteRequest request = editRequest(null);
             request.setStartTime(null);
 
@@ -1055,7 +1060,7 @@ class VoteServiceTest {
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
             when(tagRepository.findAllById(Set.of(kept.getId(), added.getId()))).thenReturn(List.of(kept, added));
-            stubSaveAssignsId();
+            stubSaveAndFlushAssignsId();
 
             voteService.updateVote(voteId.toString(), editRequest(List.of(kept.getId(), added.getId())), userId.toString());
 

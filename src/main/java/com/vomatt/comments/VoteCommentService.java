@@ -64,7 +64,8 @@ public class VoteCommentService {
 
         log.info("Comment created: {} on vote: {} by user: {}", comment.getId(), voteId, userId);
 
-        return toDto(comment, null);
+        // A new Comment has no likes yet
+        return commentMapper.toDto(comment, 0, false);
     }
 
     /** A Poll's comments, newest first, cursor-paged; likes are loaded per page, not per comment. */

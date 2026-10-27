@@ -14,7 +14,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 import org.testcontainers.postgresql.PostgreSQLContainer;
-import org.testcontainers.utility.MountableFile;
 
 import com.vomatt.vomattapi.VomattApiApplication;
 
@@ -39,9 +38,7 @@ class OpenApiSnapshotTest {
     static final Path SNAPSHOT = Path.of("docs/frontend/openapi.json");
 
     @ServiceConnection
-    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17")
-            .withCopyFileToContainer(MountableFile.forClasspathResource("db/schema.sql"),
-                    "/docker-entrypoint-initdb.d/01-schema.sql");
+    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17");
 
     static {
         POSTGRES.start();

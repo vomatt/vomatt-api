@@ -18,7 +18,7 @@ class DropBallotIpMigrationPostgresTest extends PostgresRepositoryTest {
     @Test
     @DisplayName("should drop the column and stay a no-op when run again")
     void shouldDropIpColumnWhenMigrationRuns() throws Exception {
-        // schema.sql no longer creates the column: recreate the pre-migration shape first
+        // the baseline does not create the column: recreate the pre-migration shape first
         em.createNativeQuery("ALTER TABLE vomatt.user_votes ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45)").executeUpdate();
         assertThat(hasIpColumn()).isTrue();
 

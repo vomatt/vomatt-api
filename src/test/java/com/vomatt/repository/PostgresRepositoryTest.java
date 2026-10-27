@@ -9,7 +9,6 @@ import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabas
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.ContextConfiguration;
 import org.testcontainers.postgresql.PostgreSQLContainer;
-import org.testcontainers.utility.MountableFile;
 
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
@@ -19,8 +18,8 @@ import com.vomatt.vomattapi.VomattApiApplication;
 import jakarta.persistence.EntityManager;
 
 /**
- * Base for repository tests against a real Postgres 17 loaded with the production schema.sql,
- * the same way docker-compose initialises the local database. One container is shared by all subclasses.
+ * Base for repository tests against a real Postgres 17 migrated by Flyway at context startup,
+ * the same way the application initialises its database. One container is shared by all subclasses.
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -28,9 +27,7 @@ import jakarta.persistence.EntityManager;
 public abstract class PostgresRepositoryTest {
 
     @ServiceConnection
-    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17")
-            .withCopyFileToContainer(MountableFile.forClasspathResource("db/schema.sql"),
-                    "/docker-entrypoint-initdb.d/01-schema.sql");
+    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17");
 
     static {
         POSTGRES.start();

@@ -12,7 +12,7 @@ Vomatt polling community backend. The architecture follows sachmis-api (domain-d
 ## Quick start
 
 0. Just need a running API (frontend integration): `docker compose up -d --build`; see [docs/frontend/README.md](docs/frontend/README.md)
-1. `docker compose up -d postgres redis`: local Postgres + Redis; `src/main/resources/db/schema.sql` is applied automatically on first start
+1. `docker compose up -d postgres redis`: local Postgres + Redis; Flyway applies `src/main/resources/db/migration/` when the API starts
 2. `cp .env.example .env` and fill in APP_KEY, JWT_SECRET and other variables (the DB / Redis defaults match docker-compose)
 3. Run: `./mvnw spring-boot:run`; with `EMAIL_ENABLED=false` no OTP email is sent; read it from the app log line `[EMAIL-NOOP] ... OTP <code>` (Redis holds only a hash)
 4. Swagger UI: <http://localhost:8080/swagger-ui.html>
@@ -33,6 +33,6 @@ Responses are always `ApiResponse<T>`: `{ success, data, message, errorCode, err
 
 For frontend integration see [docs/frontend/README.md](docs/frontend/README.md) (Swagger usage, global conventions, glossary).
 
-Upgrading an existing database from the old schema: `psql "$DB" -v ON_ERROR_STOP=1 -f src/main/resources/db/migrations/2026-10-02-sachmis-arch.sql` (single transaction; back up first and check the time zone assumption in the file header).
+Upgrading a pre-sachmis database (before running the API, so Flyway baselines it): `psql "$DB" -v ON_ERROR_STOP=1 -f src/main/resources/db/migrations/2026-10-02-sachmis-arch.sql` (single transaction; back up first and check the time zone assumption in the file header).
 
 Development guidelines: see [AGENTS.md](AGENTS.md).

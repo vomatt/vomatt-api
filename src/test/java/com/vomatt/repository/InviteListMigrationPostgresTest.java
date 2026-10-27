@@ -20,7 +20,7 @@ class InviteListMigrationPostgresTest extends PostgresRepositoryTest {
 
     private static final String SCRIPT = "db/migrations/2026-10-22-invite-lists.sql";
 
-    // Turns the schema.sql tables back into the pre-rename ones, names Postgres generated included
+    // Turns the baseline tables back into the pre-rename ones, names Postgres generated included
     private static final List<String> TO_GROUPS = List.of(
             "ALTER TABLE vomatt.invite_lists RENAME TO groups",
             "ALTER TABLE vomatt.groups RENAME CONSTRAINT invite_lists_pkey TO groups_pkey",
@@ -38,7 +38,7 @@ class InviteListMigrationPostgresTest extends PostgresRepositoryTest {
             "ALTER INDEX vomatt.idx_invite_list_members_email RENAME TO idx_group_members_email");
 
     @Test
-    @DisplayName("should rename groups to invite_lists with the schema.sql names and keep the rows, also on rerun")
+    @DisplayName("should rename groups to invite_lists with the baseline names and keep the rows, also on rerun")
     void shouldRenameToSchemaNamesWhenMigrationRuns() throws Exception {
         User owner = User.builder().username("il-" + System.nanoTime()).email("il" + System.nanoTime() + "@example.com").build();
         em.persist(owner);

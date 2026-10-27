@@ -1,6 +1,6 @@
 # Frontend integration: docker compose up -d --build -> API + Swagger at http://localhost:8080/swagger-ui.html
 # Backend development, DB only: docker compose up -d postgres redis, then ./mvnw spring-boot:run
-# db/schema.sql runs automatically on first start; to rebuild the schema: docker compose down -v
+# Flyway migrates the schema when the API starts; to rebuild the database: docker compose down -v
 services:
   postgres:
     image: postgres:17
@@ -10,7 +10,6 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "postgres"]
       interval: 2s

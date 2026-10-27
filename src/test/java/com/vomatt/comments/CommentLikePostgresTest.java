@@ -1,6 +1,7 @@
 package com.vomatt.comments;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -11,7 +12,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +23,8 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
@@ -67,7 +69,16 @@ class CommentLikePostgresTest extends PostgresRepositoryTest {
 
     private void like() {
         commentService.likeComment(comment.getId(), liker.getId().toString());
+        // the old exists-then-save deferred its INSERT to commit; send it now so the row lock is taken here
         em.flush();
+    }
+
+    // true once a session is blocked on a lock while inserting into comment_likes
+    private boolean likeWaitsOnLock() {
+        return ((Number) em.createNativeQuery("""
+                SELECT COUNT(*) FROM pg_stat_activity
+                WHERE wait_event_type = 'Lock' AND query ILIKE 'insert into vomatt.comment_likes%'""")
+                .getSingleResult()).longValue() > 0;
     }
 
     @Test
@@ -87,16 +98,26 @@ class CommentLikePostgresTest extends PostgresRepositoryTest {
         assertThat(liked.await(10, TimeUnit.SECONDS)).isTrue();
 
         Future<?> second = pool.submit(() -> tx.executeWithoutResult(s -> like()));
-        try {
-            second.get(500, TimeUnit.MILLISECONDS);
-        } catch (TimeoutException e) {
-            // waiting on the first like's uncommitted row, as intended
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (!likeWaitsOnLock() && System.nanoTime() < deadline) {
+            Thread.sleep(20);
         }
+        assertThat(likeWaitsOnLock()).as("second like waits on the first one's uncommitted row").isTrue();
         release.countDown();
         first.get(10, TimeUnit.SECONDS);
         second.get(10, TimeUnit.SECONDS);
 
         assertThat(((Number) em.createNativeQuery("SELECT COUNT(*) FROM vomatt.comment_likes WHERE comment_id = :id")
                 .setParameter("id", comment.getId()).getSingleResult()).longValue()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("should return 404 user.not_found when the signed-in user no longer exists")
+    void shouldThrowUserNotFoundWhenLikerIsGone() {
+        String gone = UUID.randomUUID().toString();
+
+        assertThatThrownBy(() -> tx.executeWithoutResult(s -> commentService.likeComment(comment.getId(), gone)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND));
     }
 }

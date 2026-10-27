@@ -18,12 +18,15 @@ import com.vomatt.comments.dto.UpdateCommentRequest;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.repository.PostgresRepositoryTest;
+import com.vomatt.repository.VoteCommentRepository;
 
 @Import({ VoteCommentService.class, CommentMapper.class, VoteServiceSlice.class })
 @DisplayName("Comment edited flag (Postgres)")
 class CommentEditedPostgresTest extends PostgresRepositoryTest {
 
     @Autowired VoteCommentService commentService;
+    @Autowired VoteCommentRepository commentRepository;
+    @Autowired CommentMapper commentMapper;
 
     private User user;
     private Vote poll;
@@ -48,8 +51,7 @@ class CommentEditedPostgresTest extends PostgresRepositoryTest {
     private CommentDto reload(UUID id) {
         em.flush();
         em.clear();
-        return commentService.getCommentsByVote(poll.getId().toString(), null, null, user.getId().toString()).items()
-                .stream().filter(c -> c.getId().equals(id.toString())).findFirst().orElseThrow();
+        return commentMapper.toDto(commentRepository.findById(id).orElseThrow(), 0, false);
     }
 
     @Test
@@ -77,7 +79,6 @@ class CommentEditedPostgresTest extends PostgresRepositoryTest {
     void shouldKeepLikedStateWhenAuthorEditsLikedComment() {
         UUID id = post("hi");
         commentService.likeComment(id, user.getId().toString());
-        em.flush();
         UpdateCommentRequest request = new UpdateCommentRequest();
         request.setText("hi, fixed");
 

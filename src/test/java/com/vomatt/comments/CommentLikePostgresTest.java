@@ -176,6 +176,47 @@ class CommentLikePostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should insert nothing when the Comment was soft-deleted after it was looked up")
+    void shouldInsertNothingWhenCommentSoftDeleted() {
+        tx.executeWithoutResult(s -> em.createNativeQuery("UPDATE vomatt.vote_comments SET is_deleted = true WHERE id = :id")
+                .setParameter("id", comment.getId()).executeUpdate());
+
+        assertThat(insertLike()).isZero();
+    }
+
+    @Test
+    @DisplayName("should return 404 and keep no like when the Comment is soft-deleted while it is being liked")
+    void shouldKeepNoLikeWhenCommentSoftDeletedConcurrently() throws Exception {
+        CountDownLatch deleted = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Future<?> delete = pool.submit(() -> tx.executeWithoutResult(s -> {
+            em.createNativeQuery("UPDATE vomatt.vote_comments SET is_deleted = true WHERE id = :id")
+                    .setParameter("id", comment.getId()).executeUpdate();
+            deleted.countDown();
+            try {
+                release.await(10, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }));
+        assertThat(deleted.await(10, TimeUnit.SECONDS)).isTrue();
+
+        // the lookup still sees the Comment live: its delete is not committed yet
+        Future<?> like = pool.submit(() -> tx.executeWithoutResult(s -> like()));
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (!likeWaitsOnLock() && System.nanoTime() < deadline) {
+            Thread.sleep(20);
+        }
+        assertThat(likeWaitsOnLock()).as("like waits on the uncommitted delete").isTrue();
+        release.countDown();
+        delete.get(10, TimeUnit.SECONDS);
+
+        assertThatThrownBy(() -> like.get(10, TimeUnit.SECONDS)).hasCauseInstanceOf(ApiException.class)
+                .cause().satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.COMMENT_NOT_FOUND));
+        assertThat(likeCount()).isZero();
+    }
+
+    @Test
     @DisplayName("should return 404 user.not_found when the signed-in user no longer exists")
     void shouldThrowUserNotFoundWhenLikerIsGone() {
         String gone = UUID.randomUUID().toString();

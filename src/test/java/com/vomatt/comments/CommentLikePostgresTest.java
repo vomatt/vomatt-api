@@ -73,12 +73,17 @@ class CommentLikePostgresTest extends PostgresRepositoryTest {
         em.flush();
     }
 
-    // true once a session is blocked on a lock while inserting into comment_likes
-    private boolean likeWaitsOnLock() {
+    // true once a session of this test database is blocked on a lock while running a statement that starts with
+    // the prefix (written with LIKE wildcards escaped)
+    private boolean waitsOnLock(String likePrefix) {
         return ((Number) em.createNativeQuery("""
                 SELECT COUNT(*) FROM pg_stat_activity
-                WHERE wait_event_type = 'Lock' AND query ILIKE 'insert into vomatt.comment_likes%'""")
-                .getSingleResult()).longValue() > 0;
+                WHERE datname = current_database() AND wait_event_type = 'Lock' AND query ILIKE :prefix || '%'""")
+                .setParameter("prefix", likePrefix).getSingleResult()).longValue() > 0;
+    }
+
+    private boolean likeWaitsOnLock() {
+        return waitsOnLock("insert into vomatt.comment\\_likes");
     }
 
     @Test

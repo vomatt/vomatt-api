@@ -212,12 +212,13 @@ public class VoteService {
      */
     public VoteShareResponse share(String voteId, ShareVoteRequest request, String userId) {
         Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
-        if (voteRepository.insertShareIfAbsent(vote.getId(), UUID.fromString(userId), request.channel().name()) > 0) {
-            log.info("User {} shared vote {} via {}", userId, voteId, request.channel());
+        if (voteRepository.insertShareIfAbsent(vote.getId(), UUID.fromString(userId), request.channel().name()) == 0) {
+            return new VoteShareResponse(vote.getShareCount());
         }
-        long shareCount = voteRepository.countSharesByVoteIds(List.of(vote.getId())).stream()
-            .mapToLong(IdCount::getCount).sum();
-        return new VoteShareResponse(shareCount);
+        voteRepository.incrementShareCount(vote.getId());
+        log.info("User {} shared vote {} via {}", userId, voteId, request.channel());
+        // ponytail: count read before the increment, so a concurrent sharer's +1 may be missing until the next read
+        return new VoteShareResponse(vote.getShareCount() + 1L);
     }
 
     /** @param userId viewer, or null when signed out */
@@ -823,7 +824,7 @@ public class VoteService {
 
     /**
      * The one Poll-to-response path (Sealed via {@link VoteMapper}). Fixed queries per page: options / tags / creators via
-     * batch fetching, Selections, comment and share counts one query each.
+     * batch fetching, Selections and comment counts one query each.
      *
      * @param userId viewer, or null for none (no Selection, no {@code deletable}), as for admin views
      */
@@ -834,8 +835,6 @@ public class VoteService {
         List<UUID> ids = votes.stream().map(Vote::getId).toList();
         OffsetDateTime now = OffsetDateTime.now();
         Map<UUID, Long> commentCounts = voteCommentRepository.countVisibleByVoteIds(ids).stream()
-            .collect(Collectors.toMap(IdCount::getId, IdCount::getCount));
-        Map<UUID, Long> shareCounts = voteRepository.countSharesByVoteIds(ids).stream()
             .collect(Collectors.toMap(IdCount::getId, IdCount::getCount));
         Map<UUID, BallotSelection> selections = userId == null ? Map.of()
             : userVoteRepository.findSelections(UUID.fromString(userId), ids).stream()
@@ -853,7 +852,6 @@ public class VoteService {
             response.setMyOptionId(mine == null || mine.getOptionId() == null ? null : mine.getOptionId().toString());
             response.setMyBallotAnonymous(mine == null ? null : mine.isAnonymous());
             response.setCommentCount(commentCounts.getOrDefault(vote.getId(), 0L));
-            response.setShareCount(shareCounts.getOrDefault(vote.getId(), 0L));
             if (vote.getAudience() == Audience.INVITE_ONLY) {
                 response.setInviteeCount(inviteeCounts.getOrDefault(vote.getId(), 0L));
             }

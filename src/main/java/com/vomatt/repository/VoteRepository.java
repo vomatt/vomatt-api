@@ -1,6 +1,5 @@
 package com.vomatt.repository;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -9,16 +8,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.vomatt.entity.Vote;
 
-import org.hibernate.jpa.HibernateHints;
-
 import jakarta.persistence.LockModeType;
-import jakarta.persistence.QueryHint;
 
 /** List queries live in {@link VoteListRepository}. */
 @Repository
@@ -68,13 +63,16 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
             ON CONFLICT (vote_id, user_id) DO NOTHING""", nativeQuery = true)
     int insertShareIfAbsent(@Param("voteId") UUID voteId, @Param("userId") UUID userId, @Param("channel") String channel);
 
-    /**
-     * Share count (distinct sharers) per Poll; Polls nobody shared are absent. The query space hint keeps this native
-     * query from flushing and resetting the session's batch fetching, which would load each Poll's options and tags one by one.
-     */
-    @QueryHints(@QueryHint(name = HibernateHints.HINT_NATIVE_SPACES, value = "vomatt.vote_shares"))
+    /** Atomic +1 on the stored share count; call only when {@link #insertShareIfAbsent} inserted a row. */
+    @Modifying
+    @Query(value = "UPDATE vomatt.votes SET share_count = share_count + 1 WHERE id = :voteId", nativeQuery = true)
+    void incrementShareCount(@Param("voteId") UUID voteId);
+
+    /** Releases a user's shares from the stored share counts; run before deleting the user (vote_shares cascade). */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query(value = """
-            SELECT vote_id AS id, count(*) AS count FROM vomatt.vote_shares
-            WHERE vote_id IN (:voteIds) GROUP BY vote_id""", nativeQuery = true)
-    List<IdCount> countSharesByVoteIds(@Param("voteIds") Collection<UUID> voteIds);
+            UPDATE vomatt.votes v SET share_count = v.share_count - 1
+            FROM vomatt.vote_shares s
+            WHERE s.vote_id = v.id AND s.user_id = :userId""", nativeQuery = true)
+    void decrementShareCountForUserShares(@Param("userId") UUID userId);
 }

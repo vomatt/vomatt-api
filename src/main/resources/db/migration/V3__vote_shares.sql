@@ -8,5 +8,8 @@ CREATE TABLE IF NOT EXISTS vomatt.vote_shares (
     PRIMARY KEY (vote_id, user_id)
 );
 
+-- Share count (distinct sharers) per Poll; written only by atomic SQL increments in VoteRepository, like turnout
+ALTER TABLE vomatt.votes ADD COLUMN IF NOT EXISTS share_count INTEGER NOT NULL DEFAULT 0;
+
 -- Account deletion cascades by user_id
 CREATE INDEX IF NOT EXISTS idx_vote_shares_user ON vomatt.vote_shares (user_id);

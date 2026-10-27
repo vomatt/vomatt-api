@@ -57,7 +57,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleValidation(MethodArgumentNotValidException ex) {
         String message = ex.getBindingResult().getFieldErrors().stream().findFirst()
                 .map(e -> e.getField() + ": " + e.getDefaultMessage())
-                .orElse(messageService.resolve(MessageKey.COMMON_VALIDATION_FAILED));
+                .orElseGet(() -> messageService.resolve(MessageKey.COMMON_VALIDATION_FAILED));
         return ResponseEntity.badRequest().body(ApiResponse.error(message, MessageKey.COMMON_VALIDATION_FAILED.code()));
     }
 
@@ -65,7 +65,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleConstraintViolation(ConstraintViolationException ex) {
         String message = ex.getConstraintViolations().stream().findFirst()
                 .map(v -> v.getPropertyPath() + ": " + v.getMessage())
-                .orElse(messageService.resolve(MessageKey.COMMON_VALIDATION_FAILED));
+                .orElseGet(() -> messageService.resolve(MessageKey.COMMON_VALIDATION_FAILED));
         return ResponseEntity.badRequest().body(ApiResponse.error(message, MessageKey.COMMON_VALIDATION_FAILED.code()));
     }
 
@@ -91,7 +91,7 @@ public class GlobalExceptionHandler {
 
     /**
      * Handles authorization failures (403).
-     * When method security ({@code @PreAuthorize}) fails, Spring Security 6
+     * When method security ({@code @PreAuthorize}) fails, Spring Security
      * throws {@link org.springframework.security.authorization.AuthorizationDeniedException} inside the DispatcherServlet,
      * a subclass of {@link AccessDeniedException}; the same applies to the filter chain.
      * One handler covers both sources, so they are not misreported as 500 by the {@code Exception.class} fallback handler.
@@ -105,7 +105,7 @@ public class GlobalExceptionHandler {
 
     /**
      * Handles failures of correctness-critical Redis writes/reads (503).
-     * Since OTP writes, refresh token reuse detection, etc. now throw, Redis failures bubble up here;
+     * Since OTP writes, refresh token reuse detection, etc. throw, Redis failures bubble up here;
      * return 503 (retryable) instead of the {@code Exception.class} fallback 500, logged at WARN (unexpected, but infrastructure flakiness).
      */
     @ExceptionHandler(com.vomatt.common.redis.RedisOperationException.class)

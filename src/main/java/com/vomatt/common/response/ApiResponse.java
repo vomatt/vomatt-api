@@ -15,21 +15,6 @@ public record ApiResponse<T>(
         return new ApiResponse<>(true, data, null, null, null);
     }
 
-    public static <T> ApiResponse<T> ok() {
-        return new ApiResponse<>(true, null, null, null, null);
-    }
-
-    /**
-     * Success with an i18n message (e.g. "Booking created") for the frontend to show as a toast.
-     */
-    public static <T> ApiResponse<T> ok(T data, String message) {
-        return new ApiResponse<>(true, data, message, null, null);
-    }
-
-    public static <T> ApiResponse<T> error(String message) {
-        return new ApiResponse<>(false, null, message, null, message);
-    }
-
     public static <T> ApiResponse<T> error(String message, String errorCode) {
         return new ApiResponse<>(false, null, message, errorCode, message);
     }

@@ -6,14 +6,7 @@ import org.springframework.web.servlet.i18n.AcceptHeaderLocaleResolver;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * Three-tier locale resolution:
- * 1. Accept-Language header (current implementation)
- * 2. zh-TW fallback (default)
- *
- * Phase 2: logged-in users can get their preferred locale from Profile.preferredLocale;
- * this requires overriding LocaleContextHolder after the SecurityContext is ready (HandlerInterceptor.preHandle).
- */
+/** Locale from Accept-Language, matched against the supported locales; zh-TW otherwise. */
 public class VomattLocaleResolver extends AcceptHeaderLocaleResolver {
 
     private static final Locale DEFAULT_LOCALE = Locale.forLanguageTag("zh-TW");

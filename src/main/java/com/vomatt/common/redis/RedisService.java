@@ -1,15 +1,18 @@
 package com.vomatt.common.redis;
 
+import org.springframework.data.redis.core.script.RedisScript;
 import tools.jackson.core.type.TypeReference;
 
 import java.time.Duration;
+import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 
 /**
  * Redis operations interface.
  *
  * Error handling strategy:
- * - Reads + idempotent writes (get, hGet, hGetAll, hasKey, set, expire): swallow-and-log; cache-aside can fail soft.
+ * - Reads + idempotent writes (get, hGetAll, set, expire): swallow-and-log; cache-aside can fail soft.
  * - Correctness-critical (getOrThrow, getAndDelete, setOrThrow, setIfAbsent, incrementAndExpire, delete, hDelete,
  *   hGetAllOrThrow, multiGetOrThrow, hasKeyOrThrow, execInTransaction, execScript): throw RedisOperationException.
  *   A value they cannot decode (bad bytes, changed type) is not a Redis error: it is logged and read as null (a miss),
@@ -49,7 +52,7 @@ public interface RedisService {
     <T> T getAndDelete(String cacheName, String key, Class<T> clazz);
 
     /** One multi-key DEL for many keys of one cacheName; returns how many existed. Throws RedisOperationException on Redis failure. */
-    long deleteAll(String cacheName, java.util.Collection<String> keys);
+    long deleteAll(String cacheName, Collection<String> keys);
 
     /**
      * Uses SCAN to match the prefix and batch-deletes all matching keys (including the cacheName prefix).
@@ -62,8 +65,6 @@ public interface RedisService {
 
     // ── Hash ─────────────────────────────────────────────────────────
 
-    <T> T hGet(String cacheName, String key, String field, Class<T> clazz);
-
     /** Deletes hash fields; throws RedisOperationException on Redis failure. */
     boolean hDelete(String cacheName, String key, String... fields);
 
@@ -73,7 +74,7 @@ public interface RedisService {
     Map<String, Object> hGetAllOrThrow(String cacheName, String key);
 
     /** MGET: one value per key, in order, null where missing; throws RedisOperationException on Redis failure. */
-    <T> java.util.List<T> multiGetOrThrow(String cacheName, java.util.List<String> keys, Class<T> clazz);
+    <T> List<T> multiGetOrThrow(String cacheName, List<String> keys, Class<T> clazz);
 
     // ── Counter ───────────────────────────────────────────────────────
 
@@ -90,9 +91,7 @@ public interface RedisService {
 
     boolean expire(String cacheName, String key, Duration ttl);
 
-    boolean hasKey(String cacheName, String key);
-
-    /** Same as {@link #hasKey}, but throws RedisOperationException on Redis failure, for checks that must fail closed (OTP lockout). */
+    /** EXISTS; throws RedisOperationException on Redis failure, for checks that must fail closed (OTP lockout). */
     boolean hasKeyOrThrow(String cacheName, String key);
 
     // ── Transaction (MULTI/EXEC) ─────────────────────────────────────
@@ -104,15 +103,15 @@ public interface RedisService {
      * semantically like calling {@code setOrThrow} for each write, but stronger (atomic). Fail-soft writes
      * should not go in this transaction; the caller must write them separately with {@link #set}.</p>
      */
-    void execInTransaction(java.util.List<RedisWrite> writes);
+    void execInTransaction(List<RedisWrite> writes);
 
     /**
      * Runs a Lua script (EVALSHA, falling back to EVAL) on full Redis keys ({@link CacheKeyUtil#buildKey}) and returns
      * its integer reply. A {@code byte[]} arg is passed as is (hash fields, numbers); any other goes through the value
-     * serializer, so get/hGet read it back. Throws {@link RedisOperationException} on Redis failure or an error reply.
+     * serializer, so get/hGetAll read it back. Throws {@link RedisOperationException} on Redis failure or an error reply.
      */
-    long execScript(org.springframework.data.redis.core.script.RedisScript<Long> script, java.util.List<String> keys,
-                    java.util.List<Object> args);
+    long execScript(RedisScript<Long> script, List<String> keys,
+                    List<Object> args);
 
     /** A single write descriptor for {@link #execInTransaction}. */
     record RedisWrite(Op op, String cacheName, String key, String field, Object value, Duration ttl) {

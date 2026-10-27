@@ -17,7 +17,7 @@ public final class ReservedUsernames {
     /** Username rule for profile updates: 3-50 characters of [a-z0-9_], not a reserved name. */
     public static final String USERNAME_PATTERN = "^(?!(?:" + ALTERNATION + ")$)[a-z0-9_]{3,50}$";
 
-    public static final Set<String> NAMES = Set.of(ALTERNATION.split("\\|"));
+    private static final Set<String> NAMES = Set.of(ALTERNATION.split("\\|"));
 
     public static boolean contains(String username) {
         return NAMES.contains(username);

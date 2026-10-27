@@ -44,7 +44,7 @@ class AuditServiceTest {
         // The deletion itself: resource id and request URI spell the deleted id (whatever the case), so they go too
         auditService.logAction(gone.toString(), null, "DELETE", "USER", gone.toString().toUpperCase(), "203.0.113.7", "ua", "/api/users/" + gone, "DELETE", null);
         // Plain (5-arg) entries go through the same resolution
-        auditService.logAction(gone.toString(), "stale", "SUSPEND", "USER", "r");
+        auditService.logAction(gone.toString(), "stale", "SUSPEND", "USER", "r", null, null, null, null, null);
         // A failing lookup is not a missing account: the entry keeps its actor id, only the username stays unknown
         java.util.UUID flaky = java.util.UUID.randomUUID();
         when(userRepository.findById(flaky)).thenThrow(new org.springframework.dao.DataAccessResourceFailureException("db down"));
@@ -77,8 +77,8 @@ class AuditServiceTest {
             release.await();
             return inv.getArgument(0);
         });
-        Thread first = Thread.ofVirtual().start(() -> auditService.logAction(null, "u", "A", "R", "1"));
-        Thread second = Thread.ofVirtual().start(() -> auditService.logAction(null, "u", "A", "R", "2"));
+        Thread first = Thread.ofVirtual().start(() -> auditService.logAction(null, "u", "A", "R", "1", null, null, null, null, null));
+        Thread second = Thread.ofVirtual().start(() -> auditService.logAction(null, "u", "A", "R", "2", null, null, null, null, null));
         assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
 
         auditService.logAction(id.toString(), null, "VIEW", "USER", "r", null, null, "/x", "GET", null); // dropped: no permit
@@ -101,11 +101,11 @@ class AuditServiceTest {
             release.await();
             return inv.getArgument(0);
         });
-        Thread first = Thread.ofVirtual().start(() -> auditService.logAction(null, "u", "A", "R", "1"));
-        Thread second = Thread.ofVirtual().start(() -> auditService.logAction(null, "u", "A", "R", "2"));
+        Thread first = Thread.ofVirtual().start(() -> auditService.logAction(null, "u", "A", "R", "1", null, null, null, null, null));
+        Thread second = Thread.ofVirtual().start(() -> auditService.logAction(null, "u", "A", "R", "2", null, null, null, null, null));
         assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
 
-        auditService.logAction(null, "u", "A", "R", "3");  // waits out the permit timeout, then drops
+        auditService.logAction(null, "u", "A", "R", "3", null, null, null, null, null);  // waits out the permit timeout, then drops
 
         release.countDown();
         first.join();

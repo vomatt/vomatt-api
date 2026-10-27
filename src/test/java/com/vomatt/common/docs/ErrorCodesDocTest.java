@@ -35,14 +35,14 @@ class ErrorCodesDocTest {
 
     private static final Map<String, Integer> FACTORY_STATUS = Map.of(
             "badRequest", 400, "unauthorized", 401, "notFound", 404, "forbidden", 403,
-            "conflict", 409, "unprocessable", 422, "tooManyRequests", 429);
+            "conflict", 409, "tooManyRequests", 429);
     private static final Map<String, Integer> HTTP_STATUS = Map.of(
             "BAD_REQUEST", 400, "UNAUTHORIZED", 401, "FORBIDDEN", 403, "NOT_FOUND", 404, "CONFLICT", 409,
             "UNPROCESSABLE_ENTITY", 422, "TOO_MANY_REQUESTS", 429, "INTERNAL_SERVER_ERROR", 500,
             "SERVICE_UNAVAILABLE", 503);
 
     private static final Pattern FACTORY = Pattern.compile(
-            "ApiException\\.(badRequest|unauthorized|notFound|forbidden|conflict|unprocessable|tooManyRequests)"
+            "ApiException\\.(badRequest|unauthorized|notFound|forbidden|conflict|tooManyRequests)"
                     + "\\(\\s*MessageKey\\.(\\w+)");
     private static final Pattern WITH_DATA = Pattern.compile(
             "ApiException\\.withData\\(\\s*HttpStatus\\.(\\w+)\\s*,\\s*MessageKey\\.(\\w+)");

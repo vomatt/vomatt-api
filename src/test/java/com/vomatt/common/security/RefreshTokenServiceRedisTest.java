@@ -92,7 +92,7 @@ class RefreshTokenServiceRedisTest {
         RefreshTokenService.RotateResult r = service.rotate(t0);
 
         String newKey = keyOf(r.newRefreshToken());
-        assertThat(redisService.hasKey("refresh", keyOf(t0))).isFalse();
+        assertThat(redisService.hasKeyOrThrow("refresh", keyOf(t0))).isFalse();
         assertThat(redisService.get("refresh", newKey, RefreshTokenService.RefreshTokenData.class)).isEqualTo(r.data());
         assertThat(template.getExpire("refresh:" + newKey, TimeUnit.DAYS)).isBetween(29L, 30L);
         assertThat(redisService.get("refresh:consumed", keyOf(t0), String.class)).isEqualTo(session);
@@ -100,7 +100,7 @@ class RefreshTokenServiceRedisTest {
         assertThat(template.getExpire("refresh:grace:" + keyOf(t0), TimeUnit.SECONDS)).isBetween(55L, 60L);
         // Unquoted fields, so revokeAllForUser finds the token; values name the session
         assertThat(redisService.hGetAll("refresh:idx", userId)).containsOnlyKeys(newKey);
-        assertThat(redisService.hGet("refresh:idx", userId, newKey, String.class)).isEqualTo(session);
+        assertThat(redisService.hGetAllOrThrow("refresh:idx", userId).get(newKey)).isEqualTo(session);
         assertThat(template.getExpire("refresh:idx:" + userId, TimeUnit.DAYS)).isBetween(29L, 30L);
     }
 
@@ -144,10 +144,10 @@ class RefreshTokenServiceRedisTest {
 
         assertThat(service.rotate(t0)).isNull();
 
-        assertThat(redisService.hasKey("refresh", keyOf(t0))).isFalse();
+        assertThat(redisService.hasKeyOrThrow("refresh", keyOf(t0))).isFalse();
         assertThat(redisService.hGetAll("refresh:idx", userId)).isEmpty();
-        assertThat(redisService.hasKey("refresh:consumed", keyOf(t0))).isFalse();
-        assertThat(redisService.hasKey("refresh:grace", keyOf(t0))).isFalse();
+        assertThat(redisService.hasKeyOrThrow("refresh:consumed", keyOf(t0))).isFalse();
+        assertThat(redisService.hasKeyOrThrow("refresh:grace", keyOf(t0))).isFalse();
     }
 
     @Test
@@ -158,7 +158,7 @@ class RefreshTokenServiceRedisTest {
         redisService.set("refresh:idx", userId, "not-a-hash", Duration.ofMinutes(5));
 
         assertThat(service.rotate(t0)).isNull();
-        assertThat(redisService.hasKey("refresh", keyOf(t0))).isFalse();
+        assertThat(redisService.hasKeyOrThrow("refresh", keyOf(t0))).isFalse();
     }
 
     @Test
@@ -193,7 +193,7 @@ class RefreshTokenServiceRedisTest {
 
         assertThat(service.rotate(t0)).isNull();
         assertThat(service.rotate(t1)).isNull();
-        assertThat(redisService.hasKey("refresh", keyOf(t1))).isFalse();
+        assertThat(redisService.hasKeyOrThrow("refresh", keyOf(t1))).isFalse();
     }
 
     @Test
@@ -219,8 +219,8 @@ class RefreshTokenServiceRedisTest {
 
         service.revokeAllForUser(userId);
 
-        assertThat(redisService.hasKey("refresh:revoked-session", session)).isTrue();
-        assertThat(redisService.hasKey("refresh", keyOf(t0))).isFalse();
+        assertThat(redisService.hasKeyOrThrow("refresh:revoked-session", session)).isTrue();
+        assertThat(redisService.hasKeyOrThrow("refresh", keyOf(t0))).isFalse();
         assertThat(redisService.hGetAll("refresh:idx", userId)).isEmpty();
     }
 
@@ -239,7 +239,7 @@ class RefreshTokenServiceRedisTest {
                 Duration.ofDays(30));
         template.opsForHash().put("refresh:idx:" + userId, keyOf(t2), "1");
         service.revokeAllForUser(userId);
-        assertThat(redisService.hasKey("refresh:revoked-session", keyOf(t2))).isTrue();
+        assertThat(redisService.hasKeyOrThrow("refresh:revoked-session", keyOf(t2))).isTrue();
     }
 
     @Test
@@ -251,6 +251,6 @@ class RefreshTokenServiceRedisTest {
 
         service.revoke(t0);
 
-        assertThat(redisService.hasKey("refresh", keyOf(t0))).isFalse();
+        assertThat(redisService.hasKeyOrThrow("refresh", keyOf(t0))).isFalse();
     }
 }

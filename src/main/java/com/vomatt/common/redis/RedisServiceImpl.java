@@ -19,8 +19,11 @@ import tools.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 @Slf4j
 @Service
@@ -106,7 +109,7 @@ public class RedisServiceImpl implements RedisService {
 
     /** Reads a value; one that does not decode (see RedisService) is logged and read as null; this does not touch the key (getAndDelete has already removed it). */
     @SuppressWarnings("unchecked")
-    private <T> T decode(String cacheKey, java.util.function.Supplier<Object> read, Class<T> clazz) {
+    private <T> T decode(String cacheKey, Supplier<Object> read, Class<T> clazz) {
         Object value;
         try {
             value = read.get();
@@ -160,7 +163,7 @@ public class RedisServiceImpl implements RedisService {
     }
 
     @Override
-    public long deleteAll(String cacheName, java.util.Collection<String> keys) {
+    public long deleteAll(String cacheName, Collection<String> keys) {
         if (keys.isEmpty()) {
             return 0;
         }
@@ -216,21 +219,6 @@ public class RedisServiceImpl implements RedisService {
     // ── Hash ─────────────────────────────────────────────────────────
 
     @Override
-    @SuppressWarnings("unchecked")
-    public <T> T hGet(String cacheName, String key, String field, Class<T> clazz) {
-        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
-        try {
-            Object value = redisTemplate.opsForHash().get(cacheKey, field);
-            if (value == null) return null;
-            if (clazz.isInstance(value)) return (T) value;
-            return objectMapper.convertValue(value, clazz);
-        } catch (Exception e) {
-            log.error("Redis HGET error: key={}, field={}, error={}", cacheKey, field, e.getMessage());
-            return null;
-        }
-    }
-
-    @Override
     public boolean hDelete(String cacheName, String key, String... fields) {
         String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
         try {
@@ -268,7 +256,7 @@ public class RedisServiceImpl implements RedisService {
             throw new RedisOperationException("Redis HGETALL failed, key=" + cacheKey, e);
         }
         // Decoded field by field: an undecodable value is kept as null, so its field is still listed
-        Map<String, Object> entries = new java.util.HashMap<>();
+        Map<String, Object> entries = new HashMap<>();
         if (raw != null) {
             raw.forEach((f, v) -> entries.put(fieldSer.deserialize(f), decode(cacheKey, () -> valueSer.deserialize(v), Object.class)));
         }
@@ -335,7 +323,7 @@ public class RedisServiceImpl implements RedisService {
     @SuppressWarnings("unchecked")
     public long execScript(RedisScript<Long> script, List<String> keys, List<Object> args) {
         try {
-            // Serialized as the template would, so get/hGet read the values back unchanged
+            // Serialized as the template would, so get/hGetAll read the values back unchanged
             RedisSerializer<Object> valueSer = (RedisSerializer<Object>) redisTemplate.getValueSerializer();
             Object[] argBytes = args.stream().map(a -> a instanceof byte[] ? a : valueSer.serialize(a)).toArray();
             // EVALSHA, falling back to EVAL once per connection; an integer reply needs no result serializer
@@ -361,18 +349,6 @@ public class RedisServiceImpl implements RedisService {
             return Boolean.TRUE.equals(result);
         } catch (Exception e) {
             log.warn("Redis EXPIRE failed, key={}: {}", cacheKey, e.getMessage());
-            return false;
-        }
-    }
-
-    @Override
-    public boolean hasKey(String cacheName, String key) {
-        String cacheKey = CacheKeyUtil.buildKey(cacheName, key);
-        try {
-            Boolean result = redisTemplate.hasKey(cacheKey);
-            return Boolean.TRUE.equals(result);
-        } catch (Exception e) {
-            log.warn("Redis EXISTS failed, key={}: {}", cacheKey, e.getMessage());
             return false;
         }
     }

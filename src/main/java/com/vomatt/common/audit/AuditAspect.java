@@ -30,15 +30,15 @@ public class AuditAspect {
     @AfterReturning("@annotation(auditable)")
     public void logSuccessfulAction(JoinPoint joinPoint, Auditable auditable) {
         try {
-            String[] userInfo = getCurrentUserInfo();
+            String userId = currentUserId();
             HttpServletRequest request = getCurrentRequest();
             
-            if (request != null && userInfo[0] != null) {
+            if (request != null && userId != null) {
                 String resourceId = argString(joinPoint.getArgs(), auditable.resourceIdIndex());
                 
                 auditService.logAction(
-                    userInfo[0], // userId
-                    userInfo[1], // username
+                    userId,
+                    null, // username: resolved by AuditService
                     auditable.action(),
                     auditable.resourceType(),
                     resourceId,
@@ -62,15 +62,15 @@ public class AuditAspect {
             return;
         }
         try {
-            String[] userInfo = getCurrentUserInfo();
+            String userId = currentUserId();
             HttpServletRequest request = getCurrentRequest();
             
             if (request != null) {
                 String resourceId = argString(joinPoint.getArgs(), auditable.resourceIdIndex());
                 
                 auditService.logFailedAction(
-                    userInfo[0], // userId (might be null for unauthenticated requests)
-                    userInfo[1], // username (might be null)
+                    userId, // null for unauthenticated requests
+                    null, // username: resolved by AuditService
                     auditable.action(),
                     auditable.resourceType(),
                     resourceId,
@@ -84,13 +84,13 @@ public class AuditAspect {
         }
     }
     
-    /** {userId, username}: the token carries no username, AuditService resolves the actor on its async writer. */
-    private String[] getCurrentUserInfo() {
+    /** The caller's user id, or null; the token carries no username, AuditService resolves the actor on its async writer. */
+    private String currentUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.getPrincipal() instanceof UserPrincipal principal) {
-            return new String[]{principal.userId(), null};
+            return principal.userId();
         }
-        return new String[]{null, null};
+        return null;
     }
     
     private HttpServletRequest getCurrentRequest() {

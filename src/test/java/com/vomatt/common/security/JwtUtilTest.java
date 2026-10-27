@@ -49,7 +49,7 @@ class JwtUtilTest {
                 .parseSignedClaims(signedByNew).getHeader().getKeyId())
                 .isEqualTo(AppKey.sha256Hex(SECRET).substring(0, 8));
         // Once the old key is dropped its tokens are refused
-        assertThat(new JwtUtil(SECRET, 900).validateJwtToken(signedByOld)).isFalse();
+        assertThatThrownBy(() -> new JwtUtil(SECRET, 900).parseToken(signedByOld)).isInstanceOf(io.jsonwebtoken.JwtException.class);
         assertThatThrownBy(() -> new JwtUtil(SECRET + ",short", 900)).isInstanceOf(IllegalStateException.class);
     }
 }

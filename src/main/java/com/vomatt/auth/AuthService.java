@@ -716,14 +716,24 @@ public class AuthService {
 
             Map<String, Object> verifyResponse = callLine(() -> postForm(lineVerifyUrl, verifyBody),
                     MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
-            if (verifyResponse == null) {
-                log.warn("LINE id_token verify returned an empty body");
+            Object emailValue = verifyResponse == null ? null : verifyResponse.get("email");
+            if (verifyResponse == null || !(verifyResponse.get("sub") instanceof String sub)
+                    || (emailValue != null && !(emailValue instanceof String))) {
+                log.warn("LINE id_token verify returned an empty or malformed body");
                 throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
             }
-            // Only a verified email is returned; none means the user granted no email scope
-            if (verifyResponse.get("email") instanceof String verifiedEmail && !verifiedEmail.isBlank()) {
-                email = verifiedEmail;
+            if (!sub.equals(userId)) {
+                log.warn("LINE id_token belongs to another user than the profile: sub={}, userId={}", sub, userId);
+                throw ApiException.unauthorized(MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
             }
+            // Only a verified email is returned; none means the user granted no email scope
+            if (emailValue instanceof String verifiedEmail && !verifiedEmail.isBlank()) {
+                email = verifiedEmail;
+            } else {
+                log.info("LINE login uses a synthetic email: userId={}, reason=verify returned no email", userId);
+            }
+        } else {
+            log.info("LINE login uses a synthetic email: userId={}, reason=no id_token", userId);
         }
 
         if (email == null) {

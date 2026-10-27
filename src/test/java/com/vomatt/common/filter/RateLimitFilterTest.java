@@ -63,7 +63,7 @@ class RateLimitFilterTest {
     /** Passkey sign-in shares the per-IP auth bucket with the OTP endpoints (application.yml: /api/auth/**). */
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(strings = { "/api/auth/passkey/login/options",
-            "/api/auth/passkey/login/verify" })
+            "/api/auth/passkey/login/verify", "/api/auth/admin/passkey/login/verify" })
     void shouldReturn429WhenPasskeySignInOverLimit(String path) throws Exception {
         when(redisService.incrementAndExpire(eq("rate:limit"), anyString(), any(Duration.class))).thenReturn(301L);
 

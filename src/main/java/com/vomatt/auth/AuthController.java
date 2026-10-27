@@ -267,7 +267,8 @@ public class AuthController {
                     **Auth**: public
                     **Precondition**: none; the user does not enter an email or username (usernameless sign-in)
                     **Behavior**: returns WebAuthn request options: pass `data` to `PublicKeyCredential.parseRequestOptionsFromJSON` \
-                    and then `navigator.credentials.get({ publicKey })`, and send `credential.toJSON()` to `POST /api/auth/passkey/login/verify` `allowCredentials` is always empty, so the user picks any passkey for vomatt.com
+                    and then `navigator.credentials.get({ publicKey })`, and send `credential.toJSON()` to `POST /api/auth/passkey/login/verify` \
+                    (or `POST /api/auth/admin/passkey/login/verify` in the admin console). `allowCredentials` is always empty, so the user picks any passkey for vomatt.com
                     **Side effects**: issues a one-time challenge that expires after 5 minutes
                     **Errors**:
                     - 429 `common.rate_limited`: too many auth requests from this IP""")
@@ -293,7 +294,7 @@ public class AuthController {
                     **Behavior**: send `credential.toJSON()` from `navigator.credentials.get()` as `credential` (iOS: the same fields from \
                     `ASAuthorizationPlatformPublicKeyCredentialAssertion`, base64url). The server checks the challenge, the origin, the RP ID, \
                     user presence and the signature against the stored passkey, and signs its owner in: the response has the same shape as `POST /api/auth/verify-otp` \
-                    (`isNewUser` is always false). The tokens never grant the admin role, even for an admin
+                    (`isNewUser` is always false). The tokens never grant the admin role, even for an admin; the admin console uses `POST /api/auth/admin/passkey/login/verify`
                     **Side effects**: the challenge is spent whether or not the sign-in succeeds; the passkey's sign count and last use, and the user's `lastLoginAt`, are updated. \
                     A sign count that did not increase is logged, not rejected
                     **Errors**:
@@ -305,6 +306,34 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.ok(authService.verifyPasskey(req)));
     }
 
+
+    @PostMapping("/admin/passkey/login/verify")
+    @PublicApiResponse
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
+            content = @Content(examples = @ExampleObject(value = OK_ADMIN_AUTH)))
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = PASSKEY_LOGIN_BODY)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
+            description = "The passkey sign-in was not accepted (`auth.passkey.invalid`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = PASSKEY_INVALID)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+            description = "Not an admin account (`auth.admin.forbidden`) or account suspended (`auth.account_banned`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = ADMIN_FORBIDDEN)))
+    @Operation(summary = "Sign in to the admin console with a passkey",
+            description = """
+                    **Auth**: public
+                    **Precondition**: a challenge from `POST /api/auth/passkey/login/options` (shared with the consumer sign-in), at most 5 minutes old and not yet used
+                    **Behavior**: the passkey counterpart of `POST /api/auth/admin/verify-otp`: verifies the passkey as `POST /api/auth/passkey/login/verify` does, \
+                    then requires the owner to be an active admin and returns tokens that grant the admin role (`/api/admin/**`); refreshing them keeps the admin scope
+                    **Side effects**: the challenge is spent whether or not the sign-in succeeds, also when the owner is not an admin; on success the passkey's sign count and last use, and `lastLoginAt`, are updated
+                    **Errors**:
+                    - 400 `common.validation_failed`: `credential` or one of its required fields is missing
+                    - 401 `auth.passkey.invalid`: the response is malformed or fails verification; get new options and retry
+                    - 403 `auth.admin.forbidden`: the passkey's owner is not an admin (same response as `POST /api/auth/admin/verify-otp`)
+                    - 403 `auth.account_banned`: the admin is suspended
+                    - 429 `common.rate_limited`: too many auth requests from this IP""")
+    public ResponseEntity<ApiResponse<AuthResponse>> adminPasskeyLoginVerify(@Valid @RequestBody PasskeyLoginVerifyRequest req) {
+        return ResponseEntity.ok(ApiResponse.ok(authService.verifyAdminPasskey(req)));
+    }
 
 
     @PostMapping("/phone/send-otp")

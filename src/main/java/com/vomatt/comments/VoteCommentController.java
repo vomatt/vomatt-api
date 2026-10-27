@@ -96,6 +96,7 @@ public class VoteCommentController {
                     **Side effects**: the top-level Comment's `replyCount` grows by 1 in later list reads
                     **Errors**:
                     - 400 `comment.parent.invalid`: `parentId` does not exist, is deleted, or belongs to another Poll
+                    - 404 `comment.not_found`: `parentId` is hidden from the caller as in the lists (written by a user the caller blocked, or a Reply in a thread such a user started)
                     - 404 `vote.not_found`: Poll does not exist or is Deleted
                     - 404 `user.not_found`: the signed-in user no longer exists
                     """,
@@ -539,10 +540,10 @@ public class VoteCommentController {
             description = """
                     **Auth**: required
                     **Precondition**: the Comment or Reply exists and is not deleted
-                    **Behavior**: idempotent. Removing a like that does not exist succeeds without change
+                    **Behavior**: idempotent. Removing a like that does not exist succeeds without change. Works on a Comment by a user the caller blocked too, so a like given before the block can be taken back
                     **Side effects**: `likeCount` -1 and `likedByCurrentUser` false in later reads (only if a like existed)
                     **Errors**:
-                    - 404 `comment.not_found`: Comment does not exist, is deleted, or is hidden from the caller as in the lists (written by a user the caller blocked, or a Reply in a thread such a user started)
+                    - 404 `comment.not_found`: Comment does not exist or is deleted
                     - 404 `vote.not_found`: the Comment's Poll is Deleted
                     """)
     public ResponseEntity<ApiResponse<SimpleResultResponse>> unlikeComment(

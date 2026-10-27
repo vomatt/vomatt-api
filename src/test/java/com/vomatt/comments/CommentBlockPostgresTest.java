@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 
+import com.vomatt.comments.dto.CreateCommentRequest;
 import com.vomatt.comments.dto.ReportCommentRequest;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
@@ -25,7 +26,7 @@ import com.vomatt.entity.VoteComment;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.votes.VoteServiceSlice;
 
-/** Liking and reporting see the same Comments the lists show: none by a user the caller blocked. */
+/** Liking, replying and reporting see the same Comments the lists show: none by a user the caller blocked. */
 @Import({ VoteCommentService.class, CommentMapper.class, VoteServiceSlice.class })
 @DisplayName("Comment writes and blocks (Postgres)")
 class CommentBlockPostgresTest extends PostgresRepositoryTest {
@@ -62,19 +63,38 @@ class CommentBlockPostgresTest extends PostgresRepositoryTest {
         return new ReportCommentRequest(CommentReportReason.SPAM, null);
     }
 
+    private void reply(VoteComment parent) {
+        CreateCommentRequest request = new CreateCommentRequest();
+        request.setText("re");
+        request.setParentId(parent.getId());
+        commentService.createComment(poll.getId().toString(), viewer.getId().toString(), request);
+    }
+
     @Test
-    @DisplayName("should 404 liking, unliking and reporting a Comment by a user the caller blocked")
+    @DisplayName("should 404 liking, replying to and reporting a Comment by a user the caller blocked")
     void shouldReturnNotFoundWhenCallerBlockedAuthor() {
         block(viewer, blocked);
         String viewerId = viewer.getId().toString();
 
         assertNotFound(() -> commentService.likeComment(comment.getId(), viewerId));
-        assertNotFound(() -> commentService.unlikeComment(comment.getId(), viewerId));
+        assertNotFound(() -> reply(comment));
         assertNotFound(() -> commentService.reportComment(comment.getId(), viewerId, spam()));
     }
 
     @Test
-    @DisplayName("should 404 liking and reporting a Reply in a thread started by a user the caller blocked")
+    @DisplayName("should let the caller take back a like after blocking the author, as it reveals nothing")
+    void shouldUnlikeWhenCallerBlockedAuthor() {
+        String viewerId = viewer.getId().toString();
+        commentService.likeComment(comment.getId(), viewerId);
+        block(viewer, blocked);
+
+        assertThatCode(() -> commentService.unlikeComment(comment.getId(), viewerId)).doesNotThrowAnyException();
+        assertThat(em.createNativeQuery("SELECT COUNT(*) FROM vomatt.comment_likes WHERE comment_id = :id")
+                .setParameter("id", comment.getId()).getSingleResult()).isEqualTo(0L);
+    }
+
+    @Test
+    @DisplayName("should 404 liking, replying to and reporting a Reply in a thread started by a user the caller blocked")
     void shouldReturnNotFoundWhenCallerBlockedThreadAuthor() {
         User replier = persistUser("cb-replier-" + UUID.randomUUID());
         VoteComment reply = new VoteComment(poll, replier, "re");
@@ -84,7 +104,26 @@ class CommentBlockPostgresTest extends PostgresRepositoryTest {
         String viewerId = viewer.getId().toString();
 
         assertNotFound(() -> commentService.likeComment(reply.getId(), viewerId));
+        assertNotFound(() -> reply(reply));
         assertNotFound(() -> commentService.reportComment(reply.getId(), viewerId, spam()));
+    }
+
+    @Test
+    @DisplayName("should 404 liking, replying to and reporting a Reply by a user the caller blocked under another user's thread")
+    void shouldReturnNotFoundWhenCallerBlockedReplyAuthor() {
+        User starter = persistUser("cb-starter-" + UUID.randomUUID());
+        VoteComment root = new VoteComment(poll, starter, "root");
+        em.persist(root);
+        VoteComment reply = new VoteComment(poll, blocked, "re");
+        reply.setParent(root);
+        em.persist(reply);
+        block(viewer, blocked);
+        String viewerId = viewer.getId().toString();
+
+        assertNotFound(() -> commentService.likeComment(reply.getId(), viewerId));
+        assertNotFound(() -> reply(reply));
+        assertNotFound(() -> commentService.reportComment(reply.getId(), viewerId, spam()));
+        assertThatCode(() -> commentService.likeComment(root.getId(), viewerId)).doesNotThrowAnyException();
     }
 
     @Test

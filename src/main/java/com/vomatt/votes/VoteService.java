@@ -96,11 +96,10 @@ public class VoteService {
     private final TransactionTemplate transactionTemplate;
     private final LockTimeout lockTimeout;
     private final LookupService lookupService;
+    private final VoteViewRecorder viewRecorder;
 
     private static final String INVITATION_COUNTER_NS = "email:invitation";
     private static final String BALLOT_RATE_LIMIT_NS = "rate:limit:ballot";
-    private static final String VIEW_DEDUPE_NS = "vote:view";
-    static final Duration VIEW_DEDUPE_WINDOW = Duration.ofDays(1);
     // Admin overrides (lookup type config); without one the app.* settings below apply
     static final String INVITATION_LIMIT_KEY = "invitation_email_daily_limit";
     static final String MAX_OPTIONS_KEY = "vote_max_options";
@@ -223,28 +222,20 @@ public class VoteService {
         return new VoteShareResponse(vote.getShareCount() + 1L);
     }
 
-    /** @param userId viewer, or null when signed out */
+    /**
+     * Also counts a View (asynchronously, never failing the read) when a signed-in non-owner opens an Open Public Poll,
+     * the only Polls Trending can list.
+     *
+     * @param userId viewer, or null when signed out
+     */
     @Transactional(readOnly = true)
     public VoteResponse getVote(String voteId, String userId) {
-        return convertToVoteResponse(UUID.fromString(voteId), userId);
-    }
-
-    /**
-     * Counts a View of a Poll the caller just read: signed in, not its owner, once per user and Poll per
-     * {@link #VIEW_DEDUPE_WINDOW}. Best effort: a Redis or database failure drops the View and is never the caller's error.
-     */
-    @Transactional(propagation = Propagation.SUPPORTS)
-    public void recordView(VoteResponse poll, String userId) {
-        if (userId == null || userId.equals(poll.getCreatorId())) {
-            return;
+        VoteResponse response = convertToVoteResponse(UUID.fromString(voteId), userId);
+        if (userId != null && !userId.equals(response.getCreatorId()) && response.getAudience() == Audience.PUBLIC
+                && response.isVotingActive()) {
+            viewRecorder.record(UUID.fromString(response.getId()), UUID.fromString(userId));
         }
-        try {
-            if (redisService.setIfAbsent(VIEW_DEDUPE_NS, poll.getId() + ":" + userId, 1, VIEW_DEDUPE_WINDOW)) {
-                transactionTemplate.executeWithoutResult(s -> voteRepository.incrementViewHour(UUID.fromString(poll.getId())));
-            }
-        } catch (RuntimeException e) {
-            log.warn("View of vote {} by user {} not recorded: {}", poll.getId(), userId, e.getMessage());
-        }
+        return response;
     }
 
     /**

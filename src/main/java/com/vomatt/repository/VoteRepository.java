@@ -78,7 +78,8 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
     void decrementShareCountForUserShares(@Param("userId") UUID userId);
 
     /** Atomic +1 on the Poll's View bucket for the current UTC hour. */
-    // ponytail: Views of one Poll serialize on its current-hour row; buffer in Redis INCR + scheduled flush if a hot Poll needs more
+    // ponytail: Views of one Poll serialize on its current-hour row and VoteViewRecorder caps writers at 2, so a hot Poll
+    // drops Views once its queue waits past 2 s; buffer in Redis HINCRBY + scheduled flush if Trending needs them all
     @Modifying
     @Query(value = """
             INSERT INTO vomatt.vote_view_hours (vote_id, hour, views)

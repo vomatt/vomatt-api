@@ -242,8 +242,8 @@ public class VoteController {
             **Precondition**: none; Scheduled, Open and Ended Polls are all readable
             **Behavior**: returns the Poll. `options[].votes` is null (Sealed) for everyone, owner included, until the Poll has Ended; `participantCount` (Turnout) is always present, \
             and so is `inviteeCount` for an INVITE_ONLY Poll.
-            **Side effects**: counts a View (input for Trending) when the caller is signed in and not the owner, at most once \
-            per user and Poll per 24 hours; never fails the request
+            **Side effects**: counts a View (input for Trending) when the caller is signed in and not the owner and the Poll is Open \
+            and PUBLIC, at most once per user and Poll per 24 hours; counted asynchronously, never fails or delays the request
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
             """)
@@ -255,9 +255,7 @@ public class VoteController {
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
             @PathVariable String voteId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        String userId = principal != null ? principal.userId() : null;
-        VoteResponse response = voteService.getVote(voteId, userId);
-        voteService.recordView(response, userId);
+        VoteResponse response = voteService.getVote(voteId, principal != null ? principal.userId() : null);
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 

@@ -25,4 +25,12 @@ public class VoteServiceSlice {
     RedisService redisService() {
         return Mockito.mock(RedisService.class);
     }
+
+    // Async with its own transaction, so it could not see the test's uncommitted rows; VoteViewRecorderTest covers it.
+    // Marked AopInfrastructureBean so the @Async post-processor leaves it unproxied and calls stay on the test thread
+    @Bean
+    VoteViewRecorder voteViewRecorder() {
+        return Mockito.mock(VoteViewRecorder.class,
+                Mockito.withSettings().extraInterfaces(org.springframework.aop.framework.AopInfrastructureBean.class));
+    }
 }

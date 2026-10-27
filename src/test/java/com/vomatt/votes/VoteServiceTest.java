@@ -79,6 +79,7 @@ class VoteServiceTest {
     @Mock com.vomatt.repository.UserPreferenceRepository preferenceRepository;
     @Mock TransactionTemplate transactionTemplate;
     @Mock com.vomatt.lookups.LookupService lookupService;
+    @Mock VoteViewRecorder viewRecorder;
     // Real helper over a stubbed EntityManager, so lockVote still runs the Poll-row lock it wraps
     @Spy com.vomatt.repository.LockTimeout lockTimeout = new com.vomatt.repository.LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @Spy VoteMapper voteMapper = new VoteMapper();

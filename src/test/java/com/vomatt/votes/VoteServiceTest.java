@@ -570,7 +570,7 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("should log the anonymity change, without voter or option, when the same option is cast again")
+        @DisplayName("should log only an actual anonymity change, without voter or option, when the same option is cast again")
         void shouldLogAnonymityChangeWhenSameOptionCastAgain() {
             vote.setStartTime(OffsetDateTime.now().minusHours(1));
             vote.setEndTime(OffsetDateTime.now().plusDays(1));
@@ -590,6 +590,8 @@ class VoteServiceTest {
                 VoteRequest request = new VoteRequest();
                 request.setOptionIds(List.of(optionId.toString()));
                 request.setAnonymous(true);
+                voteService.vote(voteId.toString(), request, userId.toString());
+                // Same option, same flag: nothing changed, nothing logged
                 voteService.vote(voteId.toString(), request, userId.toString());
 
                 assertThat(ballot.isAnonymous()).isTrue();

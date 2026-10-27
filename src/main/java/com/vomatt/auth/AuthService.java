@@ -29,6 +29,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import tools.jackson.databind.json.JsonMapper;
@@ -681,49 +682,91 @@ public class AuthService {
         tokenBody.add("client_id", lineChannelId);
         tokenBody.add("client_secret", lineChannelSecret);
 
-        Map<String, Object> tokenResponse = postForm(lineTokenUrl, tokenBody);
+        Map<String, Object> tokenResponse = callLine(() -> postForm(lineTokenUrl, tokenBody),
+                MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
 
-        if (tokenResponse == null || tokenResponse.get("access_token") == null) {
+        // instanceof, not a cast: a malformed LINE response is a failed exchange (401), not a ClassCastException (500)
+        if (tokenResponse == null || !(tokenResponse.get("access_token") instanceof String accessToken)
+                || !StringUtils.hasText(accessToken)) {
             throw ApiException.unauthorized(MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
         }
 
-        String accessToken = (String) tokenResponse.get("access_token");
+        Map<String, Object> lineProfile = callLine(() -> restClient.get().uri(lineProfileUrl)
+                .header("Authorization", "Bearer " + accessToken).retrieve().body(Map.class),
+                MessageKey.AUTH_LINE_PROFILE_FAILED);
 
-        var lineProfile = restClient.get().uri(lineProfileUrl)
-                .header("Authorization", "Bearer " + accessToken).retrieve().body(Map.class);
-
-        if (lineProfile == null || lineProfile.get("userId") == null) {
+        // A blank userId would synthesize the same line_@line.oauth email for everyone
+        if (lineProfile == null || !(lineProfile.get("userId") instanceof String userId) || !StringUtils.hasText(userId)) {
             throw ApiException.unauthorized(MessageKey.AUTH_LINE_PROFILE_FAILED);
         }
 
-        String email = "";
-        String idToken = (String) tokenResponse.get("id_token");
-        if (idToken != null) {
-            try {
-                MultiValueMap<String, String> verifyBody = new LinkedMultiValueMap<>();
-                verifyBody.add("id_token", idToken);
-                verifyBody.add("client_id", lineChannelId);
-
-                Map<String, Object> verifyResponse = postForm(lineVerifyUrl, verifyBody);
-
-                if (verifyResponse != null && verifyResponse.get("email") != null) {
-                    email = (String) verifyResponse.get("email");
-                }
-            } catch (Exception ex) {
-                log.warn("Failed to get email from LINE id_token: {}", ex.getMessage());
+        // An id_token means LINE holds an email for this user, so the login needs a trusted verify result: falling back
+        // to the synthetic email below would sign a user who already has an account into a second, separate one.
+        // The token exchange just succeeded with this channel, so a 4xx here is a rejected token, not a configuration problem.
+        String email = null;
+        Object idTokenValue = tokenResponse.get("id_token");
+        if (idTokenValue != null) {
+            if (!(idTokenValue instanceof String idToken) || !StringUtils.hasText(idToken)) {
+                log.warn("LINE token response carries an unusable id_token");
+                throw ApiException.unauthorized(MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
             }
+            MultiValueMap<String, String> verifyBody = new LinkedMultiValueMap<>();
+            verifyBody.add("id_token", idToken);
+            verifyBody.add("client_id", lineChannelId);
+
+            Map<String, Object> verifyResponse = callLine(() -> postForm(lineVerifyUrl, verifyBody),
+                    MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
+            Object emailValue = verifyResponse == null ? null : verifyResponse.get("email");
+            if (verifyResponse == null || !(verifyResponse.get("sub") instanceof String sub)
+                    || (emailValue != null && !(emailValue instanceof String))) {
+                log.warn("LINE id_token verify returned an empty or malformed body");
+                throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+            }
+            if (!sub.equals(userId)) {
+                log.warn("LINE id_token belongs to another user than the profile: sub={}, userId={}", sub, userId);
+                throw ApiException.unauthorized(MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
+            }
+            // Only a verified email is returned; none means the user granted no email scope
+            if (emailValue instanceof String verifiedEmail && !verifiedEmail.isBlank()) {
+                email = verifiedEmail;
+            } else {
+                log.info("LINE login uses a synthetic email: userId={}, reason=verify returned no email", userId);
+            }
+        } else {
+            log.info("LINE login uses a synthetic email: userId={}, reason=no id_token", userId);
         }
 
-        if (!StringUtils.hasText(email)) {
-            email = "line_" + lineProfile.get("userId") + "@line.oauth";
+        if (email == null) {
+            email = "line_" + userId + "@line.oauth";
         }
 
-        String displayName = (String) lineProfile.getOrDefault("displayName", "");
+        String displayName = lineProfile.get("displayName") instanceof String name ? name : "";
 
         // LINE's verify endpoint only returns the email when it is verified; otherwise the synthesized
         // line_<userId>@line.oauth is unique and cannot be set by an attacker to a victim's real email -> both cases are safely treated as verified
         FoundUser found = findOrCreateUserByEmail(User.normalizeEmail(email), displayName, "line", true);
         return buildAuthResponse(found.user(), false, found.created());
+    }
+
+    /**
+     * Runs a call to LINE: a 4xx means LINE rejected the code or token -> 401 {@code rejected}; a 429 / 408, a 5xx or
+     * a connection failure / timeout is an upstream problem -> 503 (as in {@link #fetchJwks}).
+     */
+    private static <T> T callLine(Supplier<T> call, MessageKey rejected) {
+        try {
+            return call.get();
+        } catch (HttpClientErrorException ex) {
+            // 429 (rate limited) and 408 are transient on LINE's side, not a rejected credential
+            if (ex.getStatusCode().value() == 429 || ex.getStatusCode().value() == 408) {
+                log.warn("LINE call failed (transient {}): {}", ex.getStatusCode().value(), ex.getMessage());
+                throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+            }
+            log.warn("LINE rejected the request ({}): {}", rejected, ex.getMessage());
+            throw ApiException.unauthorized(rejected);
+        } catch (RestClientException ex) {
+            log.warn("LINE call failed (external service): {}", ex.getMessage());
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -737,6 +780,7 @@ public class AuthService {
 
     // ── Apple OAuth ───────────────────────────────────────────────────
 
+    @SuppressWarnings("unchecked")
     public AuthResponse appleLogin(String idToken, String fullName, String nonce) {
         // Without a configured client id the audience cannot be checked, so a token minted for any app would pass
         if (!StringUtils.hasText(appleClientId)) {
@@ -980,7 +1024,7 @@ public class AuthService {
     }
 
     /** @param isNewUser whether the account was created by this very sign-in (reported to the client, see AuthResponse) */
-    private AuthResponse buildAuthResponse(User user, boolean adminScope, boolean isNewUser) {
+    AuthResponse buildAuthResponse(User user, boolean adminScope, boolean isNewUser) {
         // Ban check: all login paths (OTP/Google/LINE/Apple, phone) funnel through here, so they are blocked in one place
         if (!user.isActive()) {
             throw ApiException.forbidden(MessageKey.AUTH_ACCOUNT_BANNED);

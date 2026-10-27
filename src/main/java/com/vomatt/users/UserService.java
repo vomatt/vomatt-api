@@ -52,6 +52,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -324,7 +325,7 @@ public class UserService {
         }
 
         // Query target user's visibility settings
-        Map<String, Boolean> visibility = loadVisibilitySettings(projection.getId(), false);
+        Map<String, Boolean> visibility = loadVisibilitySettings(projection.getId());
         return userMapper.toPublicProfileResponse(projection, visibility,
                 signedIn ? projection.getFollowing() : null, signedIn ? projection.getBlocked() : null,
                 signedIn ? projection.getFollowsViewer() : null, mutualCount, mutualPreview);
@@ -338,7 +339,7 @@ public class UserService {
         UserProfileProjection projection = userRepository.findProfileByUsername(user.getUsername())
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
 
-        Map<String, Boolean> visibility = loadVisibilitySettings(user.getId(), false);
+        Map<String, Boolean> visibility = loadVisibilitySettings(user.getId());
         boolean anonymousBallotByDefault = preferenceRepository.anonymousBallotByDefault(user.getId());
         return userMapper.toMyProfileResponse(user, projection, visibility, anonymousBallotByDefault);
     }
@@ -399,7 +400,7 @@ public class UserService {
                     .ifPresent(field -> savePreference(user, field.preferenceKey(), entry.getValue().toString()));
         }
         log.info("Visibility settings updated for user: {}", userId);
-        return loadVisibilitySettings(user.getId(), false);
+        return loadVisibilitySettings(user.getId());
     }
 
     private void savePreference(User user, String key, String value) {
@@ -448,17 +449,23 @@ public class UserService {
         UserProfileProjection projection = userRepository.findProfileByUsername(user.getUsername())
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
         // The owner's own profile: no follow or block of oneself exists
-        return userMapper.toPublicProfileResponse(projection, loadVisibilitySettings(user.getId(), true), false, false, false,
+        return userMapper.toPublicProfileResponse(projection, loadVisibilitySettingsUnsetShown(user.getId()), false, false, false,
                 null, null);
     }
 
-    /**
-     * Load user's field visibility settings; unset fields fall back to their default (display name and bio public)
-     */
-    private Map<String, Boolean> loadVisibilitySettings(UUID userId, boolean isVisibility) {
+    /** Load user's field visibility settings; unset fields fall back to their default (display name and bio public) */
+    private Map<String, Boolean> loadVisibilitySettings(UUID userId) {
+        return loadVisibilitySettings(userId, VisibilityField::isVisibleByDefault);
+    }
+
+    /** Same, but every unset field is shown: the owner's own profile right after an edit */
+    private Map<String, Boolean> loadVisibilitySettingsUnsetShown(UUID userId) {
+        return loadVisibilitySettings(userId, f -> true);
+    }
+
+    private Map<String, Boolean> loadVisibilitySettings(UUID userId, Predicate<VisibilityField> visibleWhenUnset) {
         Map<String, Boolean> settings = Arrays.stream(VisibilityField.values())
-                .collect(Collectors.toMap(VisibilityField::getFieldName,
-                        f -> isVisibility || f.isVisibleByDefault()));
+                .collect(Collectors.toMap(VisibilityField::getFieldName, visibleWhenUnset::test));
 
         // Load configured values from database
         List<UserPreference> prefs = preferenceRepository

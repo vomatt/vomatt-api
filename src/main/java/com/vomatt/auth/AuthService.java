@@ -685,43 +685,40 @@ public class AuthService {
         Map<String, Object> tokenResponse = callLine(() -> postForm(lineTokenUrl, tokenBody),
                 MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
 
-        if (tokenResponse == null || tokenResponse.get("access_token") == null) {
+        // instanceof, not a cast: a malformed LINE response is a failed exchange (401), not a ClassCastException (500)
+        if (tokenResponse == null || !(tokenResponse.get("access_token") instanceof String accessToken)) {
             throw ApiException.unauthorized(MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
         }
-
-        String accessToken = (String) tokenResponse.get("access_token");
 
         Map<String, Object> lineProfile = callLine(() -> restClient.get().uri(lineProfileUrl)
                 .header("Authorization", "Bearer " + accessToken).retrieve().body(Map.class),
                 MessageKey.AUTH_LINE_PROFILE_FAILED);
 
-        if (lineProfile == null || lineProfile.get("userId") == null) {
+        if (lineProfile == null || !(lineProfile.get("userId") instanceof String userId)) {
             throw ApiException.unauthorized(MessageKey.AUTH_LINE_PROFILE_FAILED);
         }
 
-        String email = "";
-        String idToken = (String) tokenResponse.get("id_token");
-        if (idToken != null) {
-            try {
-                MultiValueMap<String, String> verifyBody = new LinkedMultiValueMap<>();
-                verifyBody.add("id_token", idToken);
-                verifyBody.add("client_id", lineChannelId);
+        // A failed verify call fails the login instead of falling back to the synthetic email below: that would
+        // sign a user whose LINE account has a real email into a second, separate account
+        String email = null;
+        if (tokenResponse.get("id_token") instanceof String idToken) {
+            MultiValueMap<String, String> verifyBody = new LinkedMultiValueMap<>();
+            verifyBody.add("id_token", idToken);
+            verifyBody.add("client_id", lineChannelId);
 
-                Map<String, Object> verifyResponse = postForm(lineVerifyUrl, verifyBody);
-
-                if (verifyResponse != null && verifyResponse.get("email") != null) {
-                    email = (String) verifyResponse.get("email");
-                }
-            } catch (Exception ex) {
-                log.warn("Failed to get email from LINE id_token: {}", ex.getMessage());
+            Map<String, Object> verifyResponse = callLine(() -> postForm(lineVerifyUrl, verifyBody),
+                    MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
+            if (verifyResponse != null && verifyResponse.get("email") instanceof String verifiedEmail
+                    && !verifiedEmail.isBlank()) {
+                email = verifiedEmail;
             }
         }
 
-        if (email.isBlank()) {
-            email = "line_" + lineProfile.get("userId") + "@line.oauth";
+        if (email == null) {
+            email = "line_" + userId + "@line.oauth";
         }
 
-        String displayName = (String) lineProfile.getOrDefault("displayName", "");
+        String displayName = lineProfile.get("displayName") instanceof String name ? name : "";
 
         // LINE's verify endpoint only returns the email when it is verified; otherwise the synthesized
         // line_<userId>@line.oauth is unique and cannot be set by an attacker to a victim's real email -> both cases are safely treated as verified
@@ -730,13 +727,18 @@ public class AuthService {
     }
 
     /**
-     * Runs a call to LINE: a 4xx means LINE rejected the code or token -> 401 {@code rejected}; a 5xx or a
-     * connection failure / timeout is an upstream outage -> 503, retryable (as in {@link #fetchJwks}).
+     * Runs a call to LINE: a 4xx means LINE rejected the code or token -> 401 {@code rejected}; a 429 / 408, a 5xx or
+     * a connection failure / timeout is an upstream problem -> 503 (as in {@link #fetchJwks}).
      */
     private static <T> T callLine(Supplier<T> call, MessageKey rejected) {
         try {
             return call.get();
         } catch (HttpClientErrorException ex) {
+            // 429 (rate limited) and 408 are transient on LINE's side, not a rejected credential
+            if (ex.getStatusCode().value() == 429 || ex.getStatusCode().value() == 408) {
+                log.warn("LINE call failed (transient {}): {}", ex.getStatusCode().value(), ex.getMessage());
+                throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+            }
             log.warn("LINE rejected the request ({}): {}", rejected, ex.getMessage());
             throw ApiException.unauthorized(rejected);
         } catch (RestClientException ex) {

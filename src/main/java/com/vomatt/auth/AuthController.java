@@ -334,7 +334,7 @@ public class AuthController {
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
                     {"success": false, "data": null, "message": "This account has been banned and cannot sign in", "errorCode": "auth.account_banned", "error": "This account has been banned and cannot sign in"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503",
-            description = "LINE failed (5xx) or did not answer in time; safe to retry (`common.service_unavailable`)",
+            description = "LINE failed (5xx), rate limited (429 / 408) or did not answer in time (`common.service_unavailable`). The authorization code may already be spent, so restart LINE Login for a new code instead of resending this request",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
                     {"success": false, "data": null, "message": "Service temporarily unavailable, please try again later", "errorCode": "common.service_unavailable", "error": "Service temporarily unavailable, please try again later"}""")))
     @Operation(summary = "Sign in with LINE",
@@ -346,10 +346,11 @@ public class AuthController {
                     **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated
                     **Errors**:
                     - 400 `auth.line.not_configured`: LINE login is not configured on the server
-                    - 401 `auth.line.token_exchange_failed`: LINE rejected the code (4xx) or returned no access token
+                    - 401 `auth.line.token_exchange_failed`: LINE rejected the code or the id_token (4xx) or returned no access token
                     - 401 `auth.line.profile_failed`: LINE rejected the access token (4xx) or returned no profile
                     - 403 `auth.account_banned`: the user is suspended (`active=false`)
-                    - 503 `common.service_unavailable`: LINE's token or profile endpoint failed (5xx) or did not answer in time""")
+                    - 503 `common.service_unavailable`: LINE's token, profile or id_token verify endpoint failed (5xx), \
+                    rate limited (429 / 408) or did not answer in time. The code is single-use and may already be spent: restart LINE Login for a new code""")
     public ResponseEntity<ApiResponse<AuthResponse>> lineLogin(@Valid @RequestBody LineAuthRequest req) {
         return ResponseEntity.ok(ApiResponse.ok(authService.lineLogin(req.code(), req.redirectUri())));
     }

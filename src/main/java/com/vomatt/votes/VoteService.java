@@ -134,7 +134,7 @@ public class VoteService {
         insertInvitees(vote, concat(request.getInviteeIds(), inviteLists.userIds()), concat(request.getInviteeEmails(), inviteLists.emails()));
         log.info("Vote created: {} by user: {}", vote.getId(), creatorId);
 
-        incrementTagUsage(countedTagIds(vote));
+        tagRepository.incrementUsageCount(countedTagIds(vote));
 
         return convertToVoteResponse(vote.getId(), creatorId);
     }
@@ -193,8 +193,8 @@ public class VoteService {
         removed.removeAll(newTagIds);
         Set<UUID> added = new HashSet<>(newTagIds);
         added.removeAll(oldTagIds);
-        decrementTagUsage(removed);
-        incrementTagUsage(added);
+        tagRepository.decrementUsageCount(removed);
+        tagRepository.incrementUsageCount(added);
         log.info("Vote {} edited by creator {}", voteId, userId);
 
         return convertToVoteResponse(vote.getId(), userId);
@@ -520,7 +520,7 @@ public class VoteService {
         }
         vote.setDeletedAt(now);
         voteRepository.save(vote);
-        decrementTagUsage(countedTagIds(vote));
+        tagRepository.decrementUsageCount(countedTagIds(vote));
     }
 
     /** Inverse of {@link #softDelete}: the Poll is visible again and its tags count it again; a live Poll is left as is. */
@@ -530,7 +530,7 @@ public class VoteService {
         }
         vote.setDeletedAt(null);
         voteRepository.save(vote);
-        incrementTagUsage(countedTagIds(vote));
+        tagRepository.incrementUsageCount(countedTagIds(vote));
     }
 
     /** Invitees of a Poll with whether each holds a Ballot (owner only), earliest invited first. */
@@ -920,18 +920,6 @@ public class VoteService {
     private static Set<UUID> countedTagIds(Vote vote) {
         return vote.getAudience() != Audience.PUBLIC || vote.getTags() == null ? Set.of()
             : vote.getTags().stream().map(Tag::getId).collect(Collectors.toSet());
-    }
-
-    private void incrementTagUsage(Set<UUID> tagIds) {
-        if (!tagIds.isEmpty()) {
-            tagRepository.incrementUsageCount(tagIds);
-        }
-    }
-
-    private void decrementTagUsage(Set<UUID> tagIds) {
-        if (!tagIds.isEmpty()) {
-            tagRepository.decrementUsageCount(tagIds);
-        }
     }
 
     private List<Tag> findTags(List<UUID> tagIds) {

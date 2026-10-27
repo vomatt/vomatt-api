@@ -31,6 +31,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
+import org.mockito.Answers;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -68,7 +69,8 @@ class VoteServiceTest {
     @Mock VoteOptionRepository voteOptionRepository;
     @Mock UserVoteRepository userVoteRepository;
     @Mock UserRepository userRepository;
-    @Mock TagRepository tagRepository;
+    // Real default methods, so the empty-set guard runs and never() checks the query itself
+    @Mock(answer = Answers.CALLS_REAL_METHODS) TagRepository tagRepository;
     @Mock VoteConfigurationProperties voteConfig;
     @Mock com.vomatt.repository.VoteCommentRepository voteCommentRepository;
     @Mock InviteeRepository inviteeRepository;
@@ -1179,7 +1181,7 @@ class VoteServiceTest {
             voteService.softDelete(vote, OffsetDateTime.now());
 
             assertThat(vote.getDeletedAt()).isEqualTo(deletedAt);
-            verify(tagRepository, never()).decrementUsageCount(any());
+            verify(tagRepository, never()).decrementUsageCountRaw(any());
         }
 
         @Test
@@ -1190,7 +1192,7 @@ class VoteServiceTest {
             voteService.softDelete(vote, OffsetDateTime.now());
 
             assertThat(vote.getDeletedAt()).isNotNull();
-            verify(tagRepository, never()).decrementUsageCount(any());
+            verify(tagRepository, never()).decrementUsageCountRaw(any());
         }
 
         @Test
@@ -1211,7 +1213,7 @@ class VoteServiceTest {
 
             voteService.restore(vote);
 
-            verify(tagRepository, never()).incrementUsageCount(any());
+            verify(tagRepository, never()).incrementUsageCountRaw(any());
         }
 
         @Test
@@ -1796,7 +1798,7 @@ class VoteServiceTest {
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.TAG_IDS_INVALID));
 
             verify(voteRepository, never()).save(any());
-            verify(tagRepository, never()).incrementUsageCount(any());
+            verify(tagRepository, never()).incrementUsageCountRaw(any());
         }
 
         @Test
@@ -1815,7 +1817,7 @@ class VoteServiceTest {
             voteService.createVote(request, userId.toString());
 
             verify(tagRepository, never()).findAllById(any());
-            verify(tagRepository, never()).incrementUsageCount(any());
+            verify(tagRepository, never()).incrementUsageCountRaw(any());
         }
     }
 }

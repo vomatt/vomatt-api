@@ -439,7 +439,7 @@ public class VoteCommentController {
                     **Behavior**: idempotent. Liking something already liked succeeds without change. Own Comments can be liked
                     **Side effects**: `likeCount` +1 and `likedByCurrentUser` true in later reads (first like only)
                     **Errors**:
-                    - 404 `comment.not_found`: Comment does not exist or is deleted
+                    - 404 `comment.not_found`: Comment does not exist, is deleted, or is hidden from the caller as in the lists (written by a user the caller blocked, or a Reply in a thread such a user started)
                     - 404 `vote.not_found`: the Comment's Poll is Deleted
                     - 404 `user.not_found`: the signed-in user no longer exists
                     """)
@@ -493,7 +493,7 @@ public class VoteCommentController {
                     - 400 `comment.report.self`: the caller wrote the Comment
                     - 400 `common.validation_failed`: `reason` missing, or `note` over 500 characters
                     - 400 `common.bad_request`: `reason` is not one of the values above
-                    - 404 `comment.not_found`: Comment does not exist or is deleted
+                    - 404 `comment.not_found`: Comment does not exist, is deleted, or is hidden from the caller as in the lists (written by a user the caller blocked, or a Reply in a thread such a user started)
                     - 404 `vote.not_found`: the Comment's Poll is Deleted or not reachable by the caller
                     """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
@@ -542,7 +542,7 @@ public class VoteCommentController {
                     **Behavior**: idempotent. Removing a like that does not exist succeeds without change
                     **Side effects**: `likeCount` -1 and `likedByCurrentUser` false in later reads (only if a like existed)
                     **Errors**:
-                    - 404 `comment.not_found`: Comment does not exist or is deleted
+                    - 404 `comment.not_found`: Comment does not exist, is deleted, or is hidden from the caller as in the lists (written by a user the caller blocked, or a Reply in a thread such a user started)
                     - 404 `vote.not_found`: the Comment's Poll is Deleted
                     """)
     public ResponseEntity<ApiResponse<SimpleResultResponse>> unlikeComment(

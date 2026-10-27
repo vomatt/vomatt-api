@@ -4,7 +4,6 @@ import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.annotation.PublicApiResponse;
 import com.vomatt.tags.dto.TagDto;
-import com.vomatt.tags.TagService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -55,8 +54,7 @@ public class TagController {
                       "error": null
                     }""")))
     public ResponseEntity<ApiResponse<List<TagDto>>> getAllTags() {
-        List<TagDto> tags = tagService.getAllTags();
-        return ResponseEntity.ok(ApiResponse.ok(tags));
+        return ResponseEntity.ok(ApiResponse.ok(tagService.getAllTags()));
     }
 
     @GetMapping("/popular")

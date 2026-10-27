@@ -47,22 +47,14 @@ public class VoteMapper {
         response.setOptions(options.stream()
                 .map(opt -> toOptionResponse(opt, sealed))
                 .toList());
-        List<TagDto> tagDtos = (vote.getTags() != null)
-                ? vote.getTags().stream()
-                        .map(tag -> new TagDto(
-                                tag.getId().toString(),
-                                tag.getName(),
-                                tag.getSlug(),
-                                tag.getDescription(),
-                                tag.getDisplayOrder(),
-                                tag.getUsageCount()))
-                        .toList()
-                : List.of();
-        response.setTags(tagDtos);
+        response.setTags(vote.getTags().stream()
+                .map(tag -> new TagDto(tag.getId().toString(), tag.getName(), tag.getSlug(), tag.getDescription(),
+                        tag.getDisplayOrder(), tag.getUsageCount()))
+                .toList());
         return response;
     }
 
-    public VoteResponse.VoteOptionResponse toOptionResponse(VoteOption option, boolean sealed) {
+    private static VoteResponse.VoteOptionResponse toOptionResponse(VoteOption option, boolean sealed) {
         VoteResponse.VoteOptionResponse resp = new VoteResponse.VoteOptionResponse();
         resp.setId(option.getId().toString());
         resp.setText(option.getText());
@@ -114,7 +106,7 @@ public class VoteMapper {
         return response;
     }
 
-    public VoteResultResponse.VoteOptionResultResponse toOptionResultResponse(VoteOption option, long participants) {
+    private static VoteResultResponse.VoteOptionResultResponse toOptionResultResponse(VoteOption option, long participants) {
         VoteResultResponse.VoteOptionResultResponse result = new VoteResultResponse.VoteOptionResultResponse();
         result.setId(option.getId().toString());
         result.setText(option.getText());

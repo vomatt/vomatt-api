@@ -156,7 +156,7 @@ public class AdminUserService {
     }
 
     private static void requireNotSelf(User user, String actorId) {
-        if (user.getId().toString().equals(actorId)) {
+        if (user.getId().equals(UUID.fromString(actorId))) {
             throw ApiException.forbidden(MessageKey.ADMIN_SELF_ACTION_FORBIDDEN);
         }
     }

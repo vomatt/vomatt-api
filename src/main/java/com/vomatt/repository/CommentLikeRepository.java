@@ -14,10 +14,14 @@ import java.util.UUID;
 @Repository
 public interface CommentLikeRepository extends JpaRepository<CommentLike, UUID> {
 
-    /** Idempotent, also under concurrent requests; returns 1 when the like is new, 0 when it already existed. */
+    /**
+     * Idempotent, also under concurrent requests; returns 1 when the like is new, 0 when it already existed or the
+     * user does not exist.
+     */
     @Modifying
     @Query(value = """
-            INSERT INTO vomatt.comment_likes (id, comment_id, user_id) VALUES (:id, :commentId, :userId)
+            INSERT INTO vomatt.comment_likes (id, comment_id, user_id)
+            SELECT :id, :commentId, :userId WHERE EXISTS (SELECT 1 FROM vomatt.users WHERE id = :userId)
             ON CONFLICT (comment_id, user_id) DO NOTHING""", nativeQuery = true)
     int insertIfAbsent(@Param("id") UUID id, @Param("commentId") UUID commentId, @Param("userId") UUID userId);
 

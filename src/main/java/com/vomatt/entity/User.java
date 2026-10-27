@@ -107,11 +107,6 @@ public class User extends AuditableEntity {
         return Arrays.asList(roles).contains(UserRole.ADMIN);
     }
 
-    public void addPoints(int points) {
-        this.points += points;
-        updateMembershipLevel();
-    }
-
     /**
      * The one email normalization: sign-up / sign-in lookups and email Invitees must agree on it. Trims and lower-cases;
      * a Gmail address (gmail.com / googlemail.com) also loses its {@code +tag} and dots and moves to gmail.com, since
@@ -147,22 +142,5 @@ public class User extends AuditableEntity {
             return "+886" + digits.substring(1);
         }
         throw ApiException.badRequest(MessageKey.AUTH_PHONE_INVALID);
-    }
-
-    public void deductPoints(int points) {
-        this.points = Math.max(0, this.points - points);
-        updateMembershipLevel();
-    }
-
-    private void updateMembershipLevel() {
-        if (points >= 10000) {
-            this.membershipLevel = "PLATINUM";
-        } else if (points >= 5000) {
-            this.membershipLevel = "GOLD";
-        } else if (points >= 1000) {
-            this.membershipLevel = "SILVER";
-        } else {
-            this.membershipLevel = "BASIC";
-        }
     }
 }

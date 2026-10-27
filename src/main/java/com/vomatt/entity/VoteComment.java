@@ -1,7 +1,6 @@
 package com.vomatt.entity;
 
 import com.vomatt.entity.common.AuditableEntity;
-import com.vomatt.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -66,6 +65,6 @@ public class VoteComment extends AuditableEntity {
     }
 
     public boolean canBeDeletedBy(String userId) {
-        return this.user.getId().toString().equals(userId) && !this.isDeleted;
+        return canBeEditedBy(userId);
     }
 }

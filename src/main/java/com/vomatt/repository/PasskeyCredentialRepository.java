@@ -18,4 +18,6 @@ public interface PasskeyCredentialRepository extends JpaRepository<PasskeyCreden
     /** With its user, which sign-in hands to AuthService after the transaction ends. */
     @EntityGraph(attributePaths = "user")
     Optional<PasskeyCredential> findByCredentialId(byte[] credentialId);
+
+    Optional<PasskeyCredential> findByIdAndUserId(UUID id, UUID userId);
 }

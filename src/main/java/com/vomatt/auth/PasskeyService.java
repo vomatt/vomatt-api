@@ -173,7 +173,21 @@ public class PasskeyService {
                 data.getClientExtensions(), data.getTransports());
         String name = request.name() == null || request.name().isBlank() ? null : request.name().strip();
         PasskeyCredential saved = passkeyCredentialRepository.saveAndFlush(toEntity(user, record, name));
-        return new PasskeyResponse(saved.getId(), saved.getName(), saved.getCreatedAt(), saved.getLastUsedAt());
+        return PasskeyResponse.from(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public List<PasskeyResponse> list(String userId) {
+        return passkeyCredentialRepository.findByUserIdOrderByCreatedAt(UUID.fromString(userId)).stream()
+                .map(PasskeyResponse::from).toList();
+    }
+
+    /** Another user's passkey is 404, the same as an unknown id, so ids cannot be probed. */
+    @Transactional
+    public void delete(String userId, UUID id) {
+        PasskeyCredential credential = passkeyCredentialRepository.findByIdAndUserId(id, UUID.fromString(userId))
+                .orElseThrow(() -> ApiException.notFound(MessageKey.COMMON_NOT_FOUND));
+        passkeyCredentialRepository.delete(credential);
     }
 
     /** Usernameless sign-in options: no allowCredentials, so the user picks any passkey for this RP. */

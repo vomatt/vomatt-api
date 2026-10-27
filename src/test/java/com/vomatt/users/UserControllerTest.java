@@ -6,8 +6,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -15,6 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,9 +40,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.util.pattern.PathPatternParser;
 
+import com.vomatt.auth.PasskeyService;
+import com.vomatt.auth.dto.PasskeyResponse;
 import com.vomatt.common.constant.ReservedUsernames;
+import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.exception.GlobalExceptionHandler;
 import com.vomatt.common.i18n.LocalizedMessageService;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.security.SecurityEndpoints;
 import com.vomatt.common.security.UserPrincipal;
@@ -54,6 +62,7 @@ class UserControllerTest {
 
     @Mock UserService userService;
     @Mock VoteService voteService;
+    @Mock PasskeyService passkeyService;
     @Mock LocalizedMessageService messageService;
     @InjectMocks UserController userController;
 
@@ -380,5 +389,56 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.data.items[0].isFollowing").value(true))
                 .andExpect(jsonPath("$.data.items[0].followsYou").value(false))
                 .andExpect(jsonPath("$.data.nextCursor").value("next"));
+    }
+
+    @Test
+    @DisplayName("should wrap the caller's passkeys in ApiResponse when listing")
+    void shouldReturnPasskeysWhenListing() throws Exception {
+        signIn("u1");
+        UUID id = UUID.randomUUID();
+        when(passkeyService.list("u1")).thenReturn(List.of(
+                new PasskeyResponse(id, "iPhone", java.time.OffsetDateTime.now(), null, List.of("hybrid", "internal"))));
+
+        mockMvc.perform(get("/api/users/me/passkeys"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(1)))
+                .andExpect(jsonPath("$.data[0].id").value(id.toString()))
+                .andExpect(jsonPath("$.data[0].name").value("iPhone"))
+                .andExpect(jsonPath("$.data[0].transports[1]").value("internal"));
+    }
+
+    @Test
+    @DisplayName("should delete the passkey as the caller")
+    void shouldDeletePasskeyWhenSignedIn() throws Exception {
+        signIn("u1");
+        UUID id = UUID.randomUUID();
+
+        mockMvc.perform(delete("/api/users/me/passkeys/" + id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.success").value(true));
+        verify(passkeyService).delete("u1", id);
+    }
+
+    @Test
+    @DisplayName("should respond 404 when the passkey is not the caller's")
+    void shouldReturnNotFoundWhenDeletingForeignPasskey() throws Exception {
+        signIn("u1");
+        UUID id = UUID.randomUUID();
+        doThrow(ApiException.notFound(MessageKey.COMMON_NOT_FOUND)).when(passkeyService).delete("u1", id);
+
+        mockMvc.perform(delete("/api/users/me/passkeys/" + id))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("common.not_found"));
+    }
+
+    @Test
+    @DisplayName("should respond 400 without calling the service when the passkey id is not a UUID")
+    void shouldRejectWhenPasskeyIdMalformed() throws Exception {
+        signIn("u1");
+
+        mockMvc.perform(delete("/api/users/me/passkeys/not-a-uuid"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("common.type_mismatch"));
+        verifyNoInteractions(passkeyService);
     }
 }

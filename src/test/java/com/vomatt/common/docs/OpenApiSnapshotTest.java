@@ -92,6 +92,9 @@ class OpenApiSnapshotTest {
             mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path))
                     .andExpect(status().isUnauthorized());
         }
+        mockMvc.perform(get("/api/users/me/passkeys")).andExpect(status().isUnauthorized());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
+                "/api/users/me/passkeys/" + java.util.UUID.randomUUID())).andExpect(status().isUnauthorized());
     }
 
     @Autowired

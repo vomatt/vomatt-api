@@ -289,4 +289,62 @@ class PasskeyServicePostgresTest extends PostgresRepositoryTest {
         assertInvalid(() -> passkeyService.verifyRegistration(userId(), garbled));
         assertInvalid(() -> passkeyService.verifyRegistration(userId(), notBase64));
     }
+
+    private PasskeyCredential persistPasskey(User owner, String name) {
+        PasskeyCredential c = PasskeyService.toEntity(owner, PasskeyEmulator.registeredRecord(), name);
+        c.setTransports(new String[] { "hybrid", "internal" });
+        return passkeyCredentialRepository.saveAndFlush(c);
+    }
+
+    private static void assertNotFound(ThrowingCallable call) {
+        assertThatThrownBy(call).isInstanceOfSatisfying(ApiException.class, e -> {
+            assertThat(e.getMessageKey()).isEqualTo(MessageKey.COMMON_NOT_FOUND);
+            assertThat(e.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+        });
+    }
+
+    @Test
+    @DisplayName("should list only the caller's passkeys, oldest first, without key material")
+    void shouldListOnlyOwnPasskeysWhenListing() {
+        PasskeyCredential first = persistPasskey(user, "iPhone");
+        PasskeyCredential second = persistPasskey(user, null);
+        persistPasskey(persistUser("passkey-other-" + UUID.randomUUID().toString().substring(0, 8)), "Other");
+
+        List<PasskeyResponse> list = passkeyService.list(userId());
+
+        assertThat(list).extracting(PasskeyResponse::id).containsExactly(first.getId(), second.getId());
+        assertThat(list.getFirst().name()).isEqualTo("iPhone");
+        assertThat(list.getFirst().transports()).containsExactly("hybrid", "internal");
+        assertThat(list.getFirst().createdAt()).isNotNull();
+        assertThat(list.getFirst().lastUsedAt()).isNull();
+        JsonNode json = JsonMapper.builder().build().valueToTree(list.getFirst());
+        assertThat(json.propertyNames()).containsExactlyInAnyOrder("id", "name", "createdAt", "lastUsedAt", "transports");
+    }
+
+    @Test
+    @DisplayName("should delete the caller's own passkey")
+    void shouldDeletePasskeyWhenCallerOwnsIt() {
+        PasskeyCredential mine = persistPasskey(user, "iPhone");
+        PasskeyCredential kept = persistPasskey(user, "Mac");
+
+        passkeyService.delete(userId(), mine.getId());
+        em.flush();
+
+        assertThat(passkeyCredentialRepository.existsById(mine.getId())).isFalse();
+        assertThat(passkeyService.list(userId())).extracting(PasskeyResponse::id).containsExactly(kept.getId());
+    }
+
+    @Test
+    @DisplayName("should reject with 404 and keep the row when deleting another user's or an unknown passkey")
+    void shouldReturnNotFoundWhenDeletingForeignOrUnknownPasskey() {
+        User other = persistUser("passkey-other-" + UUID.randomUUID().toString().substring(0, 8));
+        PasskeyCredential theirs = persistPasskey(other, "Theirs");
+
+        assertNotFound(() -> passkeyService.delete(userId(), theirs.getId()));
+        assertNotFound(() -> passkeyService.delete(userId(), UUID.randomUUID()));
+        em.flush();
+
+        assertThat(passkeyCredentialRepository.existsById(theirs.getId())).isTrue();
+        assertThat(passkeyService.list(other.getId().toString())).extracting(PasskeyResponse::name).containsExactly("Theirs");
+    }
 }

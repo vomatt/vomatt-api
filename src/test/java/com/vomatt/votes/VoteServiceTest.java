@@ -6,6 +6,7 @@ import com.vomatt.entity.Audience;
 import com.vomatt.entity.Invitee;
 import com.vomatt.entity.Tag;
 import com.vomatt.entity.User;
+import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
 import com.vomatt.entity.VoteStatus;
@@ -564,6 +565,39 @@ class VoteServiceTest {
                         .anySatisfy(m -> assertThat(m).contains("anonymous=true"))
                         .anySatisfy(m -> assertThat(m).contains("ballot.retract"))
                         .allSatisfy(m -> assertThat(m).contains(voteId.toString())
+                                .doesNotContain(userId.toString()).doesNotContain(optionId.toString()));
+            } finally {
+                serviceLogger.detachAppender(logs);
+            }
+        }
+
+        @Test
+        @DisplayName("should log the anonymity change, without voter or option, when the same option is cast again")
+        void shouldLogAnonymityChangeWhenSameOptionCastAgain() {
+            vote.setStartTime(OffsetDateTime.now().minusHours(1));
+            vote.setEndTime(OffsetDateTime.now().plusDays(1));
+            UUID optionId = UUID.randomUUID();
+            setId(option, optionId);
+            UserVote ballot = new UserVote(user, vote, option);
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(voteOptionRepository.findById(optionId)).thenReturn(Optional.of(option));
+            when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+            when(userVoteRepository.findByUserIdAndVoteId(userId, voteId)).thenReturn(Optional.of(ballot));
+            stubConvertToVoteResponse(vote);
+            Logger serviceLogger = (Logger) LoggerFactory.getLogger(VoteService.class);
+            ListAppender<ILoggingEvent> logs = new ListAppender<>();
+            logs.start();
+            serviceLogger.addAppender(logs);
+            try {
+                VoteRequest request = new VoteRequest();
+                request.setOptionIds(List.of(optionId.toString()));
+                request.setAnonymous(true);
+                voteService.vote(voteId.toString(), request, userId.toString());
+
+                assertThat(ballot.isAnonymous()).isTrue();
+                assertThat(logs.list).extracting(ILoggingEvent::getFormattedMessage)
+                        .singleElement().satisfies(m -> assertThat(m).contains("ballot.anonymity")
+                                .contains(voteId.toString()).contains("anonymous=true")
                                 .doesNotContain(userId.toString()).doesNotContain(optionId.toString()));
             } finally {
                 serviceLogger.detachAppender(logs);

@@ -366,6 +366,7 @@ public class VoteService {
         boolean unchanged = previous.filter(b -> b.getOption().getId().equals(optionUuid)).isPresent();
         if (unchanged) {
             previous.get().setAnonymous(anonymous);
+            log.info("ballot.anonymity vote={} anonymous={}", voteId, anonymous);
         } else {
             Optional<UUID> releasedOptionId = previous.map(this::deleteBallot);
             UserVote ballot = new UserVote(user, vote, option);

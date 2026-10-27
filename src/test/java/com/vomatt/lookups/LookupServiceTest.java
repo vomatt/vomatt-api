@@ -294,6 +294,60 @@ class LookupServiceTest {
             verify(redisService).delete(CacheNamespaces.LOOKUP_BY_TYPE, "CITY");
             verify(redisService).delete(eq(CacheNamespaces.LOOKUP_FRONTEND), anyString());
         }
+
+        @Test
+        @DisplayName("Should neither write nor evict the cache when already inactive")
+        void shouldSkipWriteWhenAlreadyInactive() {
+            when(lookupRepository.findById(LOOKUP_ID)).thenReturn(Optional.of(buildLookup("CITY", "TPE", false, true)));
+
+            lookupService.deactivate(LOOKUP_ID.toString());
+
+            verify(lookupRepository, never()).save(any());
+            verifyNoInteractions(redisService);
+        }
+    }
+
+    // ─── activate ─────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("activate")
+    class ActivateTests {
+
+        @Test
+        @DisplayName("Should change isActive to true and evict only the type cache for a non-frontend item")
+        void shouldActivateWhenInactive() {
+            Lookup lookup = buildLookup("CITY", "TPE", false, false);
+            when(lookupRepository.findById(LOOKUP_ID)).thenReturn(Optional.of(lookup));
+            when(lookupRepository.save(any(Lookup.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            lookupService.activate(LOOKUP_ID.toString());
+
+            verify(lookupRepository).save(argThat(Lookup::getIsActive));
+            verify(redisService).delete(CacheNamespaces.LOOKUP_BY_TYPE, "CITY");
+            verify(redisService, never()).delete(eq(CacheNamespaces.LOOKUP_FRONTEND), anyString());
+        }
+
+        @Test
+        @DisplayName("Should neither write nor evict the cache when already active")
+        void shouldSkipWriteWhenAlreadyActive() {
+            when(lookupRepository.findById(LOOKUP_ID)).thenReturn(Optional.of(buildLookup("CITY", "TPE", true, true)));
+
+            lookupService.activate(LOOKUP_ID.toString());
+
+            verify(lookupRepository, never()).save(any());
+            verifyNoInteractions(redisService);
+        }
+
+        @Test
+        @DisplayName("Should throw 404 LOOKUP_NOT_FOUND when ID not found")
+        void shouldThrowWhenIdNotFound() {
+            UUID randomId = UUID.randomUUID();
+            when(lookupRepository.findById(randomId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> lookupService.activate(randomId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.LOOKUP_NOT_FOUND));
+            verifyNoInteractions(redisService);
+        }
     }
 
     // ─── delete ───────────────────────────────────────────────────────────────

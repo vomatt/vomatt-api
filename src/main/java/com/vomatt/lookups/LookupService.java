@@ -209,6 +209,9 @@ public class LookupService {
 
     private void setActive(String id, boolean active) {
         Lookup lookup = findById(id);
+        if (Boolean.valueOf(active).equals(lookup.getIsActive())) {
+            return;
+        }
         lookup.setIsActive(active);
         lookupRepository.save(lookup);
         evictCacheForType(lookup.getLookupType(), Boolean.TRUE.equals(lookup.getFrontendUsing()));

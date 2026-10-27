@@ -28,6 +28,8 @@ public interface CommentLikeRepository extends JpaRepository<CommentLike, UUID> 
             ON CONFLICT (comment_id, user_id) DO NOTHING""", nativeQuery = true)
     int insertIfAbsent(@Param("id") UUID id, @Param("commentId") UUID commentId, @Param("userId") UUID userId);
 
+    boolean existsByCommentIdAndUserId(UUID commentId, UUID userId);
+
     /** Like counts for a page of comments. */
     @Query("SELECT cl.comment.id AS id, COUNT(cl) AS count FROM CommentLike cl "
             + "WHERE cl.comment.id IN :commentIds GROUP BY cl.comment.id")

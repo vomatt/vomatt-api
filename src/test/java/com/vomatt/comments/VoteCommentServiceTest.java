@@ -151,7 +151,7 @@ class VoteCommentServiceTest {
 
     @Test
     @DisplayName("should return comment.not_found when the Comment goes between its lookup and the like")
-    void shouldThrowCommentNotFoundWhenCommentGoesBeforeLike() {
+    void shouldThrowCommentNotFoundWhenCommentDeletedBeforeLikeInsert() {
         Vote vote = new Vote();
         ReflectionTestUtils.setField(vote, "id", voteId);
         VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "hi");
@@ -166,7 +166,7 @@ class VoteCommentServiceTest {
 
     @Test
     @DisplayName("should return comment.not_found when the Comment goes between its lookup and the report")
-    void shouldThrowCommentNotFoundWhenCommentGoesBeforeReport() {
+    void shouldThrowCommentNotFoundWhenCommentDeletedBeforeReportInsert() {
         Vote vote = new Vote();
         ReflectionTestUtils.setField(vote, "id", voteId);
         VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "hi");
@@ -178,5 +178,21 @@ class VoteCommentServiceTest {
                 new ReportCommentRequest(CommentReportReason.SPAM, null)))
                 .isInstanceOfSatisfying(ApiException.class,
                         ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMENT_NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("should succeed without telling 404 causes apart when the caller already liked the Comment")
+    void shouldSkipNotFoundChecksWhenAlreadyLiked() {
+        Vote vote = new Vote();
+        ReflectionTestUtils.setField(vote, "id", voteId);
+        VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "hi");
+        when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(Optional.of(target));
+        when(commentLikeRepository.insertIfAbsent(any(), eq(target.getId()), eq(viewerId))).thenReturn(0);
+        when(commentLikeRepository.existsByCommentIdAndUserId(target.getId(), viewerId)).thenReturn(true);
+
+        commentService.likeComment(target.getId(), viewerId.toString());
+
+        org.mockito.Mockito.verify(userRepository, org.mockito.Mockito.never()).existsById(any());
+        org.mockito.Mockito.verify(commentRepository, org.mockito.Mockito.times(1)).findByIdAndNotDeleted(target.getId());
     }
 }

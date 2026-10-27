@@ -25,9 +25,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.common.util.UUIDv7Generator;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
-import com.vomatt.common.util.UUIDv7Generator;
 import com.vomatt.entity.VoteComment;
 import com.vomatt.repository.CommentLikeRepository;
 import com.vomatt.repository.PostgresRepositoryTest;
@@ -115,8 +115,7 @@ class CommentLikePostgresTest extends PostgresRepositoryTest {
         first.get(10, TimeUnit.SECONDS);
         second.get(10, TimeUnit.SECONDS);
 
-        assertThat(((Number) em.createNativeQuery("SELECT COUNT(*) FROM vomatt.comment_likes WHERE comment_id = :id")
-                .setParameter("id", comment.getId()).getSingleResult()).longValue()).isEqualTo(1);
+        assertThat(likeCount()).isEqualTo(1);
     }
 
     private void unlike() {
@@ -152,8 +151,7 @@ class CommentLikePostgresTest extends PostgresRepositoryTest {
         first.get(10, TimeUnit.SECONDS);
         second.get(10, TimeUnit.SECONDS);
 
-        assertThat(((Number) em.createNativeQuery("SELECT COUNT(*) FROM vomatt.comment_likes WHERE comment_id = :id")
-                .setParameter("id", comment.getId()).getSingleResult()).longValue()).isZero();
+        assertThat(likeCount()).isZero();
     }
 
     // The insert alone, as the service runs it once the Comment lookup has passed

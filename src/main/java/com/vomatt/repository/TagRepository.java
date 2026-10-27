@@ -33,27 +33,14 @@ public interface TagRepository extends JpaRepository<Tag, UUID> {
             ORDER BY t.usageCount DESC, t.id DESC""")
     List<Tag> findPopularPage(@Param("afterCount") Integer afterCount, @Param("afterId") UUID afterId, Limit limit);
 
-    /** No query for an empty set. */
-    default void incrementUsageCount(Set<UUID> tagIds) {
-        if (!tagIds.isEmpty()) {
-            incrementUsageCountRaw(tagIds);
-        }
-    }
-
-    /** No query for an empty set; a count never drops below 0. */
-    default void decrementUsageCount(Set<UUID> tagIds) {
-        if (!tagIds.isEmpty()) {
-            decrementUsageCountRaw(tagIds);
-        }
-    }
-
+    // An empty set is fine: Hibernate renders the empty IN as 1=0 (TagUsagePostgresTest)
     @Modifying
     @Query("UPDATE Tag t SET t.usageCount = t.usageCount + 1 WHERE t.id IN :tagIds")
-    void incrementUsageCountRaw(@Param("tagIds") Set<UUID> tagIds);
+    void incrementUsageCount(@Param("tagIds") Set<UUID> tagIds);
 
     @Modifying
     @Query("UPDATE Tag t SET t.usageCount = t.usageCount - 1 WHERE t.id IN :tagIds AND t.usageCount > 0")
-    void decrementUsageCountRaw(@Param("tagIds") Set<UUID> tagIds);
+    void decrementUsageCount(@Param("tagIds") Set<UUID> tagIds);
 
     @Query("SELECT CASE WHEN COUNT(v) > 0 THEN true ELSE false END FROM Vote v JOIN v.tags t WHERE t.id = :tagId")
     boolean isTagReferencedByVotes(@Param("tagId") UUID tagId);

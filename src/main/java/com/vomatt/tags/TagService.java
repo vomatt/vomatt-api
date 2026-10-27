@@ -50,8 +50,7 @@ public class TagService {
     @Transactional
     public TagDto updateTag(String tagId, UpdateTagRequest request) {
         UUID id = UUID.fromString(tagId);
-        Tag tag = tagRepository.findById(id)
-                .orElseThrow(() -> ApiException.notFound(MessageKey.TAG_NOT_FOUND));
+        Tag tag = findTag(id);
 
         String name = request.getName().trim();
 
@@ -75,8 +74,7 @@ public class TagService {
     @Transactional
     public void deleteTag(String tagId) {
         UUID id = UUID.fromString(tagId);
-        Tag tag = tagRepository.findById(id)
-                .orElseThrow(() -> ApiException.notFound(MessageKey.TAG_NOT_FOUND));
+        Tag tag = findTag(id);
 
         if (tagRepository.isTagReferencedByVotes(id)) {
             throw ApiException.conflict(MessageKey.TAG_IN_USE);
@@ -102,6 +100,10 @@ public class TagService {
                 after == null ? null : after.id(), Limit.of(size + 1));
         return CursorResponse.of(rows, size, Cursor.Scope.POPULAR_TAGS, t -> Cursor.of(t.getUsageCount(), t.getId()),
                 page -> page.stream().map(this::toDto).toList());
+    }
+
+    private Tag findTag(UUID id) {
+        return tagRepository.findById(id).orElseThrow(() -> ApiException.notFound(MessageKey.TAG_NOT_FOUND));
     }
 
     private String resolveSlug(String providedSlug, String name) {

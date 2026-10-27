@@ -80,10 +80,15 @@ class AdminUserServiceTest {
 
     @Test
     void shouldRejectWhenBlockDirectionIsUnknown() {
-        user(targetId, "user");
+        when(userRepository.existsById(targetId)).thenReturn(true);
         assertThatThrownBy(() -> service.listBlocks(targetId, "sideways", null, null))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.COMMON_INVALID_DIRECTION));
+    }
+
+    @Test
+    void shouldReturn404WhenListingBlocksOfMissingUser() {
+        assertApiError(() -> service.listBlocks(targetId, null, null, null), HttpStatus.NOT_FOUND, MessageKey.USER_NOT_FOUND);
     }
 
     @Test

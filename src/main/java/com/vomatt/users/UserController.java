@@ -15,7 +15,6 @@ import com.vomatt.users.dto.UserDto;
 import com.vomatt.users.dto.UserProfileResponse;
 import com.vomatt.common.security.UserPrincipal;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import com.vomatt.users.UserService;
 import com.vomatt.votes.VoteService;
 import com.vomatt.votes.dto.VoteResponse;
 import jakarta.validation.Valid;
@@ -152,7 +151,7 @@ public class UserController {
             @Parameter(description = "Username of the user to look up", required = true, example = "alice")
             @PathVariable String username,
             @AuthenticationPrincipal UserPrincipal principal) {
-        UserProfileResponse profile = userService.getUserProfile(username, false,
+        UserProfileResponse profile = userService.getUserProfile(username,
                 principal != null ? principal.userId() : null);
         return ResponseEntity.ok(ApiResponse.ok(profile));
     }
@@ -518,10 +517,7 @@ public class UserController {
             @Parameter(description = "Id of the account to delete", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47")
             @PathVariable String userId,
             @AuthenticationPrincipal UserPrincipal principal) {
-
         userService.deleteUser(userId, principal);
-
-        log.info("User {} deleted by {}", userId, principal.userId());
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 }

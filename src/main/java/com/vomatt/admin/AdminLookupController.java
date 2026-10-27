@@ -134,9 +134,7 @@ public class AdminLookupController {
                             }""")))
     public ResponseEntity<ApiResponse<LookupDto>> create(
             @Valid @RequestBody CreateLookupRequest request) {
-        LookupDto result = lookupService.create(request);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.ok(result));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(lookupService.create(request)));
     }
 
     @PutMapping("/{id}")
@@ -210,8 +208,7 @@ public class AdminLookupController {
     public ResponseEntity<ApiResponse<LookupDto>> update(
             @Parameter(description = "Dictionary item ID (UUIDv7)", required = true) @PathVariable String id,
             @Valid @RequestBody UpdateLookupRequest request) {
-        LookupDto result = lookupService.update(id, request);
-        return ResponseEntity.ok(ApiResponse.ok(result));
+        return ResponseEntity.ok(ApiResponse.ok(lookupService.update(id, request)));
     }
 
     @PatchMapping("/{id}/activate")

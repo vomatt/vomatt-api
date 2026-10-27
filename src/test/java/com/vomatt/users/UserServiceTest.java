@@ -435,7 +435,7 @@ class UserServiceTest {
         when(projection.getBlocked()).thenReturn(false);
         when(projection.getFollowsViewer()).thenReturn(true);
 
-        UserProfileResponse profile = userService.getUserProfile("alice", false, viewer.toString());
+        UserProfileResponse profile = userService.getUserProfile("alice", viewer.toString());
 
         assertThat(profile.id()).isEqualTo(target.toString());
         assertThat(profile.isFollowing()).isTrue();
@@ -452,7 +452,7 @@ class UserServiceTest {
         when(projection.getBlocked()).thenReturn(true);
         when(projection.getFollowsViewer()).thenReturn(true);
 
-        UserProfileResponse profile = userService.getUserProfile("alice", false, viewer.toString());
+        UserProfileResponse profile = userService.getUserProfile("alice", viewer.toString());
 
         assertThat(profile.isBlocked()).isTrue();
         assertThat(profile.isFollowing()).isFalse();
@@ -466,7 +466,7 @@ class UserServiceTest {
         when(projection.getFollowersCount()).thenReturn(12L);
         when(projection.getFollowingCount()).thenReturn(8L);
 
-        UserProfileResponse profile = userService.getUserProfile("alice", false, null);
+        UserProfileResponse profile = userService.getUserProfile("alice", null);
 
         assertThat(profile.followersCount()).isEqualTo(12);
         assertThat(profile.followingCount()).isEqualTo(8);
@@ -495,7 +495,7 @@ class UserServiceTest {
     void shouldReturnNullFlagsWhenSignedOut() {
         activeProfile(UUID.randomUUID(), null);
 
-        UserProfileResponse profile = userService.getUserProfile("alice", false, null);
+        UserProfileResponse profile = userService.getUserProfile("alice", null);
 
         assertThat(profile.isFollowing()).isNull();
         assertThat(profile.isBlocked()).isNull();
@@ -690,7 +690,7 @@ class UserServiceTest {
     void shouldReturnNullMutualFollowersWhenSignedOut() {
         activeProfile(UUID.randomUUID(), null);
 
-        UserProfileResponse profile = userService.getUserProfile("alice", false, null);
+        UserProfileResponse profile = userService.getUserProfile("alice", null);
 
         assertThat(profile.mutualFollowersCount()).isNull();
         assertThat(profile.mutualFollowersPreview()).isNull();
@@ -704,7 +704,7 @@ class UserServiceTest {
         UUID me = UUID.randomUUID();
         activeProfile(me, me);
 
-        UserProfileResponse profile = userService.getUserProfile("alice", false, me.toString());
+        UserProfileResponse profile = userService.getUserProfile("alice", me.toString());
 
         assertThat(profile.mutualFollowersCount()).isNull();
         assertThat(profile.mutualFollowersPreview()).isNull();
@@ -719,7 +719,7 @@ class UserServiceTest {
         activeProfile(target, viewer);
         when(followRepository.countMutualFollowers(target, viewer)).thenReturn(0L);
 
-        UserProfileResponse profile = userService.getUserProfile("alice", false, viewer.toString());
+        UserProfileResponse profile = userService.getUserProfile("alice", viewer.toString());
 
         assertThat(profile.mutualFollowersCount()).isZero();
         assertThat(profile.mutualFollowersPreview()).isEmpty();
@@ -746,7 +746,7 @@ class UserServiceTest {
         when(preferenceRepository.findByUserIdInAndKey(any(), eq(VisibilityField.DISPLAY_NAME.preferenceKey())))
                 .thenReturn(List.of(hidden));
 
-        UserProfileResponse profile = userService.getUserProfile("alice", false, viewer.toString());
+        UserProfileResponse profile = userService.getUserProfile("alice", viewer.toString());
 
         assertThat(profile.mutualFollowersCount()).isEqualTo(5);
         assertThat(profile.mutualFollowersPreview()).extracting(UserDto::username, UserDto::displayName, UserDto::avatarUrl)

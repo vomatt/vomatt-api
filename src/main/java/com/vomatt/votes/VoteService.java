@@ -134,12 +134,9 @@ public class VoteService {
         insertInvitees(vote, concat(request.getInviteeIds(), inviteLists.userIds()), concat(request.getInviteeEmails(), inviteLists.emails()));
         log.info("Vote created: {} by user: {}", vote.getId(), creatorId);
 
-        Set<UUID> countedTagIds = countedTagIds(vote);
-        if (!countedTagIds.isEmpty()) {
-            tagRepository.incrementUsageCount(countedTagIds);
-        }
+        incrementTagUsage(countedTagIds(vote));
 
-        return convertToVoteResponse(vote, creatorId);
+        return convertToVoteResponse(vote.getId(), creatorId);
     }
 
     /**
@@ -196,15 +193,11 @@ public class VoteService {
         removed.removeAll(newTagIds);
         Set<UUID> added = new HashSet<>(newTagIds);
         added.removeAll(oldTagIds);
-        if (!removed.isEmpty()) {
-            tagRepository.decrementUsageCount(removed);
-        }
-        if (!added.isEmpty()) {
-            tagRepository.incrementUsageCount(added);
-        }
+        decrementTagUsage(removed);
+        incrementTagUsage(added);
         log.info("Vote {} edited by creator {}", voteId, userId);
 
-        return convertToVoteResponse(vote, userId);
+        return convertToVoteResponse(vote.getId(), userId);
     }
 
     /**
@@ -499,7 +492,7 @@ public class VoteService {
         vote = voteRepository.save(vote);
         log.info("Vote {} closed by creator {}", voteId, creatorId);
 
-        return convertToVoteResponse(vote, creatorId);
+        return convertToVoteResponse(vote.getId(), creatorId);
     }
 
     /**
@@ -528,10 +521,7 @@ public class VoteService {
         }
         vote.setDeletedAt(now);
         voteRepository.save(vote);
-        Set<UUID> tagIds = countedTagIds(vote);
-        if (!tagIds.isEmpty()) {
-            tagRepository.decrementUsageCount(tagIds);
-        }
+        decrementTagUsage(countedTagIds(vote));
     }
 
     /** Inverse of {@link #softDelete}: the Poll is visible again and its tags count it again; a live Poll is left as is. */
@@ -541,10 +531,7 @@ public class VoteService {
         }
         vote.setDeletedAt(null);
         voteRepository.save(vote);
-        Set<UUID> tagIds = countedTagIds(vote);
-        if (!tagIds.isEmpty()) {
-            tagRepository.incrementUsageCount(tagIds);
-        }
+        incrementTagUsage(countedTagIds(vote));
     }
 
     /** Invitees of a Poll with whether each holds a Ballot (owner only), earliest invited first. */
@@ -818,10 +805,6 @@ public class VoteService {
         return toResponses(List.of(vote), userId).getFirst();
     }
 
-    private VoteResponse convertToVoteResponse(Vote vote, String userId) {
-        return convertToVoteResponse(vote.getId(), userId);
-    }
-
     // After a Ballot change the caller already knows the Selection, so it overrides the looked-up one.
     // The Poll is still reloaded: adjustVoteCount clears the persistence context and the counts changed.
     private VoteResponse ballotResponse(UUID voteId, String userId, UUID myOptionId) {
@@ -936,8 +919,20 @@ public class VoteService {
 
     // Popular tag counts include only Public Polls
     private static Set<UUID> countedTagIds(Vote vote) {
-        return vote.getAudience() != Audience.PUBLIC ? Set.of()
+        return vote.getAudience() != Audience.PUBLIC || vote.getTags() == null ? Set.of()
             : vote.getTags().stream().map(Tag::getId).collect(Collectors.toSet());
+    }
+
+    private void incrementTagUsage(Set<UUID> tagIds) {
+        if (!tagIds.isEmpty()) {
+            tagRepository.incrementUsageCount(tagIds);
+        }
+    }
+
+    private void decrementTagUsage(Set<UUID> tagIds) {
+        if (!tagIds.isEmpty()) {
+            tagRepository.decrementUsageCount(tagIds);
+        }
     }
 
     private List<Tag> findTags(List<UUID> tagIds) {

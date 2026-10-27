@@ -4,6 +4,7 @@ import static com.vomatt.common.util.TextUtil.blankToNull;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -59,8 +60,7 @@ public class AdminUserService {
     /** @param status active, suspended, or null for both */
     @Transactional(readOnly = true)
     public PageResponse<AdminUserResponse> listUsers(String q, String status, String role, Integer page, Integer limit) {
-        String statusFilter = blankToNull(status);
-        Boolean active = switch (statusFilter == null ? "" : statusFilter) {
+        Boolean active = switch (Objects.requireNonNullElse(blankToNull(status), "")) {
             case "" -> null;
             case "active" -> true;
             case "suspended" -> false;
@@ -82,9 +82,10 @@ public class AdminUserService {
     /** @param direction {@code blocking} (default: users this user blocks) or {@code blocked-by} (users blocking them) */
     @Transactional(readOnly = true)
     public PageResponse<AdminUserBlockResponse> listBlocks(UUID userId, String direction, Integer page, Integer limit) {
-        findUser(userId);
-        String dir = blankToNull(direction);
-        boolean blocking = switch (dir == null ? "blocking" : dir) {
+        if (!userRepository.existsById(userId)) {
+            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
+        }
+        boolean blocking = switch (Objects.requireNonNullElse(blankToNull(direction), "blocking")) {
             case "blocking" -> true;
             case "blocked-by" -> false;
             default -> throw ApiException.badRequest(MessageKey.COMMON_INVALID_DIRECTION, direction);
@@ -97,9 +98,7 @@ public class AdminUserService {
 
     public AdminUserDetail suspend(UUID userId, String actorId) {
         User user = findUser(userId);
-        if (user.getId().toString().equals(actorId)) {
-            throw ApiException.forbidden(MessageKey.ADMIN_SELF_ACTION_FORBIDDEN);
-        }
+        requireNotSelf(user, actorId);
         userService.requireAnotherActiveAdmin(user);
         user.setActive(false);
         userService.revokeTokensAfterCommit(userId.toString());
@@ -121,9 +120,7 @@ public class AdminUserService {
             return detail(user);
         }
         if (user.isAdmin() && !roles.contains(UserRole.ADMIN)) {
-            if (user.getId().toString().equals(actorId)) {
-                throw ApiException.forbidden(MessageKey.ADMIN_SELF_ACTION_FORBIDDEN);
-            }
+            requireNotSelf(user, actorId);
             userService.requireAnotherActiveAdmin(user);
         }
         user.setRoles(roles.stream().distinct().toArray(String[]::new));
@@ -141,12 +138,13 @@ public class AdminUserService {
     public UnlockLoginResponse unlockLogin(UUID userId, UnlockLoginRequest request, String actorId) {
         User user = findUser(userId);
         Set<String> targets = Set.copyOf(request.clearOrAll());
+        String ip = blankToNull(request.ip());
         int cleared = 0;
         for (String channel : Set.copyOf(request.channelsOrAll())) {
             String identifier = LoginUnlock.CHANNEL_PHONE.equals(channel) ? user.getPhoneNumber() : user.getEmail();
             // An account without this identifier cannot be locked on its channel
             if (identifier != null) {
-                cleared += authService.unlockLogin(channel, identifier, blankToNull(request.ip()), targets);
+                cleared += authService.unlockLogin(channel, identifier, ip, targets);
             }
         }
         log.info("User {} login unlocked by admin {} ({}): {} entries cleared", userId, actorId, request.auditDetails(), cleared);
@@ -155,6 +153,12 @@ public class AdminUserService {
 
     private User findUser(UUID userId) {
         return userRepository.findById(userId).orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
+    }
+
+    private static void requireNotSelf(User user, String actorId) {
+        if (user.getId().toString().equals(actorId)) {
+            throw ApiException.forbidden(MessageKey.ADMIN_SELF_ACTION_FORBIDDEN);
+        }
     }
 
     private AdminUserDetail detail(User user) {

@@ -44,7 +44,7 @@ public class TagService {
         tag = tagRepository.save(tag);
         log.info("Tag created: id={}, name={}, slug={}", tag.getId(), tag.getName(), tag.getSlug());
 
-        return toDto(tag);
+        return TagDto.from(tag);
     }
 
     @Transactional
@@ -68,7 +68,7 @@ public class TagService {
         tag = tagRepository.save(tag);
         log.info("Tag updated: id={}, name={}, slug={}", tag.getId(), tag.getName(), tag.getSlug());
 
-        return toDto(tag);
+        return TagDto.from(tag);
     }
 
     @Transactional
@@ -88,7 +88,7 @@ public class TagService {
     public List<TagDto> getAllTags() {
         return tagRepository.findAllByOrderByDisplayOrderAsc()
                 .stream()
-                .map(this::toDto)
+                .map(TagDto::from)
                 .toList();
     }
 
@@ -99,7 +99,7 @@ public class TagService {
         List<Tag> rows = tagRepository.findPopularPage(after == null ? null : (int) after.longKey(),
                 after == null ? null : after.id(), Limit.of(size + 1));
         return CursorResponse.of(rows, size, Cursor.Scope.POPULAR_TAGS, t -> Cursor.of(t.getUsageCount(), t.getId()),
-                page -> page.stream().map(this::toDto).toList());
+                page -> page.stream().map(TagDto::from).toList());
     }
 
     private Tag findTag(UUID id) {
@@ -111,16 +111,5 @@ public class TagService {
             return providedSlug;
         }
         return Tag.generateSlug(name);
-    }
-
-    private TagDto toDto(Tag tag) {
-        return new TagDto(
-                tag.getId().toString(),
-                tag.getName(),
-                tag.getSlug(),
-                tag.getDescription(),
-                tag.getDisplayOrder(),
-                tag.getUsageCount()
-        );
     }
 }

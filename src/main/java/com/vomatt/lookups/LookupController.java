@@ -4,7 +4,6 @@ import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.annotation.CommonApiResponses;
 import com.vomatt.common.config.OpenAPIConfig;
 import com.vomatt.lookups.dto.LookupDto;
-import com.vomatt.lookups.LookupService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;

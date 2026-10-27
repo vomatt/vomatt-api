@@ -43,8 +43,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.vomatt.common.config.OpenAPIConfig.ERR_CODE;
 import static com.vomatt.common.config.OpenAPIConfig.ERR_END;
@@ -57,7 +55,6 @@ import static com.vomatt.common.config.OpenAPIConfig.EX_PAGE_OF_POLLS;
 @RequiredArgsConstructor
 @Tag(name = "Vote", description = "Poll APIs: create, edit, Close, cast / retract a Ballot, results, Participants, Feed / Explore / Search listing")
 public class VoteController {
-    private static final Logger log = LoggerFactory.getLogger(VoteController.class);
     private final VoteService voteService;
 
     private static final String POLL_1 = """
@@ -168,10 +165,8 @@ public class VoteController {
     public ResponseEntity<ApiResponse<VoteResponse>> createVote(
             @Valid @RequestBody CreateVoteRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        VoteResponse voteResponse = voteService.createVote(request, principal.userId());
-        log.info("Vote created: {} by user: {}", voteResponse.getId(), principal.userId());
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.ok(voteResponse));
+                .body(ApiResponse.ok(voteService.createVote(request, principal.userId())));
     }
 
     @PutMapping("/{voteId}")
@@ -448,9 +443,7 @@ public class VoteController {
             @PathVariable String voteId,
             @Valid @RequestBody VoteRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        VoteResponse response = voteService.vote(voteId, request, principal.userId());
-        log.info("User {} voted on vote {}", principal.userId(), voteId);
-        return ResponseEntity.ok(ApiResponse.ok(response));
+        return ResponseEntity.ok(ApiResponse.ok(voteService.vote(voteId, request, principal.userId())));
     }
 
     @DeleteMapping("/{voteId}/vote")
@@ -512,10 +505,7 @@ public class VoteController {
             @Parameter(description = "Option ID", required = true, example = "0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813")
             @PathVariable String optionId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        VoteResponse response = voteService.removeVote(voteId, optionId, principal.userId());
-        log.info("User {} removed vote from option {} in vote {}",
-                principal.userId(), optionId, voteId);
-        return ResponseEntity.ok(ApiResponse.ok(response));
+        return ResponseEntity.ok(ApiResponse.ok(voteService.removeVote(voteId, optionId, principal.userId())));
     }
 
     @GetMapping("/{voteId}/results")
@@ -706,7 +696,6 @@ public class VoteController {
             @PathVariable String voteId,
             @AuthenticationPrincipal UserPrincipal principal) {
         voteService.closeVote(voteId, principal.userId());
-        log.info("Vote {} closed by creator {}", voteId, principal.userId());
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 

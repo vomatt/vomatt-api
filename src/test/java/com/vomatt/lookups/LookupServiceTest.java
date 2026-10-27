@@ -21,6 +21,7 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.node.StringNode;
 
 import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -320,8 +321,8 @@ class LookupServiceTest {
     class ConfigIntTests {
 
         private int configIntFor(Object value) {
-            when(redisService.get(eq(com.vomatt.common.redis.CacheNamespaces.LOOKUP_BY_TYPE), eq("config"), any(TypeReference.class)))
-                    .thenReturn(java.util.List.of(new LookupDto(LOOKUP_ID.toString(), "config", "k", value, 0, null, null, true, null, false)));
+            when(redisService.get(eq(CacheNamespaces.LOOKUP_BY_TYPE), eq("config"), any(TypeReference.class)))
+                    .thenReturn(List.of(new LookupDto(LOOKUP_ID.toString(), "config", "k", value, 0, null, null, true, null, false)));
             return lookupService.configInt("k", 10);
         }
 
@@ -341,18 +342,18 @@ class LookupServiceTest {
 
         @Test
         void shouldConvertDurationOverrideOrKeepDefaultWhenMissing() {
-            when(redisService.get(eq(com.vomatt.common.redis.CacheNamespaces.LOOKUP_BY_TYPE), eq("config"), any(TypeReference.class)))
-                    .thenReturn(java.util.List.of(new LookupDto(LOOKUP_ID.toString(), "config", "k", 30, 0, null, null, true, null, false)));
-            assertThat(lookupService.configDuration("k", java.time.temporal.ChronoUnit.MINUTES, java.time.Duration.ofSeconds(90)))
-                    .isEqualTo(java.time.Duration.ofMinutes(30));
-            assertThat(lookupService.configDuration("other", java.time.temporal.ChronoUnit.MINUTES, java.time.Duration.ofSeconds(90)))
-                    .isEqualTo(java.time.Duration.ofSeconds(90));
+            when(redisService.get(eq(CacheNamespaces.LOOKUP_BY_TYPE), eq("config"), any(TypeReference.class)))
+                    .thenReturn(List.of(new LookupDto(LOOKUP_ID.toString(), "config", "k", 30, 0, null, null, true, null, false)));
+            assertThat(lookupService.configDuration("k", ChronoUnit.MINUTES, Duration.ofSeconds(90)))
+                    .isEqualTo(Duration.ofMinutes(30));
+            assertThat(lookupService.configDuration("other", ChronoUnit.MINUTES, Duration.ofSeconds(90)))
+                    .isEqualTo(Duration.ofSeconds(90));
         }
 
         @Test
         void shouldFallBackWhenKeyMissing() {
-            when(redisService.get(eq(com.vomatt.common.redis.CacheNamespaces.LOOKUP_BY_TYPE), eq("config"), any(TypeReference.class)))
-                    .thenReturn(java.util.List.of());
+            when(redisService.get(eq(CacheNamespaces.LOOKUP_BY_TYPE), eq("config"), any(TypeReference.class)))
+                    .thenReturn(List.of());
             assertThat(lookupService.configInt("k", 10)).isEqualTo(10);
         }
     }

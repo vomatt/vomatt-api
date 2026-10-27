@@ -98,11 +98,16 @@ public interface UserRepository extends JpaRepository<User, UUID> {
            "AND v.endTime > v.startTime AND v.deletedAt IS NULL AND v.audience = com.vomatt.entity.Audience.PUBLIC) AS totalPolls, " +
            "(SELECT COUNT(uv) FROM UserVote uv WHERE uv.user.id = u.id AND uv.vote.deletedAt IS NULL " +
            "AND uv.vote.audience = com.vomatt.entity.Audience.PUBLIC) AS totalVotes, " +
+           // Same rows as the follower and following lists: suspended accounts left out, blocks not filtered
+           "(SELECT COUNT(f) FROM UserFollow f WHERE f.followed.id = u.id AND f.follower.active = true) AS followersCount, " +
+           "(SELECT COUNT(f) FROM UserFollow f WHERE f.follower.id = u.id AND f.followed.active = true) AS followingCount, " +
            // false for a null viewer and for the viewer's own row (follows and blocks of oneself cannot exist)
            "CASE WHEN EXISTS (SELECT 1 FROM UserFollow f WHERE f.follower.id = :viewerId AND f.followed.id = u.id) " +
            "THEN true ELSE false END AS following, " +
            "CASE WHEN EXISTS (SELECT 1 FROM UserBlock b WHERE b.blocker.id = :viewerId AND b.blocked.id = u.id) " +
-           "THEN true ELSE false END AS blocked " +
+           "THEN true ELSE false END AS blocked, " +
+           "CASE WHEN EXISTS (SELECT 1 FROM UserFollow f WHERE f.follower.id = u.id AND f.followed.id = :viewerId) " +
+           "THEN true ELSE false END AS followsViewer " +
            "FROM User u " +
            "WHERE u.username = :username")
     Optional<UserProfileProjection> findProfileForViewer(@Param("username") String username, @Param("viewerId") UUID viewerId);

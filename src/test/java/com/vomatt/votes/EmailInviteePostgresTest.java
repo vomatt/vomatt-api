@@ -21,7 +21,8 @@ import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteStatus;
 import com.vomatt.repository.InviteeRepository;
-import com.vomatt.repository.NotificationReadRepository;
+import com.vomatt.repository.NotificationRepository;
+import com.vomatt.repository.PollNotifications;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.votes.dto.CreateVoteRequest;
 import com.vomatt.votes.dto.InviteeResponse;
@@ -35,7 +36,7 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
 
     @Autowired VoteService voteService;
     @Autowired InviteeRepository inviteeRepository;
-    @Autowired NotificationReadRepository notificationReadRepository;
+    @Autowired NotificationRepository notificationRepository;
 
     // Postgres keeps microseconds; Linux clocks have nanoseconds, so stored times would not round-trip
     private final OffsetDateTime now = OffsetDateTime.now().truncatedTo(ChronoUnit.MICROS);
@@ -126,17 +127,22 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
     @DisplayName("should give an unbound email no Invitation, Ended Notification, My Polls entry or access; after binding the user gets them")
     void shouldNotifyOnlyAfterBindingWhenInvitedByEmail() {
         inviteEmail(carolEmail);
-        // Carol already has an account with that email that was never bound (no verified sign-in since), plus a stale read row
+        // Carol already has an account with that email that was never bound (no verified sign-in since). She was once
+        // invited by ID and read that Invitation before the owner removed her
         User carol = User.builder().username("em-carol-" + System.nanoTime()).email(carolEmail).build();
         em.persist(carol);
-        notificationReadRepository.markRead(carol.getId(), poll.getId(), now);
+        Invitee removed = new Invitee(poll, carol);
+        em.persist(removed);
+        em.flush();
+        reads().markRead(carol.getId(), poll.getId(), now);
+        em.remove(removed);
         em.flush();
         OffsetDateTime afterEnd = now.plusDays(2);
 
-        // Pending row has user_id NULL: NOTIFIED_POLLS, MY_POLL_IDS and Vote.isVisibleTo must not match it
-        assertThat(notificationReadRepository.countUnread(carol.getId(), now)).isZero();
-        assertThat(notificationReadRepository.isNotified(carol.getId(), poll.getId(), now)).isFalse();
-        assertThat(notificationReadRepository.isNotified(carol.getId(), poll.getId(), afterEnd)).isFalse();
+        // Pending row has user_id NULL: the notification branches, MY_POLL_IDS and Vote.isVisibleTo must not match it
+        assertThat(reads().countUnread(carol.getId(), now)).isZero();
+        assertThat(reads().isNotified(carol.getId(), poll.getId(), now)).isFalse();
+        assertThat(reads().isNotified(carol.getId(), poll.getId(), afterEnd)).isFalse();
         assertThat(voteService.getMyPolls(carol.getId().toString(), "open", null, null).items()).isEmpty();
         assertThatThrownBy(() -> voteService.getVote(poll.getId().toString(), carol.getId().toString()))
                 .isInstanceOf(ApiException.class);
@@ -144,11 +150,11 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
         voteService.bindEmailInvitees(carol);
         em.clear();
 
-        // The stale read row is gone, so the Invitation is unread; once the Poll Ends, the Ended Notification follows
-        assertThat(notificationReadRepository.countUnread(carol.getId(), now)).isEqualTo(1);
-        assertThat(notificationReadRepository.isNotified(carol.getId(), poll.getId(), now)).isTrue();
-        assertThat(notificationReadRepository.countUnread(carol.getId(), afterEnd)).isEqualTo(1);
-        assertThat(notificationReadRepository.isNotified(carol.getId(), poll.getId(), afterEnd)).isTrue();
+        // The bound row is a new Invitation, unread whatever was read before; once the Poll Ends, the Ended Notification follows
+        assertThat(reads().countUnread(carol.getId(), now)).isEqualTo(1);
+        assertThat(reads().isNotified(carol.getId(), poll.getId(), now)).isTrue();
+        assertThat(reads().countUnread(carol.getId(), afterEnd)).isEqualTo(1);
+        assertThat(reads().isNotified(carol.getId(), poll.getId(), afterEnd)).isTrue();
         assertThat(voteService.getMyPolls(carol.getId().toString(), "open", null, null).items()).hasSize(1);
     }
 
@@ -178,7 +184,7 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
         em.clear();
         assertEmailOnly(voteService.getInvitees(poll.getId().toString(), owner.getId().toString()));
         assertThat(voteService.getVote(poll.getId().toString(), carol.getId().toString()).getInviteeCount()).isEqualTo(1L);
-        assertThat(notificationReadRepository.isNotified(carol.getId(), poll.getId(), now)).isTrue();
+        assertThat(reads().isNotified(carol.getId(), poll.getId(), now)).isTrue();
     }
 
     @Test
@@ -265,7 +271,7 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
         scheduled.setAudience(Audience.INVITE_ONLY);
         em.persist(new Invitee(scheduled, carol));
         em.flush();
-        notificationReadRepository.markRead(carol.getId(), scheduled.getId(), now);
+        reads().markRead(carol.getId(), scheduled.getId(), now);
         UUID before = inviteeRepository.findByVoteId(scheduled.getId()).getFirst().getId();
         em.clear();
 
@@ -283,8 +289,8 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
         assertThat(inviteeRepository.findByVoteId(scheduled.getId())).singleElement()
                 .satisfies(i -> assertThat(i.getId()).isEqualTo(before));
         // Not a new Invitee, so the read Invitation stays read
-        assertThat(notificationReadRepository.isNotified(carol.getId(), scheduled.getId(), now)).isTrue();
-        assertThat(notificationReadRepository.countUnread(carol.getId(), now)).isZero();
+        assertThat(reads().isNotified(carol.getId(), scheduled.getId(), now)).isTrue();
+        assertThat(reads().countUnread(carol.getId(), now)).isZero();
     }
 
     @Test
@@ -297,7 +303,7 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
         em.persist(new Invitee(scheduled, carol, carolEmail));
         em.persist(new Invitee(scheduled, daveEmail));
         em.flush();
-        notificationReadRepository.markRead(carol.getId(), scheduled.getId(), now);
+        reads().markRead(carol.getId(), scheduled.getId(), now);
         UUID before = inviteeRepository.findByVoteIdAndEmail(scheduled.getId(), carolEmail).orElseThrow().getId();
         em.clear();
 
@@ -313,7 +319,7 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
 
         assertThat(inviteeRepository.findByVoteId(scheduled.getId())).singleElement()
                 .satisfies(i -> assertThat(i.getId()).isEqualTo(before));
-        assertThat(notificationReadRepository.countUnread(carol.getId(), now)).isZero();
+        assertThat(reads().countUnread(carol.getId(), now)).isZero();
 
         edit.setInviteeEmails(List.of());
         voteService.updateVote(scheduled.getId().toString(), edit, owner.getId().toString());
@@ -418,5 +424,9 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
         CreateVoteRequest.VoteOptionRequest option = new CreateVoteRequest.VoteOptionRequest();
         option.setText(text);
         return option;
+    }
+
+    private PollNotifications reads() {
+        return new PollNotifications(notificationRepository);
     }
 }

@@ -2,6 +2,7 @@ package com.vomatt.users;
 
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.users.dto.FollowUserDto;
 import com.vomatt.users.dto.MyProfileResponse;
 import com.vomatt.users.dto.UpdateProfileRequest;
 import com.vomatt.users.dto.UpdateVisibilityRequest;
@@ -49,7 +50,7 @@ public class UserController {
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":null,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","points":120,"membershipLevel":"basic","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"visibilitySettings":{"firstName":false,"lastName":false,"location":false,"points":false,"displayName":true,"bio":true,"membershipLevel":false},"anonymousBallotByDefault":false},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":null,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","points":120,"membershipLevel":"basic","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"followersCount":12,"followingCount":8,"visibilitySettings":{"firstName":false,"lastName":false,"location":false,"points":false,"displayName":true,"bio":true,"membershipLevel":false},"anonymousBallotByDefault":false},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
@@ -62,6 +63,7 @@ public class UserController {
             on `GET /api/users/{username}` (unset fields use their defaults: `displayName` and `bio` public, the rest hidden). \
             `totalPolls` counts Polls the user created that have opened (Open and Ended; not Scheduled or Cancelled before opening), \
             `totalVotes` counts Public, non-Deleted Polls the user holds a Ballot in. \
+            `followersCount` / `followingCount` count the users in `GET /api/users/{username}/followers` / `/following` (suspended accounts left out). \
             `anonymousBallotByDefault` is whether Ballots are Anonymous when a Ballot does not say otherwise (false until set).
             **Side effects**: none
             **Errors**:
@@ -75,7 +77,7 @@ public class UserController {
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"exportedAt":"2026-10-23T10:00:00+08:00","profile":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":null,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","points":120,"membershipLevel":"basic","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":1,"totalVotes":1,"visibilitySettings":{"firstName":false,"lastName":false,"location":true,"points":false,"displayName":true,"bio":true,"membershipLevel":false},"anonymousBallotByDefault":false},"preferences":{"visibility.location":"true"},"polls":[{"id":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","title":"Lunch?","description":null,"audience":"PUBLIC","startTime":"2026-10-01T12:00:00+08:00","endTime":"2026-10-08T12:00:00+08:00","createdAt":"2026-10-01T12:00:00+08:00","deleted":false,"options":["Ramen","Sushi"]}],"comments":[{"id":"0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b","voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","text":"Ramen!","createdAt":"2026-10-02T09:00:00+08:00"}],"ballots":[{"voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","voteTitle":"Lunch?","optionId":"0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813","optionText":"Ramen","anonymous":false,"castAt":"2026-10-02T08:30:00+08:00"}],"feedback":[{"id":"0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70","content":"Please add dark mode.","createdAt":"2026-10-03T10:00:00+08:00"}],"following":[{"userId":"0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f","username":"bob","since":"2026-10-04T10:00:00+08:00"}],"blocking":[]},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"exportedAt":"2026-10-23T10:00:00+08:00","profile":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":null,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","points":120,"membershipLevel":"basic","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":1,"totalVotes":1,"followersCount":0,"followingCount":1,"visibilitySettings":{"firstName":false,"lastName":false,"location":true,"points":false,"displayName":true,"bio":true,"membershipLevel":false},"anonymousBallotByDefault":false},"preferences":{"visibility.location":"true"},"polls":[{"id":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","title":"Lunch?","description":null,"audience":"PUBLIC","startTime":"2026-10-01T12:00:00+08:00","endTime":"2026-10-08T12:00:00+08:00","createdAt":"2026-10-01T12:00:00+08:00","deleted":false,"options":["Ramen","Sushi"]}],"comments":[{"id":"0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b","voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","text":"Ramen!","createdAt":"2026-10-02T09:00:00+08:00"}],"ballots":[{"voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","voteTitle":"Lunch?","optionId":"0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813","optionText":"Ramen","anonymous":false,"castAt":"2026-10-02T08:30:00+08:00"}],"feedback":[{"id":"0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70","content":"Please add dark mode.","createdAt":"2026-10-03T10:00:00+08:00"}],"following":[{"userId":"0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f","username":"bob","since":"2026-10-04T10:00:00+08:00"}],"blocking":[]},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "Already exported today (`common.rate_limited`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
@@ -125,16 +127,20 @@ public class UserController {
     @PublicApiResponse
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"firstName":"Alice","lastName":null,"location":null,"points":null,"membershipLevel":null,"isFollowing":true,"isBlocked":false},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"followersCount":12,"followingCount":8,"firstName":"Alice","lastName":null,"location":null,"points":null,"membershipLevel":null,"isFollowing":true,"followsYou":true,"isBlocked":false,"mutualFollowersCount":3,"mutualFollowersPreview":[{"id":"0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f","username":"jtan","displayName":"J Tan","avatarUrl":"bot:boba"},{"id":"0199c1a3-1a2b-7c3d-8e4f-5a6b7c8d9e0f","username":"mia","displayName":null,"avatarUrl":"bot:pip"},{"id":"0199c1a3-2b3c-7d4e-9f5a-6b7c8d9e0f1a","username":"ken","displayName":"Ken","avatarUrl":null}]},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No user with this username (errorCode `user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Get user public profile", description = """
-            **Auth**: public; optional login fills `isFollowing` and `isBlocked`. An invalid or expired token is treated as signed out
+            **Auth**: public; optional login fills `isFollowing`, `followsYou`, `isBlocked`, `mutualFollowersCount` and `mutualFollowersPreview`. An invalid or expired token is treated as signed out
             **Precondition**: none
             **Behavior**: returns the public view of a user. `isFollowing` / `isBlocked` say whether the caller follows / has blocked \
-            the user: `null` when signed out, `false` on the caller's own profile. Profile fields do not depend on the caller. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` (Public, non-Deleted Polls only) are always present \
+            the user, and `followsYou` whether the user follows the caller: `null` when signed out, `false` on the caller's own profile. \
+            `mutualFollowersCount` counts the users in `GET /api/users/{username}/mutual-followers` (this user's followers whom the caller follows) \
+            and `mutualFollowersPreview` holds the first 3 of them (most recently followed first; `[]` when there are none): both `null` when signed out and on the caller's own profile. \
+            `followersCount` / `followingCount` count the users in `GET /api/users/{username}/followers` / `/following` \
+            (suspended accounts left out, blocks not filtered). Profile fields do not depend on the caller. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` (Public, non-Deleted Polls only) are always present \
             (`avatarUrl` is `null` when never set). \
             Every optional field is `null` unless the owner made it visible: `displayName` and `bio` are visible by default, \
             `firstName`, `lastName`, `location`, `points` and `membershipLevel` are hidden by default; email and birthday are never returned. \
@@ -155,7 +161,7 @@ public class UserController {
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of followers",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"items":[{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"bob","displayName":"Bob","avatarUrl":"bot:boba"}],"nextCursor":null},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"items":[{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"bob","displayName":"Bob","avatarUrl":"bot:boba","isFollowing":false,"followsYou":true}],"nextCursor":null},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No active user with this username (errorCode `user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
@@ -165,23 +171,54 @@ public class UserController {
             **Precondition**: the user exists and is not suspended
             **Behavior**: users who follow this user, most recently followed first, cursor-paged \
             (`limit` 1-50, default 20; out-of-range values are clamped). `nextCursor` is `null` on the last page. \
-            Suspended followers are left out. Blocks do not filter this list (they hide only Polls and Comments). Each item carries only public profile fields, like user search.
+            Suspended followers are left out. Blocks do not filter this list (they hide only Polls and Comments). Each item carries the public profile fields of user search, \
+            plus `isFollowing` (the caller follows the user) and `followsYou` (the user follows the caller), both `false` on the caller's own entry.
             **Side effects**: none
             **Errors**:
             - 404 `user.not_found`: no user has this username, or the user is suspended
             - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list""")
-    public ResponseEntity<ApiResponse<CursorResponse<UserDto>>> listFollowers(
+    public ResponseEntity<ApiResponse<CursorResponse<FollowUserDto>>> listFollowers(
             @Parameter(description = "Username of the followed user", required = true, example = "alice") @PathVariable String username,
             @Parameter(description = "`nextCursor` from the previous page; omit for the first page") @RequestParam(required = false) String cursor,
-            @Parameter(description = "Page size, 1-50 (default 20); out-of-range values are clamped", example = "20") @RequestParam(required = false) Integer limit) {
-        return ResponseEntity.ok(ApiResponse.ok(userService.listFollowers(username, cursor, limit)));
+            @Parameter(description = "Page size, 1-50 (default 20); out-of-range values are clamped", example = "20") @RequestParam(required = false) Integer limit,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(userService.listFollowers(username, cursor, limit, principal.userId())));
+    }
+
+    @GetMapping("/{username}/mutual-followers")
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of mutual followers",
+            content = @Content(examples = @ExampleObject(value = """
+                    {"success":true,"data":{"items":[{"id":"0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f","username":"jtan","displayName":"J Tan","avatarUrl":"bot:boba","isFollowing":true,"followsYou":false}],"nextCursor":null},"message":null,"errorCode":null,"error":null}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No active user with this username (errorCode `user.not_found`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(value = """
+                            {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
+    @Operation(summary = "List a user's followers whom the caller follows", description = """
+            **Auth**: required
+            **Precondition**: the user exists and is not suspended
+            **Behavior**: the users in `GET /api/users/{username}/followers` whom the caller follows ("Followed by ... you follow"), \
+            in the same order (most recently followed the user first), cursor-paged (`limit` 1-50, default 20; out-of-range values are clamped). \
+            `nextCursor` is `null` on the last page. Suspended users and users with a block between them and the caller (either direction) are left out. \
+            Always empty on the caller's own profile. Items are shaped like the follower list; `isFollowing` is therefore always `true`. \
+            `mutualFollowersCount` of `GET /api/users/{username}` is the length of this list.
+            **Side effects**: none
+            **Errors**:
+            - 404 `user.not_found`: no user has this username, or the user is suspended
+            - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list""")
+    public ResponseEntity<ApiResponse<CursorResponse<FollowUserDto>>> listMutualFollowers(
+            @Parameter(description = "Username of the followed user", required = true, example = "alice") @PathVariable String username,
+            @Parameter(description = "`nextCursor` from the previous page; omit for the first page") @RequestParam(required = false) String cursor,
+            @Parameter(description = "Page size, 1-50 (default 20); out-of-range values are clamped", example = "20") @RequestParam(required = false) Integer limit,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(userService.listMutualFollowers(username, cursor, limit, principal.userId())));
     }
 
     @GetMapping("/{username}/following")
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of followed users",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"items":[{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"bob","displayName":"Bob","avatarUrl":"bot:boba"}],"nextCursor":null},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"items":[{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"bob","displayName":"Bob","avatarUrl":"bot:boba","isFollowing":false,"followsYou":true}],"nextCursor":null},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No active user with this username (errorCode `user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
@@ -191,16 +228,18 @@ public class UserController {
             **Precondition**: the user exists and is not suspended
             **Behavior**: users this user follows, most recently followed first, cursor-paged \
             (`limit` 1-50, default 20; out-of-range values are clamped). `nextCursor` is `null` on the last page. \
-            Suspended users are left out. Blocks do not filter this list (they hide only Polls and Comments). Each item carries only public profile fields, like user search.
+            Suspended users are left out. Blocks do not filter this list (they hide only Polls and Comments). Each item carries the public profile fields of user search, \
+            plus `isFollowing` (the caller follows the user) and `followsYou` (the user follows the caller), both `false` on the caller's own entry.
             **Side effects**: none
             **Errors**:
             - 404 `user.not_found`: no user has this username, or the user is suspended
             - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list""")
-    public ResponseEntity<ApiResponse<CursorResponse<UserDto>>> listFollowing(
+    public ResponseEntity<ApiResponse<CursorResponse<FollowUserDto>>> listFollowing(
             @Parameter(description = "Username of the follower", required = true, example = "alice") @PathVariable String username,
             @Parameter(description = "`nextCursor` from the previous page; omit for the first page") @RequestParam(required = false) String cursor,
-            @Parameter(description = "Page size, 1-50 (default 20); out-of-range values are clamped", example = "20") @RequestParam(required = false) Integer limit) {
-        return ResponseEntity.ok(ApiResponse.ok(userService.listFollowing(username, cursor, limit)));
+            @Parameter(description = "Page size, 1-50 (default 20); out-of-range values are clamped", example = "20") @RequestParam(required = false) Integer limit,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(userService.listFollowing(username, cursor, limit, principal.userId())));
     }
 
     @GetMapping("/{username}/votes")
@@ -375,17 +414,18 @@ public class UserController {
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of followed users",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"items":[{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice","avatarUrl":"bot:boba"}],"nextCursor":null},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"items":[{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice","avatarUrl":"bot:boba","isFollowing":true,"followsYou":false}],"nextCursor":null},"message":null,"errorCode":null,"error":null}""")))
     @Operation(summary = "List followed users", description = """
             **Auth**: required
             **Precondition**: none
             **Behavior**: users the caller follows, most recently followed first, cursor-paged \
             (`limit` 1-50, default 20; out-of-range values are clamped). `nextCursor` is `null` on the last page. \
-            Each item carries only public profile fields, like user search.
+            Each item carries the public profile fields of user search, plus `isFollowing` (always `true` here) \
+            and `followsYou` (the user follows the caller back).
             **Side effects**: none
             **Errors**:
             - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list""")
-    public ResponseEntity<ApiResponse<CursorResponse<UserDto>>> listFollowedUsers(
+    public ResponseEntity<ApiResponse<CursorResponse<FollowUserDto>>> listFollowedUsers(
             @Parameter(description = "`nextCursor` returned by the previous page") @RequestParam(required = false) String cursor,
             @Parameter(description = "Page size (1-50, default 20)") @RequestParam(required = false) Integer limit,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -412,7 +452,8 @@ public class UserController {
             **Auth**: required
             **Precondition**: `userId` is another existing, active account the caller has not blocked
             **Behavior**: one-way follow. From then on `GET /api/votes/following` lists PUBLIC Polls the followed user creates. \
-            The followed user is not told; the follow shows in `GET /api/users/{username}/followers` and `/following`. \
+            The followed user gets a FOLLOWED notification in `GET /api/notifications` (gone again if the caller unfollows); \
+            the follow shows in `GET /api/users/{username}/followers` and `/following`. \
             Idempotent: following an already followed user succeeds.
             **Side effects**: the follow is written to the audit log
             **Errors**:

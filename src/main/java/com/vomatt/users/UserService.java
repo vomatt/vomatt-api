@@ -6,6 +6,7 @@ import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.security.UserPrincipal;
+import com.vomatt.users.dto.FollowUserDto;
 import com.vomatt.users.dto.MyProfileResponse;
 import com.vomatt.users.dto.UpdateProfileRequest;
 import com.vomatt.users.dto.UserDto;
@@ -14,6 +15,7 @@ import com.vomatt.entity.User;
 import com.vomatt.entity.UserBlock;
 import com.vomatt.entity.UserFollow;
 import com.vomatt.entity.UserPreference;
+import com.vomatt.repository.FollowEdge;
 import com.vomatt.repository.UserBlockRepository;
 import com.vomatt.repository.UserFollowRepository;
 import com.vomatt.repository.UserPreferenceRepository;
@@ -36,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -61,6 +64,8 @@ public class UserService {
 
     /** One export per user per UTC day: the response is the account's whole footprint and is not cheap to build. */
     private static final String EXPORT_COUNTER_NS = "export:daily";
+
+    private static final int MUTUAL_PREVIEW_SIZE = 3;
 
     /**
      * The user themself or an active admin can delete the account; deletion also revokes all of the user's refresh tokens.
@@ -187,24 +192,42 @@ public class UserService {
         }
     }
 
-    /** Users the caller follows, most recently followed first, as public profile fields. */
+    /** Users the caller follows, most recently followed first, as public profile fields with the caller's relation. */
     @Transactional(readOnly = true)
-    public CursorResponse<UserDto> listFollowedUsers(String userId, String cursor, Integer limit) {
-        return followedPage(UUID.fromString(userId), Cursor.Scope.FOLLOWS, null, cursor, limit);
+    public CursorResponse<FollowUserDto> listFollowedUsers(String userId, String cursor, Integer limit) {
+        UUID caller = UUID.fromString(userId);
+        return followedPage(caller, Cursor.Scope.FOLLOWS, null, cursor, limit, caller);
     }
 
     /** Page of the users {@code followerId} follows; {@code owner} binds the cursor to one user's list (null: unbound). */
-    private CursorResponse<UserDto> followedPage(UUID followerId, Cursor.Scope scope, UUID owner, String cursor, Integer limit) {
+    private CursorResponse<FollowUserDto> followedPage(UUID followerId, Cursor.Scope scope, UUID owner, String cursor,
+                                                       Integer limit, UUID viewerId) {
         int size = CursorResponse.limit(limit);
         Cursor after = Cursor.decode(cursor, scope, owner);
         List<UserFollow> rows = followRepository.findPage(followerId,
             after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
         return CursorResponse.of(rows, size, scope, owner, f -> Cursor.of(f.getCreatedAt(), f.getId()),
-            page -> toSearchResults(page.stream().map(UserFollow::getFollowed).toList()));
+            page -> toFollowItems(page.stream().map(UserFollow::getFollowed).toList(), viewerId));
+    }
+
+    /** Follow list items of a page of users: display name masking as in search, and the viewer's follows both ways in one query. */
+    public List<FollowUserDto> toFollowItems(List<User> users, UUID viewerId) {
+        if (users.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, Boolean> shown = displayNameSettings(users);
+        boolean byDefault = VisibilityField.DISPLAY_NAME.isVisibleByDefault();
+        List<FollowEdge> edges = followRepository.findEdgesWithViewer(viewerId, users.stream().map(User::getId).toList());
+        Set<UUID> followedByViewer = edges.stream().filter(e -> e.followerId().equals(viewerId))
+            .map(FollowEdge::followedId).collect(Collectors.toSet());
+        Set<UUID> followingViewer = edges.stream().filter(e -> e.followedId().equals(viewerId))
+            .map(FollowEdge::followerId).collect(Collectors.toSet());
+        return users.stream().map(u -> userMapper.toFollowItem(u, shown.getOrDefault(u.getId(), byDefault),
+            followedByViewer.contains(u.getId()), followingViewer.contains(u.getId()))).toList();
     }
 
     /** Public profile fields of a page of users, display name masked by each owner's setting. */
-    private List<UserDto> toSearchResults(List<User> users) {
+    public List<UserDto> toSearchResults(List<User> users) {
         Map<UUID, Boolean> shown = displayNameSettings(users);
         boolean byDefault = VisibilityField.DISPLAY_NAME.isVisibleByDefault();
         return users.stream().map(u -> userMapper.toSearchResult(u, shown.getOrDefault(u.getId(), byDefault))).toList();
@@ -220,9 +243,9 @@ public class UserService {
             .collect(Collectors.toMap(pref -> pref.getUser().getId(), pref -> Boolean.parseBoolean(pref.getValue())));
     }
 
-    /** Users who follow the given user, most recently followed first, as public profile fields. */
+    /** Users who follow the given user, most recently followed first, as public profile fields with the caller's relation. */
     @Transactional(readOnly = true)
-    public CursorResponse<UserDto> listFollowers(String username, String cursor, Integer limit) {
+    public CursorResponse<FollowUserDto> listFollowers(String username, String cursor, Integer limit, String viewerId) {
         UUID userId = userRepository.findActiveByUsername(username)
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND)).getId();
         int size = CursorResponse.limit(limit);
@@ -231,35 +254,67 @@ public class UserService {
         List<UserFollow> rows = followRepository.findFollowersPage(userId,
             after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
         return CursorResponse.of(rows, size, Cursor.Scope.USER_FOLLOWERS, userId, f -> Cursor.of(f.getCreatedAt(), f.getId()),
-            page -> toSearchResults(page.stream().map(UserFollow::getFollower).toList()));
+            page -> toFollowItems(page.stream().map(UserFollow::getFollower).toList(), UUID.fromString(viewerId)));
     }
 
-    /** Users the given user follows, most recently followed first, as public profile fields. */
+    /** Users the given user follows, most recently followed first, as public profile fields with the caller's relation. */
     @Transactional(readOnly = true)
-    public CursorResponse<UserDto> listFollowing(String username, String cursor, Integer limit) {
+    public CursorResponse<FollowUserDto> listFollowing(String username, String cursor, Integer limit, String viewerId) {
         UUID userId = userRepository.findActiveByUsername(username)
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND)).getId();
-        return followedPage(userId, Cursor.Scope.USER_FOLLOWING, userId, cursor, limit);
+        return followedPage(userId, Cursor.Scope.USER_FOLLOWING, userId, cursor, limit, UUID.fromString(viewerId));
     }
 
     /**
-     * @param viewerId the signed-in caller, or null when signed out: {@code isFollowing} / {@code isBlocked} are then
-     *                 null, and false on the caller's own profile
+     * Followers of the given user whom the caller follows (see {@link UserFollowRepository#MUTUAL_FOLLOWER}), in follower
+     * list order. Empty on the caller's own profile.
+     */
+    @Transactional(readOnly = true)
+    public CursorResponse<FollowUserDto> listMutualFollowers(String username, String cursor, Integer limit, String viewerId) {
+        UUID userId = userRepository.findActiveByUsername(username)
+            .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND)).getId();
+        UUID viewer = UUID.fromString(viewerId);
+        int size = CursorResponse.limit(limit);
+        Cursor after = Cursor.decode(cursor, Cursor.Scope.USER_MUTUAL_FOLLOWERS, userId);
+        if (userId.equals(viewer)) {
+            return new CursorResponse<>(List.of(), null);
+        }
+        List<UserFollow> rows = followRepository.findMutualFollowersPage(userId, viewer,
+            after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
+        return CursorResponse.of(rows, size, Cursor.Scope.USER_MUTUAL_FOLLOWERS, userId,
+            f -> Cursor.of(f.getCreatedAt(), f.getId()),
+            page -> toFollowItems(page.stream().map(UserFollow::getFollower).toList(), viewer));
+    }
+
+    /**
+     * @param viewerId the signed-in caller, or null when signed out: {@code isFollowing} / {@code isBlocked} /
+     *                 {@code followsYou} are then null, and false on the caller's own profile; the mutual followers
+     *                 are null both when signed out and on the caller's own profile
      */
     @Transactional(readOnly = true)
     public UserProfileResponse getUserProfile(String username, boolean isVisibility, String viewerId) {
         // Use Projection to fetch profile and statistics in one query, avoiding N+1
         // Suspended users are hidden, same as user search and their Poll list
         boolean signedIn = viewerId != null;
-        UserProfileProjection projection = userRepository.findProfileForViewer(username,
-                signedIn ? UUID.fromString(viewerId) : null)
+        UUID viewer = signedIn ? UUID.fromString(viewerId) : null;
+        UserProfileProjection projection = userRepository.findProfileForViewer(username, viewer)
             .filter(p -> Boolean.TRUE.equals(p.getActive()))
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
+
+        Integer mutualCount = null;
+        List<UserDto> mutualPreview = null;
+        if (signedIn && !projection.getId().equals(viewer)) {
+            mutualCount = Math.toIntExact(followRepository.countMutualFollowers(projection.getId(), viewer));
+            mutualPreview = mutualCount == 0 ? List.of() : toSearchResults(followRepository
+                .findMutualFollowersPage(projection.getId(), viewer, null, null, Limit.of(MUTUAL_PREVIEW_SIZE))
+                .stream().map(UserFollow::getFollower).toList());
+        }
 
         // Query target user's visibility settings
         Map<String, Boolean> visibility = loadVisibilitySettings(projection.getId(), isVisibility);
         return userMapper.toPublicProfileResponse(projection, visibility,
-                signedIn ? projection.getFollowing() : null, signedIn ? projection.getBlocked() : null);
+                signedIn ? projection.getFollowing() : null, signedIn ? projection.getBlocked() : null,
+                signedIn ? projection.getFollowsViewer() : null, mutualCount, mutualPreview);
     }
 
     @Transactional(readOnly = true)
@@ -272,13 +327,7 @@ public class UserService {
 
         Map<String, Boolean> visibility = loadVisibilitySettings(UUID.fromString(userId), false);
         boolean anonymousBallotByDefault = preferenceRepository.anonymousBallotByDefault(user.getId());
-        return userMapper.toMyProfileResponse(
-                user,
-                projection.getTotalPolls().intValue(),
-                projection.getTotalVotes().intValue(),
-                visibility,
-                anonymousBallotByDefault
-        );
+        return userMapper.toMyProfileResponse(user, projection, visibility, anonymousBallotByDefault);
     }
 
     /** Data portability: everything stored about the caller, nothing about anyone else. Fails closed when Redis is down. */
@@ -388,7 +437,8 @@ public class UserService {
         UserProfileProjection projection = userRepository.findProfileByUsername(user.getUsername())
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
         // The owner's own profile: no follow or block of oneself exists
-        return userMapper.toPublicProfileResponse(projection, loadVisibilitySettings(user.getId(), true), false, false);
+        return userMapper.toPublicProfileResponse(projection, loadVisibilitySettings(user.getId(), true), false, false, false,
+                null, null);
     }
 
     /**

@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.vomatt.comments.dto.CreateCommentRequest;
 import com.vomatt.comments.dto.UpdateCommentRequest;
+import com.vomatt.comments.dto.ReportCommentRequest;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.response.SimpleResultResponse;
@@ -51,7 +52,7 @@ public class VoteCommentController {
     @PostMapping
     @Auditable(action = "CREATE", resourceType = "COMMENT")
     @CommonApiResponses
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Comment or Reply created (same shape as list items; `replyCount` is 0)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Comment or Reply created (same shape as list items; `replyCount` is 0 and `replies` is [])",
             content = @Content(examples = @ExampleObject(name = "reply", value = """
                             {
                               "success": true,
@@ -68,6 +69,8 @@ public class VoteCommentController {
                               "likedByCurrentUser": false,
                               "parentId": "0199c3a2-7b1e-7c4d-9a10-3f5e8d2b6a41",
                               "replyCount": 0,
+                              "replies": [],
+                              "repliesNextCursor": null,
                               "deleted": false
                             },
                               "message": null,
@@ -139,7 +142,44 @@ public class VoteCommentController {
                                   "likeCount": 3,
                                   "likedByCurrentUser": false,
                                   "parentId": null,
-                                  "replyCount": 2,
+                                  "replyCount": 3,
+                                  "replies": [
+                                    {
+                                      "id": "0199c3a8-1b2c-7d3e-8f4a-5b6c7d8e9f01",
+                                      "voteId": "0199c2f0-4d3a-7e8b-b6c2-1a9f0e7d5c33",
+                                      "userId": "0199b8e4-5d6e-7f70-9a1b-2c3d4e5f6a7b",
+                                      "author": "bob",
+                                      "text": "Same, B wins on price.",
+                                      "createdAt": "2026-10-09T12:50:00+08:00",
+                                      "updatedAt": "2026-10-09T12:50:00+08:00",
+                                      "edited": false,
+                                      "likeCount": 0,
+                                      "likedByCurrentUser": false,
+                                      "parentId": "0199c3a2-7b1e-7c4d-9a10-3f5e8d2b6a41",
+                                      "replyCount": 0,
+                                      "replies": [],
+                                      "repliesNextCursor": null,
+                                      "deleted": false
+                                    },
+                                    {
+                                      "id": "0199c3a9-2c3d-7e4f-9a5b-6c7d8e9f0a12",
+                                      "voteId": "0199c2f0-4d3a-7e8b-b6c2-1a9f0e7d5c33",
+                                      "userId": "0199b8e4-5d6e-7f70-9a1b-2c3d4e5f6a7b",
+                                      "author": "carol",
+                                      "text": "A lasts longer though.",
+                                      "createdAt": "2026-10-09T13:05:00+08:00",
+                                      "updatedAt": "2026-10-09T13:05:00+08:00",
+                                      "edited": false,
+                                      "likeCount": 0,
+                                      "likedByCurrentUser": false,
+                                      "parentId": "0199c3a2-7b1e-7c4d-9a10-3f5e8d2b6a41",
+                                      "replyCount": 0,
+                                      "replies": [],
+                                      "repliesNextCursor": null,
+                                      "deleted": false
+                                    }
+                                  ],
+                                  "repliesNextCursor": "UkVQTElFU3wwMTk5YzNhOS0yYzNkLTdlNGYtOWE1Yi02YzdkOGU5ZjBhMTJ8MjAyNi0xMC0wOVQwNTowNTowMFo",
                                   "deleted": false
                                 },
                                 {
@@ -155,6 +195,26 @@ public class VoteCommentController {
                                   "likedByCurrentUser": false,
                                   "parentId": null,
                                   "replyCount": 1,
+                                  "replies": [
+                                    {
+                                      "id": "0199c3a0-3d4e-7f5a-8b6c-7d8e9f0a1b23",
+                                      "voteId": "0199c2f0-4d3a-7e8b-b6c2-1a9f0e7d5c33",
+                                      "userId": "0199b8e4-5d6e-7f70-9a1b-2c3d4e5f6a7b",
+                                      "author": "dave",
+                                      "text": "Still worth discussing.",
+                                      "createdAt": "2026-10-09T12:25:00+08:00",
+                                      "updatedAt": "2026-10-09T12:25:00+08:00",
+                                      "edited": false,
+                                      "likeCount": 0,
+                                      "likedByCurrentUser": false,
+                                      "parentId": "0199c39e-1a2b-7d3c-8e4f-9a0b1c2d3e4f",
+                                      "replyCount": 0,
+                                      "replies": [],
+                                      "repliesNextCursor": null,
+                                      "deleted": false
+                                    }
+                                  ],
+                                  "repliesNextCursor": null,
                                   "deleted": true
                                 }
                               ],
@@ -169,7 +229,7 @@ public class VoteCommentController {
             description = """
                     **Auth**: public (optional login changes response: `likedByCurrentUser` reflects the signed-in user's likes, and is always false when not logged in; threads started by and Replies written by users the caller blocked are left out)
                     **Precondition**: the Poll exists
-                    **Behavior**: returns top-level Comments only, newest first, cursor-paged (`limit` default 20, max 50; pass `nextCursor` back as `cursor`). Each item carries `replyCount`; load Replies with the replies endpoint. A deleted Comment that still has non-deleted Replies stays as a placeholder (`deleted` = true; `userId`, `author` and `text` are null); a deleted Comment without Replies is omitted. For a signed-in caller, a thread whose top-level Comment was written by a user they blocked (`POST /api/users/me/blocks/{userId}`) is omitted with all its Replies, Replies by blocked users do not count in `replyCount`, and a deleted placeholder whose only Replies are by blocked users is omitted
+                    **Behavior**: returns top-level Comments only, newest first, cursor-paged (`limit` default 20, max 50; pass `nextCursor` back as `cursor`). Each item carries `replyCount` and its first Replies in `replies` (at most 2, oldest first, filtered like the replies endpoint); when `repliesNextCursor` is set, pass it as `cursor` to the replies endpoint to load the rest without repeating those shown. A deleted Comment that still has non-deleted Replies stays as a placeholder (`deleted` = true; `userId`, `author` and `text` are null); a deleted Comment without Replies is omitted. For a signed-in caller, a thread whose top-level Comment was written by a user they blocked (`POST /api/users/me/blocks/{userId}`) is omitted with all its Replies, Replies by blocked users do not count in `replyCount`, and a deleted placeholder whose only Replies are by blocked users is omitted
                     **Side effects**: none
                     **Errors**:
                     - 400 `common.cursor_invalid`: `cursor` is not a token returned by this endpoint
@@ -205,6 +265,8 @@ public class VoteCommentController {
                                   "likedByCurrentUser": false,
                                   "parentId": "0199c3a2-7b1e-7c4d-9a10-3f5e8d2b6a41",
                                   "replyCount": 0,
+                                  "replies": [],
+                                  "repliesNextCursor": null,
                                   "deleted": false
                                 }
                               ],
@@ -256,6 +318,8 @@ public class VoteCommentController {
                               "likedByCurrentUser": false,
                               "parentId": null,
                               "replyCount": 0,
+                              "replies": [],
+                              "repliesNextCursor": null,
                               "deleted": false
                             },
                               "message": null,
@@ -392,6 +456,69 @@ public class VoteCommentController {
             @AuthenticationPrincipal UserPrincipal principal) {
         commentService.likeComment(commentId, principal.userId());
         log.info("Comment {} liked by user {}", commentId, principal.userId());
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
+    @PostMapping("/{commentId}/report")
+    @Auditable(action = "REPORT", resourceType = "COMMENT")
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Reported (or already reported by the caller)",
+            content = @Content(examples = @ExampleObject(name = "reported", value = """
+                            {
+                              "success": true,
+                              "data": {
+                              "success": true,
+                              "id": null,
+                              "status": null,
+                              "message": null
+                            },
+                              "message": null,
+                              "errorCode": null,
+                              "error": null
+                            }
+                            """)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "The caller wrote the Comment (errorCode `comment.report.self`), or the body is invalid (`common.validation_failed`, `common.bad_request`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "ownComment", value = """
+                            {
+                              "success": false,
+                              "data": null,
+                              "message": "You cannot report your own comment",
+                              "errorCode": "comment.report.self",
+                              "error": "You cannot report your own comment"
+                            }
+                            """)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Comment not found or deleted (errorCode `comment.not_found`), or its Poll is Deleted (`vote.not_found`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(ref = "#/components/examples/" + OpenAPIConfig.EX_NOT_FOUND)))
+    @Operation(summary = "Report a Comment or Reply",
+            description = """
+                    **Auth**: required
+                    **Precondition**: the Comment or Reply exists, is not deleted, was written by someone else, and its Poll is reachable by the caller
+                    **Behavior**: records the report for moderators with `reason` (SPAM, HARASSMENT, HATE, MISINFORMATION or OTHER) and an optional `note` (max 500 characters; blank is stored as none). Idempotent: reporting the same Comment again succeeds and keeps the first report. The author is not told, and the Comment stays visible until a moderator acts
+                    **Side effects**: the report is listed in `GET /api/admin/comment-reports` and written to the audit log
+                    **Errors**:
+                    - 400 `comment.report.self`: the caller wrote the Comment
+                    - 400 `common.validation_failed`: `reason` missing, or `note` over 500 characters
+                    - 400 `common.bad_request`: `reason` is not one of the values above
+                    - 404 `comment.not_found`: Comment does not exist or is deleted
+                    - 404 `vote.not_found`: the Comment's Poll is Deleted or not reachable by the caller
+                    """,
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
+                    examples = {
+                            @ExampleObject(name = "withNote", value = """
+                                    { "reason": "HARASSMENT", "note": "Insults me in every thread." }
+                                    """),
+                            @ExampleObject(name = "reasonOnly", value = """
+                                    { "reason": "SPAM" }
+                                    """)
+                    })))
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> reportComment(
+            @Parameter(description = "Poll ID", required = true) @PathVariable String voteId,
+            @Parameter(description = "Comment ID", required = true) @PathVariable UUID commentId,
+            @Valid @RequestBody ReportCommentRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        commentService.reportComment(commentId, principal.userId(), request);
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 

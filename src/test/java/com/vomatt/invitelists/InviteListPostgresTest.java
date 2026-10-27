@@ -26,7 +26,8 @@ import com.vomatt.invitelists.dto.InviteListMembersRequest;
 import com.vomatt.invitelists.dto.InviteListRequest;
 import com.vomatt.repository.InviteListMemberRepository;
 import com.vomatt.repository.InviteeRepository;
-import com.vomatt.repository.NotificationReadRepository;
+import com.vomatt.repository.NotificationRepository;
+import com.vomatt.repository.PollNotifications;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.votes.VoteService;
 import com.vomatt.votes.VoteServiceSlice;
@@ -42,7 +43,7 @@ class InviteListPostgresTest extends PostgresRepositoryTest {
     @Autowired VoteService voteService;
     @Autowired InviteListMemberRepository inviteListMemberRepository;
     @Autowired InviteeRepository inviteeRepository;
-    @Autowired NotificationReadRepository notificationReadRepository;
+    @Autowired NotificationRepository notificationRepository;
 
     private final OffsetDateTime now = OffsetDateTime.now();
     private final String carolEmail = "gr-carol-" + System.nanoTime() + "@example.com";
@@ -211,7 +212,7 @@ class InviteListPostgresTest extends PostgresRepositoryTest {
         Vote scheduled = inviteOnlyPoll(now.plusDays(1), now.plusDays(2));
         em.persist(new Invitee(scheduled, bob));
         em.flush();
-        notificationReadRepository.markRead(bob.getId(), scheduled.getId(), now);
+        reads().markRead(bob.getId(), scheduled.getId(), now);
         UUID before = inviteeRepository.findByVoteId(scheduled.getId()).getFirst().getId();
         em.clear();
 
@@ -232,7 +233,11 @@ class InviteListPostgresTest extends PostgresRepositoryTest {
 
         assertThat(inviteeRepository.findByVoteId(scheduled.getId())).singleElement()
                 .satisfies(i -> assertThat(i.getId()).isEqualTo(before));
-        assertThat(notificationReadRepository.isNotified(bob.getId(), scheduled.getId(), now)).isTrue();
-        assertThat(notificationReadRepository.countUnread(bob.getId(), now)).isZero();
+        assertThat(reads().isNotified(bob.getId(), scheduled.getId(), now)).isTrue();
+        assertThat(reads().countUnread(bob.getId(), now)).isZero();
+    }
+
+    private PollNotifications reads() {
+        return new PollNotifications(notificationRepository);
     }
 }

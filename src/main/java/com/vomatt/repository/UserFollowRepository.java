@@ -1,6 +1,7 @@
 package com.vomatt.repository;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -59,6 +60,37 @@ public interface UserFollowRepository extends JpaRepository<UserFollow, UUID> {
             ORDER BY f.createdAt DESC, f.id DESC""")
     List<UserFollow> findFollowersPage(@Param("followedId") UUID followedId, @Param("afterTime") OffsetDateTime afterTime,
                                        @Param("afterId") UUID afterId, Limit limit);
+
+    /**
+     * Follow {@code f} of {@code :userId} by a mutual follower: an active user the viewer follows, with no block between
+     * them and the viewer in either direction.
+     */
+    String MUTUAL_FOLLOWER = """
+            f.followed.id = :userId AND f.follower.active = true
+              AND EXISTS (SELECT 1 FROM UserFollow v WHERE v.follower.id = :viewerId AND v.followed.id = f.follower.id)
+              AND NOT EXISTS (SELECT 1 FROM UserBlock b
+                              WHERE (b.blocker.id = :viewerId AND b.blocked.id = f.follower.id)
+                                 OR (b.blocker.id = f.follower.id AND b.blocked.id = :viewerId))""";
+
+    /** Keyset page of the user's followers whom the viewer follows, in follower list order (most recently followed first). */
+    @Query("SELECT f FROM UserFollow f JOIN FETCH f.follower WHERE " + MUTUAL_FOLLOWER + """
+              AND (CAST(:afterTime AS OffsetDateTime) IS NULL OR f.createdAt < :afterTime
+                   OR (f.createdAt = :afterTime AND f.id < :afterId))
+            ORDER BY f.createdAt DESC, f.id DESC""")
+    List<UserFollow> findMutualFollowersPage(@Param("userId") UUID userId, @Param("viewerId") UUID viewerId,
+                                             @Param("afterTime") OffsetDateTime afterTime, @Param("afterId") UUID afterId,
+                                             Limit limit);
+
+    /** Size of the whole {@link #findMutualFollowersPage} list. */
+    @Query("SELECT COUNT(f) FROM UserFollow f WHERE " + MUTUAL_FOLLOWER)
+    long countMutualFollowers(@Param("userId") UUID userId, @Param("viewerId") UUID viewerId);
+
+    /** Follows between the viewer and any of the users, in either direction; one query for a page of users. */
+    @Query("""
+            SELECT new com.vomatt.repository.FollowEdge(f.follower.id, f.followed.id) FROM UserFollow f
+            WHERE (f.follower.id = :viewerId AND f.followed.id IN :userIds)
+               OR (f.followed.id = :viewerId AND f.follower.id IN :userIds)""")
+    List<FollowEdge> findEdgesWithViewer(@Param("viewerId") UUID viewerId, @Param("userIds") Collection<UUID> userIds);
 
     /** Data export: every user the user follows, suspended ones included, oldest first. */
     @Query("SELECT f FROM UserFollow f JOIN FETCH f.followed WHERE f.follower.id = :followerId ORDER BY f.createdAt, f.id")

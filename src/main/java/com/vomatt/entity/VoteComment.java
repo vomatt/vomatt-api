@@ -65,6 +65,6 @@ public class VoteComment extends AuditableEntity {
     }
 
     public boolean canBeDeletedBy(String userId) {
-        return canBeEditedBy(userId);
+        return this.user.getId().toString().equals(userId) && !this.isDeleted;
     }
 }

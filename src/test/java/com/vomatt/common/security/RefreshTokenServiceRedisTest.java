@@ -99,8 +99,7 @@ class RefreshTokenServiceRedisTest {
         assertThat(redisService.get("refresh:grace", keyOf(t0), RefreshTokenService.RotateResult.class)).isEqualTo(r);
         assertThat(template.getExpire("refresh:grace:" + keyOf(t0), TimeUnit.SECONDS)).isBetween(55L, 60L);
         // Unquoted fields, so revokeAllForUser finds the token; values name the session
-        assertThat(redisService.hGetAll("refresh:idx", userId)).containsOnlyKeys(newKey);
-        assertThat(redisService.hGetAllOrThrow("refresh:idx", userId).get(newKey)).isEqualTo(session);
+        assertThat(redisService.hGetAll("refresh:idx", userId)).containsOnly(org.assertj.core.api.Assertions.entry(newKey, session));
         assertThat(template.getExpire("refresh:idx:" + userId, TimeUnit.DAYS)).isBetween(29L, 30L);
     }
 

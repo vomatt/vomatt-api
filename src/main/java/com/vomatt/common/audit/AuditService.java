@@ -30,14 +30,14 @@ public class AuditService {
     long permitWaitMillis = 2000;
     
     @Async
-    public void logAction(String userId, String username, String action, String resourceType, String resourceId, 
+    public void logAction(String userId, String action, String resourceType, String resourceId, 
                          String ipAddress, String userAgent, String requestUri, String httpMethod, String details) {
         if (!auditEnabled) {
             return;
         }
         
         try {
-            AuditLog auditLog = new AuditLog(userId, username, action, resourceType, resourceId);
+            AuditLog auditLog = new AuditLog(userId, null, action, resourceType, resourceId);
             auditLog.setIpAddress(ipAddress);
             auditLog.setUserAgent(userAgent);
             auditLog.setRequestUri(requestUri);
@@ -52,14 +52,14 @@ public class AuditService {
     }
     
     @Async
-    public void logFailedAction(String userId, String username, String action, String resourceType, 
+    public void logFailedAction(String userId, String action, String resourceType, 
                                String resourceId, String errorMessage, String ipAddress, String details) {
         if (!auditEnabled) {
             return;
         }
         
         try {
-            AuditLog auditLog = new AuditLog(userId, username, action, resourceType, resourceId);
+            AuditLog auditLog = new AuditLog(userId, null, action, resourceType, resourceId);
             auditLog.setSuccess(false);
             auditLog.setErrorMessage(errorMessage);
             auditLog.setIpAddress(ipAddress);
@@ -93,9 +93,7 @@ public class AuditService {
             return;
         }
         if (actor.isPresent()) {
-            if (auditLog.getUsername() == null) {
-                auditLog.setUsername(actor.get().getUsername());
-            }
+            auditLog.setUsername(actor.get().getUsername());
             return;
         }
         auditLog.setUserId(null);

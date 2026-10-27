@@ -62,9 +62,9 @@ class AuditAspectTest {
 
         // The aspect records the token's actor as is; AuditService decides on its writer whether the actor still exists
         // (a self-deletion is anonymized there, see AuditServiceTest)
-        verify(auditService).logAction(org.mockito.ArgumentMatchers.eq(self.toString()), org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.eq("DELETE"),
+        verify(auditService).logAction(org.mockito.ArgumentMatchers.eq(self.toString()), org.mockito.ArgumentMatchers.eq("DELETE"),
                 org.mockito.ArgumentMatchers.eq("USER"), org.mockito.ArgumentMatchers.eq(self.toString()), any(), any(), any(), any(), any());
-        verify(auditService).logAction(org.mockito.ArgumentMatchers.eq(self.toString()), org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.eq("DELETE"),
+        verify(auditService).logAction(org.mockito.ArgumentMatchers.eq(self.toString()), org.mockito.ArgumentMatchers.eq("DELETE"),
                 org.mockito.ArgumentMatchers.eq("USER"), org.mockito.ArgumentMatchers.eq(other.toString()), any(), any(), any(), any(), any());
     }
 
@@ -88,7 +88,7 @@ class AuditAspectTest {
         aspect.logFailedAction(joinPoint, auditable,
                 new ApiException(HttpStatus.TOO_MANY_REQUESTS, MessageKey.COMMON_RATE_LIMITED));
 
-        verify(auditService, never()).logFailedAction(any(), any(), any(), any(), any(), any(), any(), any());
+        verify(auditService, never()).logFailedAction(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -97,7 +97,7 @@ class AuditAspectTest {
         aspect.logFailedAction(joinPoint, auditable, new ApiException(HttpStatus.UNAUTHORIZED, MessageKey.COMMON_UNAUTHORIZED));
 
         verify(auditService, org.mockito.Mockito.times(2))
-                .logFailedAction(any(), any(), any(), any(), any(), any(), any(), any());
+                .logFailedAction(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -107,7 +107,7 @@ class AuditAspectTest {
                 new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, MessageKey.COMMON_INTERNAL_ERROR));
 
         verify(auditService, org.mockito.Mockito.times(2))
-                .logFailedAction(any(), any(), any(), any(), any(), any(), any(), any());
+                .logFailedAction(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -118,7 +118,7 @@ class AuditAspectTest {
         when(joinPoint.getArgs()).thenReturn(new Object[] { new com.vomatt.admin.dto.UpdateRolesRequest(java.util.List.of("user", "admin", "user")) });
         aspect.logFailedAction(joinPoint, withDetails, new IllegalStateException("boom"));
 
-        verify(auditService).logFailedAction(any(), any(), any(), any(), any(), any(), any(), org.mockito.ArgumentMatchers.eq("spam"));
-        verify(auditService).logFailedAction(any(), any(), any(), any(), any(), any(), any(), org.mockito.ArgumentMatchers.eq("admin,user"));
+        verify(auditService).logFailedAction(any(), any(), any(), any(), any(), any(), org.mockito.ArgumentMatchers.eq("spam"));
+        verify(auditService).logFailedAction(any(), any(), any(), any(), any(), any(), org.mockito.ArgumentMatchers.eq("admin,user"));
     }
 }

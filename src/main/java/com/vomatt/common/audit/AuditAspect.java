@@ -38,7 +38,6 @@ public class AuditAspect {
                 
                 auditService.logAction(
                     userId,
-                    null, // username: resolved by AuditService
                     auditable.action(),
                     auditable.resourceType(),
                     resourceId,
@@ -70,7 +69,6 @@ public class AuditAspect {
                 
                 auditService.logFailedAction(
                     userId, // null for unauthenticated requests
-                    null, // username: resolved by AuditService
                     auditable.action(),
                     auditable.resourceType(),
                     resourceId,

@@ -8,8 +8,7 @@ Vomatt polling community backend: Java 25 (virtual threads), Spring Boot 4.0.5 (
 
 ```bash
 docker compose up -d --build         # full stack (API + Postgres + Redis) for frontend integration
-docker compose up -d postgres redis  # DB only, pair with ./mvnw spring-boot:run; db/schema.sql is applied on first start
-                                     # an existing volume does not rerun it: apply new db/migrations/* by hand (psql) or docker compose down -v
+docker compose up -d postgres redis  # DB only, pair with ./mvnw spring-boot:run; Flyway migrates the schema at app startup
 cp .env.example .env                 # fill in JWT_SECRET etc.
 ./mvnw spring-boot:run               # with EMAIL_ENABLED=false, the OTP is printed in the app log as [EMAIL-NOOP] (Redis holds only a hash)
 ./mvnw clean package -DskipTests
@@ -38,8 +37,9 @@ Swagger UI: <http://localhost:8080/swagger-ui.html>. `*PostgresTest` and `OpenAp
 
 ## Database
 
-- The single source of DDL is `src/main/resources/db/schema.sql` (`ddl-auto: none`). All time columns are `TIMESTAMPTZ` <-> `OffsetDateTime`; primary keys use UUID v7 (`UUIDv7Generator`).
-- Write schema changes as re-runnable `ALTER TABLE ... IF NOT EXISTS`; in production (Neon), run `schema.sql` manually. Data migrations go in `db/migrations/YYYY-MM-DD-<topic>.sql`, applied manually; each new one needs a `*MigrationPostgresTest`. The exceptions are `2026-10-02-sachmis-arch.sql` (a one-time upgrade of pre-sachmis schemas) and `2026-10-14-canonical-gmail.sql` (already applied; it targets `group_members`, renamed by `2026-10-22-invite-lists.sql`): neither can run against the current schema, so they have no test.
+- DDL is managed by Flyway in `src/main/resources/db/migration/` (`ddl-auto: none`), run at app startup in every environment, tests included. `V1__baseline.sql` is the full schema; databases created before Flyway are baselined at V1 (`baseline-on-migrate`), and `V2__catch_up.sql` (the last schema.sql, idempotent) brings them up to date. All time columns are `TIMESTAMPTZ` <-> `OffsetDateTime`; primary keys use UUID v7 (`UUIDv7Generator`).
+- Every schema or data change is a new `V<n>__<topic>.sql`; never edit an applied one (Flyway checksums fail startup). Data migrations need a `*MigrationPostgresTest`.
+- `db/migrations/` (plural, date-named) holds pre-Flyway one-off scripts that Flyway never runs; do not add to it. Their tests recreate the old shape on top of the baseline. `2026-10-02-sachmis-arch.sql` and `2026-10-14-canonical-gmail.sql` cannot run against the current schema, so they have no test.
 
 ## API contract and frontend docs
 
@@ -50,7 +50,7 @@ Swagger UI: <http://localhost:8080/swagger-ui.html>. `*PostgresTest` and `OpenAp
 
 ## Testing
 
-- Controllers use `MockMvcBuilders.standaloneSetup`; Services use `@ExtendWith(MockitoExtension.class)`. Tests that need real SQL extend `PostgresRepositoryTest` (shared Testcontainers Postgres with `schema.sql` loaded); `VoteServiceSlice` provides the beans VoteService needs in a `@DataJpaTest` slice.
+- Controllers use `MockMvcBuilders.standaloneSetup`; Services use `@ExtendWith(MockitoExtension.class)`. Tests that need real SQL extend `PostgresRepositoryTest` (shared Testcontainers Postgres, migrated by Flyway); `VoteServiceSlice` provides the beans VoteService needs in a `@DataJpaTest` slice.
 - Test method naming: `shouldXxxWhenYyy`.
 
 ## Commit

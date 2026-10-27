@@ -15,7 +15,7 @@ class FeedbackPostgresTest extends PostgresRepositoryTest {
     @Autowired FeedbackRepository feedbackRepository;
 
     @Test
-    @DisplayName("should store feedback against the schema.sql table")
+    @DisplayName("should store feedback against the baseline table")
     void shouldPersistFeedbackWhenSaved() {
         User user = persistUser("feedbacker");
         Feedback saved = feedbackRepository.saveAndFlush(new Feedback(user, "Please add dark mode."));

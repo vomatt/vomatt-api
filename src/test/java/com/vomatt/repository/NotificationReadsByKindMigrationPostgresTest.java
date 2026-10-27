@@ -23,7 +23,7 @@ class NotificationReadsByKindMigrationPostgresTest extends PostgresRepositoryTes
 
     private static final String SCRIPT = "db/migrations/2026-10-26-notification-reads-by-kind.sql";
 
-    // The table as schema.sql created it before the feed, one read row per (user, Poll)
+    // The table as the old schema.sql created it before the feed, one read row per (user, Poll)
     private static final List<String> TO_POLL_READS = List.of(
             "DROP TABLE vomatt.notification_reads",
             """
@@ -37,7 +37,7 @@ class NotificationReadsByKindMigrationPostgresTest extends PostgresRepositoryTes
     private final OffsetDateTime now = OffsetDateTime.now();
 
     @Test
-    @DisplayName("should turn reads before a Poll's end into its Invitation and reads after into its Result, with schema.sql's names, also on rerun")
+    @DisplayName("should turn reads before a Poll's end into its Invitation and reads after into its Result, with the baseline's names, also on rerun")
     void shouldKeyReadsByNotificationWhenMigrationRuns() throws Exception {
         User owner = persistUser("mig-owner-" + System.nanoTime());
         User invitee = persistUser("mig-inv-" + System.nanoTime());

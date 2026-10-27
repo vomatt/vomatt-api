@@ -65,6 +65,7 @@ class UserServiceTest {
     @Mock com.vomatt.repository.VoteCommentRepository voteCommentRepository;
     @Mock com.vomatt.repository.FeedbackRepository feedbackRepository;
     @Mock com.vomatt.common.redis.RedisService redisService;
+    @Mock com.vomatt.votes.VoteViewRecorder voteViewRecorder;
     @Spy com.vomatt.repository.LockTimeout lockTimeout = new com.vomatt.repository.LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @InjectMocks UserService userService;
 
@@ -169,6 +170,7 @@ class UserServiceTest {
         order.verify(voteOptionRepository).decrementForUserBallots(id);
         order.verify(auditLogRepository).anonymizeByUserId(id.toString());
         order.verify(userRepository).delete(user);
+        verify(voteViewRecorder).forgetViewer(id.toString());
     }
 
     @Test

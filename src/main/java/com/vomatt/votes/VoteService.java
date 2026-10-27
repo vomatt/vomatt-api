@@ -96,6 +96,7 @@ public class VoteService {
     private final TransactionTemplate transactionTemplate;
     private final LockTimeout lockTimeout;
     private final LookupService lookupService;
+    private final VoteViewRecorder viewRecorder;
 
     private static final String INVITATION_COUNTER_NS = "email:invitation";
     private static final String BALLOT_RATE_LIMIT_NS = "rate:limit:ballot";
@@ -221,10 +222,20 @@ public class VoteService {
         return new VoteShareResponse(vote.getShareCount() + 1L);
     }
 
-    /** @param userId viewer, or null when signed out */
+    /**
+     * Also counts a View (asynchronously, never failing the read) when a signed-in non-owner opens an Open Public Poll,
+     * the only Polls Trending can list.
+     *
+     * @param userId viewer, or null when signed out
+     */
     @Transactional(readOnly = true)
     public VoteResponse getVote(String voteId, String userId) {
-        return convertToVoteResponse(UUID.fromString(voteId), userId);
+        VoteResponse response = convertToVoteResponse(UUID.fromString(voteId), userId);
+        if (userId != null && !userId.equals(response.getCreatorId()) && response.getAudience() == Audience.PUBLIC
+                && response.isVotingActive()) {
+            viewRecorder.record(UUID.fromString(response.getId()), UUID.fromString(userId));
+        }
+        return response;
     }
 
     /**

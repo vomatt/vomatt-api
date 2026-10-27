@@ -121,6 +121,10 @@ _Avoid_: Sub-comment, nested comment
 
 ### Discovery
 
+**View**:
+A signed-in user other than its owner opening an Open Public Poll, counted at most once per user and Poll per 24 hours (rolling from the counted View). Kept per hour for 30 days as the input to Trending; never shown to users.
+_Avoid_: Impression, visit
+
 **Feed**:
 The home stream of Open Public Polls, most recently opened first.
 _Avoid_: Timeline, home list

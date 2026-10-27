@@ -242,7 +242,8 @@ public class VoteController {
             **Precondition**: none; Scheduled, Open and Ended Polls are all readable
             **Behavior**: returns the Poll. `options[].votes` is null (Sealed) for everyone, owner included, until the Poll has Ended; `participantCount` (Turnout) is always present, \
             and so is `inviteeCount` for an INVITE_ONLY Poll.
-            **Side effects**: none
+            **Side effects**: counts a View (input for Trending) when the caller is signed in and not the owner and the Poll is Open \
+            and PUBLIC, at most once per user and Poll per 24 hours; counted asynchronously, never fails or delays the request
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
             """)

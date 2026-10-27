@@ -61,6 +61,7 @@ public class UserService {
     private final com.vomatt.repository.VoteCommentRepository voteCommentRepository;
     private final com.vomatt.repository.FeedbackRepository feedbackRepository;
     private final com.vomatt.common.redis.RedisService redisService;
+    private final com.vomatt.votes.VoteViewRecorder voteViewRecorder;
 
     /** One export per user per UTC day: the response is the account's whole footprint and is not cheap to build. */
     private static final String EXPORT_COUNTER_NS = "export:daily";
@@ -72,8 +73,9 @@ public class UserService {
      * Deleting someone else needs both an admin-scope token (admin console login) and an active admin in the database,
      * so neither a consumer-app session of an admin nor a demoted or suspended admin's stale token can do it.
      * <p>Rows that reference the user cascade in the database; audit_logs has no FK, so the user's entries are
-     * anonymized here in the same transaction. Redis keys other than refresh tokens (OTP, rate limits, lockouts, used
-     * id_tokens) carry no account data and are left to expire with their TTL.</p>
+     * anonymized here in the same transaction. After commit, refresh tokens and the View dedupe keys (which
+     * pair the user with Polls they opened) are removed too; other Redis keys (OTP, rate limits, lockouts, used id_tokens)
+     * carry no account data and are left to expire with their TTL.</p>
      */
     @Transactional
     public void deleteUser(String userId, UserPrincipal principal) {
@@ -86,6 +88,7 @@ public class UserService {
         requireAnotherActiveAdmin(user);
         // After commit: a sign-in or refresh before then still sees the account, and a rollback keeps its tokens
         revokeTokensAfterCommit(userId);
+        AfterCommit.run(() -> voteViewRecorder.forgetViewer(userId));
         // user_votes rows cascade with the user; release them from stored option counts and Turnout first.
         // Poll rows before option rows, the same lock order as a Ballot, so a concurrent Ballot cannot deadlock it
         voteRepository.decrementTurnoutForUserBallots(user.getId());

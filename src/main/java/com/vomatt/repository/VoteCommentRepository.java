@@ -80,6 +80,17 @@ public interface VoteCommentRepository extends JpaRepository<VoteComment, UUID> 
     List<IdCount> countRepliesByParentIds(@Param("parentIds") Collection<UUID> parentIds,
                                           @Param("viewerId") UUID viewerId);
 
+    /**
+     * Whether the lists hide the Comment from the viewer: the viewer blocked its author or, for a Reply, the author of
+     * its thread. One-way: a block by the author does not hide it.
+     */
+    @Query(value = """
+            SELECT EXISTS (SELECT 1 FROM vomatt.vote_comments c
+                           LEFT JOIN vomatt.vote_comments p ON p.id = c.parent_id
+                           JOIN vomatt.user_blocks b ON b.blocker_id = :viewerId AND b.blocked_id IN (c.user_id, p.user_id)
+                           WHERE c.id = :commentId)""", nativeQuery = true)
+    boolean isHiddenFrom(@Param("commentId") UUID commentId, @Param("viewerId") UUID viewerId);
+
     long countByUserId(UUID userId);
 
     /**

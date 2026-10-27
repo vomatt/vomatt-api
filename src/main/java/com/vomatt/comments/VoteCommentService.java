@@ -16,7 +16,6 @@ import com.vomatt.common.util.UUIDv7Generator;
 import com.vomatt.repository.CommentLikeRepository;
 import com.vomatt.repository.CommentReportRepository;
 import com.vomatt.repository.IdCount;
-import com.vomatt.repository.UserBlockRepository;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.votes.VoteService;
 import lombok.RequiredArgsConstructor;
@@ -42,7 +41,6 @@ public class VoteCommentService {
     private final VoteService voteService;
     private final UserRepository userRepository;
     private final CommentLikeRepository commentLikeRepository;
-    private final UserBlockRepository blockRepository;
     private final CommentMapper commentMapper;
     private final CommentReportRepository commentReportRepository;
 
@@ -122,9 +120,7 @@ public class VoteCommentService {
 
     // What the lists hide from a signed-in viewer: a Comment by a user they blocked, or any Reply in such a user's thread
     private boolean isHiddenFrom(VoteComment comment, UUID viewerId) {
-        VoteComment root = comment.getParent() != null ? comment.getParent() : comment;
-        return Stream.of(comment.getUser().getId(), root.getUser().getId()).distinct()
-            .anyMatch(authorId -> blockRepository.existsByBlockerIdAndBlockedId(viewerId, authorId));
+        return commentRepository.isHiddenFrom(comment.getId(), viewerId);
     }
 
     // Replies are one level deep: replying to a Reply attaches to the same top-level Comment

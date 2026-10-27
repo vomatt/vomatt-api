@@ -1566,23 +1566,25 @@ class AuthServiceTest {
     }
 
     @Test
-    void shouldUseSyntheticEmailWhenLineVerifyEndpointReturns400() {
+    void shouldThrow401WithoutCreatingUserWhenLineVerifyEndpointReturns400() {
         var server = lineServerUpToVerify();
         server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_VERIFY_URL)).andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withBadRequest());
-        User dave = existingLineUser("line_u123@line.oauth");
 
-        assertThat(authService.lineLogin("code", "https://app.example.com/cb").user().id()).isEqualTo(dave.getId().toString());
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.UNAUTHORIZED, MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
         server.verify();
+        verify(userRepository, never()).save(any());
     }
 
     @Test
-    void shouldUseSyntheticEmailWhenLineVerifyEndpointReturns404() {
+    void shouldThrow401WithoutCreatingUserWhenLineVerifyEndpointReturns404() {
         var server = lineServerUpToVerify();
         server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_VERIFY_URL)).andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withResourceNotFound());
-        User dave = existingLineUser("line_u123@line.oauth");
 
-        assertThat(authService.lineLogin("code", "https://app.example.com/cb").user().id()).isEqualTo(dave.getId().toString());
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.UNAUTHORIZED, MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
         server.verify();
+        verify(userRepository, never()).save(any());
     }
 
     @Test
@@ -1615,6 +1617,53 @@ class AuthServiceTest {
 
         assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
                 org.springframework.http.HttpStatus.UNAUTHORIZED, MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
+        server.verify();
+    }
+
+
+    @Test
+    void shouldThrow503WithoutCreatingUserWhenLineVerifyBodyIsEmpty() {
+        var server = lineServerUpToVerify();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_VERIFY_URL)).andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess());
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+        server.verify();
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldThrow401WithoutCallingVerifyWhenLineIdTokenIsBlank() {
+        var server = lineServer();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_TOKEN_URL)).andRespond(lineJson("{\"access_token\":\"at\",\"id_token\":\" \"}"));
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_PROFILE_URL)).andRespond(lineJson("{\"userId\":\"U123\"}"));
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.UNAUTHORIZED, MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
+        server.verify();
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldThrow401WithoutCallingVerifyWhenLineIdTokenIsNotAString() {
+        var server = lineServer();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_TOKEN_URL)).andRespond(lineJson("{\"access_token\":\"at\",\"id_token\":42}"));
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_PROFILE_URL)).andRespond(lineJson("{\"userId\":\"U123\"}"));
+
+        assertApiError(org.assertj.core.api.Assertions.catchThrowable(() -> authService.lineLogin("code", "https://app.example.com/cb")),
+                org.springframework.http.HttpStatus.UNAUTHORIZED, MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
+        server.verify();
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldUseSyntheticEmailWithoutCallingVerifyWhenLineReturnsNoIdToken() {
+        var server = lineServer();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_TOKEN_URL)).andRespond(lineJson("{\"access_token\":\"at\"}"));
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(LINE_PROFILE_URL)).andRespond(lineJson("{\"userId\":\"U123\"}"));
+        User dave = existingLineUser("line_u123@line.oauth");
+
+        assertThat(authService.lineLogin("code", "https://app.example.com/cb").user().id()).isEqualTo(dave.getId().toString());
         server.verify();
     }
 

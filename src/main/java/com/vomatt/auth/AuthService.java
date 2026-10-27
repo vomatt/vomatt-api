@@ -700,18 +700,28 @@ public class AuthService {
             throw ApiException.unauthorized(MessageKey.AUTH_LINE_PROFILE_FAILED);
         }
 
-        // An unreachable verify endpoint fails the login instead of falling back to the synthetic email below: that
-        // would sign a user whose LINE account has a real email into a second, separate account. A 4xx (e.g. a
-        // client_id mismatch) is a configuration problem that would fail every openid login, so it falls back.
+        // An id_token means LINE holds an email for this user, so the login needs a trusted verify result: falling back
+        // to the synthetic email below would sign a user who already has an account into a second, separate one.
+        // The token exchange just succeeded with this channel, so a 4xx here is a rejected token, not a configuration problem.
         String email = null;
-        if (tokenResponse.get("id_token") instanceof String idToken) {
+        Object idTokenValue = tokenResponse.get("id_token");
+        if (idTokenValue != null) {
+            if (!(idTokenValue instanceof String idToken) || !StringUtils.hasText(idToken)) {
+                log.warn("LINE token response carries an unusable id_token");
+                throw ApiException.unauthorized(MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
+            }
             MultiValueMap<String, String> verifyBody = new LinkedMultiValueMap<>();
             verifyBody.add("id_token", idToken);
             verifyBody.add("client_id", lineChannelId);
 
-            Map<String, Object> verifyResponse = callLine(() -> postForm(lineVerifyUrl, verifyBody), null);
-            if (verifyResponse != null && verifyResponse.get("email") instanceof String verifiedEmail
-                    && !verifiedEmail.isBlank()) {
+            Map<String, Object> verifyResponse = callLine(() -> postForm(lineVerifyUrl, verifyBody),
+                    MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
+            if (verifyResponse == null) {
+                log.warn("LINE id_token verify returned an empty body");
+                throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+            }
+            // Only a verified email is returned; none means the user granted no email scope
+            if (verifyResponse.get("email") instanceof String verifiedEmail && !verifiedEmail.isBlank()) {
                 email = verifiedEmail;
             }
         }
@@ -729,9 +739,8 @@ public class AuthService {
     }
 
     /**
-     * Runs a call to LINE: a 4xx means LINE rejected the code or token -> 401 {@code rejected}, or null when
-     * {@code rejected} is null; a 429 / 408, a 5xx or a connection failure / timeout is an upstream problem -> 503
-     * (as in {@link #fetchJwks}).
+     * Runs a call to LINE: a 4xx means LINE rejected the code or token -> 401 {@code rejected}; a 429 / 408, a 5xx or
+     * a connection failure / timeout is an upstream problem -> 503 (as in {@link #fetchJwks}).
      */
     private static <T> T callLine(Supplier<T> call, MessageKey rejected) {
         try {
@@ -743,9 +752,6 @@ public class AuthService {
                 throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
             }
             log.warn("LINE rejected the request ({}): {}", rejected, ex.getMessage());
-            if (rejected == null) {
-                return null;
-            }
             throw ApiException.unauthorized(rejected);
         } catch (RestClientException ex) {
             log.warn("LINE call failed (external service): {}", ex.getMessage());

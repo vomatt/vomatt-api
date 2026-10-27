@@ -346,11 +346,11 @@ public class AuthController {
                     **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated
                     **Errors**:
                     - 400 `auth.line.not_configured`: LINE login is not configured on the server
-                    - 401 `auth.line.token_exchange_failed`: LINE rejected the code (4xx) or returned no access token
+                    - 401 `auth.line.token_exchange_failed`: LINE rejected the code or the id_token (4xx), or returned no access token or an unusable id_token
                     - 401 `auth.line.profile_failed`: LINE rejected the access token (4xx) or returned no profile
                     - 403 `auth.account_banned`: the user is suspended (`active=false`)
                     - 503 `common.service_unavailable`: LINE's token, profile or id_token verify endpoint failed (5xx), \
-                    rate limited (429 / 408) or did not answer in time. The code is single-use and may already be spent: restart LINE Login for a new code""")
+                    rate limited (429 / 408), did not answer in time or returned an empty verify body. The code is single-use and may already be spent: restart LINE Login for a new code""")
     public ResponseEntity<ApiResponse<AuthResponse>> lineLogin(@Valid @RequestBody LineAuthRequest req) {
         return ResponseEntity.ok(ApiResponse.ok(authService.lineLogin(req.code(), req.redirectUri())));
     }

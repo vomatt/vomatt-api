@@ -1018,7 +1018,7 @@ class VoteServiceTest {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
-            when(tagRepository.findAllByIdIn(Set.of(kept.getId(), added.getId()))).thenReturn(List.of(kept, added));
+            when(tagRepository.findAllById(Set.of(kept.getId(), added.getId()))).thenReturn(List.of(kept, added));
             stubSaveAssignsId();
 
             voteService.updateVote(voteId.toString(), editRequest(List.of(kept.getId(), added.getId())), userId.toString());
@@ -1761,7 +1761,7 @@ class VoteServiceTest {
 
             UUID tagId = UUID.randomUUID();
             Tag tag = setId(new Tag("Tech", "tech", "Technology", 1), tagId);
-            when(tagRepository.findAllByIdIn(Set.of(tagId))).thenReturn(List.of(tag));
+            when(tagRepository.findAllById(Set.of(tagId))).thenReturn(List.of(tag));
 
             CreateVoteRequest request = new CreateVoteRequest();
             request.setTitle("Tag Vote");
@@ -1770,7 +1770,7 @@ class VoteServiceTest {
 
             voteService.createVote(request, userId.toString());
 
-            verify(tagRepository).findAllByIdIn(Set.of(tagId));
+            verify(tagRepository).findAllById(Set.of(tagId));
             verify(tagRepository).incrementUsageCount(Set.of(tagId));
         }
 
@@ -1785,7 +1785,7 @@ class VoteServiceTest {
             UUID tagId2 = UUID.randomUUID();
             // Only return one tag when two are requested
             Tag tag = setId(new Tag("Tech", "tech", "Technology", 1), tagId1);
-            when(tagRepository.findAllByIdIn(Set.of(tagId1, tagId2))).thenReturn(List.of(tag));
+            when(tagRepository.findAllById(Set.of(tagId1, tagId2))).thenReturn(List.of(tag));
 
             CreateVoteRequest request = new CreateVoteRequest();
             request.setTitle("Tag Vote");
@@ -1814,7 +1814,7 @@ class VoteServiceTest {
 
             voteService.createVote(request, userId.toString());
 
-            verify(tagRepository, never()).findAllByIdIn(any());
+            verify(tagRepository, never()).findAllById(any());
             verify(tagRepository, never()).incrementUsageCount(any());
         }
     }

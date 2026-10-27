@@ -53,7 +53,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         long now = Instant.now().getEpochSecond();
         Long count = countRequest(request, now / limit.getWindowSeconds(), limit);
         if (count == null) {
-            // P5-#4: when Redis is down, auth endpoints fail closed (blocked with 429) to prevent OTP brute force;
+            // When Redis is down, auth endpoints fail closed (blocked with 429) to prevent OTP brute force;
             // other endpoints fail open (allowed) to preserve availability.
             // No Retry-After here: waiting does not bring Redis back.
             if (pathMatcher.match(AUTH_PATH_PATTERN, request.getRequestURI())) {

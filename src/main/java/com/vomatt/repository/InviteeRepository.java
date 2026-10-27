@@ -1,5 +1,6 @@
 package com.vomatt.repository;
 
+import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -100,7 +101,7 @@ public interface InviteeRepository extends JpaRepository<Invitee, UUID> {
             DELETE FROM vomatt.vote_invitation_emails e
               WHERE EXISTS (SELECT 1 FROM vomatt.votes v WHERE v.id = e.vote_id AND v.end_time < :cutoff)""",
             nativeQuery = true)
-    int deleteInvitationEmailsOfPollsEndedBefore(@Param("cutoff") java.time.OffsetDateTime cutoff);
+    int deleteInvitationEmailsOfPollsEndedBefore(@Param("cutoff") OffsetDateTime cutoff);
 
     /**
      * Retention: an email Invitee who never signed up is a third party's address kept only so the Poll can reach them;
@@ -111,7 +112,7 @@ public interface InviteeRepository extends JpaRepository<Invitee, UUID> {
             DELETE FROM vomatt.vote_invitees i WHERE i.user_id IS NULL
               AND EXISTS (SELECT 1 FROM vomatt.votes v WHERE v.id = i.vote_id AND v.end_time < :cutoff)""",
             nativeQuery = true)
-    int deleteUnregisteredOfPollsEndedBefore(@Param("cutoff") java.time.OffsetDateTime cutoff);
+    int deleteUnregisteredOfPollsEndedBefore(@Param("cutoff") OffsetDateTime cutoff);
 
     /** At least one Invitee, and none without a Ballot; an Invitee not tied to a user (NULL user_id) counts as without. */
     @Query(value = """

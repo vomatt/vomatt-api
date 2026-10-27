@@ -9,7 +9,6 @@ import java.util.function.BooleanSupplier;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.entity.common.AuditableEntity;
-import com.vomatt.entity.User;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -195,11 +194,6 @@ public class Vote extends AuditableEntity {
     public void addOption(VoteOption option) {
         options.add(option);
         option.setVote(this);
-    }
-
-    public void removeOption(VoteOption option) {
-        options.remove(option);
-        option.setVote(null);
     }
 
     /** Create / edit: the owner's end time is both the Deadline and when the Poll Ends. */

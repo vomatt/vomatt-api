@@ -36,7 +36,7 @@ public final class ClientIpResolver {
      * Loopback, RFC1918, IPv6 ULA (Docker and Zeabur internal networks) and CGNAT 100.64.0.0/10,
      * which platform ingresses may connect from.
      */
-    public static final String DEFAULT_TRUSTED_PROXIES =
+    private static final String DEFAULT_TRUSTED_PROXIES =
             "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fd00::/8,100.64.0.0/10";
 
     private record Cidr(byte[] network, int prefix) {

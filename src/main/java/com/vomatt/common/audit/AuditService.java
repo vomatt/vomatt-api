@@ -1,6 +1,7 @@
 package com.vomatt.common.audit;
 
-import java.time.OffsetDateTime;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
@@ -8,6 +9,9 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import org.springframework.beans.factory.annotation.Value;
+
+import com.vomatt.entity.User;
+import com.vomatt.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 public class AuditService {
     
     private final AuditLogRepository auditLogRepository;
-    private final com.vomatt.repository.UserRepository userRepository;
+    private final UserRepository userRepository;
     @Value("${app.audit.enabled:true}")
     private boolean auditEnabled;
     // @Async runs on unbounded virtual threads; cap concurrent audit writes so they cannot drain the request connection pool
@@ -26,30 +30,14 @@ public class AuditService {
     long permitWaitMillis = 2000;
     
     @Async
-    public void logAction(String userId, String username, String action, String resourceType, String resourceId) {
-        if (!auditEnabled) {
-            return;
-        }
-        
-        try {
-            AuditLog auditLog = new AuditLog(userId, username, action, resourceType, resourceId);
-            save(auditLog);
-            
-            log.debug("Audit log created: action={}, resource={}", action, resourceType);
-        } catch (Exception e) {
-            log.error("Failed to create audit log", e);
-        }
-    }
-    
-    @Async
-    public void logAction(String userId, String username, String action, String resourceType, String resourceId, 
+    public void logAction(String userId, String action, String resourceType, String resourceId, 
                          String ipAddress, String userAgent, String requestUri, String httpMethod, String details) {
         if (!auditEnabled) {
             return;
         }
         
         try {
-            AuditLog auditLog = new AuditLog(userId, username, action, resourceType, resourceId);
+            AuditLog auditLog = new AuditLog(userId, null, action, resourceType, resourceId);
             auditLog.setIpAddress(ipAddress);
             auditLog.setUserAgent(userAgent);
             auditLog.setRequestUri(requestUri);
@@ -64,14 +52,14 @@ public class AuditService {
     }
     
     @Async
-    public void logFailedAction(String userId, String username, String action, String resourceType, 
+    public void logFailedAction(String userId, String action, String resourceType, 
                                String resourceId, String errorMessage, String ipAddress, String details) {
         if (!auditEnabled) {
             return;
         }
         
         try {
-            AuditLog auditLog = new AuditLog(userId, username, action, resourceType, resourceId);
+            AuditLog auditLog = new AuditLog(userId, null, action, resourceType, resourceId);
             auditLog.setSuccess(false);
             auditLog.setErrorMessage(errorMessage);
             auditLog.setIpAddress(ipAddress);
@@ -97,17 +85,15 @@ public class AuditService {
         if (userId == null) {
             return;
         }
-        java.util.Optional<com.vomatt.entity.User> actor;
+        Optional<User> actor;
         try {
-            actor = userRepository.findById(java.util.UUID.fromString(userId));
+            actor = userRepository.findById(UUID.fromString(userId));
         } catch (RuntimeException e) {
             log.warn("Audit actor lookup failed, entry kept as given: userId={}, {}", userId, e.getMessage());
             return;
         }
         if (actor.isPresent()) {
-            if (auditLog.getUsername() == null) {
-                auditLog.setUsername(actor.get().getUsername());
-            }
+            auditLog.setUsername(actor.get().getUsername());
             return;
         }
         auditLog.setUserId(null);
@@ -123,7 +109,7 @@ public class AuditService {
     /** UUID equality independent of spelling, so "ABC-..." and "abc-..." compare as the same id. */
     private static boolean sameId(String a, String b) {
         try {
-            return b != null && java.util.UUID.fromString(a).equals(java.util.UUID.fromString(b));
+            return b != null && UUID.fromString(a).equals(UUID.fromString(b));
         } catch (IllegalArgumentException e) {
             return false;
         }
@@ -149,9 +135,5 @@ public class AuditService {
         } finally {
             writePermits.release();
         }
-    }
-
-    public long getFailedActionsCount() {
-        return auditLogRepository.countFailedActionsLast24Hours(OffsetDateTime.now().minusHours(24));
     }
 }

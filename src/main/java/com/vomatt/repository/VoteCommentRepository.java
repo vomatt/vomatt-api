@@ -2,8 +2,6 @@ package com.vomatt.repository;
 
 import com.vomatt.entity.VoteComment;
 import org.springframework.data.domain.Limit;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,12 +15,6 @@ import java.util.UUID;
 
 @Repository
 public interface VoteCommentRepository extends JpaRepository<VoteComment, UUID> {
-
-    /**
-     * Find all comments for a vote
-     */
-    @Query("SELECT c FROM VoteComment c WHERE c.vote.id = :voteId AND c.isDeleted = false")
-    Page<VoteComment> findByVoteId(@Param("voteId") UUID voteId, Pageable pageable);
 
     /**
      * Find comment by ID, excluding deleted comments

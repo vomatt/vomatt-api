@@ -12,7 +12,7 @@ public class ApiException extends RuntimeException {
     private final Object[] messageArgs;
 
     /**
-     * Optional structured error payload (e.g. {@code {distanceM: 384}}).
+     * Optional structured error payload.
      *
      * <p>When {@link GlobalExceptionHandler} catches an {@link ApiException} and this field is non-null,
      * it is put into the response's {@code ApiResponse.data} ({@code success} stays false;
@@ -66,12 +66,7 @@ public class ApiException extends RuntimeException {
         return new ApiException(HttpStatus.CONFLICT, key, args);
     }
 
-    /** 422 Unprocessable Entity: semantically valid but rejected by business rules (e.g. GPS outside check-in range, out of stock, insufficient balance). */
-    public static ApiException unprocessable(MessageKey key, Object... args) {
-        return new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, key, args);
-    }
-
-    /** 429 Too Many Requests: service-layer quota on public endpoints (e.g. M11 guest booking daily quota). */
+    /** 429 Too Many Requests: service-layer quota (e.g. the daily invitation or Ballot limit). */
     public static ApiException tooManyRequests(MessageKey key, Object... args) {
         return new ApiException(HttpStatus.TOO_MANY_REQUESTS, key, args);
     }

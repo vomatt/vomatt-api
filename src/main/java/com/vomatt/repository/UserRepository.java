@@ -13,8 +13,6 @@ import org.springframework.stereotype.Repository;
 
 import com.vomatt.common.util.LikePattern;
 import com.vomatt.entity.User;
-import com.vomatt.entity.UserVote;
-import com.vomatt.entity.Vote;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, UUID> {
@@ -75,12 +73,6 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Query(value = USERNAME_SEARCH, nativeQuery = true)
     List<User> searchByUsernameRaw(@Param("username") String username, @Param("pattern") String pattern,
                                    @Param("afterUsername") String afterUsername, Limit limit);
-
-    /**
-     * Find users by exact username match
-     */
-    @Query("SELECT u FROM User u WHERE LOWER(u.username) = LOWER(:username) AND u.active = true")
-    List<User> findByUsernameIgnoreCase(@Param("username") String username);
 
     /**
      * Fetch the User profile and stats in one query (avoids N+1). Each stat is a scalar subquery, so the two counts

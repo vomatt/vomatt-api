@@ -19,16 +19,4 @@ public record SimpleResultResponse(
     public static SimpleResultResponse ok(UUID id) {
         return new SimpleResultResponse(true, id, null, null);
     }
-
-    public static SimpleResultResponse ok(UUID id, String status) {
-        return new SimpleResultResponse(true, id, status, null);
-    }
-
-    public static SimpleResultResponse ok(String message) {
-        return new SimpleResultResponse(true, null, null, message);
-    }
-
-    public static SimpleResultResponse of(UUID id, String status, String message) {
-        return new SimpleResultResponse(true, id, status, message);
-    }
 }

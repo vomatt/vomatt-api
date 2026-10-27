@@ -38,20 +38,21 @@ class AuditServiceTest {
         when(userRepository.findById(gone)).thenReturn(java.util.Optional.empty());
         when(auditLogRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        auditService.logAction(id.toString(), null, "VIEW", "USER", "r", "203.0.113.7", "ua", "/api/admin/users/r", "GET", null);
+        auditService.logAction(id.toString(), "VIEW", "USER", "r", "203.0.113.7", "ua", "/api/admin/users/r", "GET", null);
         // Queued before the account went away: identity dropped, the action and its resource kept
-        auditService.logAction(gone.toString(), null, "BLOCK", "USER", "r", "203.0.113.7", "ua", "/api/users/me/blocks/r", "POST", null);
+        auditService.logAction(gone.toString(), "BLOCK", "USER", "r", "203.0.113.7", "ua", "/api/users/me/blocks/r", "POST", null);
         // The deletion itself: resource id and request URI spell the deleted id (whatever the case), so they go too
-        auditService.logAction(gone.toString(), null, "DELETE", "USER", gone.toString().toUpperCase(), "203.0.113.7", "ua", "/api/users/" + gone, "DELETE", null);
-        // Plain (5-arg) entries go through the same resolution
-        auditService.logAction(gone.toString(), "stale", "SUSPEND", "USER", "r");
+        auditService.logAction(gone.toString(), "DELETE", "USER", gone.toString().toUpperCase(), "203.0.113.7", "ua", "/api/users/" + gone, "DELETE", null);
+        // Entries without request context go through the same resolution
+        auditService.logAction(gone.toString(), "SUSPEND", "USER", "r", null, null, null, null, null);
+        auditService.logAction(id.toString(), "SUSPEND", "USER", "r", null, null, null, null, null);
         // A failing lookup is not a missing account: the entry keeps its actor id, only the username stays unknown
         java.util.UUID flaky = java.util.UUID.randomUUID();
         when(userRepository.findById(flaky)).thenThrow(new org.springframework.dao.DataAccessResourceFailureException("db down"));
-        auditService.logAction(flaky.toString(), null, "SUSPEND", "USER", "r", "203.0.113.7", "ua", "/x", "PATCH", null);
+        auditService.logAction(flaky.toString(), "SUSPEND", "USER", "r", "203.0.113.7", "ua", "/x", "PATCH", null);
 
         org.mockito.ArgumentCaptor<AuditLog> saved = org.mockito.ArgumentCaptor.forClass(AuditLog.class);
-        verify(auditLogRepository, times(5)).save(saved.capture());
+        verify(auditLogRepository, times(6)).save(saved.capture());
         java.util.List<AuditLog> rows = saved.getAllValues();
         assertThat(rows.get(0)).extracting(AuditLog::getUserId, AuditLog::getUsername, AuditLog::getIpAddress)
                 .containsExactly(id.toString(), "alice", "203.0.113.7");
@@ -60,7 +61,9 @@ class AuditServiceTest {
         assertThat(rows.get(2)).extracting(AuditLog::getUserId, AuditLog::getUsername, AuditLog::getIpAddress, AuditLog::getUserAgent,
                 AuditLog::getResourceId, AuditLog::getRequestUri, AuditLog::getAction).containsExactly(null, null, null, null, null, null, "DELETE");
         assertThat(rows.get(3)).extracting(AuditLog::getUserId, AuditLog::getUsername, AuditLog::getResourceId).containsExactly(null, null, "r");
-        assertThat(rows.get(4)).extracting(AuditLog::getUserId, AuditLog::getUsername, AuditLog::getIpAddress)
+        // The username is always the one resolved on the writer, never taken from the caller
+        assertThat(rows.get(4)).extracting(AuditLog::getUserId, AuditLog::getUsername).containsExactly(id.toString(), "alice");
+        assertThat(rows.get(5)).extracting(AuditLog::getUserId, AuditLog::getUsername, AuditLog::getIpAddress)
                 .containsExactly(flaky.toString(), null, "203.0.113.7");
     }
 
@@ -77,11 +80,11 @@ class AuditServiceTest {
             release.await();
             return inv.getArgument(0);
         });
-        Thread first = Thread.ofVirtual().start(() -> auditService.logAction(null, "u", "A", "R", "1"));
-        Thread second = Thread.ofVirtual().start(() -> auditService.logAction(null, "u", "A", "R", "2"));
+        Thread first = Thread.ofVirtual().start(() -> auditService.logAction(null, "A", "R", "1", null, null, null, null, null));
+        Thread second = Thread.ofVirtual().start(() -> auditService.logAction(null, "A", "R", "2", null, null, null, null, null));
         assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
 
-        auditService.logAction(id.toString(), null, "VIEW", "USER", "r", null, null, "/x", "GET", null); // dropped: no permit
+        auditService.logAction(id.toString(), "VIEW", "USER", "r", null, null, "/x", "GET", null); // dropped: no permit
 
         release.countDown();
         first.join();
@@ -101,11 +104,11 @@ class AuditServiceTest {
             release.await();
             return inv.getArgument(0);
         });
-        Thread first = Thread.ofVirtual().start(() -> auditService.logAction(null, "u", "A", "R", "1"));
-        Thread second = Thread.ofVirtual().start(() -> auditService.logAction(null, "u", "A", "R", "2"));
+        Thread first = Thread.ofVirtual().start(() -> auditService.logAction(null, "A", "R", "1", null, null, null, null, null));
+        Thread second = Thread.ofVirtual().start(() -> auditService.logAction(null, "A", "R", "2", null, null, null, null, null));
         assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
 
-        auditService.logAction(null, "u", "A", "R", "3");  // waits out the permit timeout, then drops
+        auditService.logAction(null, "A", "R", "3", null, null, null, null, null);  // waits out the permit timeout, then drops
 
         release.countDown();
         first.join();

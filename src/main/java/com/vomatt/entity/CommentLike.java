@@ -1,7 +1,6 @@
 package com.vomatt.entity;
 
 import com.vomatt.entity.common.AuditableEntity;
-import com.vomatt.entity.User;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;

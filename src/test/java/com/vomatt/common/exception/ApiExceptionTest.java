@@ -8,7 +8,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * {@link ApiException} unit tests: covers backward-compatible behavior of the existing static factories, plus
- * {@code unprocessable} (422) and {@code withData} carrying structured {@code data}.
+ * {@code withData} carrying structured {@code data}.
  */
 class ApiExceptionTest {
 
@@ -18,16 +18,6 @@ class ApiExceptionTest {
 
         assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMON_VALIDATION_FAILED);
-        assertThat(ex.getData()).isNull();
-    }
-
-    @Test
-    void unprocessable_returns422_withNullData() {
-        ApiException ex = ApiException.unprocessable(MessageKey.VOTE_NOT_ALLOWED, "foo");
-
-        assertThat(ex.getStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
-        assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_NOT_ALLOWED);
-        assertThat(ex.getMessageArgs()).containsExactly("foo");
         assertThat(ex.getData()).isNull();
     }
 

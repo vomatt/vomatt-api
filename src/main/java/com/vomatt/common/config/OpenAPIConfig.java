@@ -75,14 +75,6 @@ public class OpenAPIConfig {
 
     @Bean
     public OpenAPI vomattOpenAPI(@Value("${spring.profiles.active:dev}") String activeProfile) {
-        Server devServer = new Server();
-        devServer.setUrl(devUrl);
-        devServer.setDescription("Development Environment Server");
-
-        Server prodServer = new Server();
-        prodServer.setUrl(prodUrl);
-        prodServer.setDescription("Production Environment Server");
-
         Contact contact = new Contact();
         contact.setName("Vomatt");
         contact.setEmail("yi-hsien@vomatt.com");

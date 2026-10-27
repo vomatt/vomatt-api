@@ -940,7 +940,7 @@ public class VoteService {
             return List.of();
         }
         Set<UUID> tagUUIDs = new HashSet<>(tagIds);
-        List<Tag> tags = tagRepository.findAllByIdIn(tagUUIDs);
+        List<Tag> tags = tagRepository.findAllById(tagUUIDs);
         if (tags.size() != tagUUIDs.size()) {
             throw ApiException.badRequest(MessageKey.TAG_IDS_INVALID);
         }

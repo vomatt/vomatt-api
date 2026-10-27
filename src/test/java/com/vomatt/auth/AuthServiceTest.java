@@ -1185,7 +1185,7 @@ class AuthServiceTest {
         User banned = User.builder().id(UUID.randomUUID()).email("banned@example.com")
                 .displayName("Banned").roles(new String[] { "user" }).active(false).build();
 
-        assertThatThrownBy(() -> authService.buildAuthResponse(banned))
+        assertThatThrownBy(() -> authService.buildAuthResponse(banned, false, false))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey())
                         .isEqualTo(MessageKey.AUTH_ACCOUNT_BANNED));
@@ -1202,7 +1202,7 @@ class AuthServiceTest {
         when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("ok-token");
         when(refreshTokenService.generate(anyString(), any(), anyBoolean())).thenReturn("ok-refresh");
 
-        AuthResponse response = authService.buildAuthResponse(user);
+        AuthResponse response = authService.buildAuthResponse(user, false, false);
 
         assertThat(response.token()).isEqualTo("ok-token");
         assertThat(response.refreshToken()).isEqualTo("ok-refresh");

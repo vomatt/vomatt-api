@@ -1,15 +1,18 @@
 package com.vomatt.auth;
 
 import com.vomatt.auth.dto.AuthResponse;
+import com.vomatt.common.constant.LoginUnlock;
 import com.vomatt.common.constant.ReservedUsernames;
 import com.vomatt.common.email.EmailService;
 import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.security.AppKey;
 import com.vomatt.common.security.JwtUtil;
+import com.vomatt.common.security.RefreshTokenReuseException;
 import com.vomatt.common.security.RefreshTokenService;
-import com.vomatt.common.util.TextUtil;
 import com.vomatt.common.sms.SmsService;
+import com.vomatt.common.util.TextUtil;
 import com.vomatt.entity.User;
 import com.vomatt.invitelists.InviteListService;
 import com.vomatt.repository.UserRepository;
@@ -25,20 +28,30 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import tools.jackson.databind.json.JsonMapper;
 
+import java.math.BigInteger;
+import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyFactory;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.security.Signature;
+import java.security.spec.RSAPublicKeySpec;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
-import com.vomatt.common.constant.LoginUnlock;
-import com.vomatt.common.i18n.MessageKey;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 @Slf4j
 @Service
@@ -50,8 +63,7 @@ public class AuthService {
     // P6-#21: Jackson 3 JsonMapper/ObjectMapper is thread-safe and should be reused as a singleton
     // (each build recreates the serializer/deserializer caches, which is wasteful). Apple login
     // shares this singleton for parsing the JWT header / payload.
-    private static final tools.jackson.databind.json.JsonMapper JSON_MAPPER =
-            tools.jackson.databind.json.JsonMapper.builder().build();
+    private static final JsonMapper JSON_MAPPER = JsonMapper.builder().build();
 
     // P6-#21: short-TTL in-memory cache for the Apple / Google JWKS, so each login does not hit the JWKS endpoint.
     // Self-contained in AuthService (no Redis); one holder + timestamp per JWKS URL. With mostly
@@ -63,19 +75,19 @@ public class AuthService {
     // Tolerated clock drift between us and the provider when checking id_token exp
     private static final Duration ID_TOKEN_CLOCK_SKEW = Duration.ofSeconds(60);
 
-    private static final java.util.Set<String> GOOGLE_ISSUERS = java.util.Set.of("accounts.google.com", "https://accounts.google.com");
+    private static final Set<String> GOOGLE_ISSUERS = Set.of("accounts.google.com", "https://accounts.google.com");
 
     /** Hashes of Apple / Google id_tokens already exchanged: each one signs in once (LINE codes are single-use at LINE). */
     private static final String OAUTH_USED_NS = "oauth:used";
 
     /** JWKS cache holder: keys is the parsed public key list, fetchedAt is the fetch time. */
-    private record JwksCache(List<java.util.Map<String, Object>> keys, Instant fetchedAt) {
+    private record JwksCache(List<Map<String, Object>> keys, Instant fetchedAt) {
         boolean isYoungerThan(Duration age) {
             return Duration.between(fetchedAt, Instant.now()).compareTo(age) < 0;
         }
     }
 
-    private final java.util.Map<String, JwksCache> jwksCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, JwksCache> jwksCache = new ConcurrentHashMap<>();
 
     private final UserRepository userRepository;
     private final VoteService voteService;
@@ -142,9 +154,9 @@ public class AuthService {
         String otpType = (type != null) ? type : "login";
         String code = generateOtpCode();
 
-        if (email != null && !email.isBlank()) {
+        if (StringUtils.hasText(email)) {
             sendEmailOtp(User.normalizeEmail(email), code, clientIp);
-        } else if (phone != null && !phone.isBlank()) {
+        } else if (StringUtils.hasText(phone)) {
             sendPhoneOtp(User.normalizePhone(phone), otpType, code, clientIp);
         } else {
             throw ApiException.badRequest(MessageKey.AUTH_IDENTIFIER_REQUIRED);
@@ -221,9 +233,9 @@ public class AuthService {
     }
 
     public AuthResponse verifyOtp(String email, String phone, String code, String clientIp) {
-        if (email != null && !email.isBlank()) {
+        if (StringUtils.hasText(email)) {
             return verifyEmailOtp(User.normalizeEmail(email), code, clientIp);
-        } else if (phone != null && !phone.isBlank()) {
+        } else if (StringUtils.hasText(phone)) {
             return verifyPhoneOtp(User.normalizePhone(phone), code, clientIp);
         } else {
             throw ApiException.badRequest(MessageKey.AUTH_IDENTIFIER_REQUIRED);
@@ -241,7 +253,7 @@ public class AuthService {
     }
 
     private static String requireEmail(String email) {
-        if (email == null || email.isBlank()) {
+        if (!StringUtils.hasText(email)) {
             throw ApiException.badRequest(MessageKey.AUTH_IDENTIFIER_REQUIRED);
         }
         return User.normalizeEmail(email);
@@ -261,9 +273,8 @@ public class AuthService {
     private AuthResponse verifyEmailOtp(String normalizedEmail, String code, String clientIp) {
         OtpRecord otp = consumeOtp(OTP_EMAIL_NS, normalizedEmail, code, clientIp);
 
-        String defaultName = "signup".equals(otp.type()) ? normalizedEmail.split("@")[0] : "";
         // The user proved ownership of the email via OTP -> treat as verified
-        FoundUser found = findOrCreateUserByEmail(normalizedEmail, defaultName, "email_otp", true);
+        FoundUser found = findOrCreateUserByEmail(normalizedEmail, null, "email_otp", true);
         User user = found.user();
 
         AuthResponse response = buildAuthResponse(user, false, found.created());
@@ -343,8 +354,7 @@ public class AuthService {
         // Every attempt is counted with an atomic INCR BEFORE the code is compared, so concurrent guesses cannot
         // all slip past the limit (P1-#7). TTL matches the OTP's remaining lifetime (at least 1 second); a resend extends it.
         String failNs = namespace + OTP_FAIL_SUFFIX;
-        long remainingSeconds = otpTtlSeconds - Duration.between(rec.createdAt(), Instant.now()).getSeconds();
-        Duration counterTtl = Duration.ofSeconds(Math.max(remainingSeconds, 1));
+        Duration counterTtl = Duration.ofSeconds(Math.max(otpSecondsLeft(rec), 1));
         long attempts = redisService.incrementAndExpire(failNs, attemptKey, counterTtl);
         // Past the limit: a concurrent guess already used the last attempt (and locks out), so even a correct code is refused
         if (attempts > MAX_OTP_ATTEMPTS) {
@@ -382,7 +392,7 @@ public class AuthService {
         }
         if (!consumed.createdAt().equals(rec.createdAt())) {
             // A resend replaced the OTP after it was read: the old code must not sign in, and the new OTP goes back
-            long left = otpTtlSeconds - Duration.between(consumed.createdAt(), Instant.now()).getSeconds();
+            long left = otpSecondsLeft(consumed);
             if (left > 0) {
                 redisService.set(namespace, key, consumed, Duration.ofSeconds(left));
             }
@@ -391,6 +401,10 @@ public class AuthService {
         redisService.delete(failNs, attemptKey);
         redisService.delete(namespace + OTP_LEVEL_SUFFIX, attemptKey);
         return rec;
+    }
+
+    private long otpSecondsLeft(OtpRecord otp) {
+        return otpTtlSeconds - Duration.between(otp.createdAt(), Instant.now()).getSeconds();
     }
 
     /**
@@ -521,7 +535,7 @@ public class AuthService {
             return null;
         }
         try {
-            return java.net.InetAddress.ofLiteral(ip.trim()).getHostAddress();
+            return InetAddress.ofLiteral(ip.trim()).getHostAddress();
         } catch (IllegalArgumentException e) {
             return ip;
         }
@@ -606,25 +620,25 @@ public class AuthService {
     // ── Google OAuth ──────────────────────────────────────────────────
 
     public AuthResponse googleLogin(String idToken) {
-        if (googleClientId == null || googleClientId.isBlank()) {
+        if (!StringUtils.hasText(googleClientId)) {
             throw ApiException.badRequest(MessageKey.AUTH_GOOGLE_NOT_CONFIGURED);
         }
         // JWKS outage -> 503 (thrown before the try, so it is not reported as an invalid token)
-        List<java.util.Map<String, Object>> keys = fetchJwks(googleJwksUrl, "Google", false);
+        List<Map<String, Object>> keys = fetchJwks(googleJwksUrl, "Google", false);
 
         String email;
         String name;
         boolean emailVerified;
-        java.util.Map<String, Object> payload;
+        Map<String, Object> payload;
         try {
             // Every local verification failure maps to auth.google.no_email ("token invalid"), except a wrong audience
-            java.util.function.Supplier<ApiException> invalid = () -> ApiException.unauthorized(MessageKey.AUTH_GOOGLE_NO_EMAIL);
+            Supplier<ApiException> invalid = () -> ApiException.unauthorized(MessageKey.AUTH_GOOGLE_NO_EMAIL);
             payload = verifyRs256(idToken, keys, googleJwksUrl, "Google", invalid, invalid, invalid);
             if (!GOOGLE_ISSUERS.contains(payload.get("iss"))) {
                 throw invalid.get();
             }
             // google.client-id may list several client ids (web / iOS / Android), comma-separated
-            boolean audOk = java.util.Arrays.stream(googleClientId.split(","))
+            boolean audOk = Arrays.stream(googleClientId.split(","))
                     .map(String::trim).anyMatch(id -> id.equals(payload.get("aud")));
             if (!audOk) {
                 throw ApiException.unauthorized(MessageKey.AUTH_GOOGLE_INVALID_AUDIENCE);
@@ -656,7 +670,7 @@ public class AuthService {
 
     @SuppressWarnings("unchecked")
     public AuthResponse lineLogin(String code, String redirectUri) {
-        if (lineChannelId == null || lineChannelId.isBlank()) {
+        if (!StringUtils.hasText(lineChannelId)) {
             throw ApiException.badRequest(MessageKey.AUTH_LINE_NOT_CONFIGURED);
         }
 
@@ -667,11 +681,7 @@ public class AuthService {
         tokenBody.add("client_id", lineChannelId);
         tokenBody.add("client_secret", lineChannelSecret);
 
-        var tokenResponse = restClient.post().uri(lineTokenUrl)
-                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .body(tokenBody)
-                .retrieve()
-                .body(java.util.Map.class);
+        Map<String, Object> tokenResponse = postForm(lineTokenUrl, tokenBody);
 
         if (tokenResponse == null || tokenResponse.get("access_token") == null) {
             throw ApiException.unauthorized(MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
@@ -680,7 +690,7 @@ public class AuthService {
         String accessToken = (String) tokenResponse.get("access_token");
 
         var lineProfile = restClient.get().uri(lineProfileUrl)
-                .header("Authorization", "Bearer " + accessToken).retrieve().body(java.util.Map.class);
+                .header("Authorization", "Bearer " + accessToken).retrieve().body(Map.class);
 
         if (lineProfile == null || lineProfile.get("userId") == null) {
             throw ApiException.unauthorized(MessageKey.AUTH_LINE_PROFILE_FAILED);
@@ -694,11 +704,7 @@ public class AuthService {
                 verifyBody.add("id_token", idToken);
                 verifyBody.add("client_id", lineChannelId);
 
-                var verifyResponse = restClient.post().uri(lineVerifyUrl)
-                        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                        .body(verifyBody)
-                        .retrieve()
-                        .body(java.util.Map.class);
+                Map<String, Object> verifyResponse = postForm(lineVerifyUrl, verifyBody);
 
                 if (verifyResponse != null && verifyResponse.get("email") != null) {
                     email = (String) verifyResponse.get("email");
@@ -720,17 +726,26 @@ public class AuthService {
         return buildAuthResponse(found.user(), false, found.created());
     }
 
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> postForm(String url, MultiValueMap<String, String> form) {
+        return restClient.post().uri(url)
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(form)
+                .retrieve()
+                .body(Map.class);
+    }
+
     // ── Apple OAuth ───────────────────────────────────────────────────
 
     @SuppressWarnings("unchecked")
     public AuthResponse appleLogin(String idToken, String fullName, String nonce) {
         // Without a configured client id the audience cannot be checked, so a token minted for any app would pass
-        if (appleClientId == null || appleClientId.isBlank()) {
+        if (!StringUtils.hasText(appleClientId)) {
             throw ApiException.badRequest(MessageKey.AUTH_APPLE_NOT_CONFIGURED);
         }
         // P6-#16: JWKS fetching (external call + null guard + 5xx/connection failure classification) stays outside the try,
         // so a 503 external error from an Apple/network failure is not swallowed by the broad catch below and misreported as a 401 login failure.
-        List<java.util.Map<String, Object>> keys = fetchJwks(appleJwksUrl, "Apple", false);
+        List<Map<String, Object>> keys = fetchJwks(appleJwksUrl, "Apple", false);
 
         try {
             var payload = verifyRs256(idToken, keys, appleJwksUrl, "Apple",
@@ -763,8 +778,7 @@ public class AuthService {
             // Apple id_token usually returns email_verified as the string "true", occasionally as boolean true; parse defensively
             boolean emailVerified = "true".equals(String.valueOf(payload.get("email_verified")));
 
-            FoundUser found = findOrCreateUserByEmail(User.normalizeEmail(email),
-                    fullName != null ? fullName : "", "apple", emailVerified);
+            FoundUser found = findOrCreateUserByEmail(User.normalizeEmail(email), fullName, "apple", emailVerified);
             return buildAuthResponse(found.user(), false, found.created());
 
         } catch (ApiException ex) {
@@ -781,16 +795,16 @@ public class AuthService {
      * A kid missing from {@code keys} triggers one refetch of {@code jwksUrl} before giving up with {@code keyNotFound}.
      */
     @SuppressWarnings("unchecked")
-    private java.util.Map<String, Object> verifyRs256(String idToken, List<java.util.Map<String, Object>> keys,
+    private Map<String, Object> verifyRs256(String idToken, List<Map<String, Object>> keys,
             String jwksUrl, String provider,
-            java.util.function.Supplier<ApiException> invalidToken, java.util.function.Supplier<ApiException> keyNotFound,
-            java.util.function.Supplier<ApiException> invalidSignature) throws Exception {
+            Supplier<ApiException> invalidToken, Supplier<ApiException> keyNotFound,
+            Supplier<ApiException> invalidSignature) throws Exception {
+        Base64.Decoder base64 = Base64.getUrlDecoder();
         String[] parts = idToken.split("\\.");
         if (parts.length != 3)
             throw invalidToken.get();
 
-        byte[] headerBytes = java.util.Base64.getUrlDecoder().decode(parts[0]);
-        var headerMap = JSON_MAPPER.readValue(headerBytes, java.util.Map.class);
+        var headerMap = JSON_MAPPER.readValue(base64.decode(parts[0]), Map.class);
         // Only RS256 is accepted, whatever the header claims (no "none", no HMAC with the public key)
         if (!"RS256".equals(headerMap.get("alg")))
             throw invalidToken.get();
@@ -806,24 +820,17 @@ public class AuthService {
         if (matchingKey == null)
             throw keyNotFound.get();
 
-        String n = (String) matchingKey.get("n");
-        String e = (String) matchingKey.get("e");
-        byte[] nBytes = java.util.Base64.getUrlDecoder().decode(n);
-        byte[] eBytes = java.util.Base64.getUrlDecoder().decode(e);
-        var keyFactory = java.security.KeyFactory.getInstance("RSA");
-        var rsaKey = keyFactory.generatePublic(
-                new java.security.spec.RSAPublicKeySpec(new java.math.BigInteger(1, nBytes),
-                        new java.math.BigInteger(1, eBytes)));
+        var rsaKey = KeyFactory.getInstance("RSA").generatePublic(new RSAPublicKeySpec(
+                new BigInteger(1, base64.decode((String) matchingKey.get("n"))),
+                new BigInteger(1, base64.decode((String) matchingKey.get("e")))));
 
-        var sig = java.security.Signature.getInstance("SHA256withRSA");
+        var sig = Signature.getInstance("SHA256withRSA");
         sig.initVerify(rsaKey);
-        sig.update((parts[0] + "." + parts[1]).getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        boolean valid = sig.verify(java.util.Base64.getUrlDecoder().decode(parts[2]));
-        if (!valid)
+        sig.update((parts[0] + "." + parts[1]).getBytes(StandardCharsets.UTF_8));
+        if (!sig.verify(base64.decode(parts[2])))
             throw invalidSignature.get();
 
-        byte[] payloadBytes = java.util.Base64.getUrlDecoder().decode(parts[1]);
-        return JSON_MAPPER.readValue(payloadBytes, java.util.Map.class);
+        return JSON_MAPPER.readValue(base64.decode(parts[1]), Map.class);
     }
 
     /**
@@ -844,7 +851,7 @@ public class AuthService {
         }
     }
 
-    private static java.util.Map<String, Object> findKey(List<java.util.Map<String, Object>> keys, String kid) {
+    private static Map<String, Object> findKey(List<Map<String, Object>> keys, String kid) {
         return keys.stream().filter(k -> kid.equals(k.get("kid"))).findFirst().orElse(null);
     }
 
@@ -870,15 +877,15 @@ public class AuthService {
      * @return the parsed, non-empty public key list
      */
     @SuppressWarnings("unchecked")
-    private List<java.util.Map<String, Object>> fetchJwks(String url, String provider, boolean refresh) {
+    private List<Map<String, Object>> fetchJwks(String url, String provider, boolean refresh) {
         JwksCache cached = jwksCache.get(url);
         if (cached != null && cached.isYoungerThan(refresh ? JWKS_REFETCH_COOLDOWN : JWKS_CACHE_TTL)) {
             return cached.keys();
         }
 
-        java.util.Map<String, Object> jwks;
+        Map<String, Object> jwks;
         try {
-            jwks = restClient.get().uri(url).retrieve().body(java.util.Map.class);
+            jwks = restClient.get().uri(url).retrieve().body(Map.class);
         } catch (RestClientException ex) {
             // JWKS endpoint 5xx / connection timeout / DNS failure -> upstream/external service failure, retryable (503), not a credential problem
             log.warn("Failed to fetch {} JWKS (external service): {}", provider, ex.getMessage());
@@ -890,7 +897,7 @@ public class AuthService {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
         }
 
-        List<java.util.Map<String, Object>> keys = (List<java.util.Map<String, Object>>) jwks.get("keys");
+        List<Map<String, Object>> keys = (List<Map<String, Object>>) jwks.get("keys");
         if (keys.isEmpty()) {
             log.warn("Abnormal {} JWKS response: keys is empty", provider);
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
@@ -901,6 +908,9 @@ public class AuthService {
     }
 
     // ── Shared ────────────────────────────────────────────────────────
+
+    /** A find-or-create outcome: {@code created} is true when this call made the account (the sign-in is a signup). */
+    record FoundUser(User user, boolean created) {}
 
     /**
      * Finds or creates a User by email.
@@ -916,9 +926,6 @@ public class AuthService {
      * <p>This is the only place an email is proven to be the user's, so pending email Invitees and Invite List members of it are
      * tied to the user here, in the same transaction as the find-or-create (Polls locked before Invite Lists); rerunning it binds nothing new.</p>
      */
-    /** A find-or-create outcome: {@code created} is true when this call made the account (the sign-in is a signup). */
-    record FoundUser(User user, boolean created) {}
-
     FoundUser findOrCreateUserByEmail(String email, String fullName, String authMethod, boolean emailVerified) {
         if (!emailVerified) {
             // Email not verified by the provider -> refuse to merge or create, preventing account takeover
@@ -928,10 +935,11 @@ public class AuthService {
         return transactionTemplate.execute(status -> {
             boolean[] created = { false };
             User user = userRepository.findByEmail(email).orElseGet(() -> {
+                String localPart = email.split("@")[0];
                 User newUser = User.builder()
                         .email(email)
-                        .username(generateUsername(email.split("@")[0]))
-                        .displayName((fullName != null && !fullName.isBlank()) ? fullName : email.split("@")[0])
+                        .username(generateUsername(localPart))
+                        .displayName(StringUtils.hasText(fullName) ? fullName : localPart)
                         .authMethod(authMethod)
                         .avatarUrl(BotAvatar.random())
                         .build();
@@ -972,17 +980,13 @@ public class AuthService {
         return candidate;
     }
 
-    public AuthResponse buildAuthResponse(User user) {
-        return buildAuthResponse(user, false, false);
-    }
-
     /** @param isNewUser whether the account was created by this very sign-in (reported to the client, see AuthResponse) */
-    private AuthResponse buildAuthResponse(User user, boolean adminScope, boolean isNewUser) {
+    AuthResponse buildAuthResponse(User user, boolean adminScope, boolean isNewUser) {
         // Ban check: all login paths (OTP/Google/LINE/Apple, phone) funnel through here, so they are blocked in one place
         if (!user.isActive()) {
             throw ApiException.forbidden(MessageKey.AUTH_ACCOUNT_BANNED);
         }
-        user.setLastLoginAt(java.time.OffsetDateTime.now());
+        user.setLastLoginAt(OffsetDateTime.now());
         userRepository.save(user);
         List<String> roles = List.of(user.getRoles());
         String token = jwtUtil.generateToken(user.getId().toString(), roles, adminScope);
@@ -999,7 +1003,7 @@ public class AuthService {
                 throw ApiException.unauthorized(MessageKey.AUTH_REFRESH_TOKEN_INVALID);
             }
             return new AuthResponse(result.newAccessToken(), result.newRefreshToken(), null, null);
-        } catch (com.vomatt.common.security.RefreshTokenReuseException e) {
+        } catch (RefreshTokenReuseException e) {
             throw ApiException.unauthorized(MessageKey.AUTH_SUSPICIOUS_LOGIN);
         }
     }

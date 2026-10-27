@@ -90,6 +90,7 @@ public class UserService {
         // Poll rows before option rows, the same lock order as a Ballot, so a concurrent Ballot cannot deadlock it
         voteRepository.decrementTurnoutForUserBallots(user.getId());
         voteOptionRepository.decrementForUserBallots(user.getId());
+        voteRepository.decrementShareCountForUserShares(user.getId());
         auditLogRepository.anonymizeByUserId(userId);
         userRepository.delete(user);
         log.info("User {} deleted by {}", userId, principal.userId());

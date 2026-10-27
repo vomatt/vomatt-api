@@ -42,6 +42,7 @@ public class VoteMapper {
         response.setUpdatedAt(vote.getUpdatedAt());
         response.setTotalVotes(vote.getTurnout());
         response.setParticipantCount(vote.getTurnout());
+        response.setShareCount(vote.getShareCount());
         response.setVotingActive(vote.isVotingActive());
         response.setOptions(options.stream()
                 .map(opt -> toOptionResponse(opt, sealed))

@@ -106,6 +106,10 @@ _Avoid_: Alert, message
 What a Poll's owner and its Participants receive once the Poll has Ended, pointing them to the results; for an Invite-only Poll, every Invitee too. Participants who Retracted receive none unless they are Invitees.
 _Avoid_: Alert, results notice
 
+**Share**:
+A signed-in user passing a Poll's link on through its share button. Each user counts once per Poll however often they share it; signed-out shares are not counted. Visible to anyone who can see the Poll, in any state.
+_Avoid_: Repost, forward
+
 ### Discussion
 
 **Comment**:

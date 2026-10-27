@@ -72,6 +72,10 @@ public class Vote extends AuditableEntity {
     @Column(name = "turnout", insertable = false, updatable = false)
     private int turnout;
 
+    /** Distinct sharers; written only by atomic SQL increments in {@code VoteRepository}, never by the entity. */
+    @Column(name = "share_count", insertable = false, updatable = false)
+    private int shareCount;
+
     @Column(name = "is_active")
     private boolean isActive = true;
 

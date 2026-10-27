@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -47,7 +48,8 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
     @MockitoBean RefreshTokenService refreshTokenService;
     @Autowired NotificationService notificationService;
 
-    private final OffsetDateTime now = OffsetDateTime.now();
+    // Postgres keeps microseconds; a nanosecond clock would make times read back from SQL differ from the persisted ones
+    private final OffsetDateTime now = OffsetDateTime.now().truncatedTo(ChronoUnit.MICROS);
     private User me;
     private User alice;
     private User bob;

@@ -63,6 +63,7 @@ public class AdminVoteController {
                   ],
                   "tags": [],
                   "commentCount": 7,
+                  "shareCount": 18,
                   "voterVisibility": "OWNER",
                   "audience": "PUBLIC",
                   "inviteeCount": null,

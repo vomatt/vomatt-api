@@ -54,4 +54,25 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
             FROM vomatt.user_votes uv
             WHERE uv.vote_id = v.id AND uv.user_id = :userId AND v.end_time > now()""", nativeQuery = true)
     void decrementTurnoutForUserBallots(@Param("userId") UUID userId);
+
+    /** Idempotent, also under concurrent requests: a user's later shares of the same Poll are dropped. */
+    @Modifying
+    @Query(value = """
+            INSERT INTO vomatt.vote_shares (vote_id, user_id, channel)
+            VALUES (:voteId, :userId, :channel)
+            ON CONFLICT (vote_id, user_id) DO NOTHING""", nativeQuery = true)
+    int insertShareIfAbsent(@Param("voteId") UUID voteId, @Param("userId") UUID userId, @Param("channel") String channel);
+
+    /** Atomic +1 on the stored share count; call only when {@link #insertShareIfAbsent} inserted a row. */
+    @Modifying
+    @Query(value = "UPDATE vomatt.votes SET share_count = share_count + 1 WHERE id = :voteId", nativeQuery = true)
+    void incrementShareCount(@Param("voteId") UUID voteId);
+
+    /** Releases a user's shares from the stored share counts; run before deleting the user (vote_shares cascade). */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = """
+            UPDATE vomatt.votes v SET share_count = v.share_count - 1
+            FROM vomatt.vote_shares s
+            WHERE s.vote_id = v.id AND s.user_id = :userId""", nativeQuery = true)
+    void decrementShareCountForUserShares(@Param("userId") UUID userId);
 }

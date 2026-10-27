@@ -37,7 +37,9 @@ import com.vomatt.votes.dto.InviteeResponse;
 import com.vomatt.votes.dto.InviteesRequest;
 import com.vomatt.votes.dto.VoteCreatorResponse;
 import com.vomatt.votes.dto.VoteRequest;
+import com.vomatt.votes.dto.ShareVoteRequest;
 import com.vomatt.votes.dto.VoteResponse;
+import com.vomatt.votes.dto.VoteShareResponse;
 import com.vomatt.votes.dto.VoteResultResponse;
 import com.vomatt.votes.dto.VoterResponse;
 import com.vomatt.common.response.Cursor;
@@ -202,6 +204,21 @@ public class VoteService {
         log.info("Vote {} edited by creator {}", voteId, userId);
 
         return convertToVoteResponse(vote, userId);
+    }
+
+    /**
+     * Records that the caller shared a Poll they can reach. Idempotent per user and Poll: a repeat share keeps the first
+     * channel and adds nothing to the count. Any state counts, Scheduled and Ended included.
+     */
+    public VoteShareResponse share(String voteId, ShareVoteRequest request, String userId) {
+        Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
+        if (voteRepository.insertShareIfAbsent(vote.getId(), UUID.fromString(userId), request.channel().name()) == 0) {
+            return new VoteShareResponse(vote.getShareCount());
+        }
+        voteRepository.incrementShareCount(vote.getId());
+        log.info("User {} shared vote {} via {}", userId, voteId, request.channel());
+        // ponytail: count read before the increment, so a concurrent sharer's +1 may be missing until the next read
+        return new VoteShareResponse(vote.getShareCount() + 1L);
     }
 
     /** @param userId viewer, or null when signed out */

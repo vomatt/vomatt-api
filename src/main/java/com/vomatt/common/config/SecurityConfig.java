@@ -56,10 +56,14 @@ public class SecurityConfig {
         ClientIpResolver.setTrustedProxies(cidrs);
     }
 
-    // Shared with vomatt-web, which sends it with the user's IP (ClientIpResolver.CLIENT_IP_HEADER); blank ignores that header
+    // Shared with vomatt-web, which sends it with the user's IP (ClientIpResolver.CLIENT_IP_HEADER); blank ignores that
+    // header, except in production: every user behind vomatt-web would then share one IP for rate limits and OTP lockouts
     @Value("${app.security.client-ip-secret:}")
     void setClientIpSecret(String secret) {
-        if (secret != null && !secret.isBlank() && secret.length() < 32) {
+        if ((secret == null || secret.isBlank()) && environment.matchesProfiles("prod")) {
+            throw new IllegalStateException("CLIENT_IP_SECRET must be set in production: share it with vomatt-web so it can pass each user's IP.");
+        }
+        if (secret != null && !secret.isBlank() && secret.trim().length() < 32) {
             throw new IllegalStateException("CLIENT_IP_SECRET must be at least 32 characters.");
         }
         ClientIpResolver.setClientIpSecret(secret);

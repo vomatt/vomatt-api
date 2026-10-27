@@ -17,8 +17,9 @@ class ClientIpResolverTest {
         ClientIpResolver.setClientIpSecret(null);
     }
 
+    /** vomatt-web (egress 203.0.113.7) through the platform ingress. */
     private static MockHttpServletRequest fromWeb(String clientIp, String secret) {
-        MockHttpServletRequest req = request("203.0.113.7", null);
+        MockHttpServletRequest req = request("10.0.0.5", "203.0.113.7");
         req.addHeader(ClientIpResolver.CLIENT_IP_HEADER, clientIp);
         req.addHeader(ClientIpResolver.CLIENT_IP_SECRET_HEADER, secret);
         return req;
@@ -28,7 +29,40 @@ class ClientIpResolverTest {
     void shouldUseClientIpHeaderWhenSecretMatches() {
         ClientIpResolver.setClientIpSecret(SECRET);
         assertThat(ClientIpResolver.resolve(fromWeb(" 198.51.100.9 ", SECRET))).isEqualTo("198.51.100.9");
-        assertThat(ClientIpResolver.resolve(fromWeb("2001:db8::1", SECRET))).isEqualTo("2001:db8::1");
+        assertThat(ClientIpResolver.resolve(fromWeb("2001:db8::1", SECRET))).isEqualTo("2001:db8:0:0:0:0:0:1");
+    }
+
+    @Test
+    void shouldNormalizeClientIpWhenSpelledDifferently() {
+        ClientIpResolver.setClientIpSecret(SECRET);
+        String canonical = ClientIpResolver.resolve(fromWeb("2001:db8:0:0:0:0:0:1", SECRET));
+        assertThat(ClientIpResolver.resolve(fromWeb("2001:DB8::1", SECRET))).isEqualTo(canonical);
+        assertThat(ClientIpResolver.resolve(fromWeb("2001:0db8::0001", SECRET))).isEqualTo(canonical);
+        assertThat(ClientIpResolver.resolve(fromWeb("::ffff:198.51.100.9", SECRET))).isEqualTo("198.51.100.9");
+    }
+
+    @Test
+    void shouldNormalizeForwardedAndPeerIpWhenSpelledDifferently() {
+        assertThat(ClientIpResolver.resolve(request("10.0.0.5", "2001:DB8::1"))).isEqualTo("2001:db8:0:0:0:0:0:1");
+        assertThat(ClientIpResolver.resolve(request("2001:DB8::2", null))).isEqualTo("2001:db8:0:0:0:0:0:2");
+        assertThat(ClientIpResolver.resolve(request("::ffff:203.0.113.7", null))).isEqualTo("203.0.113.7");
+    }
+
+    @Test
+    void shouldAcceptClientIpWhenConfiguredSecretHasSurroundingWhitespace() {
+        // An env value ending in a newline; the container trims the header value
+        ClientIpResolver.setClientIpSecret(" " + SECRET + "\n");
+        assertThat(ClientIpResolver.resolve(fromWeb("198.51.100.9", SECRET))).isEqualTo("198.51.100.9");
+    }
+
+    @Test
+    void shouldIgnoreClientIpHeaderWhenPeerIsNotTrustedProxy() {
+        ClientIpResolver.setClientIpSecret(SECRET);
+        MockHttpServletRequest direct = request("203.0.113.5", null);
+        direct.addHeader(ClientIpResolver.CLIENT_IP_HEADER, "198.51.100.9");
+        direct.addHeader(ClientIpResolver.CLIENT_IP_SECRET_HEADER, SECRET);
+
+        assertThat(ClientIpResolver.resolve(direct)).isEqualTo("203.0.113.5");
     }
 
     @Test

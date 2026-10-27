@@ -13,14 +13,12 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.testcontainers.containers.GenericContainer;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** consumeAndExec runs a Lua script on pre-serialized values, so it is checked against a real Redis 7. */
+/** execScript passes pre-serialized values to Lua, so it is checked against a real Redis 7. */
 class RedisServiceImplTest {
 
     static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7").withExposedPorts(6379);
@@ -55,60 +53,105 @@ class RedisServiceImplTest {
         redisService = new RedisServiceImpl(template, JsonMapper.builder().build());
     }
 
+    private static final org.springframework.data.redis.core.script.RedisScript<Long> SET_AND_HSET =
+            org.springframework.data.redis.core.script.RedisScript.of(
+                    "redis.call('SET', KEYS[1], ARGV[1]) redis.call('HSET', KEYS[2], ARGV[2], ARGV[1]) return 7", Long.class);
+
     @Test
-    void shouldConsumeKeyAndApplyWritesWhenKeyExists() {
-        RefreshTokenService.RotateResult pair = new RefreshTokenService.RotateResult("access", "refresh",
-                new RefreshTokenService.RefreshTokenData("user-1", List.of("user"), "session-1", false));
-        redisService.set("ns", "old", "v", Duration.ofMinutes(5));
-        template.opsForHash().put("idx:user-1", "old", "1");
+    void shouldSerializeValuesAndPassBytesAsIsWhenRunningScript() {
+        RefreshTokenService.RefreshTokenData data =
+                new RefreshTokenService.RefreshTokenData("user-1", List.of("user"), "session-1", false);
 
-        boolean consumed = redisService.consumeAndExec("ns", "old", List.of(
-                RedisService.RedisWrite.set("grace", "old", pair, Duration.ofSeconds(60)),
-                RedisService.RedisWrite.hput("idx", "user-1", "new", "1"),
-                RedisService.RedisWrite.expire("idx", "user-1", Duration.ofDays(30)),
-                RedisService.RedisWrite.hdelete("idx", "user-1", "old")));
+        long result = redisService.execScript(SET_AND_HSET, List.of("ns:k", "idx:u"),
+                List.of(data, "field".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
 
-        assertThat(consumed).isTrue();
-        assertThat(redisService.get("ns", "old", String.class)).isNull();
-        assertThat(redisService.get("grace", "old", RefreshTokenService.RotateResult.class)).isEqualTo(pair);
-        assertThat(template.getExpire("grace:old", TimeUnit.SECONDS)).isBetween(55L, 60L);
-        assertThat(redisService.hGetAll("idx", "user-1")).containsOnlyKeys("new");
-        assertThat(redisService.hGet("idx", "user-1", "new", String.class)).isEqualTo("1");
-        assertThat(template.getExpire("idx:user-1", TimeUnit.DAYS)).isBetween(29L, 30L);
+        assertThat(result).isEqualTo(7);
+        assertThat(redisService.get("ns", "k", RefreshTokenService.RefreshTokenData.class)).isEqualTo(data);
+        // A byte[] field is stored unquoted, as hGetAll reads fields
+        assertThat(redisService.hGetAll("idx", "u")).containsOnlyKeys("field");
     }
 
     @Test
-    void shouldKeepTheKeyWhenAWriteFails() {
-        redisService.set("ns", "old", "v", Duration.ofMinutes(5));
+    void shouldThrowWhenScriptReturnsAnError() {
+        var failing = org.springframework.data.redis.core.script.RedisScript.of("return redis.error_reply('boom')", Long.class);
 
-        // Redis refuses a zero expiry; the script stops there, and its key must survive for a retry
-        assertThatThrownBy(() -> redisService.consumeAndExec("ns", "old", List.of(
-                RedisService.RedisWrite.set("grace", "old", "pair", Duration.ZERO))))
+        assertThatThrownBy(() -> redisService.execScript(failing, List.of("k"), List.of()))
                 .isInstanceOf(RedisOperationException.class);
+    }
 
-        assertThat(redisService.get("ns", "old", String.class)).isEqualTo("v");
+    private void setRaw(String key, String bytes) {
+        template.execute((org.springframework.data.redis.core.RedisCallback<Object>) c -> c.stringCommands()
+                .set(key.getBytes(java.nio.charset.StandardCharsets.UTF_8), bytes.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
     }
 
     @Test
-    void shouldWriteNothingWhenKeyIsAlreadyConsumed() {
-        boolean consumed = redisService.consumeAndExec("ns", "gone", List.of(
-                RedisService.RedisWrite.set("grace", "gone", "pair", Duration.ofSeconds(60))));
+    void shouldReadMissAndKeepKeyWhenValueIsNotJson() {
+        setRaw("ns:bad", "not json");
 
-        assertThat(consumed).isFalse();
-        assertThat(redisService.get("grace", "gone", String.class)).isNull();
+        assertThat(redisService.getOrThrow("ns", "bad", RefreshTokenService.RefreshTokenData.class)).isNull();
+        // Left for its owner to judge (a consumed marker must keep failing closed)
+        assertThat(template.hasKey("ns:bad")).isTrue();
     }
 
     @Test
-    void shouldWriteNothingWhenAnotherCallerConsumedTheKeyFirst() {
-        redisService.set("ns", "old", "v", Duration.ofMinutes(5));
+    void shouldReadMissWhenGettingAndDeletingUndecodableValue() {
+        setRaw("ns:bad", "not json");
 
-        boolean first = redisService.consumeAndExec("ns", "old",
-                List.of(RedisService.RedisWrite.set("grace", "old", "first", Duration.ofSeconds(60))));
-        boolean second = redisService.consumeAndExec("ns", "old",
-                List.of(RedisService.RedisWrite.set("grace", "old", "second", Duration.ofSeconds(60))));
+        assertThat(redisService.getAndDelete("ns", "bad", RefreshTokenService.RefreshTokenData.class)).isNull();
+        assertThat(template.hasKey("ns:bad")).isFalse();
+    }
 
-        assertThat(first).isTrue();
-        assertThat(second).isFalse();
-        assertThat(redisService.get("grace", "old", String.class)).isEqualTo("first");
+    @Test
+    void shouldReadMissWhenValueHasAnotherShape() {
+        redisService.set("ns", "other", "a plain string", java.time.Duration.ofMinutes(5));
+
+        assertThat(redisService.getOrThrow("ns", "other", RefreshTokenService.RefreshTokenData.class)).isNull();
+    }
+
+    @Test
+    void shouldListFieldWithNullValueWhenHashValueIsUndecodable() {
+        redisService.execInTransaction(List.of(RedisService.RedisWrite.hput("idx", "u", "good", "session-1")));
+        template.execute((org.springframework.data.redis.core.RedisCallback<Object>) c -> c.hashCommands().hSet(
+                "idx:u".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                "bad".getBytes(java.nio.charset.StandardCharsets.UTF_8), "not json".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+
+        java.util.Map<String, Object> entries = redisService.hGetAllOrThrow("idx", "u");
+
+        assertThat(entries).containsEntry("good", "session-1").containsEntry("bad", null).hasSize(2);
+    }
+
+    @Test
+    void shouldReturnValuesInOrderWhenMultiGetting() {
+        redisService.set("ns", "a", "session-a", java.time.Duration.ofMinutes(5));
+        setRaw("ns:bad", "not json");
+
+        assertThat(redisService.multiGetOrThrow("ns", List.of("a", "missing", "bad"), String.class))
+                .containsExactly("session-a", null, null);
+    }
+
+    @Test
+    void shouldThrowWhenGettingKeyOfWrongType() {
+        template.opsForHash().put("ns:hash", "f", "v");
+
+        // WRONGTYPE is a Redis error, not an undecodable value: the key stays
+        assertThatThrownBy(() -> redisService.getOrThrow("ns", "hash", String.class))
+                .isInstanceOf(RedisOperationException.class);
+        assertThat(template.hasKey("ns:hash")).isTrue();
+    }
+
+    @Test
+    void shouldThrowWhenReadingHashOfWrongType() {
+        redisService.set("idx", "u", "not-a-hash", java.time.Duration.ofMinutes(5));
+
+        assertThatThrownBy(() -> redisService.hGetAllOrThrow("idx", "u")).isInstanceOf(RedisOperationException.class);
+    }
+
+    @Test
+    void shouldDeleteEveryGivenFieldWhenDeletingHashFields() {
+        template.opsForHash().putAll("idx:u", java.util.Map.of("a", "1", "b", "2", "c", "3"));
+
+        assertThat(redisService.hDelete("idx", "u", "a", "b")).isTrue();
+
+        assertThat(redisService.hGetAll("idx", "u")).containsOnlyKeys("c");
     }
 }

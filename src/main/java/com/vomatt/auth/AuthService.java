@@ -681,7 +681,7 @@ public class AuthService {
         tokenBody.add("client_id", lineChannelId);
         tokenBody.add("client_secret", lineChannelSecret);
 
-        Map<String, Object> tokenResponse = callLine(() -> postForm(lineTokenUrl, tokenBody),
+        Map<String, Object> tokenResponse = callUpstream("LINE", () -> postForm(lineTokenUrl, tokenBody),
                 MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
 
         // instanceof, not a cast: a malformed LINE response is a failed exchange (401), not a ClassCastException (500)
@@ -690,7 +690,7 @@ public class AuthService {
             throw ApiException.unauthorized(MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
         }
 
-        Map<String, Object> lineProfile = callLine(() -> restClient.get().uri(lineProfileUrl)
+        Map<String, Object> lineProfile = callUpstream("LINE", () -> restClient.get().uri(lineProfileUrl)
                 .header("Authorization", "Bearer " + accessToken).retrieve().body(Map.class),
                 MessageKey.AUTH_LINE_PROFILE_FAILED);
 
@@ -713,7 +713,7 @@ public class AuthService {
             verifyBody.add("id_token", idToken);
             verifyBody.add("client_id", lineChannelId);
 
-            Map<String, Object> verifyResponse = callLine(() -> postForm(lineVerifyUrl, verifyBody),
+            Map<String, Object> verifyResponse = callUpstream("LINE", () -> postForm(lineVerifyUrl, verifyBody),
                     MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
             Object emailValue = verifyResponse == null ? null : verifyResponse.get("email");
             if (verifyResponse == null || !(verifyResponse.get("sub") instanceof String sub)
@@ -748,22 +748,24 @@ public class AuthService {
     }
 
     /**
-     * Runs a call to LINE: a 4xx means LINE rejected the code or token -> 401 {@code rejected}; a 429 / 408, a 5xx or
-     * a connection failure / timeout is an upstream problem -> 503 (as in {@link #fetchJwks}).
+     * Runs a call to an external provider and classifies its failures. A 4xx means the provider rejected the user's
+     * code or token -> 401 {@code rejected}; with {@code rejected} null the call carries no user input (a JWKS fetch),
+     * so a 4xx is an upstream problem like the rest. A 429 / 408, a 5xx or a connection failure / timeout -> 503.
      */
-    private static <T> T callLine(Supplier<T> call, MessageKey rejected) {
+    private static <T> T callUpstream(String upstream, Supplier<T> call, MessageKey rejected) {
         try {
             return call.get();
         } catch (HttpClientErrorException ex) {
-            // 429 (rate limited) and 408 are transient on LINE's side, not a rejected credential
-            if (ex.getStatusCode().value() == 429 || ex.getStatusCode().value() == 408) {
-                log.warn("LINE call failed (transient {}): {}", ex.getStatusCode().value(), ex.getMessage());
-                throw ApiException.serviceUnavailable(MessageKey.COMMON_SERVICE_UNAVAILABLE);
+            int status = ex.getStatusCode().value();
+            // 429 (rate limited) and 408 are transient on the provider's side, not a rejected credential
+            if (rejected != null && status != 429 && status != 408) {
+                log.warn("{} rejected the request ({}): {}", upstream, rejected, ex.getMessage());
+                throw ApiException.unauthorized(rejected);
             }
-            log.warn("LINE rejected the request ({}): {}", rejected, ex.getMessage());
-            throw ApiException.unauthorized(rejected);
+            log.warn("{} call failed ({}): {}", upstream, status, ex.getMessage());
+            throw ApiException.serviceUnavailable(MessageKey.COMMON_SERVICE_UNAVAILABLE);
         } catch (RestClientException ex) {
-            log.warn("LINE call failed (external service): {}", ex.getMessage());
+            log.warn("{} call failed (external service): {}", upstream, ex.getMessage());
             throw ApiException.serviceUnavailable(MessageKey.COMMON_SERVICE_UNAVAILABLE);
         }
     }
@@ -925,14 +927,8 @@ public class AuthService {
             return cached.keys();
         }
 
-        Map<String, Object> jwks;
-        try {
-            jwks = restClient.get().uri(url).retrieve().body(Map.class);
-        } catch (RestClientException ex) {
-            // JWKS endpoint 5xx / connection timeout / DNS failure -> upstream/external service failure, retryable (503), not a credential problem
-            log.warn("Failed to fetch {} JWKS (external service): {}", provider, ex.getMessage());
-            throw ApiException.serviceUnavailable(MessageKey.COMMON_SERVICE_UNAVAILABLE);
-        }
+        // Any JWKS endpoint failure, 4xx included, is upstream and retryable (503), not a credential problem
+        Map<String, Object> jwks = callUpstream(provider + " JWKS", () -> restClient.get().uri(url).retrieve().body(Map.class), null);
 
         if (jwks == null || jwks.get("keys") == null) {
             log.warn("Abnormal {} JWKS response: body or keys is null", provider);

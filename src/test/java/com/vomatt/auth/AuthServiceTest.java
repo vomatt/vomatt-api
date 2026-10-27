@@ -1062,6 +1062,19 @@ class AuthServiceTest {
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey()).isEqualTo(MessageKey.COMMON_SERVICE_UNAVAILABLE));
     }
 
+    /** Unlike a LINE call, a JWKS 4xx is never the user's fault: the provider's key endpoint is broken or moved. */
+    @Test
+    void shouldThrowServiceUnavailableWhenGoogleJwksReturns4xx() {
+        ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
+        stubJwksFetch(null, new org.springframework.web.client.HttpClientErrorException(HttpStatus.NOT_FOUND));
+
+        assertThatThrownBy(() -> authService.googleLogin("a.b.c"))
+                .isInstanceOfSatisfying(ApiException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+                    assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMON_SERVICE_UNAVAILABLE);
+                });
+    }
+
     private void assertGoogleRejected(String idToken, MessageKey expected) {
         assertThatThrownBy(() -> authService.googleLogin(idToken))
                 .isInstanceOf(ApiException.class)

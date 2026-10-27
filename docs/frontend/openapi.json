@@ -9198,7 +9198,7 @@
     },
     "/api/auth/line" : {
       "post" : {
-        "description" : "**Auth**: public\n**Precondition**: the client completed LINE Login and holds the authorization `code` and the `redirectUri` it used\n**Behavior**: exchanges the code with LINE, reads the LINE profile and signs in the matching user, creating it if new. If LINE provides no email, a synthetic `line_<userId>@line.oauth` email is used, so `user.email` in the response is never null for LINE logins\n**Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated\n**Errors**:\n- 400 `auth.line.not_configured`: LINE login is not configured on the server\n- 401 `auth.line.token_exchange_failed`: LINE did not return an access token for this code\n- 401 `auth.line.profile_failed`: the LINE profile could not be read\n- 403 `auth.account_banned`: the user is suspended (`active=false`)",
+        "description" : "**Auth**: public\n**Precondition**: the client completed LINE Login and holds the authorization `code` and the `redirectUri` it used\n**Behavior**: exchanges the code with LINE, reads the LINE profile and signs in the matching user, creating it if new. If LINE provides no email, a synthetic `line_<userId>@line.oauth` email is used, so `user.email` in the response is never null for LINE logins\n**Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated\n**Errors**:\n- 400 `auth.line.not_configured`: LINE login is not configured on the server\n- 401 `auth.line.token_exchange_failed`: LINE rejected the code (4xx) or returned no access token\n- 401 `auth.line.profile_failed`: LINE rejected the access token (4xx) or returned no profile\n- 403 `auth.account_banned`: the user is suspended (`active=false`)\n- 503 `common.service_unavailable`: LINE's token or profile endpoint failed (5xx) or did not answer in time",
         "operationId" : "lineLogin",
         "requestBody" : {
           "content" : {
@@ -9311,6 +9311,23 @@
               }
             },
             "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          },
+          "503" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : null,
+                  "error" : "Service temporarily unavailable, please try again later",
+                  "errorCode" : "common.service_unavailable",
+                  "message" : "Service temporarily unavailable, please try again later",
+                  "success" : false
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "LINE failed (5xx) or did not answer in time; safe to retry (`common.service_unavailable`)"
           }
         },
         "summary" : "Sign in with LINE",

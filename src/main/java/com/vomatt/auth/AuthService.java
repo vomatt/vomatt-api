@@ -29,6 +29,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import tools.jackson.databind.json.JsonMapper;
@@ -681,7 +682,8 @@ public class AuthService {
         tokenBody.add("client_id", lineChannelId);
         tokenBody.add("client_secret", lineChannelSecret);
 
-        Map<String, Object> tokenResponse = postForm(lineTokenUrl, tokenBody);
+        Map<String, Object> tokenResponse = callLine(() -> postForm(lineTokenUrl, tokenBody),
+                MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
 
         if (tokenResponse == null || tokenResponse.get("access_token") == null) {
             throw ApiException.unauthorized(MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
@@ -689,8 +691,9 @@ public class AuthService {
 
         String accessToken = (String) tokenResponse.get("access_token");
 
-        var lineProfile = restClient.get().uri(lineProfileUrl)
-                .header("Authorization", "Bearer " + accessToken).retrieve().body(Map.class);
+        Map<String, Object> lineProfile = callLine(() -> restClient.get().uri(lineProfileUrl)
+                .header("Authorization", "Bearer " + accessToken).retrieve().body(Map.class),
+                MessageKey.AUTH_LINE_PROFILE_FAILED);
 
         if (lineProfile == null || lineProfile.get("userId") == null) {
             throw ApiException.unauthorized(MessageKey.AUTH_LINE_PROFILE_FAILED);
@@ -724,6 +727,22 @@ public class AuthService {
         // line_<userId>@line.oauth is unique and cannot be set by an attacker to a victim's real email -> both cases are safely treated as verified
         FoundUser found = findOrCreateUserByEmail(User.normalizeEmail(email), displayName, "line", true);
         return buildAuthResponse(found.user(), false, found.created());
+    }
+
+    /**
+     * Runs a call to LINE: a 4xx means LINE rejected the code or token -> 401 {@code rejected}; a 5xx or a
+     * connection failure / timeout is an upstream outage -> 503, retryable (as in {@link #fetchJwks}).
+     */
+    private static <T> T callLine(Supplier<T> call, MessageKey rejected) {
+        try {
+            return call.get();
+        } catch (HttpClientErrorException ex) {
+            log.warn("LINE rejected the request ({}): {}", rejected, ex.getMessage());
+            throw ApiException.unauthorized(rejected);
+        } catch (RestClientException ex) {
+            log.warn("LINE call failed (external service): {}", ex.getMessage());
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, MessageKey.COMMON_SERVICE_UNAVAILABLE);
+        }
     }
 
     @SuppressWarnings("unchecked")

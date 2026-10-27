@@ -219,6 +219,9 @@ public class VoteCommentService {
         if (commentReportRepository.insertIfAbsent(UUIDv7Generator.generateId(), commentId, reporterId,
                 request.reason().name(), note) > 0) {
             log.info("User {} reported comment {} as {}", userId, commentId, request.reason());
+        } else if (!userRepository.existsById(reporterId)) {
+            // An access token outlives account deletion, so the signed-in user may be gone
+            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
         }
     }
 

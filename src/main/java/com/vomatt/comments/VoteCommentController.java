@@ -481,7 +481,7 @@ public class VoteCommentController {
                               "error": "You cannot report your own comment"
                             }
                             """)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Comment not found or deleted (errorCode `comment.not_found`), or its Poll is Deleted (`vote.not_found`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Comment not found or deleted (errorCode `comment.not_found`), its Poll is Deleted (`vote.not_found`), or the current user no longer exists (`user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(ref = "#/components/examples/" + OpenAPIConfig.EX_NOT_FOUND)))
     @Operation(summary = "Report a Comment or Reply",
@@ -496,6 +496,7 @@ public class VoteCommentController {
                     - 400 `common.bad_request`: `reason` is not one of the values above
                     - 404 `comment.not_found`: Comment does not exist, is deleted, or is hidden from the caller as in the lists (written by a user the caller blocked, or a Reply in a thread such a user started)
                     - 404 `vote.not_found`: the Comment's Poll is Deleted or not reachable by the caller
+                    - 404 `user.not_found`: signed-in user no longer exists
                     """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = {

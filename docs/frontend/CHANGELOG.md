@@ -4,6 +4,7 @@ Contract changes that affect the frontend. 💥 BREAKING means frontend code mus
 
 ## 2026-10-27
 
+- `POST /api/votes/{voteId}/comments/{commentId}/report`: a signed-in user whose account was deleted now gets 404 `user.not_found`. Before, it was 500.
 - `POST /api/votes/{voteId}/comments/{commentId}/like`, `POST /api/votes/{voteId}/comments/{commentId}/report` and `POST /api/votes/{voteId}/comments` with a `parentId` now respond 404 `comment.not_found` for a Comment the lists hide from the caller: one written by a user the caller blocked, or a Reply in a thread such a user started. Before, knowing the id was enough to like, report or reply to it. `DELETE .../like` is not affected, so a like given before the block can still be taken back. A block by the author alone does not hide their Comments, as in the lists.
 - `PUT /api/votes/{voteId}/comments/{commentId}`: the response's `likedByCurrentUser` now reflects the caller's like. Before, it was always `false`, so editing a Comment you had liked showed it as not liked until the next read.
 - `POST /api/votes/{voteId}/comments/{commentId}/like`: two likes from the same user at the same moment (e.g. a double tap) now both succeed with one like kept. Before, the second could fail with 500.

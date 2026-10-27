@@ -130,6 +130,16 @@ class CommentReportPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should return 404 user.not_found when the signed-in user no longer exists")
+    void shouldThrowUserNotFoundWhenReporterIsGone() {
+        String gone = UUID.randomUUID().toString();
+
+        assertThatThrownBy(() -> commentService.reportComment(comment.getId(), gone,
+                new ReportCommentRequest(CommentReportReason.SPAM, null)))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND));
+    }
+
+    @Test
     @DisplayName("should drop a user's reports when the account is deleted")
     void shouldDropReportsWhenReporterDeleted() {
         report(reporter, comment, CommentReportReason.SPAM, null);

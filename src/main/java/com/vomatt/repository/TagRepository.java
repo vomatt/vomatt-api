@@ -33,6 +33,7 @@ public interface TagRepository extends JpaRepository<Tag, UUID> {
             ORDER BY t.usageCount DESC, t.id DESC""")
     List<Tag> findPopularPage(@Param("afterCount") Integer afterCount, @Param("afterId") UUID afterId, Limit limit);
 
+    // An empty set is fine: Hibernate renders the empty IN as 1=0 (TagUsagePostgresTest)
     @Modifying
     @Query("UPDATE Tag t SET t.usageCount = t.usageCount + 1 WHERE t.id IN :tagIds")
     void incrementUsageCount(@Param("tagIds") Set<UUID> tagIds);

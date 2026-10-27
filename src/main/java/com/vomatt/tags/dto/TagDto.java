@@ -1,5 +1,6 @@
 package com.vomatt.tags.dto;
 
+import com.vomatt.entity.Tag;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -23,4 +24,9 @@ public class TagDto {
     private int displayOrder;
     @Schema(description = "Number of Public Polls currently using this tag (Unlisted and Deleted Polls are not counted); the popular list is ordered by this value", example = "42")
     private int usageCount;
+
+    public static TagDto from(Tag tag) {
+        return new TagDto(tag.getId().toString(), tag.getName(), tag.getSlug(), tag.getDescription(),
+                tag.getDisplayOrder(), tag.getUsageCount());
+    }
 }

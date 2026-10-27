@@ -6,6 +6,7 @@ import com.vomatt.entity.Audience;
 import com.vomatt.entity.Invitee;
 import com.vomatt.entity.Tag;
 import com.vomatt.entity.User;
+import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
 import com.vomatt.entity.VoteStatus;
@@ -32,6 +33,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.invocation.InvocationOnMock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
@@ -139,20 +141,24 @@ class VoteServiceTest {
         when(voteRepository.findByIdWithOptions(v.getId())).thenReturn(Optional.of(v));
     }
 
+    // Create saves
     private void stubSaveAssignsId() {
-        List<Vote> saved = new ArrayList<>();
-        when(voteRepository.save(any(Vote.class))).thenAnswer(inv -> {
-            Vote v = inv.getArgument(0);
-            if (v.getId() == null) {
-                setId(v, UUID.randomUUID()); // simulate DB-assigned ID
-                ReflectionTestUtils.setField(v, "createdAt", OffsetDateTime.now()); // simulate @PrePersist
-            }
-            v.getOptions().stream().filter(o -> o.getId() == null).forEach(o -> setId(o, UUID.randomUUID()));
-            saved.add(v);
-            return v;
-        });
-        // The response is reloaded with its options after saving
-        when(voteRepository.findByIdWithOptions(any(UUID.class))).thenAnswer(inv -> Optional.of(saved.getLast()));
+        when(voteRepository.save(any(Vote.class))).thenAnswer(VoteServiceTest::assignIds);
+    }
+
+    // Edit saves and flushes
+    private void stubSaveAndFlushAssignsId() {
+        when(voteRepository.saveAndFlush(any(Vote.class))).thenAnswer(VoteServiceTest::assignIds);
+    }
+
+    private static Vote assignIds(InvocationOnMock inv) {
+        Vote v = inv.getArgument(0);
+        if (v.getId() == null) {
+            setId(v, UUID.randomUUID()); // simulate DB-assigned ID
+            ReflectionTestUtils.setField(v, "createdAt", OffsetDateTime.now()); // simulate @PrePersist
+        }
+        v.getOptions().stream().filter(o -> o.getId() == null).forEach(o -> setId(o, UUID.randomUUID()));
+        return v;
     }
 
     private CreateVoteRequest.VoteOptionRequest buildOption(String text) {
@@ -567,6 +573,41 @@ class VoteServiceTest {
                 serviceLogger.detachAppender(logs);
             }
         }
+
+        @Test
+        @DisplayName("should log only an actual anonymity change, without voter or option, when the same option is cast again")
+        void shouldLogAnonymityChangeWhenSameOptionCastAgain() {
+            vote.setStartTime(OffsetDateTime.now().minusHours(1));
+            vote.setEndTime(OffsetDateTime.now().plusDays(1));
+            UUID optionId = UUID.randomUUID();
+            setId(option, optionId);
+            UserVote ballot = new UserVote(user, vote, option);
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(voteOptionRepository.findById(optionId)).thenReturn(Optional.of(option));
+            when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+            when(userVoteRepository.findByUserIdAndVoteId(userId, voteId)).thenReturn(Optional.of(ballot));
+            stubConvertToVoteResponse(vote);
+            Logger serviceLogger = (Logger) LoggerFactory.getLogger(VoteService.class);
+            ListAppender<ILoggingEvent> logs = new ListAppender<>();
+            logs.start();
+            serviceLogger.addAppender(logs);
+            try {
+                VoteRequest request = new VoteRequest();
+                request.setOptionIds(List.of(optionId.toString()));
+                request.setAnonymous(true);
+                voteService.vote(voteId.toString(), request, userId.toString());
+                // Same option, same flag: nothing changed, nothing logged
+                voteService.vote(voteId.toString(), request, userId.toString());
+
+                assertThat(ballot.isAnonymous()).isTrue();
+                assertThat(logs.list).extracting(ILoggingEvent::getFormattedMessage)
+                        .singleElement().satisfies(m -> assertThat(m).contains("ballot.anonymity")
+                                .contains(voteId.toString()).contains("anonymous=true")
+                                .doesNotContain(userId.toString()).doesNotContain(optionId.toString()));
+            } finally {
+                serviceLogger.detachAppender(logs);
+            }
+        }
     }
 
     @Nested
@@ -858,7 +899,7 @@ class VoteServiceTest {
 
             assertThatThrownBy(() -> voteService.updateVote(voteId.toString(), editRequest(null), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_NOT_EDITABLE));
-            verify(voteRepository, never()).save(any());
+            verify(voteRepository, never()).saveAndFlush(any());
         }
 
         @Test
@@ -881,7 +922,7 @@ class VoteServiceTest {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
-            stubSaveAssignsId();
+            stubSaveAndFlushAssignsId();
             CreateVoteRequest request = editRequest(null);
 
             request.setAnonymous(true);
@@ -908,7 +949,7 @@ class VoteServiceTest {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
-            stubSaveAssignsId();
+            stubSaveAndFlushAssignsId();
             CreateVoteRequest request = editRequest(null);
             request.setAnonymous(true);
             request.setVoterVisibility(VoterVisibility.SIGNED_IN);
@@ -927,7 +968,7 @@ class VoteServiceTest {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
-            stubSaveAssignsId();
+            stubSaveAndFlushAssignsId();
             CreateVoteRequest request = editRequest(null);
             request.setAudience(Audience.UNLISTED);
 
@@ -957,7 +998,7 @@ class VoteServiceTest {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
-            stubSaveAssignsId();
+            stubSaveAndFlushAssignsId();
 
             CreateVoteRequest request = editRequest(null);
 
@@ -980,7 +1021,7 @@ class VoteServiceTest {
             when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
-            stubSaveAssignsId();
+            stubSaveAndFlushAssignsId();
             CreateVoteRequest request = editRequest(null);
             request.setStartTime(null);
 
@@ -1019,7 +1060,7 @@ class VoteServiceTest {
             when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
             when(tagRepository.findAllById(Set.of(kept.getId(), added.getId()))).thenReturn(List.of(kept, added));
-            stubSaveAssignsId();
+            stubSaveAndFlushAssignsId();
 
             voteService.updateVote(voteId.toString(), editRequest(List.of(kept.getId(), added.getId())), userId.toString());
 
@@ -1045,7 +1086,7 @@ class VoteServiceTest {
                     .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_FORBIDDEN));
 
             assertThat(vote.isActive()).isTrue();
-            verify(voteRepository, never()).save(any());
+            verify(voteRepository, never()).saveAndFlush(any());
         }
 
         @Test
@@ -1056,15 +1097,14 @@ class VoteServiceTest {
             vote.scheduleEnd(deadline);
             vote.setAudience(Audience.UNLISTED);
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
-            when(voteRepository.save(vote)).thenReturn(vote);
-            stubConvertToVoteResponse(vote);
+            when(voteRepository.saveAndFlush(vote)).thenReturn(vote);
 
             voteService.closeVote(voteId.toString(), userId.toString());
 
             assertThat(vote.getStatus()).isEqualTo(VoteStatus.ENDED);
             assertThat(vote.getEndTime()).isBefore(deadline);
             assertThat(vote.getDeadline()).isEqualTo(deadline);
-            verify(voteRepository).save(vote);
+            verify(voteRepository).saveAndFlush(vote);
         }
 
         @Test
@@ -1078,7 +1118,7 @@ class VoteServiceTest {
             assertThatThrownBy(() -> voteService.closeVote(voteId.toString(), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_CLOSE_PUBLIC_NOT_ALLOWED));
             assertThat(vote.getEndTime()).isEqualTo(deadline);
-            verify(voteRepository, never()).save(any());
+            verify(voteRepository, never()).saveAndFlush(any());
         }
 
         @Test
@@ -1093,7 +1133,7 @@ class VoteServiceTest {
             assertThatThrownBy(() -> voteService.closeVote(voteId.toString(), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_CLOSE_SCHEDULED));
             assertThat(vote.getEndTime()).isEqualTo(deadline);
-            verify(voteRepository, never()).save(any());
+            verify(voteRepository, never()).saveAndFlush(any());
         }
 
         @Test
@@ -1103,8 +1143,7 @@ class VoteServiceTest {
             vote.setStartTime(OffsetDateTime.now().minusDays(1));
             vote.setEndTime(ended);
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
-            when(voteRepository.save(vote)).thenReturn(vote);
-            stubConvertToVoteResponse(vote);
+            when(voteRepository.saveAndFlush(vote)).thenReturn(vote);
 
             voteService.closeVote(voteId.toString(), userId.toString());
 
@@ -1179,7 +1218,7 @@ class VoteServiceTest {
             voteService.softDelete(vote, OffsetDateTime.now());
 
             assertThat(vote.getDeletedAt()).isEqualTo(deletedAt);
-            verify(tagRepository, never()).decrementUsageCount(any());
+            verify(tagRepository, never()).decrementUsageCount(argThat(ids -> !ids.isEmpty()));
         }
 
         @Test
@@ -1190,7 +1229,7 @@ class VoteServiceTest {
             voteService.softDelete(vote, OffsetDateTime.now());
 
             assertThat(vote.getDeletedAt()).isNotNull();
-            verify(tagRepository, never()).decrementUsageCount(any());
+            verify(tagRepository, never()).decrementUsageCount(argThat(ids -> !ids.isEmpty()));
         }
 
         @Test
@@ -1211,7 +1250,7 @@ class VoteServiceTest {
 
             voteService.restore(vote);
 
-            verify(tagRepository, never()).incrementUsageCount(any());
+            verify(tagRepository, never()).incrementUsageCount(argThat(ids -> !ids.isEmpty()));
         }
 
         @Test
@@ -1796,7 +1835,7 @@ class VoteServiceTest {
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.TAG_IDS_INVALID));
 
             verify(voteRepository, never()).save(any());
-            verify(tagRepository, never()).incrementUsageCount(any());
+            verify(tagRepository, never()).incrementUsageCount(argThat(ids -> !ids.isEmpty()));
         }
 
         @Test
@@ -1815,7 +1854,7 @@ class VoteServiceTest {
             voteService.createVote(request, userId.toString());
 
             verify(tagRepository, never()).findAllById(any());
-            verify(tagRepository, never()).incrementUsageCount(any());
+            verify(tagRepository, never()).incrementUsageCount(argThat(ids -> !ids.isEmpty()));
         }
     }
 }

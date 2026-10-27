@@ -92,7 +92,7 @@ class PasskeyControllerTest {
     void shouldReturnPasskeyWhenVerified() throws Exception {
         UUID id = UUID.randomUUID();
         when(passkeyService.verifyRegistration(eq(USER_ID), any(PasskeyRegistrationVerifyRequest.class)))
-                .thenReturn(new PasskeyResponse(id, "iPhone", OffsetDateTime.now(), null));
+                .thenReturn(new PasskeyResponse(id, "iPhone", OffsetDateTime.now(), null, List.of("internal")));
 
         mockMvc.perform(post("/api/auth/passkey/register/verify").contentType(MediaType.APPLICATION_JSON).content(VERIFY_BODY))
                 .andExpect(status().isOk())

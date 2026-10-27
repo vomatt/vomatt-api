@@ -52,7 +52,7 @@ public class PasskeyController {
     private static final String OK_PASSKEY = """
             {
               "success": true,
-              "data": {"id": "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70", "name": "iPhone", "createdAt": "2026-10-27T08:30:00Z", "lastUsedAt": null},
+              "data": {"id": "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70", "name": "iPhone", "createdAt": "2026-10-27T08:30:00Z", "lastUsedAt": null, "transports": ["hybrid", "internal"]},
               "message": null,
               "errorCode": null,
               "error": null

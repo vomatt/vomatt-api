@@ -1,5 +1,7 @@
 package com.vomatt.users;
 
+import com.vomatt.auth.PasskeyService;
+import com.vomatt.auth.dto.PasskeyResponse;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.users.dto.FollowUserDto;
@@ -32,7 +34,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/users")
@@ -44,6 +48,7 @@ public class UserController {
 
     private final UserService userService;
     private final VoteService voteService;
+    private final PasskeyService passkeyService;
 
     @GetMapping("/me")
     @CommonApiResponses
@@ -406,6 +411,51 @@ public class UserController {
             @PathVariable String userId,
             @AuthenticationPrincipal UserPrincipal principal) {
         userService.unblockUser(principal.userId(), userId);
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
+    @GetMapping("/me/passkeys")
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
+            content = @Content(examples = @ExampleObject(value = """
+                    {"success":true,"data":[{"id":"0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70","name":"iPhone","createdAt":"2026-10-27T08:30:00Z","lastUsedAt":"2026-10-28T09:15:00Z","transports":["hybrid","internal"]},{"id":"0199c3a4-1d2e-7f3a-8b4c-5d6e7f8a9b0c","name":null,"createdAt":"2026-10-27T10:00:00Z","lastUsedAt":null,"transports":[]}],"message":null,"errorCode":null,"error":null}""")))
+    @Operation(summary = "List my passkeys", description = """
+            **Auth**: required
+            **Precondition**: none
+            **Behavior**: the caller's passkeys, oldest first (`[]` when none). Key material (credential id, public key, \
+            signature counter) is never returned; `name` is null when none was given at registration, `lastUsedAt` null until \
+            the passkey is first used to sign in
+            **Side effects**: none
+            **Errors**: none beyond 401""")
+    public ResponseEntity<ApiResponse<List<PasskeyResponse>>> listMyPasskeys(@AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(passkeyService.list(principal.userId())));
+    }
+
+    @DeleteMapping("/me/passkeys/{passkeyId}")
+    @Auditable(action = "DELETE", resourceType = "PASSKEY", resourceIdIndex = 0)
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
+            content = @Content(examples = @ExampleObject(value = """
+                    {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No passkey with this ID belongs to the caller (errorCode `common.not_found`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(value = """
+                            {"success":false,"data":null,"message":"The requested resource was not found","errorCode":"common.not_found","error":"The requested resource was not found"}""")))
+    @Operation(summary = "Delete one of my passkeys", description = """
+            **Auth**: required
+            **Precondition**: the passkey belongs to the caller
+            **Behavior**: removes the passkey, so it can no longer sign in to this account. Deleting the last passkey is allowed: \
+            the account keeps its other sign-in methods. The passkey stays on the device \
+            until the user removes it there
+            **Side effects**: the delete is written to the audit log
+            **Errors**:
+            - 400 `common.type_mismatch`: `passkeyId` is not a valid UUID
+            - 404 `common.not_found`: no passkey with this ID, or it belongs to another user""")
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> deleteMyPasskey(
+            @Parameter(description = "Id of the passkey to delete", required = true, example = "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70")
+            @PathVariable UUID passkeyId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        passkeyService.delete(principal.userId(), passkeyId);
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 

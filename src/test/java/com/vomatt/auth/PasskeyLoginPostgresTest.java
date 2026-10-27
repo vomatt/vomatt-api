@@ -167,6 +167,16 @@ class PasskeyLoginPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should reject sign-in with a passkey its owner deleted")
+    void shouldRejectWhenPasskeyDeleted() {
+        PasskeyCredential registered = register();
+        passkeyService.delete(user.getId().toString(), registered.getId());
+        em.flush();
+
+        assertInvalid(() -> passkeyService.authenticate(request(signIn())));
+    }
+
+    @Test
     @DisplayName("should reject a wrong signature")
     void shouldRejectWhenSignatureWrong() {
         register();

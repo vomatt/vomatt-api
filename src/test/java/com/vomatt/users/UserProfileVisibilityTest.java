@@ -215,7 +215,7 @@ class UserProfileVisibilityTest {
                     .thenReturn(expectedResponse);
 
             // When
-            UserProfileResponse result = userService.getUserProfile(USERNAME, false, null);
+            UserProfileResponse result = userService.getUserProfile(USERNAME, null);
 
             // Then
             assertThat(result).isNotNull();
@@ -233,7 +233,7 @@ class UserProfileVisibilityTest {
         void shouldReturnNotFoundWhenUserSuspended() {
             when(userRepository.findProfileForViewer(USERNAME, null)).thenReturn(Optional.of(createTestProjection(false)));
 
-            assertThatThrownBy(() -> userService.getUserProfile(USERNAME, false, null))
+            assertThatThrownBy(() -> userService.getUserProfile(USERNAME, null))
                     .isInstanceOfSatisfying(ApiException.class, ex -> {
                         assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
                         assertThat(ex.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND);
@@ -264,7 +264,7 @@ class UserProfileVisibilityTest {
                     .thenReturn(expectedResponse);
 
             // When
-            UserProfileResponse result = userService.getUserProfile(USERNAME, false, null);
+            UserProfileResponse result = userService.getUserProfile(USERNAME, null);
 
             // Then
             assertThat(result.location()).isEqualTo("Taipei");

@@ -266,7 +266,7 @@ class UserControllerTest {
     @Test
     @DisplayName("should return null relation flags under isFollowing / isBlocked keys when signed out")
     void shouldReturnNullRelationFlagsWhenSignedOut() throws Exception {
-        when(userService.getUserProfile("alice", false, null)).thenReturn(profile(null, null));
+        when(userService.getUserProfile("alice", null)).thenReturn(profile(null, null));
 
         mockMvc.perform(get("/api/users/alice"))
                 .andExpect(status().isOk())
@@ -285,7 +285,7 @@ class UserControllerTest {
         // What AnonymousAuthenticationFilter leaves on a public path when there is no valid token
         SecurityContextHolder.getContext().setAuthentication(new org.springframework.security.authentication.AnonymousAuthenticationToken(
                 "key", "anonymousUser", AuthorityUtils.createAuthorityList("ROLE_ANONYMOUS")));
-        when(userService.getUserProfile("alice", false, null)).thenReturn(profile(null, null));
+        when(userService.getUserProfile("alice", null)).thenReturn(profile(null, null));
 
         mockMvc.perform(get("/api/users/alice"))
                 .andExpect(status().isOk())
@@ -296,7 +296,7 @@ class UserControllerTest {
     @DisplayName("should pass the signed-in viewer to the profile lookup")
     void shouldPassViewerIdWhenSignedIn() throws Exception {
         signIn("u1");
-        when(userService.getUserProfile("alice", false, "u1")).thenReturn(profile(true, false));
+        when(userService.getUserProfile("alice", "u1")).thenReturn(profile(true, false));
 
         mockMvc.perform(get("/api/users/alice"))
                 .andExpect(status().isOk())
@@ -344,7 +344,7 @@ class UserControllerTest {
     @DisplayName("should return mutual follower count and preview under their keys, null when signed out")
     void shouldReturnMutualFollowerKeysWhenReadingProfile() throws Exception {
         signIn("u1");
-        when(userService.getUserProfile("alice", false, "u1")).thenReturn(new UserProfileResponse("id-1", "alice", null, null,
+        when(userService.getUserProfile("alice", "u1")).thenReturn(new UserProfileResponse("id-1", "alice", null, null,
                 "bot:boba", null, 0, 0, 1204, 0, null, null, null, null, null, true, false, false,
                 3, List.of(new UserDto("id-2", "jtan", "J Tan", "bot:boba"))));
 
@@ -358,7 +358,7 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.data.mutualFollowersPreview[0].avatarUrl").value("bot:boba"));
 
         SecurityContextHolder.clearContext();
-        when(userService.getUserProfile("alice", false, null)).thenReturn(profile(null, null));
+        when(userService.getUserProfile("alice", null)).thenReturn(profile(null, null));
         mockMvc.perform(get("/api/users/alice"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data", org.hamcrest.Matchers.hasKey("mutualFollowersCount")))

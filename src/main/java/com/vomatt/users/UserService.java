@@ -2,19 +2,24 @@ package com.vomatt.users;
 
 import static com.vomatt.common.util.TextUtil.blankToNull;
 
+import com.vomatt.common.audit.AuditLogRepository;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.security.UserPrincipal;
 import com.vomatt.users.dto.FollowUserDto;
 import com.vomatt.users.dto.MyProfileResponse;
 import com.vomatt.users.dto.UpdateProfileRequest;
+import com.vomatt.users.dto.UserDataExportResponse;
 import com.vomatt.users.dto.UserDto;
 import com.vomatt.users.dto.UserProfileResponse;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserBlock;
 import com.vomatt.entity.UserFollow;
 import com.vomatt.entity.UserPreference;
+import com.vomatt.entity.VoteOption;
+import com.vomatt.repository.FeedbackRepository;
 import com.vomatt.repository.FollowEdge;
 import com.vomatt.repository.UserBlockRepository;
 import com.vomatt.repository.UserFollowRepository;
@@ -23,8 +28,11 @@ import com.vomatt.repository.UserProfileProjection;
 import com.vomatt.common.response.Cursor;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.repository.UserRepository;
+import com.vomatt.repository.UserVoteRepository;
+import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.VoteRepository;
+import com.vomatt.votes.VoteViewRecorder;
 import com.vomatt.repository.LockTimeout;
 import com.vomatt.common.util.AfterCommit;
 import com.vomatt.common.util.TextUtil;
@@ -35,10 +43,14 @@ import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -56,12 +68,12 @@ public class UserService {
     private final VoteOptionRepository voteOptionRepository;
     private final VoteRepository voteRepository;
     private final LockTimeout lockTimeout;
-    private final com.vomatt.common.audit.AuditLogRepository auditLogRepository;
-    private final com.vomatt.repository.UserVoteRepository userVoteRepository;
-    private final com.vomatt.repository.VoteCommentRepository voteCommentRepository;
-    private final com.vomatt.repository.FeedbackRepository feedbackRepository;
-    private final com.vomatt.common.redis.RedisService redisService;
-    private final com.vomatt.votes.VoteViewRecorder voteViewRecorder;
+    private final AuditLogRepository auditLogRepository;
+    private final UserVoteRepository userVoteRepository;
+    private final VoteCommentRepository voteCommentRepository;
+    private final FeedbackRepository feedbackRepository;
+    private final RedisService redisService;
+    private final VoteViewRecorder voteViewRecorder;
 
     /** One export per user per UTC day: the response is the account's whole footprint and is not cheap to build. */
     private static final String EXPORT_COUNTER_NS = "export:daily";
@@ -250,8 +262,7 @@ public class UserService {
     /** Users who follow the given user, most recently followed first, as public profile fields with the caller's relation. */
     @Transactional(readOnly = true)
     public CursorResponse<FollowUserDto> listFollowers(String username, String cursor, Integer limit, String viewerId) {
-        UUID userId = userRepository.findActiveByUsername(username)
-            .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND)).getId();
+        UUID userId = findActiveUserId(username);
         int size = CursorResponse.limit(limit);
         // Bound to the user, so a cursor of another user's follower list is rejected
         Cursor after = Cursor.decode(cursor, Cursor.Scope.USER_FOLLOWERS, userId);
@@ -264,8 +275,7 @@ public class UserService {
     /** Users the given user follows, most recently followed first, as public profile fields with the caller's relation. */
     @Transactional(readOnly = true)
     public CursorResponse<FollowUserDto> listFollowing(String username, String cursor, Integer limit, String viewerId) {
-        UUID userId = userRepository.findActiveByUsername(username)
-            .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND)).getId();
+        UUID userId = findActiveUserId(username);
         return followedPage(userId, Cursor.Scope.USER_FOLLOWING, userId, cursor, limit, UUID.fromString(viewerId));
     }
 
@@ -275,8 +285,7 @@ public class UserService {
      */
     @Transactional(readOnly = true)
     public CursorResponse<FollowUserDto> listMutualFollowers(String username, String cursor, Integer limit, String viewerId) {
-        UUID userId = userRepository.findActiveByUsername(username)
-            .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND)).getId();
+        UUID userId = findActiveUserId(username);
         UUID viewer = UUID.fromString(viewerId);
         int size = CursorResponse.limit(limit);
         Cursor after = Cursor.decode(cursor, Cursor.Scope.USER_MUTUAL_FOLLOWERS, userId);
@@ -296,7 +305,7 @@ public class UserService {
      *                 are null both when signed out and on the caller's own profile
      */
     @Transactional(readOnly = true)
-    public UserProfileResponse getUserProfile(String username, boolean isVisibility, String viewerId) {
+    public UserProfileResponse getUserProfile(String username, String viewerId) {
         // Use Projection to fetch profile and statistics in one query, avoiding N+1
         // Suspended users are hidden, same as user search and their Poll list
         boolean signedIn = viewerId != null;
@@ -315,7 +324,7 @@ public class UserService {
         }
 
         // Query target user's visibility settings
-        Map<String, Boolean> visibility = loadVisibilitySettings(projection.getId(), isVisibility);
+        Map<String, Boolean> visibility = loadVisibilitySettings(projection.getId(), false);
         return userMapper.toPublicProfileResponse(projection, visibility,
                 signedIn ? projection.getFollowing() : null, signedIn ? projection.getBlocked() : null,
                 signedIn ? projection.getFollowsViewer() : null, mutualCount, mutualPreview);
@@ -329,70 +338,68 @@ public class UserService {
         UserProfileProjection projection = userRepository.findProfileByUsername(user.getUsername())
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
 
-        Map<String, Boolean> visibility = loadVisibilitySettings(UUID.fromString(userId), false);
+        Map<String, Boolean> visibility = loadVisibilitySettings(user.getId(), false);
         boolean anonymousBallotByDefault = preferenceRepository.anonymousBallotByDefault(user.getId());
         return userMapper.toMyProfileResponse(user, projection, visibility, anonymousBallotByDefault);
     }
 
     /** Data portability: everything stored about the caller, nothing about anyone else. Fails closed when Redis is down. */
     @Transactional(readOnly = true)
-    public com.vomatt.users.dto.UserDataExportResponse exportMyData(String userId) {
-        String day = TextUtil.utcDay();
+    public UserDataExportResponse exportMyData(String userId) {
+        String counterKey = userId + ":" + TextUtil.utcDay();
         // Checked first so a spent quota costs nothing, counted only once the document is built, so a failure
         // (DB error, missing account) does not spend the day's export
-        if (redisService.get(EXPORT_COUNTER_NS, userId + ":" + day, Long.class) != null) {
+        if (redisService.get(EXPORT_COUNTER_NS, counterKey, Long.class) != null) {
             throw ApiException.tooManyRequests(MessageKey.COMMON_RATE_LIMITED);
         }
         UUID userUuid = UUID.fromString(userId);
         MyProfileResponse profile = getMyProfile(userId);
         Map<String, String> preferences = preferenceRepository.findByUserId(userUuid).stream()
-                .collect(Collectors.toMap(UserPreference::getKey, UserPreference::getValue, (a, b) -> a, java.util.TreeMap::new));
-        List<com.vomatt.users.dto.UserDataExportResponse.PollExport> polls = voteRepository.findByCreatorIdOrderByCreatedAtDesc(userUuid).stream()
-                .map(v -> new com.vomatt.users.dto.UserDataExportResponse.PollExport(v.getId().toString(), v.getTitle(), v.getDescription(),
+                .collect(Collectors.toMap(UserPreference::getKey, UserPreference::getValue, (a, b) -> a, TreeMap::new));
+        List<UserDataExportResponse.PollExport> polls = voteRepository.findByCreatorIdOrderByCreatedAtDesc(userUuid).stream()
+                .map(v -> new UserDataExportResponse.PollExport(v.getId().toString(), v.getTitle(), v.getDescription(),
                         v.getAudience().name(), v.getStartTime(), v.getEndTime(), v.getCreatedAt(), v.getDeletedAt() != null,
-                        v.getOptions().stream().sorted(java.util.Comparator.comparing(o -> o.getDisplayOrder() == null ? 0 : o.getDisplayOrder()))
-                                .map(o -> o.getText()).toList()))
+                        v.getOptions().stream().sorted(Comparator.comparing(o -> o.getDisplayOrder() == null ? 0 : o.getDisplayOrder()))
+                                .map(VoteOption::getText).toList()))
                 .toList();
-        List<com.vomatt.users.dto.UserDataExportResponse.CommentExport> comments = voteCommentRepository.findByUserId(userUuid).stream()
-                .map(c -> new com.vomatt.users.dto.UserDataExportResponse.CommentExport(c.getId().toString(), c.getVote().getId().toString(),
+        List<UserDataExportResponse.CommentExport> comments = voteCommentRepository.findByUserId(userUuid).stream()
+                .map(c -> new UserDataExportResponse.CommentExport(c.getId().toString(), c.getVote().getId().toString(),
                         c.getContent(), c.getCreatedAt()))
                 .toList();
-        List<com.vomatt.users.dto.UserDataExportResponse.BallotExport> ballots = userVoteRepository.findByUserIdWithVoteAndOption(userUuid).stream()
-                .map(b -> new com.vomatt.users.dto.UserDataExportResponse.BallotExport(b.getVote().getId().toString(), b.getVote().getTitle(),
+        List<UserDataExportResponse.BallotExport> ballots = userVoteRepository.findByUserIdWithVoteAndOption(userUuid).stream()
+                .map(b -> new UserDataExportResponse.BallotExport(b.getVote().getId().toString(), b.getVote().getTitle(),
                         b.getOption() == null ? null : b.getOption().getId().toString(), b.getOption() == null ? null : b.getOption().getText(),
                         b.isAnonymous(), b.getCreatedAt()))
                 .toList();
-        List<com.vomatt.users.dto.UserDataExportResponse.FeedbackExport> feedback = feedbackRepository.findByUserIdOrderByCreatedAt(userUuid).stream()
-                .map(f -> new com.vomatt.users.dto.UserDataExportResponse.FeedbackExport(f.getId().toString(), f.getContent(), f.getCreatedAt()))
+        List<UserDataExportResponse.FeedbackExport> feedback = feedbackRepository.findByUserIdOrderByCreatedAt(userUuid).stream()
+                .map(f -> new UserDataExportResponse.FeedbackExport(f.getId().toString(), f.getContent(), f.getCreatedAt()))
                 .toList();
-        List<com.vomatt.users.dto.UserDataExportResponse.RelationExport> following = followRepository.findAllByFollower(userUuid).stream()
-                .map(f -> new com.vomatt.users.dto.UserDataExportResponse.RelationExport(f.getFollowed().getId().toString(),
+        List<UserDataExportResponse.RelationExport> following = followRepository.findAllByFollower(userUuid).stream()
+                .map(f -> new UserDataExportResponse.RelationExport(f.getFollowed().getId().toString(),
                         f.getFollowed().getUsername(), f.getCreatedAt()))
                 .toList();
-        List<com.vomatt.users.dto.UserDataExportResponse.RelationExport> blocking = blockRepository.findAllByBlocker(userUuid).stream()
-                .map(b -> new com.vomatt.users.dto.UserDataExportResponse.RelationExport(b.getBlocked().getId().toString(),
+        List<UserDataExportResponse.RelationExport> blocking = blockRepository.findAllByBlocker(userUuid).stream()
+                .map(b -> new UserDataExportResponse.RelationExport(b.getBlocked().getId().toString(),
                         b.getBlocked().getUsername(), b.getCreatedAt()))
                 .toList();
-        if (redisService.incrementAndExpire(EXPORT_COUNTER_NS, userId + ":" + day, java.time.Duration.ofDays(1)) > 1) {
+        if (redisService.incrementAndExpire(EXPORT_COUNTER_NS, counterKey, Duration.ofDays(1)) > 1) {
             throw ApiException.tooManyRequests(MessageKey.COMMON_RATE_LIMITED);
         }
         log.info("Data export produced for user {}", userId);
-        return new com.vomatt.users.dto.UserDataExportResponse(java.time.OffsetDateTime.now(), profile, preferences, polls, comments, ballots, feedback,
+        return new UserDataExportResponse(OffsetDateTime.now(), profile, preferences, polls, comments, ballots, feedback,
                 following, blocking);
     }
 
     @Transactional
     public Map<String, Boolean> updateVisibility(String userId, Map<String, Boolean> visibility) {
         User user = findUserById(userId);
-        UUID userUuid = user.getId();
-
         for (Map.Entry<String, Boolean> entry : visibility.entrySet()) {
             // Only process valid field names, ignore unknown fields
             VisibilityField.fromFieldName(entry.getKey())
                     .ifPresent(field -> savePreference(user, field.preferenceKey(), entry.getValue().toString()));
         }
         log.info("Visibility settings updated for user: {}", userId);
-        return loadVisibilitySettings(userUuid, false);
+        return loadVisibilitySettings(user.getId(), false);
     }
 
     private void savePreference(User user, String key, String value) {
@@ -480,6 +487,11 @@ public class UserService {
             throw ApiException.badRequest(selfKey);
         }
         return target;
+    }
+
+    private UUID findActiveUserId(String username) {
+        return userRepository.findActiveByUsername(username)
+            .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND)).getId();
     }
 
     private User findUserById(String userId) {

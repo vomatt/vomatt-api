@@ -6,7 +6,6 @@ import com.vomatt.comments.dto.CreateCommentRequest;
 import com.vomatt.comments.dto.UpdateCommentRequest;
 import com.vomatt.comments.dto.CommentDto;
 import com.vomatt.comments.dto.ReportCommentRequest;
-import com.vomatt.comments.CommentMapper;
 import com.vomatt.entity.User;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.entity.CommentLike;
@@ -66,7 +65,7 @@ public class VoteCommentService {
 
         log.info("Comment created: {} on vote: {} by user: {}", comment.getId(), voteId, userId);
 
-        return convertToCommentDto(comment);
+        return toDto(comment, null);
     }
 
     /** A Poll's comments, newest first, cursor-paged; likes are loaded per page, not per comment. */
@@ -89,18 +88,17 @@ public class VoteCommentService {
     public CursorResponse<CommentDto> getReplies(String voteId, UUID commentId, String cursor, Integer limit,
                                                  String currentUserId) {
         voteService.findAccessibleVote(UUID.fromString(voteId), currentUserId);
+        UUID viewerId = currentUserId == null ? null : UUID.fromString(currentUserId);
         VoteComment root = commentRepository.findById(commentId)
             .filter(c -> c.getParent() == null && c.getVote().getId().toString().equals(voteId))
             // A thread started by a user the viewer blocked is hidden from the list, so its Replies are too
-            .filter(c -> currentUserId == null
-                || !blockRepository.existsByBlockerIdAndBlockedId(UUID.fromString(currentUserId), c.getUser().getId()))
+            .filter(c -> viewerId == null || !blockRepository.existsByBlockerIdAndBlockedId(viewerId, c.getUser().getId()))
             .orElseThrow(() -> ApiException.notFound(MessageKey.COMMENT_NOT_FOUND));
 
         int size = CursorResponse.limit(limit);
         Cursor after = Cursor.decode(cursor, Cursor.Scope.REPLIES);
         List<VoteComment> rows = commentRepository.findReplyPage(root.getId(),
-            after == null ? null : after.timeKey(), after == null ? null : after.id(),
-            currentUserId == null ? null : UUID.fromString(currentUserId), Limit.of(size + 1));
+            after == null ? null : after.timeKey(), after == null ? null : after.id(), viewerId, Limit.of(size + 1));
         return CursorResponse.of(rows, size, Cursor.Scope.REPLIES, c -> Cursor.of(c.getCreatedAt(), c.getId()),
             page -> toDtos(page, currentUserId));
     }
@@ -165,7 +163,7 @@ public class VoteCommentService {
 
         log.info("Comment {} updated by user {}", commentId, userId);
 
-        return convertToCommentDto(comment);
+        return toDto(comment, null);
     }
 
     public void deleteComment(UUID commentId, String userId) {
@@ -185,23 +183,16 @@ public class VoteCommentService {
     public CommentDto getComment(UUID commentId, String currentUserId) {
         VoteComment comment = findComment(commentId, currentUserId);
 
-        return convertToCommentDto(comment, currentUserId);
-    }
-
-    @Transactional(readOnly = true)
-    public long countCommentsByVote(String voteId, String currentUserId) {
-        voteService.findAccessibleVote(UUID.fromString(voteId), currentUserId);
-
-        return commentRepository.countByVoteId(UUID.fromString(voteId));
+        return toDto(comment, currentUserId);
     }
 
     public void likeComment(UUID commentId, String userId) {
         VoteComment comment = findComment(commentId, userId);
 
-        User user = userRepository.findById(UUID.fromString(userId))
+        UUID userUuid = UUID.fromString(userId);
+        User user = userRepository.findById(userUuid)
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
 
-        UUID userUuid = UUID.fromString(userId);
         if (commentLikeRepository.existsByCommentIdAndUserId(commentId, userUuid)) {
             log.warn("User {} already liked comment {}", userId, commentId);
             return;
@@ -249,14 +240,7 @@ public class VoteCommentService {
             .toList();
     }
 
-    private CommentDto convertToCommentDto(VoteComment comment) {
-        return convertToCommentDto(comment, null);
-    }
-
-    private CommentDto convertToCommentDto(VoteComment comment, String currentUserId) {
-        long likeCount = commentLikeRepository.countByCommentId(comment.getId());
-        boolean isLiked = currentUserId != null &&
-            commentLikeRepository.existsByCommentIdAndUserId(comment.getId(), UUID.fromString(currentUserId));
-        return commentMapper.toDto(comment, likeCount, isLiked);
+    private CommentDto toDto(VoteComment comment, String currentUserId) {
+        return toDtos(List.of(comment), currentUserId).getFirst();
     }
 }

@@ -93,8 +93,7 @@ public class AdminTagController {
                             }""")))
     public ResponseEntity<ApiResponse<TagDto>> createTag(
             @Valid @RequestBody CreateTagRequest request) {
-        TagDto tag = tagService.createTag(request);
-        return ResponseEntity.ok(ApiResponse.ok(tag));
+        return ResponseEntity.ok(ApiResponse.ok(tagService.createTag(request)));
     }
 
     @PutMapping("/{tagId}")
@@ -168,8 +167,7 @@ public class AdminTagController {
             @Parameter(description = "Tag ID (UUIDv7)", required = true)
             @PathVariable String tagId,
             @Valid @RequestBody UpdateTagRequest request) {
-        TagDto tag = tagService.updateTag(tagId, request);
-        return ResponseEntity.ok(ApiResponse.ok(tag));
+        return ResponseEntity.ok(ApiResponse.ok(tagService.updateTag(tagId, request)));
     }
 
     @DeleteMapping("/{tagId}")

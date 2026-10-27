@@ -74,6 +74,15 @@ class VoteMapperTest {
     }
 
     @Test
+    @DisplayName("should return empty tags when Poll tags are null")
+    void shouldReturnEmptyTagsWhenTagsNull() {
+        Vote vote = poll(now.minusHours(1), now.plusDays(1));
+        vote.setTags(null);
+
+        assertThat(mapper.toResponse(vote, List.of()).getTags()).isEmpty();
+    }
+
+    @Test
     @DisplayName("should compute Support with Participant as denominator")
     void shouldComputeSupportFromParticipants() {
         VoteResultResponse results = mapper.toResultResponse(poll(now.minusDays(2), now.minusDays(1), 4),

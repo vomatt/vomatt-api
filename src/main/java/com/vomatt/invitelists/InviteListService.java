@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -175,7 +176,7 @@ public class InviteListService {
         List<InviteListMember> members = inviteListMemberRepository.findWithUserByInviteListIdIn(ids);
         return new Members(
             members.stream().filter(m -> m.getEmail() == null && m.getUser().isActive()).map(m -> m.getUser().getId()).toList(),
-            members.stream().map(InviteListMember::getEmail).filter(e -> e != null).toList());
+            members.stream().map(InviteListMember::getEmail).filter(Objects::nonNull).toList());
     }
 
     /**

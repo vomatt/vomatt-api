@@ -16,6 +16,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
@@ -99,6 +102,18 @@ class AdminUserServiceTest {
 
         assertThat(target.isActive()).isFalse();
         verify(refreshTokenService).revokeAllForUser(targetId.toString());
+    }
+
+    /** An actor id that is no UUID cannot name the target, so the self check passes instead of throwing. */
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = { "not-a-uuid", "" })
+    void shouldSuspendWhenActorIdIsNotAUuid(String actorIdValue) {
+        User target = user(targetId, "user");
+
+        service.suspend(targetId, actorIdValue);
+
+        assertThat(target.isActive()).isFalse();
     }
 
     @Test

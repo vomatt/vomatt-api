@@ -17,7 +17,6 @@ import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.Cursor;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.util.UUIDv7Generator;
-import com.vomatt.entity.NotificationKind;
 import com.vomatt.entity.UserPreference;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;

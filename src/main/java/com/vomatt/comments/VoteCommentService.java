@@ -21,8 +21,6 @@ import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.votes.VoteService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.hibernate.exception.ConstraintViolationException;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,8 +48,6 @@ public class VoteCommentService {
 
     /** Replies shown under each top-level Comment in a Poll's Comment list. */
     static final int REPLY_PREVIEW_SIZE = 2;
-
-    private static final String USER_FK = "comment_likes_user_id_fkey";
 
     public CommentDto createComment(String voteId, String userId, CreateCommentRequest request) {
         Vote vote = voteService.findAccessibleVote(UUID.fromString(voteId), userId);
@@ -184,19 +180,12 @@ public class VoteCommentService {
 
     public void likeComment(UUID commentId, String userId) {
         findComment(commentId, userId);
-        int inserted;
-        try {
-            inserted = commentLikeRepository.insertIfAbsent(UUIDv7Generator.generateId(), commentId,
-                UUID.fromString(userId));
-        } catch (DataIntegrityViolationException e) {
-            // An access token outlives account deletion, so the signed-in user may be gone
-            if (e.getCause() instanceof ConstraintViolationException cve && USER_FK.equals(cve.getConstraintName())) {
-                throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
-            }
-            throw e;
-        }
-        if (inserted > 0) {
+        UUID userUuid = UUID.fromString(userId);
+        if (commentLikeRepository.insertIfAbsent(UUIDv7Generator.generateId(), commentId, userUuid) > 0) {
             log.info("User {} liked comment {}", userId, commentId);
+        } else if (!userRepository.existsById(userUuid)) {
+            // An access token outlives account deletion, so the signed-in user may be gone
+            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
         }
     }
 

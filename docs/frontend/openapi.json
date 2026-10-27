@@ -15268,7 +15268,7 @@
         "tags" : [ "Vote Comment" ]
       },
       "post" : {
-        "description" : "**Auth**: required\n**Precondition**: the Poll exists (any Poll state is accepted). When `parentId` is sent it must be a non-deleted Comment or Reply of the same Poll\n**Behavior**: without `parentId` creates a top-level Comment. With `parentId` creates a Reply; Replies are one level deep, so replying to a Reply attaches the new Reply to that Reply's top-level Comment (the response `parentId` is the top-level Comment, not the id you sent). Responds 201\n**Side effects**: the top-level Comment's `replyCount` grows by 1 in later list reads\n**Errors**:\n- 400 `comment.parent.invalid`: `parentId` does not exist, is deleted, or belongs to another Poll\n- 404 `vote.not_found`: Poll does not exist or is Deleted\n- 404 `user.not_found`: the signed-in user no longer exists\n",
+        "description" : "**Auth**: required\n**Precondition**: the Poll exists (any Poll state is accepted). When `parentId` is sent it must be a non-deleted Comment or Reply of the same Poll\n**Behavior**: without `parentId` creates a top-level Comment. With `parentId` creates a Reply; Replies are one level deep, so replying to a Reply attaches the new Reply to that Reply's top-level Comment (the response `parentId` is the top-level Comment, not the id you sent). Responds 201\n**Side effects**: the top-level Comment's `replyCount` grows by 1 in later list reads\n**Errors**:\n- 400 `comment.parent.invalid`: `parentId` does not exist, is deleted, or belongs to another Poll\n- 404 `comment.not_found`: `parentId` is hidden from the caller as in the lists (written by a user the caller blocked, or a Reply in a thread such a user started)\n- 404 `vote.not_found`: Poll does not exist or is Deleted\n- 404 `user.not_found`: the signed-in user no longer exists\n",
         "operationId" : "createComment",
         "parameters" : [ {
           "description" : "Poll ID",
@@ -15652,7 +15652,7 @@
     },
     "/api/votes/{voteId}/comments/{commentId}/like" : {
       "delete" : {
-        "description" : "**Auth**: required\n**Precondition**: the Comment or Reply exists and is not deleted\n**Behavior**: idempotent. Removing a like that does not exist succeeds without change\n**Side effects**: `likeCount` -1 and `likedByCurrentUser` false in later reads (only if a like existed)\n**Errors**:\n- 404 `comment.not_found`: Comment does not exist or is deleted\n- 404 `vote.not_found`: the Comment's Poll is Deleted\n",
+        "description" : "**Auth**: required\n**Precondition**: the Comment or Reply exists and is not deleted\n**Behavior**: idempotent. Removing a like that does not exist succeeds without change. Works on a Comment by a user the caller blocked too, so a like given before the block can be taken back\n**Side effects**: `likeCount` -1 and `likedByCurrentUser` false in later reads (only if a like existed)\n**Errors**:\n- 404 `comment.not_found`: Comment does not exist or is deleted\n- 404 `vote.not_found`: the Comment's Poll is Deleted\n",
         "operationId" : "unlikeComment",
         "parameters" : [ {
           "description" : "Poll ID",
@@ -15760,7 +15760,7 @@
         "tags" : [ "Vote Comment" ]
       },
       "post" : {
-        "description" : "**Auth**: required\n**Precondition**: the Comment or Reply exists and is not deleted\n**Behavior**: idempotent. Liking something already liked succeeds without change. Own Comments can be liked\n**Side effects**: `likeCount` +1 and `likedByCurrentUser` true in later reads (first like only)\n**Errors**:\n- 404 `comment.not_found`: Comment does not exist or is deleted\n- 404 `vote.not_found`: the Comment's Poll is Deleted\n- 404 `user.not_found`: the signed-in user no longer exists\n",
+        "description" : "**Auth**: required\n**Precondition**: the Comment or Reply exists and is not deleted\n**Behavior**: idempotent. Liking something already liked succeeds without change. Own Comments can be liked\n**Side effects**: `likeCount` +1 and `likedByCurrentUser` true in later reads (first like only)\n**Errors**:\n- 404 `comment.not_found`: Comment does not exist, is deleted, or is hidden from the caller as in the lists (written by a user the caller blocked, or a Reply in a thread such a user started)\n- 404 `vote.not_found`: the Comment's Poll is Deleted\n- 404 `user.not_found`: the signed-in user no longer exists\n",
         "operationId" : "likeComment",
         "parameters" : [ {
           "description" : "Poll ID",
@@ -15989,7 +15989,7 @@
     },
     "/api/votes/{voteId}/comments/{commentId}/report" : {
       "post" : {
-        "description" : "**Auth**: required\n**Precondition**: the Comment or Reply exists, is not deleted, was written by someone else, and its Poll is reachable by the caller\n**Behavior**: records the report for moderators with `reason` (SPAM, HARASSMENT, HATE, MISINFORMATION or OTHER) and an optional `note` (max 500 characters; blank is stored as none). Idempotent: reporting the same Comment again succeeds and keeps the first report. The author is not told, and the Comment stays visible until a moderator acts\n**Side effects**: the report is listed in `GET /api/admin/comment-reports` and written to the audit log\n**Errors**:\n- 400 `comment.report.self`: the caller wrote the Comment\n- 400 `common.validation_failed`: `reason` missing, or `note` over 500 characters\n- 400 `common.bad_request`: `reason` is not one of the values above\n- 404 `comment.not_found`: Comment does not exist or is deleted\n- 404 `vote.not_found`: the Comment's Poll is Deleted or not reachable by the caller\n",
+        "description" : "**Auth**: required\n**Precondition**: the Comment or Reply exists, is not deleted, was written by someone else, and its Poll is reachable by the caller\n**Behavior**: records the report for moderators with `reason` (SPAM, HARASSMENT, HATE, MISINFORMATION or OTHER) and an optional `note` (max 500 characters; blank is stored as none). Idempotent: reporting the same Comment again succeeds and keeps the first report. The author is not told, and the Comment stays visible until a moderator acts\n**Side effects**: the report is listed in `GET /api/admin/comment-reports` and written to the audit log\n**Errors**:\n- 400 `comment.report.self`: the caller wrote the Comment\n- 400 `common.validation_failed`: `reason` missing, or `note` over 500 characters\n- 400 `common.bad_request`: `reason` is not one of the values above\n- 404 `comment.not_found`: Comment does not exist, is deleted, or is hidden from the caller as in the lists (written by a user the caller blocked, or a Reply in a thread such a user started)\n- 404 `vote.not_found`: the Comment's Poll is Deleted or not reachable by the caller\n",
         "operationId" : "reportComment",
         "parameters" : [ {
           "description" : "Poll ID",

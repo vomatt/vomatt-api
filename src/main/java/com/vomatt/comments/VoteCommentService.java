@@ -57,7 +57,7 @@ public class VoteCommentService {
 
         VoteComment comment = new VoteComment(vote, user, request.getText());
         if (request.getParentId() != null) {
-            comment.setParent(findReplyRoot(request.getParentId(), vote.getId()));
+            comment.setParent(findReplyRoot(request.getParentId(), vote.getId(), userId));
         }
         // flush so created_at / updated_at exist before mapping (UUIDv7 ids defer the insert)
         comment = commentRepository.saveAndFlush(comment);
@@ -91,7 +91,7 @@ public class VoteCommentService {
         VoteComment root = commentRepository.findById(commentId)
             .filter(c -> c.getParent() == null && c.getVote().getId().toString().equals(voteId))
             // A thread started by a user the viewer blocked is hidden from the list, so its Replies are too
-            .filter(c -> viewerId == null || !blockRepository.existsByBlockerIdAndBlockedId(viewerId, c.getUser().getId()))
+            .filter(c -> viewerId == null || !isHiddenFrom(c, viewerId))
             .orElseThrow(() -> ApiException.notFound(MessageKey.COMMENT_NOT_FOUND));
 
         int size = CursorResponse.limit(limit);
@@ -110,11 +110,30 @@ public class VoteCommentService {
         return comment;
     }
 
+    // As findComment, minus what the lists hide from the caller
+    private VoteComment findVisibleComment(UUID commentId, String userId) {
+        VoteComment comment = findComment(commentId, userId);
+        if (isHiddenFrom(comment, UUID.fromString(userId))) {
+            throw ApiException.notFound(MessageKey.COMMENT_NOT_FOUND);
+        }
+        return comment;
+    }
+
+    // What the lists hide from a signed-in viewer: a Comment by a user they blocked, or any Reply in such a user's thread
+    private boolean isHiddenFrom(VoteComment comment, UUID viewerId) {
+        VoteComment root = comment.getParent() != null ? comment.getParent() : comment;
+        return Stream.of(comment.getUser().getId(), root.getUser().getId()).distinct()
+            .anyMatch(authorId -> blockRepository.existsByBlockerIdAndBlockedId(viewerId, authorId));
+    }
+
     // Replies are one level deep: replying to a Reply attaches to the same top-level Comment
-    private VoteComment findReplyRoot(UUID targetId, UUID voteId) {
+    private VoteComment findReplyRoot(UUID targetId, UUID voteId, String userId) {
         VoteComment target = commentRepository.findByIdAndNotDeleted(targetId)
             .filter(c -> c.getVote().getId().equals(voteId))
             .orElseThrow(() -> ApiException.badRequest(MessageKey.COMMENT_PARENT_INVALID));
+        if (isHiddenFrom(target, UUID.fromString(userId))) {
+            throw ApiException.notFound(MessageKey.COMMENT_NOT_FOUND);
+        }
         return target.getParent() != null ? target.getParent() : target;
     }
 
@@ -179,7 +198,7 @@ public class VoteCommentService {
     }
 
     public void likeComment(UUID commentId, String userId) {
-        findComment(commentId, userId);
+        findVisibleComment(commentId, userId);
         UUID userUuid = UUID.fromString(userId);
         if (commentLikeRepository.insertIfAbsent(UUIDv7Generator.generateId(), commentId, userUuid) > 0) {
             log.info("User {} liked comment {}", userId, commentId);
@@ -191,7 +210,7 @@ public class VoteCommentService {
 
     /** Reports a live Comment or Reply of someone else; idempotent, a repeat report keeps the first one. */
     public void reportComment(UUID commentId, String userId, ReportCommentRequest request) {
-        VoteComment comment = findComment(commentId, userId);
+        VoteComment comment = findVisibleComment(commentId, userId);
         UUID reporterId = UUID.fromString(userId);
         if (comment.getUser().getId().equals(reporterId)) {
             throw ApiException.badRequest(MessageKey.COMMENT_REPORT_SELF);
@@ -204,6 +223,7 @@ public class VoteCommentService {
     }
 
     public void unlikeComment(UUID commentId, String userId) {
+        // Taking back one's own like reveals nothing, so a block does not stop it
         findComment(commentId, userId);
 
         commentLikeRepository.deleteByCommentIdAndUserId(commentId, UUID.fromString(userId));

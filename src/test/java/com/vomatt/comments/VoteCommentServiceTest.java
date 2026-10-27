@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.junit.jupiter.api.DisplayName;
@@ -144,5 +145,25 @@ class VoteCommentServiceTest {
         assertThatThrownBy(() -> commentService.likeComment(target.getId(), viewerId.toString()))
                 .isInstanceOfSatisfying(ApiException.class,
                         ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("should look up a block once when the Comment and its thread have the same author")
+    void shouldCheckBlockOnceWhenThreadAuthorIsCommentAuthor() {
+        Vote vote = new Vote();
+        ReflectionTestUtils.setField(vote, "id", voteId);
+        User author = User.builder().id(UUID.randomUUID()).username("author").build();
+        VoteComment root = comment(vote, author, "root");
+        VoteComment reply = comment(vote, author, "own reply");
+        reply.setParent(root);
+        when(commentRepository.findByIdAndNotDeleted(root.getId())).thenReturn(Optional.of(root));
+        when(commentRepository.findByIdAndNotDeleted(reply.getId())).thenReturn(Optional.of(reply));
+        when(commentLikeRepository.insertIfAbsent(any(), any(), eq(viewerId))).thenReturn(1);
+
+        commentService.likeComment(root.getId(), viewerId.toString());
+        commentService.likeComment(reply.getId(), viewerId.toString());
+
+        org.mockito.Mockito.verify(blockRepository, org.mockito.Mockito.times(2))
+                .existsByBlockerIdAndBlockedId(viewerId, author.getId());
     }
 }

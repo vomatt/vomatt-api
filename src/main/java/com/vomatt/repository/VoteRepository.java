@@ -1,5 +1,6 @@
 package com.vomatt.repository;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -75,4 +76,17 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
             FROM vomatt.vote_shares s
             WHERE s.vote_id = v.id AND s.user_id = :userId""", nativeQuery = true)
     void decrementShareCountForUserShares(@Param("userId") UUID userId);
+
+    /** Atomic +1 on the Poll's View bucket for the current UTC hour. */
+    // ponytail: Views of one Poll serialize on its current-hour row; buffer in Redis INCR + scheduled flush if a hot Poll needs more
+    @Modifying
+    @Query(value = """
+            INSERT INTO vomatt.vote_view_hours (vote_id, hour, views)
+            VALUES (:voteId, date_trunc('hour', now(), 'UTC'), 1)
+            ON CONFLICT (vote_id, hour) DO UPDATE SET views = vote_view_hours.views + 1""", nativeQuery = true)
+    void incrementViewHour(@Param("voteId") UUID voteId);
+
+    @Modifying
+    @Query(value = "DELETE FROM vomatt.vote_view_hours WHERE hour < :before", nativeQuery = true)
+    int deleteViewHoursBefore(@Param("before") OffsetDateTime before);
 }

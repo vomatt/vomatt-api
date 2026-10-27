@@ -66,6 +66,9 @@ class RetentionPostgresTest extends PostgresRepositoryTest {
         // dedupe record, so the Poll cannot mail that address again)
         insertInvitationEmail(ended, "old-" + tag + "@example.com", now.minusDays(45));
         insertInvitationEmail(open, "new-" + tag + "@example.com", now.minusDays(8));
+        // View buckets: one past retention goes, a recent one stays
+        insertViewHour(open, now.minusDays(31));
+        insertViewHour(open, now.minusHours(2));
         em.clear();
 
         RetentionJob.Result first = retentionJob.run(now);
@@ -75,6 +78,9 @@ class RetentionPostgresTest extends PostgresRepositoryTest {
         assertThat(first.invitationEmails()).isGreaterThanOrEqualTo(1);
         assertThat(first.unregisteredInvitees()).isGreaterThanOrEqualTo(1);
         assertThat(first.sealedBallots()).isGreaterThanOrEqualTo(1);
+        assertThat(first.viewHours()).isGreaterThanOrEqualTo(1);
+        assertThat(second.viewHours()).isZero();
+        assertThat(count("SELECT COUNT(*) FROM vomatt.vote_view_hours WHERE vote_id = :p", open.getId())).isEqualTo(1);
         assertThat(count("SELECT COUNT(*) FROM vomatt.audit_logs WHERE id = :p", old.getId())).isZero();
         assertThat(count("SELECT COUNT(*) FROM vomatt.audit_logs WHERE id = :p", fresh.getId())).isEqualTo(1);
         assertThat(count("SELECT COUNT(*) FROM vomatt.vote_invitation_emails WHERE email = :p", "old-" + tag + "@example.com")).isZero();
@@ -110,6 +116,11 @@ class RetentionPostgresTest extends PostgresRepositoryTest {
     private void insertInvitationEmail(Vote poll, String email, OffsetDateTime sentAt) {
         em.createNativeQuery("INSERT INTO vomatt.vote_invitation_emails (vote_id, email, sent_at) VALUES (:v, :e, :at)")
                 .setParameter("v", poll.getId()).setParameter("e", email).setParameter("at", sentAt).executeUpdate();
+    }
+
+    private void insertViewHour(Vote poll, OffsetDateTime at) {
+        em.createNativeQuery("INSERT INTO vomatt.vote_view_hours (vote_id, hour, views) VALUES (:v, date_trunc('hour', CAST(:at AS timestamptz), 'UTC'), 1)")
+                .setParameter("v", poll.getId()).setParameter("at", at).executeUpdate();
     }
 
     private Object optionOf(UserVote ballot) {

@@ -2,7 +2,7 @@
 -- Migration: key notification read state by notification (kind + source row) instead of by Poll
 --
 -- Run: psql "$DB" -v ON_ERROR_STOP=1 -f 2026-10-26-notification-reads-by-kind.sql
--- Run it before or after schema.sql; the API needs both. Re-runnable: does nothing once vote_id is gone.
+-- Run it before or after the Flyway migrations (formerly schema.sql); the API needs both. Re-runnable: does nothing once vote_id is gone.
 --
 -- Why: the notification feed (ADR 0005) has kinds that are not about one Poll (follows, Comments), so a read is
 -- stored per notification. One row per (user, Poll) used to cover both of the Poll's notifications, told apart by

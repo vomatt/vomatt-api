@@ -2,9 +2,9 @@
 -- Migration: rename Groups to Invite Lists (groups -> invite_lists, group_members -> invite_list_members)
 --
 -- Run: psql "$DB" -v ON_ERROR_STOP=1 -f 2026-10-22-invite-lists.sql
--- Run it BEFORE schema.sql: schema.sql would otherwise create empty invite_lists tables and this rename would fail.
+-- Run it BEFORE starting the API: Flyway (db/migration, formerly schema.sql) would otherwise create empty invite_lists tables and this rename would fail.
 -- Apply 2026-10-14-canonical-gmail.sql first if this database has not had it: it targets group_members.
--- Re-runnable: does nothing once vomatt.groups is gone; aborts with a hint if schema.sql already created invite_lists.
+-- Re-runnable: does nothing once vomatt.groups is gone; aborts with a hint if Flyway (formerly schema.sql) already created invite_lists.
 --
 -- Rule: data is kept as is; tables, the group_id column and every constraint and index get the names a fresh
 --   schema.sql produces, including the ones Postgres generated (pkey, fkey, unique key).

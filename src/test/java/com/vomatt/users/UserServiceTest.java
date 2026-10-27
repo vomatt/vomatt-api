@@ -566,7 +566,7 @@ class UserServiceTest {
         pref.setUser(hidden);
         pref.setKey("visibility.displayName");
         pref.setValue("false");
-        when(userRepository.getActiveByUsername("alice")).thenReturn(alice);
+        when(userRepository.findActiveByUsername("alice")).thenReturn(Optional.of(alice));
         when(followRepository.findFollowersPage(eq(alice.getId()), eq(null), eq(null), any(Limit.class)))
                 .thenReturn(List.of(new UserFollow(hidden, alice)));
         when(preferenceRepository.findByUserIdInAndKey(List.of(hidden.getId()), "visibility.displayName"))
@@ -583,7 +583,7 @@ class UserServiceTest {
     void shouldListFollowedUsersWhenReadingFollowing() {
         User alice = User.builder().id(UUID.randomUUID()).username("alice").build();
         User bob = User.builder().id(UUID.randomUUID()).username("bob").displayName("Bob").build();
-        when(userRepository.getActiveByUsername("alice")).thenReturn(alice);
+        when(userRepository.findActiveByUsername("alice")).thenReturn(Optional.of(alice));
         when(followRepository.findPage(eq(alice.getId()), eq(null), eq(null), any(Limit.class)))
                 .thenReturn(List.of(new UserFollow(alice, bob)));
 
@@ -595,7 +595,7 @@ class UserServiceTest {
     @Test
     @DisplayName("should return 404 for follower and following lists of a suspended or unknown user")
     void shouldReturnNotFoundWhenListTargetSuspendedOrUnknown() {
-        when(userRepository.getActiveByUsername(any())).thenCallRealMethod();
+        when(userRepository.findActiveByUsername(any())).thenCallRealMethod();
         when(userRepository.findByUsername("gone"))
                 .thenReturn(Optional.of(User.builder().id(UUID.randomUUID()).username("gone").active(false).build()));
         when(userRepository.findByUsername("nobody")).thenReturn(Optional.empty());
@@ -615,7 +615,7 @@ class UserServiceTest {
         User alice = User.builder().id(UUID.randomUUID()).username("alice").build();
         UUID bob = UUID.randomUUID();
         String caller = UUID.randomUUID().toString();
-        when(userRepository.getActiveByUsername("alice")).thenReturn(alice);
+        when(userRepository.findActiveByUsername("alice")).thenReturn(Optional.of(alice));
         com.vomatt.common.response.Cursor at = com.vomatt.common.response.Cursor.of(java.time.OffsetDateTime.now(), UUID.randomUUID());
         String mine = at.encode(com.vomatt.common.response.Cursor.Scope.FOLLOWS);
         String bobsFollowers = at.encode(com.vomatt.common.response.Cursor.Scope.USER_FOLLOWERS, bob);
@@ -640,7 +640,7 @@ class UserServiceTest {
         UserFollow f2 = new UserFollow(User.builder().id(UUID.randomUUID()).username("c").build(), alice);
         org.springframework.test.util.ReflectionTestUtils.setField(f1, "id", UUID.randomUUID());
         org.springframework.test.util.ReflectionTestUtils.setField(f1, "createdAt", java.time.OffsetDateTime.now());
-        when(userRepository.getActiveByUsername("alice")).thenReturn(alice);
+        when(userRepository.findActiveByUsername("alice")).thenReturn(Optional.of(alice));
         when(followRepository.findFollowersPage(eq(alice.getId()), any(), any(), any(Limit.class))).thenReturn(List.of(f1, f2));
 
         String caller = UUID.randomUUID().toString();
@@ -659,7 +659,7 @@ class UserServiceTest {
         User mutual = User.builder().id(UUID.randomUUID()).username("bob").build();
         User fan = User.builder().id(UUID.randomUUID()).username("carol").build();
         User caller = User.builder().id(UUID.randomUUID()).username("dave").build();
-        when(userRepository.getActiveByUsername("alice")).thenReturn(alice);
+        when(userRepository.findActiveByUsername("alice")).thenReturn(Optional.of(alice));
         when(followRepository.findFollowersPage(eq(alice.getId()), eq(null), eq(null), any(Limit.class)))
                 .thenReturn(List.of(new UserFollow(mutual, alice), new UserFollow(fan, alice), new UserFollow(caller, alice)));
         when(followRepository.findEdgesWithViewer(caller.getId(), List.of(mutual.getId(), fan.getId(), caller.getId())))
@@ -679,7 +679,7 @@ class UserServiceTest {
     @DisplayName("should skip the relation query when a follow list page is empty")
     void shouldSkipRelationQueryWhenFollowListEmpty() {
         User alice = User.builder().id(UUID.randomUUID()).username("alice").build();
-        when(userRepository.getActiveByUsername("alice")).thenReturn(alice);
+        when(userRepository.findActiveByUsername("alice")).thenReturn(Optional.of(alice));
 
         assertThat(userService.listFollowing("alice", null, null, UUID.randomUUID().toString()).items()).isEmpty();
         verify(followRepository, never()).findEdgesWithViewer(any(), any());
@@ -759,7 +759,7 @@ class UserServiceTest {
     @DisplayName("should return an empty mutual follower list without querying it on the caller's own profile")
     void shouldReturnEmptyListWhenListingOwnMutualFollowers() {
         User me = User.builder().id(UUID.randomUUID()).username("alice").build();
-        when(userRepository.getActiveByUsername("alice")).thenReturn(me);
+        when(userRepository.findActiveByUsername("alice")).thenReturn(Optional.of(me));
 
         CursorResponse<FollowUserDto> page = userService.listMutualFollowers("alice", null, null, me.getId().toString());
 
@@ -777,7 +777,7 @@ class UserServiceTest {
         UserFollow f2 = new UserFollow(User.builder().id(UUID.randomUUID()).username("c").build(), alice);
         org.springframework.test.util.ReflectionTestUtils.setField(f1, "id", UUID.randomUUID());
         org.springframework.test.util.ReflectionTestUtils.setField(f1, "createdAt", java.time.OffsetDateTime.now());
-        when(userRepository.getActiveByUsername("alice")).thenReturn(alice);
+        when(userRepository.findActiveByUsername("alice")).thenReturn(Optional.of(alice));
         when(followRepository.findMutualFollowersPage(eq(alice.getId()), eq(viewer.getId()), any(), any(), any(Limit.class)))
                 .thenReturn(List.of(f1, f2));
         when(followRepository.findEdgesWithViewer(eq(viewer.getId()), any()))

@@ -263,7 +263,7 @@ public class UserService {
     /** Users who follow the given user, most recently followed first, as public profile fields with the caller's relation. */
     @Transactional(readOnly = true)
     public CursorResponse<FollowUserDto> listFollowers(String username, String cursor, Integer limit, String viewerId) {
-        UUID userId = userRepository.getActiveByUsername(username).getId();
+        UUID userId = findActiveUserId(username);
         int size = CursorResponse.limit(limit);
         // Bound to the user, so a cursor of another user's follower list is rejected
         Cursor after = Cursor.decode(cursor, Cursor.Scope.USER_FOLLOWERS, userId);
@@ -276,7 +276,7 @@ public class UserService {
     /** Users the given user follows, most recently followed first, as public profile fields with the caller's relation. */
     @Transactional(readOnly = true)
     public CursorResponse<FollowUserDto> listFollowing(String username, String cursor, Integer limit, String viewerId) {
-        UUID userId = userRepository.getActiveByUsername(username).getId();
+        UUID userId = findActiveUserId(username);
         return followedPage(userId, Cursor.Scope.USER_FOLLOWING, userId, cursor, limit, UUID.fromString(viewerId));
     }
 
@@ -286,7 +286,7 @@ public class UserService {
      */
     @Transactional(readOnly = true)
     public CursorResponse<FollowUserDto> listMutualFollowers(String username, String cursor, Integer limit, String viewerId) {
-        UUID userId = userRepository.getActiveByUsername(username).getId();
+        UUID userId = findActiveUserId(username);
         UUID viewer = UUID.fromString(viewerId);
         int size = CursorResponse.limit(limit);
         Cursor after = Cursor.decode(cursor, Cursor.Scope.USER_MUTUAL_FOLLOWERS, userId);
@@ -494,6 +494,11 @@ public class UserService {
             throw ApiException.badRequest(selfKey);
         }
         return target;
+    }
+
+    private UUID findActiveUserId(String username) {
+        return userRepository.findActiveByUsername(username)
+            .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND)).getId();
     }
 
     private User findUserById(String userId) {

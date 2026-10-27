@@ -136,7 +136,7 @@ public class VoteService {
 
         tagRepository.incrementUsageCount(countedTagIds(vote));
 
-        return convertToVoteResponse(vote.getId(), creatorId);
+        return toResponse(vote, creatorId);
     }
 
     /**
@@ -173,7 +173,8 @@ public class VoteService {
 
         vote.getOptions().clear();
         addOptions(vote, request);
-        vote = voteRepository.save(vote);
+        // Flushed now so @PreUpdate stamps updated_at before the response is built from this Poll
+        vote = voteRepository.saveAndFlush(vote);
 
         // Invitees exist only on an Invite-only Poll; a null list keeps that kind of Invitee
         if (oldAudience == Audience.INVITE_ONLY && audience != Audience.INVITE_ONLY) {
@@ -197,7 +198,7 @@ public class VoteService {
         tagRepository.incrementUsageCount(added);
         log.info("Vote {} edited by creator {}", voteId, userId);
 
-        return convertToVoteResponse(vote.getId(), userId);
+        return toResponse(vote, userId);
     }
 
     /**
@@ -488,10 +489,11 @@ public class VoteService {
         Vote vote = requireOwned(lockVote(UUID.fromString(voteId)), creatorId);
 
         vote.closeAt(OffsetDateTime.now());
-        vote = voteRepository.save(vote);
+        // Flushed now so @PreUpdate stamps updated_at before the response is built from this Poll
+        vote = voteRepository.saveAndFlush(vote);
         log.info("Vote {} closed by creator {}", voteId, creatorId);
 
-        return convertToVoteResponse(vote.getId(), creatorId);
+        return toResponse(vote, creatorId);
     }
 
     /**
@@ -801,6 +803,10 @@ public class VoteService {
     private VoteResponse convertToVoteResponse(UUID voteId, String userId) {
         // JOIN FETCH avoids additional queries for options
         Vote vote = requireAccessible(voteRepository.findByIdWithOptions(voteId), userId);
+        return toResponse(vote, userId);
+    }
+
+    private VoteResponse toResponse(Vote vote, String userId) {
         return toResponses(List.of(vote), userId).getFirst();
     }
 

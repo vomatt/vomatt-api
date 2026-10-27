@@ -33,6 +33,7 @@ import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Answers;
 import org.mockito.Mock;
+import org.mockito.stubbing.Answer;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
@@ -142,19 +143,18 @@ class VoteServiceTest {
     }
 
     private void stubSaveAssignsId() {
-        List<Vote> saved = new ArrayList<>();
-        when(voteRepository.save(any(Vote.class))).thenAnswer(inv -> {
+        Answer<Vote> assignIds = inv -> {
             Vote v = inv.getArgument(0);
             if (v.getId() == null) {
                 setId(v, UUID.randomUUID()); // simulate DB-assigned ID
                 ReflectionTestUtils.setField(v, "createdAt", OffsetDateTime.now()); // simulate @PrePersist
             }
             v.getOptions().stream().filter(o -> o.getId() == null).forEach(o -> setId(o, UUID.randomUUID()));
-            saved.add(v);
             return v;
-        });
-        // The response is reloaded with its options after saving
-        when(voteRepository.findByIdWithOptions(any(UUID.class))).thenAnswer(inv -> Optional.of(saved.getLast()));
+        };
+        // Create saves, Edit saves and flushes
+        lenient().when(voteRepository.save(any(Vote.class))).thenAnswer(assignIds);
+        lenient().when(voteRepository.saveAndFlush(any(Vote.class))).thenAnswer(assignIds);
     }
 
     private CreateVoteRequest.VoteOptionRequest buildOption(String text) {
@@ -860,7 +860,7 @@ class VoteServiceTest {
 
             assertThatThrownBy(() -> voteService.updateVote(voteId.toString(), editRequest(null), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_NOT_EDITABLE));
-            verify(voteRepository, never()).save(any());
+            verify(voteRepository, never()).saveAndFlush(any());
         }
 
         @Test
@@ -1047,7 +1047,7 @@ class VoteServiceTest {
                     .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_FORBIDDEN));
 
             assertThat(vote.isActive()).isTrue();
-            verify(voteRepository, never()).save(any());
+            verify(voteRepository, never()).saveAndFlush(any());
         }
 
         @Test
@@ -1058,15 +1058,14 @@ class VoteServiceTest {
             vote.scheduleEnd(deadline);
             vote.setAudience(Audience.UNLISTED);
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
-            when(voteRepository.save(vote)).thenReturn(vote);
-            stubConvertToVoteResponse(vote);
+            when(voteRepository.saveAndFlush(vote)).thenReturn(vote);
 
             voteService.closeVote(voteId.toString(), userId.toString());
 
             assertThat(vote.getStatus()).isEqualTo(VoteStatus.ENDED);
             assertThat(vote.getEndTime()).isBefore(deadline);
             assertThat(vote.getDeadline()).isEqualTo(deadline);
-            verify(voteRepository).save(vote);
+            verify(voteRepository).saveAndFlush(vote);
         }
 
         @Test
@@ -1080,7 +1079,7 @@ class VoteServiceTest {
             assertThatThrownBy(() -> voteService.closeVote(voteId.toString(), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_CLOSE_PUBLIC_NOT_ALLOWED));
             assertThat(vote.getEndTime()).isEqualTo(deadline);
-            verify(voteRepository, never()).save(any());
+            verify(voteRepository, never()).saveAndFlush(any());
         }
 
         @Test
@@ -1095,7 +1094,7 @@ class VoteServiceTest {
             assertThatThrownBy(() -> voteService.closeVote(voteId.toString(), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_CLOSE_SCHEDULED));
             assertThat(vote.getEndTime()).isEqualTo(deadline);
-            verify(voteRepository, never()).save(any());
+            verify(voteRepository, never()).saveAndFlush(any());
         }
 
         @Test
@@ -1105,8 +1104,7 @@ class VoteServiceTest {
             vote.setStartTime(OffsetDateTime.now().minusDays(1));
             vote.setEndTime(ended);
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
-            when(voteRepository.save(vote)).thenReturn(vote);
-            stubConvertToVoteResponse(vote);
+            when(voteRepository.saveAndFlush(vote)).thenReturn(vote);
 
             voteService.closeVote(voteId.toString(), userId.toString());
 

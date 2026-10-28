@@ -102,6 +102,30 @@ public class TagService {
                 page -> page.stream().map(TagDto::from).toList());
     }
 
+    /** Follows a tag, so its Open Public Polls join the caller's Following list; idempotent. */
+    @Transactional
+    public void followTag(String userId, String tagId) {
+        UUID id = UUID.fromString(tagId);
+        if (tagRepository.follow(UUID.fromString(userId), id) > 0) {
+            log.info("User {} followed tag {}", userId, tagId);
+        } else if (!tagRepository.existsById(id)) {
+            throw ApiException.notFound(MessageKey.TAG_NOT_FOUND);
+        }
+    }
+
+    /** Unfollows a tag; idempotent, whether or not the tag exists. */
+    @Transactional
+    public void unfollowTag(String userId, String tagId) {
+        if (tagRepository.unfollow(UUID.fromString(userId), UUID.fromString(tagId)) > 0) {
+            log.info("User {} unfollowed tag {}", userId, tagId);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<TagDto> getFollowedTags(String userId) {
+        return tagRepository.findFollowedBy(UUID.fromString(userId)).stream().map(TagDto::from).toList();
+    }
+
     private Tag findTag(UUID id) {
         return tagRepository.findById(id).orElseThrow(() -> ApiException.notFound(MessageKey.TAG_NOT_FOUND));
     }

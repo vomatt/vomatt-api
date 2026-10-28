@@ -10,7 +10,7 @@ import java.util.Map;
  * Everything the service holds about the caller, for a data-portability request; of other users it carries only the id
  * and username of those the caller follows or blocked.
  */
-@Schema(description = "Export of the caller's own data: profile, preferences, Polls created, Comments written, Ballots cast, feedback sent, follows, blocks and bookmarks")
+@Schema(description = "Export of the caller's own data: profile, preferences, Polls created, Comments written, Ballots cast, feedback sent, follows, blocks, bookmarks and followed tags")
 public record UserDataExportResponse(
         @Schema(description = "When the export was produced", example = "2026-10-23T10:00:00+08:00") OffsetDateTime exportedAt,
         @Schema(description = "The profile as returned by GET /api/users/me") MyProfileResponse profile,
@@ -21,7 +21,8 @@ public record UserDataExportResponse(
         @Schema(description = "Feedback the caller sent, oldest first") List<FeedbackExport> feedback,
         @Schema(description = "Users the caller follows, oldest first, suspended ones included") List<RelationExport> following,
         @Schema(description = "Users the caller blocked, oldest first, suspended ones included") List<RelationExport> blocking,
-        @Schema(description = "Polls the caller bookmarked, oldest first") List<BookmarkExport> bookmarks
+        @Schema(description = "Polls the caller bookmarked, oldest first") List<BookmarkExport> bookmarks,
+        @Schema(description = "Tags the caller follows, oldest first") List<TagFollowExport> followedTags
 ) {
     @Schema(description = "A Poll the caller created")
     public record PollExport(
@@ -72,5 +73,11 @@ public record UserDataExportResponse(
     public record BookmarkExport(
             @Schema(example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05") String voteId,
             OffsetDateTime createdAt
+    ) {}
+
+    @Schema(description = "A tag the caller follows")
+    public record TagFollowExport(
+            @Schema(example = "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70") String tagId,
+            @Schema(description = "When the follow was added") OffsetDateTime createdAt
     ) {}
 }

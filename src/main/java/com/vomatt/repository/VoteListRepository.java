@@ -43,6 +43,11 @@ public class VoteListRepository {
     static final String SEARCH_CONDITION = " AND v.search_bigrams @> vomatt.text_bigrams(:q)"
             + " AND lower(COALESCE(v.title, '') || ' ' || COALESCE(v.description, '')) LIKE :pattern ESCAPE '\\'";
 
+    /** The Poll's creator ({@code v}) and the viewer ({@code :viewerId}) have not blocked each other, in either direction. */
+    static final String NOT_BLOCKED_EITHER_WAY =
+            " AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b WHERE b.blocker_id = :viewerId AND b.blocked_id = v.creator_id)"
+            + " AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b WHERE b.blocker_id = v.creator_id AND b.blocked_id = :viewerId)";
+
     private final EntityManager em;
 
     /**
@@ -73,10 +78,7 @@ public class VoteListRepository {
             sql.append(SEARCH_CONDITION);
         }
         if (viewerId != null) {
-            sql.append(" AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b")
-               .append(" WHERE b.blocker_id = :viewerId AND b.blocked_id = v.creator_id)")
-               .append(" AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b")
-               .append(" WHERE b.blocker_id = v.creator_id AND b.blocked_id = :viewerId)");
+            sql.append(NOT_BLOCKED_EITHER_WAY);
         }
         if (after != null) {
             sql.append(" AND (").append(String.join(", ", sortColumns)).append(", v.id) ").append(descending ? "<" : ">")
@@ -110,30 +112,43 @@ public class VoteListRepository {
     }
 
     /**
-     * Following list: Open Public Polls created by users the follower follows (with no block either way), most recently
-     * opened first. Starts from the follower's follows and reads each followed user's newest Polls through
-     * idx_votes_creator_start_id, so the cost grows with the follows, not with every Open Poll.
+     * Following list: Open Public Polls created by users the follower follows or carrying a tag the follower follows,
+     * most recently opened first, each once. Nothing from the follower themselves, a suspended creator, or a creator
+     * either side blocked. The user branch starts from the follower's follows and keeps at most a page per followed user
+     * (read through idx_votes_creator_start_id); the tag branch reads only Polls not yet Ended (idx_votes_end_id; OFFSET 0
+     * keeps the planner from walking idx_votes_start_id through Ended history instead) and probes each one's tags by primary
+     * key (OFFSET 0 in the EXISTS stops a hash over every row of the followed tags).
+     * Both filter before their LIMIT, so filtered rows never shorten a page; IN drops duplicates.
      */
     @SuppressWarnings("unchecked")
     public List<Vote> findFollowing(UUID followerId, Cursor after, OffsetDateTime now, int limit) {
-        // ponytail: walks each followed user's Polls past Ended ones; add an Open-only partial index if creators pile up history
-        String keyset = after == null ? "" : " AND (v.start_time, v.id) < (:afterKey, :afterId)";
+        // ponytail: the user branch walks each followed user's Polls past Ended ones, and the tag branch checks every
+        // not-yet-Ended Poll per page; add Open-only partial indexes if creators pile up history or live Polls grow large
+        String open = """
+                v.deleted_at IS NULL AND v.audience = 'PUBLIC' AND v.start_time <= :now AND v.end_time > :now"""
+                + (after == null ? "" : " AND (v.start_time, v.id) < (:afterKey, :afterId)")
+                + " AND EXISTS (SELECT 1 FROM vomatt.users u WHERE u.id = v.creator_id AND u.active)" + NOT_BLOCKED_EITHER_WAY;
         String sql = """
-                SELECT v.* FROM vomatt.user_follows f
-                CROSS JOIN LATERAL (
-                    SELECT * FROM vomatt.votes v
-                    WHERE v.creator_id = f.followed_id AND v.deleted_at IS NULL AND v.audience = 'PUBLIC'
-                      AND v.start_time <= :now AND v.end_time > :now""" + keyset + """
+                SELECT v.* FROM vomatt.votes v WHERE v.id IN (
+                    SELECT fv.id FROM vomatt.user_follows f
+                    CROSS JOIN LATERAL (
+                        SELECT v.id FROM vomatt.votes v
+                        WHERE v.creator_id = f.followed_id AND\s""" + open + """
 
-                    ORDER BY v.start_time DESC, v.id DESC LIMIT :limit) v
-                WHERE f.follower_id = :followerId
-                  AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b
-                                  WHERE b.blocker_id = :followerId AND b.blocked_id = f.followed_id)
-                  AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b
-                                  WHERE b.blocker_id = f.followed_id AND b.blocked_id = :followerId)
+                        ORDER BY v.start_time DESC, v.id DESC LIMIT :limit) fv
+                    WHERE f.follower_id = :viewerId
+                    UNION ALL
+                    (SELECT tv.id FROM (
+                        SELECT v.id, v.start_time FROM vomatt.votes v
+                        WHERE v.creator_id <> :viewerId AND\s""" + open + """
+
+                          AND EXISTS (SELECT 1 FROM vomatt.vote_tags vt JOIN vomatt.tag_follows tf ON tf.tag_id = vt.tag_id
+                                      WHERE vt.vote_id = v.id AND tf.user_id = :viewerId OFFSET 0)
+                        OFFSET 0) tv
+                     ORDER BY tv.start_time DESC, tv.id DESC LIMIT :limit))
                 ORDER BY v.start_time DESC, v.id DESC LIMIT :limit""";
         Query nativeQuery = em.createNativeQuery(sql, Vote.class)
-                .setParameter("followerId", followerId)
+                .setParameter("viewerId", followerId)
                 .setParameter("now", now)
                 .setParameter("limit", limit);
         if (after != null) {

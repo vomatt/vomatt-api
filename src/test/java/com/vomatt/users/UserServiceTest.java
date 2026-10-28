@@ -67,6 +67,7 @@ class UserServiceTest {
     @Mock com.vomatt.common.redis.RedisService redisService;
     @Mock com.vomatt.votes.VoteViewRecorder voteViewRecorder;
     @Mock com.vomatt.repository.VoteBookmarkRepository bookmarkRepository;
+    @Mock com.vomatt.repository.TagRepository tagRepository;
     @Spy com.vomatt.repository.LockTimeout lockTimeout = new com.vomatt.repository.LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @InjectMocks UserService userService;
 

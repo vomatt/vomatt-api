@@ -29,7 +29,7 @@ sequenceDiagram
 | Explore (open) | `GET /api/votes?tag={slug}` | `sort=newest` (default), `sort=closing` (ending soonest first) or `sort=top` (highest Turnout first, ties most recently opened first) | `tag` is a tag slug from `GET /api/tags` |
 | Explore (ended) | `GET /api/votes?tag={slug}&status=ended` | Most recently ended first | **Must not send `sort`**, otherwise 400 `vote.list.sort_not_allowed` |
 | Top | `GET /api/votes?sort=top` | Highest Turnout first | Turnout changes between pages, so dedupe items by `id`; combines with `tag` and `q` |
-| Following | `GET /api/votes/following` | Open, most recently opened first | Login required. Open Public Polls created by users the caller follows; no `status` / `sort` / `tag` / `q` |
+| Following | `GET /api/votes/following` | Open, most recently started first | Login required. Open Public Polls by users you follow or carrying a tag you follow (`PUT /api/tags/{tagId}/follow`; your tags: `GET /api/tags/following`), each once. Does not support `status` / `sort` / `tag` / `q` |
 | Search | `GET /api/votes?q={text}` | Same as Explore | Matches title and description, **not option text**; at least 2 characters; can be combined with `tag`, `status`, `sort` |
 | My Polls (open) | `GET /api/votes/my` | Ending soonest first | Login required. Includes your own **Scheduled** and Open Polls, Open Polls where you hold a Ballot, and Scheduled / Open Polls you are invited to, Unlisted and Invite-only included; each item has `unread` (whether your Invitation is unread; `false` otherwise) |
 | My Polls (ended) | `GET /api/votes/my?status=ended` | Most recently ended first | Includes Cancelled; each item has `unread` (whether the Ended Notification is unread) |

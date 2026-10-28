@@ -331,7 +331,7 @@ public class VoteService {
             page -> toResponses(page, userId));
     }
 
-    /** Following list: Open PUBLIC Polls created by users the caller follows, most recently opened first. */
+    /** Following list: Open PUBLIC Polls created by users the caller follows or carrying tags the caller follows, most recently opened first. */
     @Transactional(readOnly = true)
     public CursorResponse<VoteResponse> listFollowingVotes(String userId, String cursor, Integer limit) {
         int size = CursorResponse.limit(limit);

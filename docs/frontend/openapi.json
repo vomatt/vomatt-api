@@ -4462,6 +4462,21 @@
         },
         "type" : "object"
       },
+      "TagFollowExport" : {
+        "description" : "A tag the caller follows",
+        "properties" : {
+          "createdAt" : {
+            "description" : "When the follow was added",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "tagId" : {
+            "example" : "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "UnlockLoginRequest" : {
         "description" : "What to clear; every field is optional and an omitted field means all. Allowed values are listed by GET /api/admin/users/options",
         "properties" : {
@@ -4783,7 +4798,7 @@
         "type" : "object"
       },
       "UserDataExportResponse" : {
-        "description" : "Export of the caller's own data: profile, preferences, Polls created, Comments written, Ballots cast, feedback sent, follows, blocks and bookmarks",
+        "description" : "Export of the caller's own data: profile, preferences, Polls created, Comments written, Ballots cast, feedback sent, follows, blocks, bookmarks and followed tags",
         "nullable" : true,
         "properties" : {
           "ballots" : {
@@ -4824,6 +4839,13 @@
             "description" : "Feedback the caller sent, oldest first",
             "items" : {
               "$ref" : "#/components/schemas/FeedbackExport"
+            },
+            "type" : "array"
+          },
+          "followedTags" : {
+            "description" : "Tags the caller follows, oldest first",
+            "items" : {
+              "$ref" : "#/components/schemas/TagFollowExport"
             },
             "type" : "array"
           },
@@ -13272,6 +13294,89 @@
         "tags" : [ "Tag" ]
       }
     },
+    "/api/tags/following" : {
+      "get" : {
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: returns the tags the caller follows (`PUT /api/tags/{tagId}/follow`), most recently followed first; not paginated. `[]` when none\n**Side effects**: none\n**Errors**: none specific to this endpoint (only the shared errors below)",
+        "operationId" : "getFollowedTags",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "FollowedTags" : {
+                    "description" : "FollowedTags",
+                    "value" : {
+                      "data" : [ {
+                        "description" : "Gadgets, software and the internet",
+                        "displayOrder" : 1,
+                        "id" : "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70",
+                        "name" : "Technology",
+                        "slug" : "technology",
+                        "usageCount" : 42
+                      } ],
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListTagDto"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "List followed Tags",
+        "tags" : [ "Tag" ]
+      }
+    },
     "/api/tags/popular" : {
       "get" : {
         "description" : "**Auth**: public\n**Precondition**: none\n**Behavior**: cursor-paged tags ordered by `usageCount` descending; items may shift between pages while usage changes. `limit` is clamped to 1-50 (default 20); `nextCursor` is null on the last page\n**Side effects**: none\n**Errors**:\n- 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list",
@@ -13362,6 +13467,193 @@
           }
         },
         "summary" : "List popular Tags",
+        "tags" : [ "Tag" ]
+      }
+    },
+    "/api/tags/{tagId}/follow" : {
+      "delete" : {
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: removes the caller's follow of the tag, so Polls that reached `GET /api/votes/following` only through it leave the list. Idempotent: unfollowing a tag that was not followed, or that does not exist, succeeds.\n**Side effects**: none\n**Errors**:\n- 400 `common.bad_request`: `tagId` is not a valid id",
+        "operationId" : "unfollowTag",
+        "parameters" : [ {
+          "description" : "Id of the tag to unfollow",
+          "example" : "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70",
+          "in" : "path",
+          "name" : "tagId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : {
+                    "id" : null,
+                    "message" : null,
+                    "status" : null,
+                    "success" : true
+                  },
+                  "error" : null,
+                  "errorCode" : null,
+                  "message" : null,
+                  "success" : true
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseSimpleResultResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Unfollow a Tag",
+        "tags" : [ "Tag" ]
+      },
+      "put" : {
+        "description" : "**Auth**: required\n**Precondition**: `tagId` is an existing tag\n**Behavior**: from then on `GET /api/votes/following` also lists Open PUBLIC Polls carrying the tag, and the tag shows in `GET /api/tags/following`. Idempotent: following an already followed tag succeeds.\n**Side effects**: none\n**Errors**:\n- 400 `common.bad_request`: `tagId` is not a valid id\n- 404 `tag.not_found`: no tag with this id",
+        "operationId" : "followTag",
+        "parameters" : [ {
+          "description" : "Id of the tag to follow",
+          "example" : "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70",
+          "in" : "path",
+          "name" : "tagId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : {
+                    "id" : null,
+                    "message" : null,
+                    "status" : null,
+                    "success" : true
+                  },
+                  "error" : null,
+                  "errorCode" : null,
+                  "message" : null,
+                  "success" : true
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseSimpleResultResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : null,
+                  "error" : "Tag not found",
+                  "errorCode" : "tag.not_found",
+                  "message" : "Tag not found",
+                  "success" : false
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Tag does not exist (errorCode `tag.not_found`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Follow a Tag",
         "tags" : [ "Tag" ]
       }
     },
@@ -16064,7 +16356,7 @@
     },
     "/api/votes/following" : {
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: cursor-paged Open PUBLIC Polls created by users the caller follows (`POST /api/users/me/follows/{userId}`), most recently opened first. Scheduled, Ended, UNLISTED and INVITE_ONLY Polls never appear, nor Polls of users the caller blocked or who blocked the caller. `nextCursor` null means the last page; `limit` is clamped to 1-50 (default 20).\n**Side effects**: none\n**Errors**:\n- 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list\n",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: cursor-paged Open PUBLIC Polls created by users the caller follows (`POST /api/users/me/follows/{userId}`) or carrying a tag the caller follows (`PUT /api/tags/{tagId}/follow`), most recently opened first; a Poll matching both appears once. Scheduled, Ended, UNLISTED and INVITE_ONLY Polls never appear, nor the caller's own Polls, nor Polls of suspended users, of users the caller blocked or of users who blocked the caller. `nextCursor` null means the last page; `limit` is clamped to 1-50 (default 20).\n**Side effects**: none\n**Errors**:\n- 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list\n",
         "operationId" : "getFollowingVotes",
         "parameters" : [ {
           "description" : "`nextCursor` of the previous page; omit for the first page",
@@ -19917,14 +20209,14 @@
     "description" : "Reading users' reports of Polls (Admin)",
     "name" : "Admin - Poll Report"
   }, {
+    "description" : "Tag APIs: public lists and the caller's followed tags",
+    "name" : "Tag"
+  }, {
     "description" : "Comment moderation APIs (Admin)",
     "name" : "Admin - Comment"
   }, {
     "description" : "Account moderation APIs (Admin)",
     "name" : "Admin - User"
-  }, {
-    "description" : "Public tag APIs",
-    "name" : "Tag"
   }, {
     "description" : "Comments and Replies on a Poll (path segment `votes` = Poll)",
     "name" : "Vote Comment"

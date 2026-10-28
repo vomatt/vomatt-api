@@ -21,6 +21,7 @@ import com.vomatt.entity.UserPreference;
 import com.vomatt.entity.VoteOption;
 import com.vomatt.repository.FeedbackRepository;
 import com.vomatt.repository.FollowEdge;
+import com.vomatt.repository.TagRepository;
 import com.vomatt.repository.UserBlockRepository;
 import com.vomatt.repository.UserFollowRepository;
 import com.vomatt.repository.UserPreferenceRepository;
@@ -46,6 +47,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
@@ -77,6 +79,7 @@ public class UserService {
     private final RedisService redisService;
     private final VoteViewRecorder voteViewRecorder;
     private final VoteBookmarkRepository bookmarkRepository;
+    private final TagRepository tagRepository;
 
     /** One export per user per UTC day: the response is the account's whole footprint and is not cheap to build. */
     private static final String EXPORT_COUNTER_NS = "export:daily";
@@ -388,12 +391,16 @@ public class UserService {
         List<UserDataExportResponse.BookmarkExport> bookmarks = bookmarkRepository.findByUserIdOrderByCreatedAt(userUuid).stream()
                 .map(b -> new UserDataExportResponse.BookmarkExport(b.getVote().getId().toString(), b.getCreatedAt()))
                 .toList();
+        List<UserDataExportResponse.TagFollowExport> followedTags = tagRepository.findFollowsOf(userUuid).stream()
+                .map(f -> new UserDataExportResponse.TagFollowExport(f.getTagId().toString(),
+                        f.getCreatedAt().atOffset(ZoneOffset.UTC)))
+                .toList();
         if (redisService.incrementAndExpire(EXPORT_COUNTER_NS, counterKey, Duration.ofDays(1)) > 1) {
             throw ApiException.tooManyRequests(MessageKey.COMMON_RATE_LIMITED);
         }
         log.info("Data export produced for user {}", userId);
         return new UserDataExportResponse(OffsetDateTime.now(), profile, preferences, polls, comments, ballots, feedback,
-                following, blocking, bookmarks);
+                following, blocking, bookmarks, followedTags);
     }
 
     @Transactional

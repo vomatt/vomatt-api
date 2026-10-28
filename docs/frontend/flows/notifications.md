@@ -47,6 +47,7 @@ Notifications are **not stored**; they are derived from Polls, Invitations, foll
 - `actor` carries `isFollowing` (you follow them) and `followsYou` (they follow you), so a `FOLLOWED` row can offer "Follow back" without fetching the profile.
 - `comment.parentId` is the Comment a Reply is under, null for a top-level Comment. A link to a Reply needs both ids.
 - Nothing from a suspended user, a user you blocked or a user who blocked you is listed or counted, and nothing about a Poll whose owner blocked you (`RESULT` and `COMMENT` included). A `COMMENT` for a Reply in a thread started by a user you blocked is left out too, as in the Comment lists.
+- `CLOSING_SOON` follows users only, by design: a followed tag (`PUT /api/tags/{tagId}/follow`) adds Polls to `GET /api/votes/following` but never raises `CLOSING_SOON`.
 - An item can vanish (Comment deleted, follow undone, Poll Deleted, block) or appear behind the cursor (you follow someone); de-duplicate by `id`.
 
 ## Read state

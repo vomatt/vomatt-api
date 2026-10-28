@@ -321,4 +321,65 @@ class TagServiceTest {
             assertThat(next.id()).isEqualTo(tag2.getId());
         }
     }
+
+    // ─── followTag / unfollowTag ──────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("followTag / unfollowTag")
+    class FollowTagTests {
+
+        final UUID userId = UUID.randomUUID();
+
+        @Test
+        @DisplayName("should follow an existing tag")
+        void shouldFollowWhenTagExists() {
+            UUID tagId = UUID.randomUUID();
+            when(tagRepository.follow(userId, tagId)).thenReturn(1);
+
+            tagService.followTag(userId.toString(), tagId.toString());
+
+            verify(tagRepository, never()).existsById(any());
+        }
+
+        @Test
+        @DisplayName("should succeed when the tag is already followed")
+        void shouldSucceedWhenTagAlreadyFollowed() {
+            UUID tagId = UUID.randomUUID();
+            when(tagRepository.follow(userId, tagId)).thenReturn(0);
+            when(tagRepository.existsById(tagId)).thenReturn(true);
+
+            tagService.followTag(userId.toString(), tagId.toString());
+        }
+
+        @Test
+        @DisplayName("should throw 404 when following an unknown tag")
+        void shouldThrowNotFoundWhenFollowingUnknownTag() {
+            UUID tagId = UUID.randomUUID();
+            when(tagRepository.follow(userId, tagId)).thenReturn(0);
+            when(tagRepository.existsById(tagId)).thenReturn(false);
+
+            assertThatThrownBy(() -> tagService.followTag(userId.toString(), tagId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.TAG_NOT_FOUND));
+        }
+
+        @Test
+        @DisplayName("should unfollow without looking the tag up")
+        void shouldUnfollowWhenTagUnknown() {
+            UUID tagId = UUID.randomUUID();
+
+            tagService.unfollowTag(userId.toString(), tagId.toString());
+
+            verify(tagRepository).unfollow(userId, tagId);
+            verify(tagRepository, never()).findById(any());
+        }
+
+        @Test
+        @DisplayName("should list the followed tags")
+        void shouldListFollowedTags() {
+            Tag tag = createTagWithId("Tech", "tech", null, 1);
+            when(tagRepository.findFollowedBy(userId)).thenReturn(List.of(tag));
+
+            assertThat(tagService.getFollowedTags(userId.toString())).extracting(TagDto::getSlug).containsExactly("tech");
+        }
+    }
 }

@@ -451,8 +451,10 @@ public class VoteController {
     @Operation(summary = "Following Polls", description = """
             **Auth**: required
             **Precondition**: none
-            **Behavior**: cursor-paged Open PUBLIC Polls created by users the caller follows (`POST /api/users/me/follows/{userId}`), \
-            most recently opened first. Scheduled, Ended, UNLISTED and INVITE_ONLY Polls never appear, nor Polls of users the caller blocked or who blocked the caller. \
+            **Behavior**: cursor-paged Open PUBLIC Polls created by users the caller follows (`POST /api/users/me/follows/{userId}`) \
+            or carrying a tag the caller follows (`PUT /api/tags/{tagId}/follow`), most recently opened first; a Poll matching both appears once. \
+            Scheduled, Ended, UNLISTED and INVITE_ONLY Polls never appear, nor the caller's own Polls, nor Polls of suspended users, \
+            of users the caller blocked or of users who blocked the caller. \
             `nextCursor` null means the last page; `limit` is clamped to 1-50 (default 20).
             **Side effects**: none
             **Errors**:

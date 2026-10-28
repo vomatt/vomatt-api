@@ -97,7 +97,7 @@ public class VoteCommentController {
                     **Errors**:
                     - 400 `comment.parent.invalid`: `parentId` does not exist, is deleted, or belongs to another Poll
                     - 404 `comment.not_found`: `parentId` is hidden from the caller as in the lists (written by a user the caller blocked, or a Reply in a thread such a user started)
-                    - 404 `vote.not_found`: Poll does not exist or is Deleted
+                    - 404 `vote.not_found`: Poll does not exist or is Deleted, or its owner blocked the caller
                     - 404 `user.not_found`: the signed-in user no longer exists
                     """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
@@ -229,7 +229,7 @@ public class VoteCommentController {
                     **Side effects**: none
                     **Errors**:
                     - 400 `common.cursor_invalid`: `cursor` is not a token returned by this endpoint
-                    - 404 `vote.not_found`: Poll does not exist or is Deleted
+                    - 404 `vote.not_found`: Poll does not exist or is Deleted, or its owner blocked the caller
                     """)
     public ResponseEntity<ApiResponse<CursorResponse<CommentDto>>> getComments(
             @Parameter(description = "Poll ID", required = true) @PathVariable String voteId,
@@ -282,7 +282,7 @@ public class VoteCommentController {
                     **Errors**:
                     - 400 `common.cursor_invalid`: `cursor` is not a token returned by this endpoint
                     - 404 `comment.not_found`: Comment does not exist, is a Reply rather than a top-level Comment, belongs to another Poll, or was written by a user the caller blocked
-                    - 404 `vote.not_found`: the Comment's Poll is Deleted
+                    - 404 `vote.not_found`: the Comment's Poll is Deleted, or its owner blocked the caller
                     """)
     public ResponseEntity<ApiResponse<CursorResponse<CommentDto>>> getReplies(
             @Parameter(description = "Poll ID", required = true) @PathVariable String voteId,
@@ -346,7 +346,7 @@ public class VoteCommentController {
                     **Errors**:
                     - 403 `comment.forbidden`: the caller is not the author
                     - 404 `comment.not_found`: Comment does not exist or is deleted
-                    - 404 `vote.not_found`: the Comment's Poll is Deleted
+                    - 404 `vote.not_found`: the Comment's Poll is Deleted, or its owner blocked the caller
                     """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = @ExampleObject(name = "edit", value = """
@@ -402,7 +402,7 @@ public class VoteCommentController {
                     **Errors**:
                     - 403 `comment.forbidden`: the caller is not the author
                     - 404 `comment.not_found`: Comment does not exist or is already deleted
-                    - 404 `vote.not_found`: the Comment's Poll is Deleted
+                    - 404 `vote.not_found`: the Comment's Poll is Deleted, or its owner blocked the caller
                     """)
     public ResponseEntity<ApiResponse<SimpleResultResponse>> deleteComment(
             @Parameter(description = "Poll ID", required = true) @PathVariable String voteId,
@@ -441,7 +441,7 @@ public class VoteCommentController {
                     **Side effects**: `likeCount` +1 and `likedByCurrentUser` true in later reads (first like only)
                     **Errors**:
                     - 404 `comment.not_found`: Comment does not exist, is deleted, or is hidden from the caller as in the lists (written by a user the caller blocked, or a Reply in a thread such a user started)
-                    - 404 `vote.not_found`: the Comment's Poll is Deleted
+                    - 404 `vote.not_found`: the Comment's Poll is Deleted, or its owner blocked the caller
                     - 404 `user.not_found`: the signed-in user no longer exists
                     """)
     public ResponseEntity<ApiResponse<SimpleResultResponse>> likeComment(
@@ -545,7 +545,7 @@ public class VoteCommentController {
                     **Side effects**: `likeCount` -1 and `likedByCurrentUser` false in later reads (only if a like existed)
                     **Errors**:
                     - 404 `comment.not_found`: Comment does not exist or is deleted
-                    - 404 `vote.not_found`: the Comment's Poll is Deleted
+                    - 404 `vote.not_found`: the Comment's Poll is Deleted, or its owner blocked the caller
                     """)
     public ResponseEntity<ApiResponse<SimpleResultResponse>> unlikeComment(
             @Parameter(description = "Poll ID", required = true) @PathVariable String voteId,

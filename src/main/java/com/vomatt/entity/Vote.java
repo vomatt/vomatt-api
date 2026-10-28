@@ -151,16 +151,24 @@ public class Vote extends AuditableEntity {
     }
 
     /**
-     * Who can reach the Poll at all: nobody once Deleted; an Invite-only Poll only its owner and Invitees.
+     * Who can reach the Poll at all: nobody once Deleted; its owner always; nobody the owner blocked, Invitees
+     * included; an Invite-only Poll only its owner and Invitees.
      *
-     * @param viewerId  caller, or null when signed out
-     * @param isInvitee asked only for a signed-in non-owner of an Invite-only Poll
+     * @param viewerId         caller, or null when signed out
+     * @param isInvitee        asked only for a signed-in non-owner of an Invite-only Poll
+     * @param isBlockedByOwner asked only for a signed-in non-owner
      */
-    public boolean isVisibleTo(String viewerId, BooleanSupplier isInvitee) {
+    public boolean isVisibleTo(String viewerId, BooleanSupplier isInvitee, BooleanSupplier isBlockedByOwner) {
         if (deletedAt != null) {
             return false;
         }
-        return audience != Audience.INVITE_ONLY || isOwnedBy(viewerId) || (viewerId != null && isInvitee.getAsBoolean());
+        if (isOwnedBy(viewerId)) {
+            return true;
+        }
+        if (viewerId != null && isBlockedByOwner.getAsBoolean()) {
+            return false;
+        }
+        return audience != Audience.INVITE_ONLY || (viewerId != null && isInvitee.getAsBoolean());
     }
 
     /** Invitees can be added or removed while the Poll is Scheduled or Open. */

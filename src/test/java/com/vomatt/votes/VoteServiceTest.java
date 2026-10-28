@@ -74,6 +74,7 @@ class VoteServiceTest {
     @Mock VoteConfigurationProperties voteConfig;
     @Mock com.vomatt.repository.VoteCommentRepository voteCommentRepository;
     @Mock InviteeRepository inviteeRepository;
+    @Mock com.vomatt.repository.UserBlockRepository blockRepository;
     @Mock NotificationRepository notificationRepository;
     @Mock com.vomatt.common.email.EmailService emailService;
     @Mock com.vomatt.common.redis.RedisService redisService;

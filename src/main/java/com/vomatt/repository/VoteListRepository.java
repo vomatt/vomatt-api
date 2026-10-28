@@ -49,7 +49,7 @@ public class VoteListRepository {
      * @param tag   tag slug filter, or null
      * @param query Search text (already validated, at least two characters), or null
      * @param after keyset position (sort key + id) of the previous page's last item, or null
-     * @param viewerId signed-in caller, whose blocked users' Polls are left out; null for anonymous callers
+     * @param viewerId signed-in caller: Polls of users they blocked or who blocked them are left out; null for anonymous callers
      */
     @SuppressWarnings("unchecked")
     public List<Vote> findPage(VoteListOrder order, String tag, String query, Cursor after, OffsetDateTime now,
@@ -74,7 +74,9 @@ public class VoteListRepository {
         }
         if (viewerId != null) {
             sql.append(" AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b")
-               .append(" WHERE b.blocker_id = :viewerId AND b.blocked_id = v.creator_id)");
+               .append(" WHERE b.blocker_id = :viewerId AND b.blocked_id = v.creator_id)")
+               .append(" AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b")
+               .append(" WHERE b.blocker_id = v.creator_id AND b.blocked_id = :viewerId)");
         }
         if (after != null) {
             sql.append(" AND (").append(String.join(", ", sortColumns)).append(", v.id) ").append(descending ? "<" : ">")
@@ -108,7 +110,7 @@ public class VoteListRepository {
     }
 
     /**
-     * Following list: Open Public Polls created by users the follower follows (and has not blocked), most recently
+     * Following list: Open Public Polls created by users the follower follows (with no block either way), most recently
      * opened first. Starts from the follower's follows and reads each followed user's newest Polls through
      * idx_votes_creator_start_id, so the cost grows with the follows, not with every Open Poll.
      */
@@ -127,6 +129,8 @@ public class VoteListRepository {
                 WHERE f.follower_id = :followerId
                   AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b
                                   WHERE b.blocker_id = :followerId AND b.blocked_id = f.followed_id)
+                  AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b
+                                  WHERE b.blocker_id = f.followed_id AND b.blocked_id = :followerId)
                 ORDER BY v.start_time DESC, v.id DESC LIMIT :limit""";
         Query nativeQuery = em.createNativeQuery(sql, Vote.class)
                 .setParameter("followerId", followerId)
@@ -139,8 +143,8 @@ public class VoteListRepository {
     }
 
     /**
-     * My Polls: Polls the user created or holds a Ballot in. Not yet Ended (Scheduled + Open) closing soonest
-     * first, or Ended most recently ended first.
+     * My Polls: Polls the user created, holds a Ballot in or is invited to, minus those of users who blocked the user.
+     * Not yet Ended (Scheduled + Open) closing soonest first, or Ended most recently ended first.
      */
     @SuppressWarnings("unchecked")
     public List<Vote> findMine(UUID userId, boolean ended, Cursor after, OffsetDateTime now, int limit) {
@@ -148,6 +152,7 @@ public class VoteListRepository {
         StringBuilder sql = new StringBuilder("SELECT v.* FROM vomatt.votes v WHERE v.deleted_at IS NULL AND v.id IN ")
                 .append(MY_POLL_IDS);
         sql.append(ended ? " AND v.end_time <= :now" : " AND v.end_time > :now");
+        sql.append(" AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b WHERE b.blocker_id = v.creator_id AND b.blocked_id = :userId)");
         if (after != null) {
             sql.append(" AND (v.end_time, v.id) ").append(ended ? "<" : ">").append(" (:afterKey, :afterId)");
         }

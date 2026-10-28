@@ -47,6 +47,7 @@ import com.vomatt.common.response.CursorResponse;
 import com.vomatt.entity.Audience;
 import com.vomatt.entity.Invitee;
 import com.vomatt.entity.User;
+import com.vomatt.repository.UserBlockRepository;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.entity.Tag;
 import com.vomatt.entity.UserVote;
@@ -89,6 +90,7 @@ public class VoteService {
     private final VoteCommentRepository voteCommentRepository;
     private final NotificationRepository notificationRepository;
     private final InviteeRepository inviteeRepository;
+    private final UserBlockRepository blockRepository;
     private final EmailService emailService;
     private final RedisService redisService;
     private final InviteListService inviteListService;
@@ -247,7 +249,8 @@ public class VoteService {
 
     /**
      * Feed / Explore / Search / Top page: Open (newest, closing soonest or highest Turnout) or Ended Polls, optionally under one tag
-     * and matching a free-text query on title and description. A signed-in caller does not see Polls of users they blocked.
+     * and matching a free-text query on title and description. A signed-in caller does not see Polls of users they blocked
+     * or who blocked them.
      */
     @Transactional(readOnly = true)
     public CursorResponse<VoteResponse> listVotes(VoteListOrder order, String tag, String q, String cursor,
@@ -314,8 +317,11 @@ public class VoteService {
         User creator = userRepository.findActiveByUsername(username)
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
         int size = CursorResponse.limit(limit);
-        List<Vote> rows = voteListRepository.findByCreator(creator.getId(), Cursor.decode(cursor, Cursor.Scope.USER_POLLS),
-            OffsetDateTime.now(), size + 1);
+        Cursor after = Cursor.decode(cursor, Cursor.Scope.USER_POLLS);
+        // A user the creator blocked cannot reach any of their Polls, so the list is empty for them
+        List<Vote> rows = userId != null && blockRepository.existsByBlockerIdAndBlockedId(creator.getId(), UUID.fromString(userId))
+            ? List.of()
+            : voteListRepository.findByCreator(creator.getId(), after, OffsetDateTime.now(), size + 1);
         return CursorResponse.of(rows, size, Cursor.Scope.USER_POLLS, v -> Cursor.of(v.getStartTime(), v.getId()),
             page -> toResponses(page, userId));
     }
@@ -788,10 +794,12 @@ public class VoteService {
         return requireAccessible(voteRepository.findById(voteId), viewerId);
     }
 
-    // The access rule itself (Vote.isVisibleTo): Deleted Polls are hidden from everyone, Invite-only ones from non-Invitees
+    // The access rule itself (Vote.isVisibleTo): Deleted Polls are hidden from everyone, a Poll from users its owner
+    // blocked, Invite-only ones from non-Invitees
     private Vote requireAccessible(Optional<Vote> vote, String viewerId) {
         return vote.filter(v -> v.isVisibleTo(viewerId,
-                () -> inviteeRepository.existsByVoteIdAndUserId(v.getId(), UUID.fromString(viewerId))))
+                () -> inviteeRepository.existsByVoteIdAndUserId(v.getId(), UUID.fromString(viewerId)),
+                () -> blockRepository.existsByBlockerIdAndBlockedId(v.getCreator().getId(), UUID.fromString(viewerId))))
             .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
     }
 

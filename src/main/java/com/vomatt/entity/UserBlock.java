@@ -12,7 +12,10 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 
-/** One-way block: {@code blocker} no longer sees Polls in public lists or Comments authored by {@code blocked}. */
+/**
+ * A block: {@code blocker} no longer sees Polls in public lists or Comments authored by {@code blocked}, and
+ * {@code blocked} can no longer reach any Poll of {@code blocker} (Vote.isVisibleTo). Notifications drop both ways.
+ */
 @Entity
 @Table(name = "user_blocks")
 @Getter

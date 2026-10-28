@@ -74,11 +74,12 @@ public class NotificationController {
             - INVITATION: the caller is an Invitee of a Scheduled or Open Invite-only Poll; listed until the Poll Ends, when its RESULT takes over. \
             Being removed and invited again is a new, unread INVITATION
             - FOLLOWED: someone followed the caller (one item per follower; group them in the UI)
-            - COMMENT: someone else commented on or replied under the caller's Poll, or replied to the caller's Comment, on a Poll the caller can see
+            - COMMENT: someone else commented on or replied under the caller's Poll, or replied to the caller's Comment, on a Poll the caller can see; \
+            not a Reply in a thread started by a user the caller blocked (the Comment lists hide that thread)
             - CLOSING_SOON: an Open Poll ends within 24 hours and the caller holds no Ballot in it, if the caller is its Invitee, \
             or it is a Public Poll of a user the caller follows. Gone once the caller casts a Ballot or the Poll Ends. Off by default
             Kinds switched off in the caller's preferences are left out (FOLLOWED cannot be switched off). Nothing from a suspended user, \
-            a user the caller blocked or a user who blocked the caller is listed. `poll` never carries per-option counts, its \
+            a user the caller blocked or a user who blocked the caller is listed, nor anything about a Poll whose owner blocked the caller. `poll` never carries per-option counts, its \
             outcome (`winningOptionIds`, `winningOptionLabels`, `tie`) stays null until the Poll has Ended, and `actor` is never \
             a voter, so Sealed results and Anonymous Ballots stay hidden. Each item carries what a row needs: the caller's \
             Selection (`poll.myOptionId`), the caller's follows with the actor both ways (`actor.isFollowing`, `actor.followsYou`), \

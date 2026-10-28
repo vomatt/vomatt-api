@@ -2,7 +2,7 @@
 
 This file provides guidance to AI coding agents working with code in this repository.
 
-Vomatt polling community backend: Java 25 (virtual threads), Spring Boot 4.0.5 (Security 7, Jackson 3 `tools.jackson.*`, Hibernate 7), PostgreSQL (schema `vomatt`), Redis (Lettuce). Respond in Traditional Chinese; write code comments in English.
+Vomatt polling community backend: Java 25 (virtual threads), Spring Boot 4.1.1 (Security 7, Jackson 3 `tools.jackson.*`, Hibernate 7), PostgreSQL (schema `vomatt`), Redis (Lettuce). Respond in Traditional Chinese; write code comments in English.
 
 ## Commands
 
@@ -21,16 +21,17 @@ Swagger UI: <http://localhost:8080/swagger-ui.html>. `*PostgresTest` and `OpenAp
 
 ## Architecture
 
-- Packages are split by domain: `auth`, `users`, `votes`, `comments`, `notifications`, `tags`, `invitelists`, `lookups`, `admin`, each with Controller + Service + Mapper + `dto/`. All JPA entities live in `entity/`, all repositories in `repository/`, shared components in `common/`.
+- Packages are split by domain: `auth`, `users`, `votes`, `comments`, `notifications`, `tags`, `invitelists`, `lookups`, `admin`, `feedback`, each with Controller + Service + Mapper + `dto/`. All JPA entities live in `entity/`, all repositories in `repository/`, shared components in `common/`.
 - When a Service has only one implementation, do not split it into interface / Impl; `@Transactional` goes on the Service layer.
 - Code and API paths keep the `Vote` naming; business terms follow `CONTEXT.md` (Poll, Ballot, Selection, Participant, Sealed, Turnout, Support...). Renaming would break the contract, so it is not renamed.
 - Poll status is not stored in a column; it is derived from time: `Vote.statusAt()`, with Ended taking precedence over Scheduled. Cancelled is an Ended Poll with `endTime < startTime`.
 - Result sealing (Sealed) is handled in one place only, `VoteMapper`: while a Poll is not Ended, every option's vote count is null. Any new path that returns `VoteResponse` must go through the mapper.
 - Anonymous Ballots (`user_votes.anonymous`) are excluded from the voter list (`GET /api/votes/{voteId}/voters`), and while a Poll holds any (other than the caller's own) the list names no option for anyone (`VoterResponse.optionId` null). Any new query that exposes who chose what must do the same: exclusion alone leaks, because per-option counts minus named voters reveal what the anonymous ones chose. Once a Poll has Ended, `RetentionJob` seals its Anonymous Ballots (`option_id` NULL), so code reading a Ballot's option must allow null.
 - The Poll-level `votes.is_anonymous` (`anonymous` in the API) is deprecated and hides nothing on its own: `VoteService.applyVoterVisibility` keeps it equal to "Voter Visibility is NOBODY", and the response derives it the same way. Sent without `voterVisibility`, true sets NOBODY and false turns NOBODY back into OWNER (`CreateVoteRequest.resolveVoterVisibility`). Use `voterVisibility`.
+- Operational limits an admin can tune (`vote_max_options`, `vote_delete_window_minutes`, `invite_list_max_*`, `invitation_email_daily_limit`...) are `config`-type lookups read with `LookupService.configInt` / `configDuration`, which fall back to the default in code when unset or invalid. A new tunable limit goes there, not in code or env.
 - Option vote counts are stored in `vote_options.vote_count` and maintained with atomic increments/decrements; `db/reconcile-vote-counts.sql` can be used to reconcile them.
 - Public lists use cursor pagination (`CursorResponse` / `Cursor`, `limit` defaults to 20, max 50); keyset queries live in `VoteListRepository`. Title and description search uses a custom bigram GIN index; `q` needs at least 2 characters.
-- Notifications (the feed: RESULT, CANCELLED, INVITATION, FOLLOWED, COMMENT, CLOSING_SOON) are derived at read time from the rows they are about, one SQL branch per kind in `NotificationRepository` (ADR 0005); the database stores only read state (`notification_reads` keyed by kind + source id, `notification_read_all`). There is no scheduler. A new kind is a new branch there, plus its switch in `NotificationPreference` if it has one.
+- Notifications (the feed: RESULT, CANCELLED, INVITATION, FOLLOWED, COMMENT, CLOSING_SOON) are derived at read time from the rows they are about, one SQL branch per kind in `NotificationRepository` (ADR 0005); the database stores only read state (`notification_reads` keyed by kind + source id, `notification_read_all`). Notifications need no scheduler. A new kind is a new branch there, plus its switch in `NotificationPreference` if it has one.
 - Responses are always wrapped in `ApiResponse<T>` (`success, data, message, errorCode, error`). Raise errors with `throw ApiException.xxx(MessageKey.X)`; messages live in `resources/i18n/messages*.properties` and are handled centrally by `GlobalExceptionHandler`.
 - Auth: JWT access token plus Redis refresh token (rotation + grace window + reuse detection). `User.active=false` means suspended. `User.roles` (`text[]`) is mapped to `ROLE_<UPPER>`.
 - All route permissions are defined in `common/security/SecurityEndpoints`; do not edit the `SecurityConfig` filter chain directly. Public Poll paths match only UUIDs, and named sub-paths that require login (`/my`, `/search`...) are ordered before the public rules. `/api/admin/**` controllers must add `@PreAuthorize("hasRole('ADMIN')")` at the class level.

@@ -292,8 +292,8 @@ public class UserController {
             **Auth**: required
             **Precondition**: none
             **Behavior**: updates `username`, `displayName`, `firstName`, `lastName`, `birthday`, `bio`, `avatarUrl` and/or `anonymousBallotByDefault` (the default for Ballots that omit `anonymous`; existing Ballots are unchanged). `avatarUrl` must be `bot:<kind>` with one of the bot cast kinds, or `bot:none` for no character. `firstName` and `lastName` are stored without surrounding whitespace, and a blank value clears them. `birthday` is an ISO date (`yyyy-MM-dd`) from 1900-01-01 to yesterday in Asia/Taipei. Sending the current `username` is a no-op, except that an older account holding a reserved name gets 400 (omit `username` when unchanged). A field that is omitted or `null` is left unchanged \
-            (`null` cannot be used to clear a value; send an empty string instead, except `avatarUrl` and `birthday`, which cannot be cleared). Returns the public profile after the update, \
-            so the optional fields are masked by the caller's own visibility settings.
+            (`null` cannot be used to clear a value; send an empty string instead, except `avatarUrl` and `birthday`, which cannot be cleared). Returns the caller's profile after the update: \
+            optional fields the caller explicitly hid are `null`, fields whose visibility was never set are shown.
             **Side effects**: persists the new values; after a `username` change the old public profile path returns 404
             **Errors**:
             - 400 `common.validation_failed`: `username` is not 3-50 characters of [a-z0-9_] or is a reserved name (see the `username` schema), \

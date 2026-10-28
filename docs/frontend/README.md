@@ -20,7 +20,7 @@ docker compose up -d --build
 - API: <http://localhost:8080> (CORS allows `http://localhost:3000` and `http://localhost:5173`; override with `CORS_ALLOWED_ORIGINS=... docker compose up -d`)
 - Swagger UI: <http://localhost:8080/swagger-ui.html>
 - OpenAPI JSON: <http://localhost:8080/v3/api-docs>
-- Login: emails are not sent locally. After `POST /api/auth/send-otp`, read the code with `docker compose exec redis redis-cli GET otp:email:<email>`
+- Login: emails are not sent locally. After `POST /api/auth/send-otp`, read the code from the API log: `docker compose logs api | grep EMAIL-NOOP` (line `[EMAIL-NOOP] login OTP <code> for ...`; Redis holds only a hash)
 - After pulling backend changes: run the same command again (`--build` rebuilds the image)
 - Reset all data: `docker compose down -v`
 
@@ -35,7 +35,7 @@ DB_URL=jdbc:postgresql://<staging-host>:5432/<db>
 DB_USER=<user>
 DB_PASSWORD=<password>
 
-# Optional: send real OTP emails instead of reading them from Redis
+# Optional: send real OTP emails instead of reading them from the API log
 EMAIL_ENABLED=true
 EMAIL_FROM=<sender>
 EMAIL_SITE_URL=<frontend-origin>   # base of links in emails, defaults to https://vomatt.com
@@ -51,7 +51,7 @@ MAIL_PASSWORD=<smtp-password>
 docker compose -f docker-compose.staging.yml --env-file .env.staging up -d --build
 ```
 
-- API / Swagger / OTP lookup: same URLs and command as above (`docker compose -f docker-compose.staging.yml exec redis redis-cli GET otp:email:<email>`)
+- API / Swagger / OTP lookup: same URLs and command as above (`docker compose -f docker-compose.staging.yml logs api | grep EMAIL-NOOP`)
 - Data is shared with everyone on staging and cannot be reset locally; avoid creating junk data
 - Stop: `docker compose -f docker-compose.staging.yml down`
 

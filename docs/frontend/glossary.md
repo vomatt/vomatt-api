@@ -4,9 +4,9 @@ Domain terms follow [CONTEXT.md](../../CONTEXT.md). API paths and DTOs still use
 
 | Domain term | Meaning | API path | DTO |
 |----------|------|----------|-----|
-| **Poll** | A question with options; always has an end time | `POST/PUT/GET /api/votes`, `GET /api/votes/{voteId}`, `GET /api/votes/my` | `CreateVoteRequest`, `VoteResponse` |
+| **Poll** | A question with options; always has an end time | `POST/GET /api/votes`, `GET/PUT /api/votes/{voteId}`, `GET /api/votes/my` | `CreateVoteRequest`, `VoteResponse` |
 | **Scheduled / Open / Ended** | Poll status (not started / in progress / ended) | Derived from `VoteResponse` fields; lists filter by the status parameter | `VoteResponse` |
-| **Close** (Cancelled) | The owner ends an Open Poll early, or cancels a Scheduled Poll | `PUT /api/votes/{voteId}/deactivate` | `SimpleResultResponse` |
+| **Close** | The owner ends an Open Unlisted or Invite-only Poll before its Deadline; a Public Poll cannot be Closed, and a Scheduled Poll is Deleted instead | `PUT /api/votes/{voteId}/deactivate` | `SimpleResultResponse` |
 | **Ballot / Selection** | A user's single choice in a Poll; voting again replaces it | `POST /api/votes/{voteId}/vote` | `VoteRequest`, `VoteResponse` |
 | **Retraction** | Withdrawing the whole Ballot | `DELETE /api/votes/{voteId}/vote` (also `DELETE .../vote/{optionId}`) | `VoteResponse` |
 | **Participant** | A user holding a Ballot in that Poll | `GET /api/votes/{voteId}/voters`, `GET /api/votes/{voteId}/my-vote-status` | `VoterResponse`, `UserVoteStatusResponse` |
@@ -17,8 +17,8 @@ Domain terms follow [CONTEXT.md](../../CONTEXT.md). API paths and DTOs still use
 | **Anonymous Ballot** | A Ballot left out of the voter list whatever the Voter Visibility; it still counts in Turnout. The account sets the default | `POST /api/votes/{voteId}/vote` (`anonymous`), `PATCH /api/users/me` (`anonymousBallotByDefault`) | `VoteRequest`, `VoteResponse` (`myBallotAnonymous`), `UpdateProfileRequest` |
 | **Share** | A signed-in user passing on a Poll's link with the share button; each user counts once per Poll | `POST /api/votes/{voteId}/share` | `ShareVoteRequest`, `VoteShareResponse`, `VoteResponse` (`shareCount`) |
 | **Notification** | Feed item: a Poll Ended (`RESULT`), an Invitation, a follow, a Comment or reply, a Poll closing soon; derived when read | `GET /api/notifications`, `GET /api/notifications/unread-count`, `POST /api/notifications/{id}/read`, `POST /api/notifications/read-all`, `/api/users/me/notification-preferences` | `NotificationResponse`, `UnreadCountResponse`, `NotificationPreferencesResponse` |
-| **Comment / Reply** | Comments under a Poll and their one level of replies | `/api/votes/{voteId}/comments`, `.../{commentId}/replies`, `.../{commentId}/like` | `CommentDto`, `CreateCommentRequest`, `UpdateCommentRequest` |
-| **Feed** | Public home page: Open Polls, most recently started first | `GET /api/votes` | `VoteResponse` (`CursorResponse`) |
+| **Comment / Reply** | Comments under a Poll and their one level of replies | `/api/votes/{voteId}/comments`, `.../{commentId}/replies`, `.../{commentId}/like`, `.../{commentId}/report` | `CommentDto`, `CreateCommentRequest`, `UpdateCommentRequest`, `ReportCommentRequest` |
+| **Feed** | Public home page: Open Public Polls, most recently opened first | `GET /api/votes` | `VoteResponse` (`CursorResponse`) |
 | **Explore / Search** | Browse Polls by tag / search Polls by keyword | `GET /api/votes`, `GET /api/tags` | `VoteResponse`, `TagDto` |
 
 > Swagger is authoritative for paths and DTO fields; if this table disagrees with Swagger, follow Swagger and please report it.

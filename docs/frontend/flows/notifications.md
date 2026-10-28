@@ -45,12 +45,12 @@ Notifications are **not stored**; they are derived from Polls, Invitations, foll
 - `poll` is `{ id, title, startTime, endTime, status, turnout, myOptionId, winningOptionIds, winningOptionLabels, tie }`. It never carries per-option counts, so a Sealed Poll shows only Turnout ("342 voted so far"). `myOptionId` is your Ballot's option (null without one, or once your Anonymous Ballot of an Ended Poll is sealed). The outcome fields are null until the Poll has Ended; then `winningOptionIds` / `winningOptionLabels` name the option(s) with the most Ballots in display order (`[]` when none named an option, as in a Cancelled Poll) and `tie` says whether there are several. Your Ballot won when `myOptionId` is in `winningOptionIds` (tied when `tie` too). Link to `/poll/{poll.id}`; for `RESULT`, the results page.
 - `actor` carries `isFollowing` (you follow them) and `followsYou` (they follow you), so a `FOLLOWED` row can offer "Follow back" without fetching the profile.
 - `comment.parentId` is the Comment a Reply is under, null for a top-level Comment. A link to a Reply needs both ids.
-- Nothing from a suspended user, a user you blocked or a user who blocked you is listed or counted.
+- Nothing from a suspended user, a user you blocked or a user who blocked you is listed or counted, and nothing about a Poll whose owner blocked you (`RESULT` and `COMMENT` included). A `COMMENT` for a Reply in a thread started by a user you blocked is left out too, as in the Comment lists.
 - An item can vanish (Comment deleted, follow undone, Poll Deleted, block) or appear behind the cursor (you follow someone); de-duplicate by `id`.
 
 ## Read state
 - `read` is per item. `POST /api/notifications/{id}/read` reads one; `POST /api/notifications/read-all` reads everything whose `createdAt` is at or before now, switched-off kinds included. Later items arrive unread.
-- **Unread count** = feed items with `read` false, of the kinds switched on. It updates on the next call; no event is needed (a Poll Ending raises it by itself).
+- **Unread count** = feed items with `read` false, of the kinds switched on. It updates on the next call; no event is needed (a Poll Ending raises it by itself). A kind switched back on returns with its items' read state as it was.
 - **No push or email**: the frontend must poll. Recommended: check once after login and whenever the app / tab returns to the foreground, every 60 seconds while in the foreground, and pause in background tabs. Poll only `unread-count`; fetch the feed when the user opens the page.
 - Deprecated: `POST /api/notifications/{voteId}/read` with a Poll id reads that Poll's Invitation while it is not Ended, its `RESULT` after. `GET /api/votes/my` items still carry `unread` for the same two. Both keep working until the web moves to the feed.
 

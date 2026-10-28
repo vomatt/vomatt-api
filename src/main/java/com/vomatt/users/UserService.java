@@ -155,7 +155,7 @@ public class UserService {
             u -> Cursor.of(u.getUsername(), u.getId()), this::toSearchResults);
     }
 
-    /** Blocks a user (one-way, see {@link UserBlock}) and drops the caller's follow of them; idempotent. */
+    /** Blocks a user (see {@link UserBlock}) and drops the caller's follow of them; idempotent. */
     @Transactional
     public void blockUser(String userId, String targetId) {
         User target = findOtherActiveUser(userId, targetId, MessageKey.USER_BLOCK_SELF);

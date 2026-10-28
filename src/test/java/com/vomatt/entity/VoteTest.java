@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.UUID;
+import java.util.function.BooleanSupplier;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -254,6 +255,8 @@ class VoteTest {
         return vote;
     }
 
+    private static final BooleanSupplier NOT_BLOCKED = () -> false;
+
     @Test
     @DisplayName("should show an Invite-only Poll only to its owner and Invitees when looked up")
     void shouldShowInviteOnlyPollOnlyToOwnerAndInviteesWhenLookedUp() {
@@ -261,22 +264,35 @@ class VoteTest {
         Vote vote = ownedBy(ownerId, Audience.INVITE_ONLY);
         String stranger = UUID.randomUUID().toString();
 
-        assertThat(vote.isVisibleTo(ownerId.toString(), () -> { throw new AssertionError("owner needs no Invitee lookup"); })).isTrue();
-        assertThat(vote.isVisibleTo(stranger, () -> true)).isTrue();
-        assertThat(vote.isVisibleTo(stranger, () -> false)).isFalse();
-        assertThat(vote.isVisibleTo(null, () -> true)).isFalse();
+        assertThat(vote.isVisibleTo(ownerId.toString(), () -> { throw new AssertionError("owner needs no Invitee lookup"); },
+                () -> { throw new AssertionError("owner needs no block lookup"); })).isTrue();
+        assertThat(vote.isVisibleTo(stranger, () -> true, NOT_BLOCKED)).isTrue();
+        assertThat(vote.isVisibleTo(stranger, () -> false, NOT_BLOCKED)).isFalse();
+        assertThat(vote.isVisibleTo(null, () -> true, NOT_BLOCKED)).isFalse();
     }
 
     @Test
     @DisplayName("should show Public and Unlisted Polls to anyone, and a Deleted Poll to nobody, when looked up")
     void shouldShowByAudienceAndDeletionWhenLookedUp() {
         UUID ownerId = UUID.randomUUID();
-        assertThat(ownedBy(ownerId, Audience.PUBLIC).isVisibleTo(null, () -> false)).isTrue();
-        assertThat(ownedBy(ownerId, Audience.UNLISTED).isVisibleTo(null, () -> false)).isTrue();
+        assertThat(ownedBy(ownerId, Audience.PUBLIC).isVisibleTo(null, () -> false,
+                () -> { throw new AssertionError("signed out needs no block lookup"); })).isTrue();
+        assertThat(ownedBy(ownerId, Audience.UNLISTED).isVisibleTo(null, () -> false, NOT_BLOCKED)).isTrue();
 
         Vote deleted = ownedBy(ownerId, Audience.INVITE_ONLY);
         deleted.setDeletedAt(now);
-        assertThat(deleted.isVisibleTo(ownerId.toString(), () -> true)).isFalse();
+        assertThat(deleted.isVisibleTo(ownerId.toString(), () -> true, NOT_BLOCKED)).isFalse();
+    }
+
+    @Test
+    @DisplayName("should hide every Poll, Invite-only ones of an Invitee included, when its owner blocked the viewer")
+    void shouldHidePollWhenOwnerBlockedViewer() {
+        UUID ownerId = UUID.randomUUID();
+        String blocked = UUID.randomUUID().toString();
+
+        for (Audience audience : Audience.values()) {
+            assertThat(ownedBy(ownerId, audience).isVisibleTo(blocked, () -> true, () -> true)).isFalse();
+        }
     }
 
     @Test

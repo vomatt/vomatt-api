@@ -247,6 +247,41 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should leave out every notification about a Poll whose owner blocked the user, until unblocked")
+    void shouldNotListPollNotificationsWhenOwnerBlockedUser() {
+        Vote ended = poll(alice, Audience.PUBLIC, now.minusDays(2), now.minusHours(1));
+        ballot(me, ended);
+        Vote open = poll(alice, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        VoteComment mine = comment(me, open, null, "my comment on alice's Poll");
+        comment(bob, open, mine, "bob replies");
+        invitePoll(alice, now.minusHours(1), now.plusDays(2), me);
+        UserBlock block = new UserBlock(alice, me);
+        em.persist(block);
+
+        assertThat(feed(me)).isEmpty();
+        assertThat(unread(me)).isZero();
+
+        em.remove(block);
+
+        assertThat(kinds(me)).containsExactlyInAnyOrder(NotificationKind.RESULT, NotificationKind.COMMENT,
+                NotificationKind.INVITATION);
+    }
+
+    @Test
+    @DisplayName("should not list a Reply in a thread started by a user the user blocked, as the Comment lists hide it")
+    void shouldNotListCommentWhenThreadStarterBlocked() {
+        User carol = persistUser("f-carol-" + System.nanoTime());
+        Vote mine = poll(me, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        VoteComment carolsThread = comment(carol, mine, null, "carol starts");
+        VoteComment hidden = comment(bob, mine, carolsThread, "bob replies to carol");
+        VoteComment shown = comment(bob, mine, null, "bob starts");
+        em.persist(new UserBlock(me, carol));
+
+        assertThat(feed(me)).extracting(NotificationResponse::id).containsExactly("comment_" + shown.getId());
+        assertThat(feed(me)).extracting(NotificationResponse::id).doesNotContain("comment_" + hidden.getId());
+    }
+
+    @Test
     @DisplayName("should leave switched-off kinds out of the feed and the unread count, and keep FOLLOWED")
     void shouldFilterKindsWhenSwitchedOff() {
         Vote mine = poll(me, Audience.PUBLIC, now.minusDays(2), now.minusHours(1));

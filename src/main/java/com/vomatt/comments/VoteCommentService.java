@@ -227,7 +227,7 @@ public class VoteCommentService {
     }
 
     public void unlikeComment(UUID commentId, String userId) {
-        // Taking back one's own like reveals nothing, so a block does not stop it
+        // Taking back one's own like reveals nothing, so blocking the author does not stop it (a block by the Poll owner does)
         findComment(commentId, userId);
 
         if (commentLikeRepository.deleteByCommentIdAndUserId(commentId, UUID.fromString(userId)) > 0) {

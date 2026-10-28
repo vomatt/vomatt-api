@@ -23,14 +23,20 @@ import com.vomatt.comments.dto.CreateCommentRequest;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.util.UUIDv7Generator;
+import com.vomatt.entity.Audience;
+import com.vomatt.entity.Invitee;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserBlock;
+import com.vomatt.entity.UserFollow;
+import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.repository.UserBlockRepository;
 import com.vomatt.repository.VoteListRepository;
 import com.vomatt.votes.VoteListOrder;
+import com.vomatt.votes.VoteService;
 import com.vomatt.votes.VoteServiceSlice;
+import com.vomatt.votes.dto.VoteResponse;
 
 @Import({ VoteCommentService.class, CommentMapper.class, VoteServiceSlice.class })
 @DisplayName("User blocks (Postgres)")
@@ -39,6 +45,7 @@ class UserBlockPostgresTest extends PostgresRepositoryTest {
     @Autowired VoteCommentService commentService;
     @Autowired VoteListRepository voteListRepository;
     @Autowired UserBlockRepository blockRepository;
+    @Autowired VoteService voteService;
 
     private User viewer;
     private User blocked;
@@ -92,10 +99,76 @@ class UserBlockPostgresTest extends PostgresRepositoryTest {
         assertThat(feed(viewer)).contains(poll.getId()).doesNotContain(blockedPoll.getId());
         assertThat(feed(other)).contains(poll.getId(), blockedPoll.getId());
         assertThat(feed(null)).contains(poll.getId(), blockedPoll.getId());
-        // One-way: the blocked user still sees the blocker's Polls
+        // The other way too: the blocked user no longer sees the blocker's Polls
         Vote viewerPoll = persistPoll(viewer, now.minusMinutes(5), now.plusDays(1), "A", "B");
         em.flush();
-        assertThat(feed(blocked)).contains(viewerPoll.getId());
+        assertThat(feed(blocked)).contains(poll.getId()).doesNotContain(viewerPoll.getId());
+        assertThat(feed(other)).contains(viewerPoll.getId());
+    }
+
+    private static void assertPollNotFound(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {
+        assertThatThrownBy(call).isInstanceOfSatisfying(ApiException.class,
+                e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.VOTE_NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("should 404 every Poll of the blocker for the blocked user, Invite-only ones they are invited to included, until unblocked")
+    void shouldReturnNotFoundWhenOwnerBlockedViewer() {
+        OffsetDateTime now = OffsetDateTime.now();
+        Vote viewerPoll = persistPoll(viewer, now.minusMinutes(5), now.plusDays(1), "A", "B");
+        Vote invitePoll = persistPoll(viewer, now.minusMinutes(5), now.plusDays(1), "A", "B");
+        invitePoll.setAudience(Audience.INVITE_ONLY);
+        em.persist(new Invitee(invitePoll, blocked));
+        em.flush();
+        String as = blocked.getId().toString();
+
+        for (Vote v : new Vote[] { viewerPoll, invitePoll }) {
+            String id = v.getId().toString();
+            assertPollNotFound(() -> voteService.getVote(id, as));
+            assertPollNotFound(() -> voteService.hasUserVoted(id, as));
+            assertPollNotFound(() -> commentService.getCommentsByVote(id, null, 20, as));
+        }
+        // The owner and everyone else are unaffected
+        assertThat(voteService.getVote(viewerPoll.getId().toString(), viewer.getId().toString()).getId())
+                .isEqualTo(viewerPoll.getId().toString());
+        assertThat(voteService.getVote(viewerPoll.getId().toString(), other.getId().toString()).getId())
+                .isEqualTo(viewerPoll.getId().toString());
+        assertThat(voteService.getVote(viewerPoll.getId().toString(), null).getId()).isEqualTo(viewerPoll.getId().toString());
+
+        blockRepository.deleteByBlockerIdAndBlockedId(viewer.getId(), blocked.getId());
+        em.clear();
+        assertThat(voteService.getVote(invitePoll.getId().toString(), as).getId()).isEqualTo(invitePoll.getId().toString());
+    }
+
+    @Test
+    @DisplayName("should leave the blocker's Polls out of the blocked user's Following, My Polls and the blocker's profile list")
+    void shouldHideBlockersPollsWhenBlockedUserListsThem() {
+        OffsetDateTime now = OffsetDateTime.now();
+        Vote viewerPoll = persistPoll(viewer, now.minusMinutes(5), now.plusDays(1), "A", "B");
+        Vote otherPoll = persistPoll(other, now.minusMinutes(5), now.plusDays(1), "A", "B");
+        em.persist(new UserFollow(blocked, viewer));
+        em.persist(new UserFollow(blocked, other));
+        em.persist(new UserVote(blocked, viewerPoll, viewerPoll.getOptions().iterator().next()));
+        em.persist(new UserVote(blocked, otherPoll, otherPoll.getOptions().iterator().next()));
+        em.flush();
+        String as = blocked.getId().toString();
+
+        assertThat(ids(voteService.listFollowingVotes(as, null, 50).items()))
+                .contains(otherPoll.getId().toString()).doesNotContain(viewerPoll.getId().toString());
+        assertThat(ids(voteService.getMyPolls(as, null, null, 50).items()))
+                .contains(otherPoll.getId().toString()).doesNotContain(viewerPoll.getId().toString());
+        assertThat(voteService.getUserPolls(viewer.getUsername(), null, 50, as).items()).isEmpty();
+        assertThat(ids(voteService.getUserPolls(viewer.getUsername(), null, 50, other.getId().toString()).items()))
+                .contains(viewerPoll.getId().toString());
+
+        blockRepository.deleteByBlockerIdAndBlockedId(viewer.getId(), blocked.getId());
+        em.clear();
+        assertThat(ids(voteService.listFollowingVotes(as, null, 50).items())).contains(viewerPoll.getId().toString());
+        assertThat(ids(voteService.getMyPolls(as, null, null, 50).items())).contains(viewerPoll.getId().toString());
+    }
+
+    private static List<String> ids(List<VoteResponse> polls) {
+        return polls.stream().map(VoteResponse::getId).toList();
     }
 
     @Test

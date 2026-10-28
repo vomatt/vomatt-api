@@ -175,7 +175,7 @@ public class UserController {
             **Precondition**: the user exists and is not suspended
             **Behavior**: users who follow this user, most recently followed first, cursor-paged \
             (`limit` 1-50, default 20; out-of-range values are clamped). `nextCursor` is `null` on the last page. \
-            Suspended followers are left out. Blocks do not filter this list (they hide only Polls and Comments). Each item carries the public profile fields of user search, \
+            Suspended followers are left out. Blocks do not filter this list (they hide only Polls, Comments and notifications). Each item carries the public profile fields of user search, \
             plus `isFollowing` (the caller follows the user) and `followsYou` (the user follows the caller), both `false` on the caller's own entry.
             **Side effects**: none
             **Errors**:
@@ -232,7 +232,7 @@ public class UserController {
             **Precondition**: the user exists and is not suspended
             **Behavior**: users this user follows, most recently followed first, cursor-paged \
             (`limit` 1-50, default 20; out-of-range values are clamped). `nextCursor` is `null` on the last page. \
-            Suspended users are left out. Blocks do not filter this list (they hide only Polls and Comments). Each item carries the public profile fields of user search, \
+            Suspended users are left out. Blocks do not filter this list (they hide only Polls, Comments and notifications). Each item carries the public profile fields of user search, \
             plus `isFollowing` (the caller follows the user) and `followsYou` (the user follows the caller), both `false` on the caller's own entry.
             **Side effects**: none
             **Errors**:
@@ -259,7 +259,8 @@ public class UserController {
             **Precondition**: the user exists and is not suspended
             **Behavior**: the PUBLIC Polls the user created that have opened (Open and Ended), most recently opened first, \
             cursor-paged (`limit` 1-50, default 20; out-of-range values are clamped). Scheduled Polls and Polls \
-            Cancelled before opening are left out, so the count matches `totalPolls` on the public profile. \
+            Cancelled before opening are left out, so the count matches `totalPolls` on the public profile, except that \
+            the list is empty for a caller the user blocked (`totalPolls` still counts the Polls). \
             `nextCursor` is `null` on the last page.
             **Side effects**: none
             **Errors**:
@@ -374,10 +375,15 @@ public class UserController {
     @Operation(summary = "Block a user", description = """
             **Auth**: required
             **Precondition**: `userId` is another existing, active account
-            **Behavior**: one-way block. From then on the caller no longer sees, in `GET /api/votes` (Feed / Explore / Search / Top), \
+            **Behavior**: the caller no longer sees, in `GET /api/votes` (Feed / Explore / Search / Top) and `GET /api/votes/following`, \
             Polls the blocked user created, nor, in `GET /api/votes/{voteId}/comments` and its replies, Comment threads the blocked user \
-            started or Replies they wrote. Nothing else changes: the Poll detail, voter list, profile and My Polls still show them, \
-            and the blocked user is not told and sees the caller's content as before. Idempotent: blocking an already blocked user succeeds.
+            started or Replies they wrote; the Poll detail, voter list, profile and My Polls still show them to the caller. \
+            For the blocked user, every Poll the caller created becomes unreachable, Invite-only Polls they are invited to included: \
+            every `/api/votes/{voteId}/**` endpoint (detail, results, voters, Ballots, Comments, share, ...) except `/creator` is 404 `vote.not_found`, \
+            and those Polls leave all their Poll lists (Feed / Explore / Search / Top, Following, My Polls, the caller's \
+            `GET /api/users/{username}/votes`) and their notifications. Notifications from either user to the other stop too. \
+            The blocked user is not told. Nothing is deleted: their earlier Ballots still count, and unblocking restores everything. \
+            Follower and following lists and counts are not affected. Idempotent: blocking an already blocked user succeeds.
             **Side effects**: the caller's follow of the user, if any, is removed (and cannot be added back while blocked); \
             the block is written to the audit log
             **Errors**:

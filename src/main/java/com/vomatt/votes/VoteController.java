@@ -188,7 +188,7 @@ public class VoteController {
             over the limit the Invitee is still added and only the email is skipped).
             **Errors**:
             - 403 `vote.forbidden`: the caller is not the owner
-            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
+            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 400 `vote.not_editable`: the Poll is Open or Ended
             - 400 `vote.invitee.not_invite_only`: `inviteeIds`, `inviteeEmails` or `inviteListIds` is not empty but the resulting Audience is not INVITE_ONLY
             - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended (`inviteeEmails` and `inviteListIds` never cause it)
@@ -219,7 +219,7 @@ public class VoteController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Caller is not the owner (`vote.forbidden`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.forbidden", value = ERR_MESSAGE + "Not allowed to modify this Poll" + ERR_CODE + "vote.forbidden" + ERR_ERROR + "Not allowed to modify this Poll" + ERR_END)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller (`vote.not_found`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller, or its owner blocked the caller (`vote.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<VoteResponse>> updateVote(
@@ -240,7 +240,7 @@ public class VoteController {
             **Side effects**: counts a View (input for Trending) when the caller is signed in and not the owner and the Poll is Open \
             and PUBLIC, at most once per user and Poll per 24 hours; counted asynchronously, never fails or delays the request
             **Errors**:
-            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
+            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Poll (shown: Open, results Sealed, caller chose Java)",
             content = @Content(examples = {
@@ -260,7 +260,8 @@ public class VoteController {
             **Auth**: public (login is ignored)
             **Precondition**: the Poll is INVITE_ONLY and not Deleted
             **Behavior**: returns only the owner's `username` and `avatarUrl`, so an Invitation link can show "<username> invited you" \
-            to a caller who cannot open the Poll yet (signed out, or signed in but not yet an Invitee). Reveals nothing else about the Poll.
+            to a caller who cannot open the Poll yet (signed out, or signed in but not yet an Invitee). Reveals nothing else about the Poll. \
+            Answers regardless of blocks, also to a user the owner blocked.
             **Side effects**: none
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is PUBLIC / UNLISTED
@@ -290,7 +291,7 @@ public class VoteController {
             **Errors**:
             - 400 `common.validation_failed`: `channel` missing
             - 400 `common.bad_request`: `channel` is not one of the values above
-            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
+            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = {
                     @ExampleObject(name = "LINE", value = """
@@ -304,7 +305,7 @@ public class VoteController {
                     { "success": true, "data": { "shareCount": 18 },
                       "message": null, "errorCode": null, "error": null }
                     """)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller (`vote.not_found`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller, or its owner blocked the caller (`vote.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<VoteShareResponse>> share(
@@ -318,9 +319,9 @@ public class VoteController {
     @GetMapping
     @PublicApiResponse
     @Operation(summary = "List Polls (Feed / Explore / Search / Top)", description = """
-            **Auth**: public (optional login changes response: `myOptionId` of each item is filled for the caller's Ballots, and Polls created by users the caller blocked are left out)
+            **Auth**: public (optional login changes response: `myOptionId` of each item is filled for the caller's Ballots, and Polls created by users the caller blocked, or who blocked the caller, are left out)
             **Precondition**: none
-            **Behavior**: cursor-paged list of Open or Ended PUBLIC Polls; Scheduled, UNLISTED and INVITE_ONLY Polls never appear, nor, for a signed-in caller, Polls created by users they blocked (`POST /api/users/me/blocks/{userId}`).
+            **Behavior**: cursor-paged list of Open or Ended PUBLIC Polls; Scheduled, UNLISTED and INVITE_ONLY Polls never appear, nor, for a signed-in caller, Polls created by users they blocked or who blocked them (`POST /api/users/me/blocks/{userId}`).
             - `status=open` (default) + `sort=newest` (default): most recently opened first (the Feed)
             - `status=open` + `sort=closing`: closing soonest first
             - `status=open` + `sort=top`: highest Turnout (`participantCount`) first, ties most recently opened first (Top); Turnout can change between pages, so dedupe items by `id`
@@ -358,7 +359,7 @@ public class VoteController {
             **Auth**: required
             **Precondition**: none
             **Behavior**: cursor-paged Open PUBLIC Polls created by users the caller follows (`POST /api/users/me/follows/{userId}`), \
-            most recently opened first. Scheduled, Ended, UNLISTED and INVITE_ONLY Polls never appear, nor Polls of users the caller blocked. \
+            most recently opened first. Scheduled, Ended, UNLISTED and INVITE_ONLY Polls never appear, nor Polls of users the caller blocked or who blocked the caller. \
             `nextCursor` null means the last page; `limit` is clamped to 1-50 (default 20).
             **Side effects**: none
             **Errors**:
@@ -378,7 +379,7 @@ public class VoteController {
     @Operation(summary = "My Polls", description = """
             **Auth**: required
             **Precondition**: none
-            **Behavior**: cursor-paged Polls the caller created, holds a Ballot in or is an Invitee of, of any Audience (UNLISTED and INVITE_ONLY included).
+            **Behavior**: cursor-paged Polls the caller created, holds a Ballot in or is an Invitee of, of any Audience (UNLISTED and INVITE_ONLY included), except Polls of users who blocked the caller.
             - `status=open` (default): the caller's Scheduled and Open Polls, closing soonest first; each item carries `unread` (Invitation to an INVITE_ONLY Poll not yet read; false otherwise)
             - `status=ended`: Ended Polls (including Cancelled ones), most recently ended first; each item carries `unread` (Ended Notification not yet read; false for a Cancelled Poll)
             - `nextCursor` null means the last page; `limit` is clamped to 1-50 (default 20).
@@ -410,7 +411,7 @@ public class VoteController {
             When this Ballot leaves every Invitee of an INVITE_ONLY Poll holding a Ballot (the owner's own Ballot never counts), the Poll Ends now \
             (`endTime` moves, `deadline` stays), so the response comes back Ended with results visible and the Ended Notification follows.
             **Errors**:
-            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
+            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen
             - 400 `vote.not_allowed`: the Poll is still Scheduled
             - 400 `vote.multiple.not_allowed`: `optionIds` holds more than one ID
@@ -454,7 +455,7 @@ public class VoteController {
             **Behavior**: withdraws the caller's whole Ballot (Retraction); the caller is no longer a Participant. Idempotent: succeeds, changing nothing, when the caller holds no Ballot.
             **Side effects**: Turnout -1 when a Ballot was removed. A Participant who Retracted gets no Ended Notification, unless they are an Invitee: every Invitee of an INVITE_ONLY Poll still gets it.
             **Errors**:
-            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
+            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen
             - 400 `vote.not_allowed`: the Poll is still Scheduled
             - 429 `common.rate_limited`: more than 30 Ballot writes (cast, Retract, remove Selection) by the caller within 60 seconds; no `Retry-After`
@@ -465,7 +466,7 @@ public class VoteController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Poll has Ended (`vote.ended`) or is still Scheduled (`vote.not_allowed`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.ended", value = ERR_MESSAGE + "Voting for this Poll has ended" + ERR_CODE + "vote.ended" + ERR_ERROR + "Voting for this Poll has ended" + ERR_END)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller (`vote.not_found`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller, or its owner blocked the caller (`vote.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<VoteResponse>> retract(
@@ -485,7 +486,7 @@ public class VoteController {
             Succeeds without change when the caller's Ballot chose another option or none exists. Deprecated: use `DELETE /api/votes/{voteId}/vote`.
             **Side effects**: Turnout -1 when a Ballot was removed.
             **Errors**:
-            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
+            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen
             - 400 `vote.not_allowed`: the Poll is still Scheduled
             - 429 `common.rate_limited`: more than 30 Ballot writes (cast, Retract, remove Selection) by the caller within 60 seconds; no `Retry-After`
@@ -496,7 +497,7 @@ public class VoteController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Poll has Ended (`vote.ended`) or is still Scheduled (`vote.not_allowed`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.ended", value = ERR_MESSAGE + "Voting for this Poll has ended" + ERR_CODE + "vote.ended" + ERR_ERROR + "Voting for this Poll has ended" + ERR_END)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller (`vote.not_found`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller, or its owner blocked the caller (`vote.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<VoteResponse>> removeVote(
@@ -516,7 +517,7 @@ public class VoteController {
             **Behavior**: returns per-option counts and Support (`percentage`, 0-100, share of Participants) plus Turnout.
             **Side effects**: none
             **Errors**:
-            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
+            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 403 `vote.results.sealed`: the Poll is still Scheduled or Open
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Results of the Ended Poll",
@@ -561,7 +562,7 @@ public class VoteController {
             `nextCursor` null means the last page; `limit` is clamped to 1-50 (default 20).
             **Side effects**: none
             **Errors**:
-            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
+            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 403 `vote.results.sealed`: the Poll is still Scheduled or Open
             - 403 `vote.voters.hidden`: Voter Visibility does not allow the caller
             - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list or another ordering of this list
@@ -578,7 +579,7 @@ public class VoteController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Poll not Ended (`vote.results.sealed`), or Voter Visibility does not allow the caller or the Poll holds 1 or 2 Anonymous Ballots other than the caller's own (`vote.voters.hidden`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.voters.hidden", value = ERR_MESSAGE + "Voters of this Poll are hidden" + ERR_CODE + "vote.voters.hidden" + ERR_ERROR + "Voters of this Poll are hidden" + ERR_END)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller (`vote.not_found`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller, or its owner blocked the caller (`vote.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<CursorResponse<VoterResponse>>> getVoters(
@@ -599,7 +600,7 @@ public class VoteController {
             an Anonymous Ballot of an Ended Poll is sealed within a day of the end, after which `hasVoted` stays true but `selectedOptions` is empty.
             **Side effects**: none
             **Errors**:
-            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
+            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Ballot status",
             content = @Content(examples = {
@@ -673,7 +674,7 @@ public class VoteController {
             - 400 `vote.close.public_not_allowed`: the Poll is Public and Open
             - 400 `vote.close.scheduled`: the Poll is Scheduled; use `DELETE /api/votes/{voteId}` instead
             - 403 `vote.forbidden`: the caller is not the owner
-            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
+            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was changed, try again
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Poll closed (or already Ended)",
@@ -688,7 +689,7 @@ public class VoteController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Caller is not the owner (`vote.forbidden`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.forbidden", value = ERR_MESSAGE + "Not allowed to modify this Poll" + ERR_CODE + "vote.forbidden" + ERR_ERROR + "Not allowed to modify this Poll" + ERR_END)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller (`vote.not_found`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller, or its owner blocked the caller (`vote.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<SimpleResultResponse>> deactivateVote(
@@ -719,14 +720,14 @@ public class VoteController {
             **Side effects**: none
             **Errors**:
             - 403 `vote.forbidden`: the caller is not the owner (Invitees included)
-            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
+            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Invitees of the Poll",
             content = @Content(examples = @ExampleObject(name = "Invitees", value = EX_INVITEES)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Caller is not the owner (`vote.forbidden`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.forbidden", value = ERR_MESSAGE + "Not allowed to modify this Poll" + ERR_CODE + "vote.forbidden" + ERR_ERROR + "Not allowed to modify this Poll" + ERR_END)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller (`vote.not_found`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller, or its owner blocked the caller (`vote.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<List<InviteeResponse>>> getInvitees(
@@ -758,7 +759,7 @@ public class VoteController {
             - 400 `vote.invitee.ids_invalid`: one of `userIds` is not an existing user or is suspended (`emails` and `inviteListIds` never cause it)
             - 400 `common.validation_failed`: `userIds`, `emails` and `inviteListIds` are all empty, `userIds` / `emails` hold more than 100 entries or `inviteListIds` more than 20, a null element or an invalid address
             - 403 `vote.forbidden`: the caller is not the owner
-            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
+            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 404 `invite_list.not_found`: one of `inviteListIds` does not exist or belongs to someone else
             - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was changed, try again
             """,
@@ -776,7 +777,7 @@ public class VoteController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Caller is not the owner (`vote.forbidden`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.forbidden", value = ERR_MESSAGE + "Not allowed to modify this Poll" + ERR_CODE + "vote.forbidden" + ERR_ERROR + "Not allowed to modify this Poll" + ERR_END)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller (`vote.not_found`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller, or its owner blocked the caller (`vote.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<List<InviteeResponse>>> addInvitees(
@@ -804,7 +805,7 @@ public class VoteController {
             - 400 `vote.invitee.not_invite_only`: the Poll is not INVITE_ONLY
             - 400 `vote.ended`: the Poll has Ended
             - 403 `vote.forbidden`: the caller is not the owner
-            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
+            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was changed, try again
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Invitees after the removal",
@@ -815,7 +816,7 @@ public class VoteController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Caller is not the owner (`vote.forbidden`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.forbidden", value = ERR_MESSAGE + "Not allowed to modify this Poll" + ERR_CODE + "vote.forbidden" + ERR_ERROR + "Not allowed to modify this Poll" + ERR_END)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller (`vote.not_found`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller, or its owner blocked the caller (`vote.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<List<InviteeResponse>>> removeInvitee(
@@ -844,7 +845,7 @@ public class VoteController {
             - 400 `vote.invitee.not_invite_only`: the Poll is not INVITE_ONLY
             - 400 `vote.ended`: the Poll has Ended
             - 403 `vote.forbidden`: the caller is not the owner
-            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
+            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was changed, try again
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Invitees after the removal",
@@ -855,7 +856,7 @@ public class VoteController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Caller is not the owner (`vote.forbidden`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.forbidden", value = ERR_MESSAGE + "Not allowed to modify this Poll" + ERR_CODE + "vote.forbidden" + ERR_ERROR + "Not allowed to modify this Poll" + ERR_END)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller (`vote.not_found`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller, or its owner blocked the caller (`vote.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
     public ResponseEntity<ApiResponse<List<InviteeResponse>>> removeEmailInvitee(

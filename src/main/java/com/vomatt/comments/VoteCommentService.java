@@ -77,7 +77,7 @@ public class VoteCommentService {
             return new UUID[0];
         }
         List<String> capped = usernames.stream().limit(lookupService.configInt(MAX_MENTIONS_KEY, MAX_MENTIONS)).toList();
-        return userRepository.findByUsernameIn(capped).stream().map(User::getId).toArray(UUID[]::new);
+        return userRepository.findIdsByUsernameIn(capped).toArray(UUID[]::new);
     }
 
     /**
@@ -89,9 +89,7 @@ public class VoteCommentService {
         if (usernames.isEmpty() || comment.getMentionedUserIds().length == 0) {
             return new UUID[0];
         }
-        return userRepository.findAllById(Arrays.asList(comment.getMentionedUserIds())).stream()
-            .filter(user -> usernames.contains(user.getUsername()))
-            .map(User::getId)
+        return userRepository.findIdsByIdInAndUsernameIn(Arrays.asList(comment.getMentionedUserIds()), usernames)
             .toArray(UUID[]::new);
     }
 

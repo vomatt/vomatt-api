@@ -112,23 +112,15 @@ public class VoteListRepository {
     }
 
     /**
-     * Following list: Open Public Polls created by users the follower follows or carrying a tag the follower follows,
-     * most recently opened first, each once. Nothing from the follower themselves, a suspended creator, or a creator
-     * either side blocked. Each branch starts from the follower's follows and keeps at most a page per followed user
-     * (read through idx_votes_creator_start_id) or per followed tag (its Polls through idx_vote_tags_tag_id; OFFSET 0
-     * keeps the planner from walking idx_votes_start_id over every live Poll instead), so the cost grows with the
-     * follows, not with every Open Poll. A Poll in the page's top rows is in the top rows of each
-     * of its followed tags, so the per-tag pages cannot miss it; IN drops the duplicates. Both filter before their
-     * LIMIT, so filtered rows never shorten a page.
+     * Following list: Open Public Polls of followed users or followed tags, newest opened first, each once; each arm keeps
+     * at most a page per follow, so the cost grows with the follows, not with every Open Poll.
      */
     @SuppressWarnings("unchecked")
     public List<Vote> findFollowing(UUID followerId, Cursor after, OffsetDateTime now, int limit) {
-        // ponytail: both branches walk past Ended Polls (a followed user's, a followed tag's); add Open-only partial
-        // indexes if creators or tags pile up history
+        // ponytail: both arms walk past Ended Polls; add Open-only partial indexes if creators or tags pile up history
         String open = """
                 v.deleted_at IS NULL AND v.audience = 'PUBLIC' AND v.start_time <= :now AND v.end_time > :now"""
-                + (after == null ? "" : " AND (v.start_time, v.id) < (:afterKey, :afterId)")
-                + " AND EXISTS (SELECT 1 FROM vomatt.users u WHERE u.id = v.creator_id AND u.active)" + NOT_BLOCKED_EITHER_WAY;
+                + (after == null ? "" : " AND (v.start_time, v.id) < (:afterKey, :afterId)");
         String sql = """
                 SELECT v.* FROM vomatt.votes v WHERE v.id IN (
                     SELECT fv.id FROM vomatt.user_follows f
@@ -138,12 +130,19 @@ public class VoteListRepository {
 
                         ORDER BY v.start_time DESC, v.id DESC LIMIT :limit) fv
                     WHERE f.follower_id = :viewerId
+                      AND EXISTS (SELECT 1 FROM vomatt.users u WHERE u.id = f.followed_id AND u.active)
+                      AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b WHERE b.blocker_id = :viewerId AND b.blocked_id = f.followed_id)
+                      AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b WHERE b.blocker_id = f.followed_id AND b.blocked_id = :viewerId)
                     UNION ALL
                     SELECT tv.id FROM vomatt.tag_follows tf
                     CROSS JOIN LATERAL (
-                        SELECT v.id FROM (SELECT vt.vote_id FROM vomatt.vote_tags vt WHERE vt.tag_id = tf.tag_id OFFSET 0) vt
+                        SELECT v.id FROM\s"""
+                // OFFSET 0 keeps the planner on idx_vote_tags_tag_id instead of walking idx_votes_start_id over every live Poll
+                + "(SELECT vt.vote_id FROM vomatt.vote_tags vt WHERE vt.tag_id = tf.tag_id OFFSET 0) vt" + """
+
                         JOIN vomatt.votes v ON v.id = vt.vote_id
-                        WHERE v.creator_id <> :viewerId AND\s""" + open + """
+                        WHERE v.creator_id <> :viewerId AND\s""" + open
+                + " AND EXISTS (SELECT 1 FROM vomatt.users u WHERE u.id = v.creator_id AND u.active)" + NOT_BLOCKED_EITHER_WAY + """
 
                         ORDER BY v.start_time DESC, v.id DESC LIMIT :limit) tv
                     WHERE tf.user_id = :viewerId)

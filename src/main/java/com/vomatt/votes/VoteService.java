@@ -145,8 +145,7 @@ public class VoteService {
 
         tagRepository.incrementUsageCount(countedTagIds(vote));
 
-        // A new Poll has no bookmark yet
-        return toResponses(List.of(vote), creatorId, Set.of()).getFirst();
+        return toResponse(vote, creatorId);
     }
 
     /**
@@ -236,9 +235,6 @@ public class VoteService {
         if (voteReportRepository.insertIfAbsent(UUIDv7Generator.generateId(), vote.getId(), reporterId,
                 request.reason().name(), request.note()) > 0) {
             log.info("User {} reported vote {} as {}", userId, voteId, request.reason());
-        } else if (!userRepository.existsById(reporterId)) {
-            // An access token outlives account deletion, so the signed-in user may be gone
-            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
         } else if (!voteRepository.existsByIdAndDeletedAtIsNull(vote.getId())) {
             // Deleted since the lookup above; a query, as findById would return the stale managed entity
             throw ApiException.notFound(MessageKey.VOTE_NOT_FOUND);
@@ -248,12 +244,8 @@ public class VoteService {
     /** Bookmarks a Poll the caller can reach, in any state; idempotent, a repeat keeps the first bookmark time. */
     public void bookmark(String voteId, String userId) {
         Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
-        UUID userUuid = UUID.fromString(userId);
-        if (bookmarkRepository.insertIfAbsent(UUIDv7Generator.generateId(), userUuid, vote.getId()) > 0) {
+        if (bookmarkRepository.insertIfAbsent(UUIDv7Generator.generateId(), UUID.fromString(userId), vote.getId()) > 0) {
             log.info("User {} bookmarked vote {}", userId, voteId);
-        } else if (!userRepository.existsById(userUuid)) {
-            // An access token outlives account deletion, so the signed-in user may be gone
-            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
         }
     }
 
@@ -272,10 +264,7 @@ public class VoteService {
         List<VoteBookmark> rows = bookmarkRepository.findPage(UUID.fromString(userId),
             after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
         return CursorResponse.of(rows, size, Cursor.Scope.BOOKMARKS, b -> Cursor.of(b.getCreatedAt(), b.getId()),
-            page -> {
-                List<Vote> votes = page.stream().map(VoteBookmark::getVote).toList();
-                return toResponses(votes, userId, votes.stream().map(Vote::getId).collect(Collectors.toSet()));
-            });
+            page -> toResponses(page.stream().map(VoteBookmark::getVote).toList(), userId));
     }
 
     /**
@@ -878,11 +867,8 @@ public class VoteService {
         return toResponse(vote, userId);
     }
 
-    // One Poll: the bookmark is a single existence check on its unique key
     private VoteResponse toResponse(Vote vote, String userId) {
-        boolean bookmarked = userId != null
-            && bookmarkRepository.existsByUserIdAndVoteId(UUID.fromString(userId), vote.getId());
-        return toResponses(List.of(vote), userId, bookmarked ? Set.of(vote.getId()) : Set.of()).getFirst();
+        return toResponses(List.of(vote), userId).getFirst();
     }
 
     // After a Ballot change the caller already knows the Selection, so it overrides the looked-up one.
@@ -906,17 +892,9 @@ public class VoteService {
         if (votes.isEmpty()) {
             return List.of();
         }
-        Set<UUID> bookmarked = userId == null ? Set.of()
-            : Set.copyOf(bookmarkRepository.findVoteIds(UUID.fromString(userId), votes.stream().map(Vote::getId).toList()));
-        return toResponses(votes, userId, bookmarked);
-    }
-
-    /** @param bookmarked of {@code votes}, those the caller bookmarked; ignored when {@code userId} is null */
-    private List<VoteResponse> toResponses(List<Vote> votes, String userId, Set<UUID> bookmarked) {
-        if (votes.isEmpty()) {
-            return List.of();
-        }
         List<UUID> ids = votes.stream().map(Vote::getId).toList();
+        Set<UUID> bookmarked = userId == null ? Set.of()
+            : Set.copyOf(bookmarkRepository.findVoteIds(UUID.fromString(userId), ids));
         OffsetDateTime now = OffsetDateTime.now();
         Map<UUID, Long> commentCounts = voteCommentRepository.countVisibleByVoteIds(ids).stream()
             .collect(Collectors.toMap(IdCount::getId, IdCount::getCount));

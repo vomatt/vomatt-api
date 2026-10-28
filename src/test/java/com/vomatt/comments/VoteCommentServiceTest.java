@@ -218,7 +218,7 @@ class VoteCommentServiceTest {
         when(voteService.findAccessibleVote(voteId, viewerId.toString())).thenReturn(vote);
         when(userRepository.findById(viewerId)).thenReturn(java.util.Optional.of(author));
         when(lookupService.configInt(VoteCommentService.MAX_MENTIONS_KEY, VoteCommentService.MAX_MENTIONS)).thenReturn(10);
-        when(userRepository.findByUsernameIn(List.of("alice", "ghost"))).thenReturn(List.of(alice));
+        when(userRepository.findIdsByUsernameIn(List.of("alice", "ghost"))).thenReturn(List.of(alice.getId()));
         when(commentRepository.saveAndFlush(any())).thenAnswer(invocation -> {
             VoteComment saved = invocation.getArgument(0);
             ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());

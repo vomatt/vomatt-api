@@ -1,12 +1,10 @@
 package com.vomatt.votes;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
-import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -15,8 +13,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-import com.vomatt.common.exception.ApiException;
-import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.entity.Audience;
@@ -53,8 +49,7 @@ class VoteBookmarkPostgresTest extends PostgresRepositoryTest {
     }
 
     private Vote poll(Audience audience, OffsetDateTime start, OffsetDateTime end) {
-        Vote poll = persistPoll(owner, start, end, "A", "B");
-        poll.setAudience(audience);
+        Vote poll = persistPoll(owner, start, end, audience, "A", "B");
         em.flush();
         return poll;
     }
@@ -79,15 +74,6 @@ class VoteBookmarkPostgresTest extends PostgresRepositoryTest {
     private void backdateBookmark(Vote poll, OffsetDateTime at) {
         em.createNativeQuery("UPDATE vomatt.vote_bookmarks SET created_at = :t WHERE vote_id = :v")
                 .setParameter("t", at).setParameter("v", poll.getId()).executeUpdate();
-    }
-
-    @Test
-    @DisplayName("should return 404 user.not_found and keep no bookmark when the signed-in user no longer exists")
-    void shouldThrowUserNotFoundWhenBookmarkingUserIsGone() {
-        Vote open = poll(Audience.PUBLIC, now.minusHours(1), now.plusDays(1));
-
-        assertThatThrownBy(() -> voteService.bookmark(open.getId().toString(), UUID.randomUUID().toString()))
-                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND));
     }
 
     @Test
@@ -187,15 +173,6 @@ class VoteBookmarkPostgresTest extends PostgresRepositoryTest {
 
         assertThat(results(me)).isEmpty();
         assertThat(bookmarked(null, 10).items()).isEmpty();
-    }
-
-    @Test
-    @DisplayName("should return vote.not_found when bookmarking an Invite-only Poll the caller is not invited to")
-    void shouldRejectBookmarkWhenPollIsHidden() {
-        Vote hidden = poll(Audience.INVITE_ONLY, now.minusHours(1), now.plusDays(1));
-
-        assertThatThrownBy(() -> bookmark(hidden)).isInstanceOfSatisfying(ApiException.class,
-                ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_NOT_FOUND));
     }
 
     @Test

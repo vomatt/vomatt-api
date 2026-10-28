@@ -18,15 +18,14 @@ public interface VoteReportRepository extends JpaRepository<VoteReport, UUID> {
 
     /**
      * Idempotent, also under concurrent requests: a user's later reports of the same Poll are dropped. Returns 1 when
-     * the report is new, 0 when it already existed, the reporter does not exist or the Poll is gone or Deleted.
+     * the report is new, 0 when it already existed or the Poll is gone or Deleted.
      * The Poll row is share-locked, so a delete still in flight is waited for.
      */
     @Modifying
     @Query(value = """
             INSERT INTO vomatt.vote_reports (id, vote_id, reporter_id, reason, note)
             SELECT :id, :voteId, :reporterId, :reason, CAST(:note AS varchar)
-            WHERE EXISTS (SELECT 1 FROM vomatt.users WHERE id = :reporterId)
-              AND EXISTS (SELECT 1 FROM vomatt.votes WHERE id = :voteId AND deleted_at IS NULL FOR SHARE)
+            WHERE EXISTS (SELECT 1 FROM vomatt.votes WHERE id = :voteId AND deleted_at IS NULL FOR SHARE)
             ON CONFLICT (vote_id, reporter_id) DO NOTHING""", nativeQuery = true)
     int insertIfAbsent(@Param("id") UUID id, @Param("voteId") UUID voteId, @Param("reporterId") UUID reporterId,
                        @Param("reason") String reason, @Param("note") String note);

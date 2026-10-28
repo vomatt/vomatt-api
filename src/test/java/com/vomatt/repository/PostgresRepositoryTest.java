@@ -10,6 +10,8 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.test.context.ContextConfiguration;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import com.vomatt.entity.Audience;
+import com.vomatt.entity.Tag;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
@@ -43,8 +45,14 @@ public abstract class PostgresRepositoryTest {
     }
 
     protected Vote persistPoll(User creator, OffsetDateTime startTime, OffsetDateTime endTime, String... options) {
+        return persistPoll(creator, startTime, endTime, Audience.PUBLIC, options);
+    }
+
+    protected Vote persistPoll(User creator, OffsetDateTime startTime, OffsetDateTime endTime, Audience audience,
+                               String... options) {
         Vote poll = new Vote("Poll " + UUID.randomUUID(), null, creator, endTime);
         poll.setStartTime(startTime);
+        poll.setAudience(audience);
         for (int i = 0; i < options.length; i++) {
             VoteOption option = new VoteOption(options[i], null, poll);
             option.setDisplayOrder(i);
@@ -52,5 +60,12 @@ public abstract class PostgresRepositoryTest {
         }
         em.persist(poll);
         return poll;
+    }
+
+    protected Tag persistTag() {
+        String name = "tag" + System.nanoTime();
+        Tag tag = new Tag(name, name, null, 0);
+        em.persist(tag);
+        return tag;
     }
 }

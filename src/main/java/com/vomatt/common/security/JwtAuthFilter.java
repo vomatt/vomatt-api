@@ -73,12 +73,17 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     userRepository.existsByIdAndActiveFalse(userId) ? MessageKey.AUTH_ACCOUNT_BANNED : MessageKey.COMMON_FORBIDDEN);
             return;
         }
-        // Access tokens outlive a suspension, so writes re-check users.active; reads skip the DB hit.
+        // Access tokens outlive a suspension or account deletion, so writes re-check the account; reads skip the DB hit.
         // /api/auth/** keeps its own handling (login and refresh already reject suspended users).
         if (!adminCall && principal != null && !READ_METHODS.contains(request.getMethod())
                 && !request.getRequestURI().startsWith("/api/auth/")
-                && userRepository.existsByIdAndActiveFalse(UUID.fromString(principal.userId()))) {
-            errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN, MessageKey.AUTH_ACCOUNT_BANNED);
+                && !userRepository.existsByIdAndActiveTrue(UUID.fromString(principal.userId()))) {
+            // Second query only on refusal: suspended gets the banned code, a deleted account user.not_found
+            if (userRepository.existsByIdAndActiveFalse(UUID.fromString(principal.userId()))) {
+                errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN, MessageKey.AUTH_ACCOUNT_BANNED);
+            } else {
+                errorWriter.write(request, response, HttpServletResponse.SC_NOT_FOUND, MessageKey.USER_NOT_FOUND);
+            }
             return;
         }
         filterChain.doFilter(request, response);

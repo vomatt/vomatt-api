@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.OffsetDateTime;
@@ -151,6 +152,8 @@ class NotificationServiceTest {
         notificationService.markRead(USER, "comment_" + commentId);
 
         verify(notificationRepository).markRead(eq(USER_ID), eq(NotificationKind.COMMENT), eq(commentId), any());
+        // Only MENTION depends on preferences
+        verifyNoInteractions(preferenceRepository);
     }
 
     @Test

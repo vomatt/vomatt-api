@@ -4,7 +4,6 @@ import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.entity.Tag;
 import com.vomatt.repository.TagRepository;
-import com.vomatt.repository.UserRepository;
 import com.vomatt.tags.dto.CreateTagRequest;
 import com.vomatt.common.response.Cursor;
 import com.vomatt.common.response.CursorResponse;
@@ -39,9 +38,6 @@ class TagServiceTest {
 
     @Mock
     TagRepository tagRepository;
-
-    @Mock
-    UserRepository userRepository;
 
     @InjectMocks
     TagService tagService;
@@ -350,21 +346,9 @@ class TagServiceTest {
         void shouldSucceedWhenTagAlreadyFollowed() {
             UUID tagId = UUID.randomUUID();
             when(tagRepository.follow(userId, tagId)).thenReturn(0);
-            when(userRepository.existsById(userId)).thenReturn(true);
             when(tagRepository.existsById(tagId)).thenReturn(true);
 
             tagService.followTag(userId.toString(), tagId.toString());
-        }
-
-        @Test
-        @DisplayName("should throw 404 user.not_found when the signed-in user no longer exists")
-        void shouldThrowUserNotFoundWhenFollowerIsGone() {
-            UUID tagId = UUID.randomUUID();
-            when(tagRepository.follow(userId, tagId)).thenReturn(0);
-            when(userRepository.existsById(userId)).thenReturn(false);
-
-            assertThatThrownBy(() -> tagService.followTag(userId.toString(), tagId.toString()))
-                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.USER_NOT_FOUND));
         }
 
         @Test
@@ -372,7 +356,6 @@ class TagServiceTest {
         void shouldThrowNotFoundWhenFollowingUnknownTag() {
             UUID tagId = UUID.randomUUID();
             when(tagRepository.follow(userId, tagId)).thenReturn(0);
-            when(userRepository.existsById(userId)).thenReturn(true);
             when(tagRepository.existsById(tagId)).thenReturn(false);
 
             assertThatThrownBy(() -> tagService.followTag(userId.toString(), tagId.toString()))

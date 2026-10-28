@@ -28,9 +28,13 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.http.server.PathContainer;
+import org.springframework.web.util.pattern.PathPatternParser;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -157,9 +161,15 @@ class TagControllerTest {
         }
 
         @Test
-        @DisplayName("should require sign-in: GET /api/tags/following is matched before the public /api/tags/**")
+        @DisplayName("should require sign-in for GET /api/tags/following while the tag lists stay public")
         void shouldRequireSignInWhenListingFollowedTags() {
-            assertThat(SecurityEndpoints.AUTHENTICATED_USERS).contains("/api/tags/following");
+            // Spring Security 7 matches with PathPatternParser; a GET no public rule matches falls to authenticated
+            Predicate<String> publicGet = path -> Arrays.stream(SecurityEndpoints.PUBLIC_GET)
+                    .anyMatch(p -> PathPatternParser.defaultInstance.parse(p).matches(PathContainer.parsePath(path)));
+
+            assertThat(publicGet.test("/api/tags")).isTrue();
+            assertThat(publicGet.test("/api/tags/popular")).isTrue();
+            assertThat(publicGet.test("/api/tags/following")).isFalse();
         }
 
         @Test

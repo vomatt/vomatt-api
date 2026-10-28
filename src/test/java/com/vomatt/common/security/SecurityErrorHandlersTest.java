@@ -156,11 +156,27 @@ class SecurityErrorHandlersTest {
         UUID userId = UUID.randomUUID();
         FilterChain chain = mock(FilterChain.class);
 
+        when(userRepository.existsByIdAndActiveTrue(userId)).thenReturn(true);
+
         MockHttpServletResponse response = filterAs(userId, "POST", "/api/votes/" + UUID.randomUUID() + "/vote", chain);
 
         assertThat(response.getStatus()).isEqualTo(200);
         verify(chain).doFilter(any(), any());
-        verify(userRepository).existsByIdAndActiveFalse(userId);
+        verify(userRepository, never()).existsByIdAndActiveFalse(any());
+    }
+
+    @Test
+    void shouldReturn404UserNotFoundWhenDeletedUserWrites() throws Exception {
+        UUID userId = UUID.randomUUID();
+        FilterChain chain = mock(FilterChain.class);
+
+        // An access token outlives account deletion; the account is neither active nor suspended
+        MockHttpServletResponse response = filterAs(userId, "PUT", "/api/votes/" + UUID.randomUUID() + "/bookmark", chain);
+
+        assertThat(response.getStatus()).isEqualTo(404);
+        assertThat(response.getContentAsString())
+                .contains("\"success\":false", "\"errorCode\":\"" + MessageKey.USER_NOT_FOUND.code() + "\"");
+        verifyNoInteractions(chain);
     }
 
     @Test
@@ -240,7 +256,7 @@ class SecurityErrorHandlersTest {
 
         assertThat(response.getStatus()).isEqualTo(200);
         verify(chain).doFilter(any(), any());
-        verify(userRepository, never()).existsByIdAndActiveFalse(any());
+        verify(userRepository, never()).existsByIdAndActiveTrue(any());
     }
 
     @Test
@@ -267,7 +283,7 @@ class SecurityErrorHandlersTest {
         filterAs(UUID.randomUUID(), "POST", "/api/auth/refresh", chain);
 
         verify(chain).doFilter(any(), any());
-        verify(userRepository, never()).existsByIdAndActiveFalse(any());
+        verify(userRepository, never()).existsByIdAndActiveTrue(any());
     }
 
     @Test

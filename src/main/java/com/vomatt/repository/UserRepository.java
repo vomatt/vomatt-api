@@ -39,13 +39,20 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     boolean existsByUsername(String username);
 
-    List<User> findByUsernameIn(Collection<String> usernames);
+    @Query("SELECT u.id FROM User u WHERE u.username IN :usernames")
+    List<UUID> findIdsByUsernameIn(@Param("usernames") Collection<String> usernames);
+
+    /** Of the given users, those whose current username is one of {@code usernames}. */
+    @Query("SELECT u.id FROM User u WHERE u.id IN :ids AND u.username IN :usernames")
+    List<UUID> findIdsByIdInAndUsernameIn(@Param("ids") Collection<UUID> ids, @Param("usernames") Collection<String> usernames);
 
     boolean existsByEmail(String email);
 
     boolean existsByPhoneNumber(String phoneNumber);
 
     boolean existsByIdAndActiveFalse(UUID id);
+
+    boolean existsByIdAndActiveTrue(UUID id);
 
     /**
      * Locks every active admin row and returns their ids, so concurrent admin removals serialize: a waiter re-reads the

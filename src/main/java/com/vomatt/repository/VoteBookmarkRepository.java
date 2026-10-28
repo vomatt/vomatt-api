@@ -19,12 +19,12 @@ public interface VoteBookmarkRepository extends JpaRepository<VoteBookmark, UUID
 
     /**
      * Idempotent, also under concurrent requests; a repeat keeps the first bookmark's created_at. Returns 0 when the
-     * bookmark already existed or the user does not exist.
+     * bookmark already existed.
      */
     @Modifying
     @Query(value = """
             INSERT INTO vomatt.vote_bookmarks (id, user_id, vote_id)
-            SELECT :id, :userId, :voteId WHERE EXISTS (SELECT 1 FROM vomatt.users WHERE id = :userId)
+            VALUES (:id, :userId, :voteId)
             ON CONFLICT (user_id, vote_id) DO NOTHING""", nativeQuery = true)
     int insertIfAbsent(@Param("id") UUID id, @Param("userId") UUID userId, @Param("voteId") UUID voteId);
 
@@ -52,8 +52,6 @@ public interface VoteBookmarkRepository extends JpaRepository<VoteBookmark, UUID
 
     /** For the data export, oldest first. */
     List<VoteBookmark> findByUserIdOrderByCreatedAt(UUID userId);
-
-    boolean existsByUserIdAndVoteId(UUID userId, UUID voteId);
 
     /** Of the given Polls, those the user bookmarked; one query for a page of Polls. */
     @Query("SELECT b.vote.id FROM VoteBookmark b WHERE b.user.id = :userId AND b.vote.id IN :voteIds")

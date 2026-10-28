@@ -492,16 +492,6 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("should throw 404 user.not_found when the signed-in user no longer exists")
-        void shouldThrowUserNotFoundWhenBookmarkingUserIsGone() {
-            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
-            when(userRepository.existsById(userId)).thenReturn(false);
-
-            assertThatThrownBy(() -> voteService.bookmark(voteId.toString(), userId.toString()))
-                .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.USER_NOT_FOUND));
-        }
-
-        @Test
         @DisplayName("should delete the caller's bookmark without reading the Poll")
         void shouldDeleteBookmarkWhenUnbookmarking() {
             voteService.unbookmark(voteId.toString(), userId.toString());
@@ -525,15 +515,15 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("should flag every listed Poll bookmarked without looking the flags up")
-        void shouldSkipBookmarkLookupWhenListingBookmarks() {
+        @DisplayName("should flag listed Polls bookmarked")
+        void shouldFlagBookmarkedWhenListingBookmarks() {
             com.vomatt.entity.VoteBookmark row = new com.vomatt.entity.VoteBookmark(user, vote);
             when(bookmarkRepository.findPage(eq(userId), isNull(), isNull(), any())).thenReturn(List.of(row));
+            when(bookmarkRepository.findVoteIds(userId, List.of(voteId))).thenReturn(List.of(voteId));
 
             var page = voteService.listBookmarkedVotes(userId.toString(), null, null);
 
             assertThat(page.items()).singleElement().satisfies(r -> assertThat(r.getBookmarked()).isTrue());
-            verify(bookmarkRepository, never()).findVoteIds(any(), any());
         }
     }
 
@@ -1949,7 +1939,6 @@ class VoteServiceTest {
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             when(voteReportRepository.insertIfAbsent(any(), eq(voteId), eq(reporterId), eq("SPAM"), eq("spam")))
                     .thenReturn(0);
-            when(userRepository.existsById(reporterId)).thenReturn(true);
             when(voteRepository.existsByIdAndDeletedAtIsNull(voteId)).thenReturn(true);
 
             voteService.reportVote(voteId.toString(), reporterId.toString(), request);
@@ -1960,7 +1949,6 @@ class VoteServiceTest {
         void shouldThrowVoteNotFoundWhenPollDeletedBeforeReportInsert() {
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             when(voteReportRepository.insertIfAbsent(any(), eq(voteId), eq(reporterId), any(), any())).thenReturn(0);
-            when(userRepository.existsById(reporterId)).thenReturn(true);
             when(voteRepository.existsByIdAndDeletedAtIsNull(voteId)).thenReturn(false);
 
             assertThatThrownBy(() -> voteService.reportVote(voteId.toString(), reporterId.toString(), request))

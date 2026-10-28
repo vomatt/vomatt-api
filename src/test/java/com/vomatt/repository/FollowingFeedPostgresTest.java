@@ -42,13 +42,6 @@ class FollowingFeedPostgresTest extends PostgresRepositoryTest {
         now = OffsetDateTime.now();
     }
 
-    private Tag persistTag() {
-        String marker = "ff" + System.nanoTime();
-        Tag t = new Tag(marker, marker, null, 0);
-        em.persist(t);
-        return t;
-    }
-
     private Vote poll(User creator, int startedMinutesAgo, Tag... tags) {
         Vote poll = persistPoll(creator, now.minusMinutes(startedMinutesAgo), now.plusDays(1), "A", "B");
         for (Tag t : tags) {
@@ -131,12 +124,6 @@ class FollowingFeedPostgresTest extends PostgresRepositoryTest {
     @DisplayName("should insert nothing when following an unknown tag")
     void shouldInsertNothingWhenTagUnknown() {
         assertThat(tagRepository.follow(viewer.getId(), UUID.randomUUID())).isZero();
-    }
-
-    @Test
-    @DisplayName("should insert nothing, and not fail, when the following user no longer exists")
-    void shouldInsertNothingWhenFollowerIsGone() {
-        assertThat(tagRepository.follow(UUID.randomUUID(), tag.getId())).isZero();
     }
 
     @Test

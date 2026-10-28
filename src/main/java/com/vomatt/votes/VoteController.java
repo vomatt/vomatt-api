@@ -373,6 +373,7 @@ public class VoteController {
             bookmarking an already Ended Poll gives no RESULT. A Poll Cancelled before it opened gives no RESULT.
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
+            - 404 `user.not_found`: the signed-in account no longer exists
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Bookmarked (or already bookmarked)",
             content = @Content(examples = @ExampleObject(name = "Bookmarked", value = """

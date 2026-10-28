@@ -484,10 +484,21 @@ class VoteServiceTest {
         @DisplayName("should insert the caller's bookmark when the Poll is reachable")
         void shouldInsertBookmarkWhenPollIsReachable() {
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(bookmarkRepository.insertIfAbsent(any(UUID.class), eq(userId), eq(voteId))).thenReturn(1);
 
             voteService.bookmark(voteId.toString(), userId.toString());
 
             verify(bookmarkRepository).insertIfAbsent(any(UUID.class), eq(userId), eq(voteId));
+        }
+
+        @Test
+        @DisplayName("should throw 404 user.not_found when the signed-in user no longer exists")
+        void shouldThrowUserNotFoundWhenBookmarkingUserIsGone() {
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(userRepository.existsById(userId)).thenReturn(false);
+
+            assertThatThrownBy(() -> voteService.bookmark(voteId.toString(), userId.toString()))
+                .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.USER_NOT_FOUND));
         }
 
         @Test

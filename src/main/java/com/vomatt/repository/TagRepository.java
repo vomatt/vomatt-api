@@ -46,11 +46,12 @@ public interface TagRepository extends JpaRepository<Tag, UUID> {
     @Query("SELECT CASE WHEN COUNT(v) > 0 THEN true ELSE false END FROM Vote v JOIN v.tags t WHERE t.id = :tagId")
     boolean isTagReferencedByVotes(@Param("tagId") UUID tagId);
 
-    /** Follows a tag; 0 when already followed or the tag does not exist. */
+    /** Follows a tag; 0 when already followed, or the tag or the user does not exist. */
     @Modifying
     @Query(value = """
             INSERT INTO vomatt.tag_follows (user_id, tag_id)
-            SELECT :userId, t.id FROM vomatt.tags t WHERE t.id = :tagId
+            SELECT :userId, t.id FROM vomatt.tags t
+            WHERE t.id = :tagId AND EXISTS (SELECT 1 FROM vomatt.users WHERE id = :userId)
             ON CONFLICT (user_id, tag_id) DO NOTHING""", nativeQuery = true)
     int follow(@Param("userId") UUID userId, @Param("tagId") UUID tagId);
 
@@ -68,6 +69,7 @@ public interface TagRepository extends JpaRepository<Tag, UUID> {
     interface FollowRow {
         UUID getTagId();
 
+        // A native query yields timestamptz as Instant, and projections have no Instant-to-OffsetDateTime converter
         Instant getCreatedAt();
     }
 

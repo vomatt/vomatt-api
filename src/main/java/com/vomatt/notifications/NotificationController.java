@@ -136,7 +136,7 @@ public class NotificationController {
             or INVITATION, `unread` becomes false on that Poll in `GET /api/votes/my`. A Poll's later RESULT is a separate \
             notification, unread until read itself.
             **Errors**:
-            - 404 `notification.not_found`: no such notification for the caller now (unknown or malformed id, a Comment deleted, a follow undone...)
+            - 404 `notification.not_found`: no such notification for the caller now (unknown or malformed id, a Comment deleted, a follow undone, a `mention_` id the feed lists as `comment_`...)
             - 404 `vote.not_found`: deprecated Poll id only; the Poll does not exist or is Deleted""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> markRead(
             @Parameter(description = "Notification id from the feed (deprecated: a Poll id)", required = true,

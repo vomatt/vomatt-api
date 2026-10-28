@@ -75,7 +75,7 @@ class FollowingFeedPostgresTest extends PostgresRepositoryTest {
 
     @Test
     @DisplayName("should list followed users' and followed tags' Polls newest first, each once")
-    void shouldMergeFollowedUsersAndTagsWithoutDuplicates() {
+    void shouldListEachPollOnceWhenFollowedByUserAndTags() {
         User followed = persistUser("ff-followed-" + UUID.randomUUID());
         User stranger = persistUser("ff-stranger-" + UUID.randomUUID());
         em.persist(new UserFollow(viewer, followed));
@@ -131,6 +131,12 @@ class FollowingFeedPostgresTest extends PostgresRepositoryTest {
     @DisplayName("should insert nothing when following an unknown tag")
     void shouldInsertNothingWhenTagUnknown() {
         assertThat(tagRepository.follow(viewer.getId(), UUID.randomUUID())).isZero();
+    }
+
+    @Test
+    @DisplayName("should insert nothing, and not fail, when the following user no longer exists")
+    void shouldInsertNothingWhenFollowerIsGone() {
+        assertThat(tagRepository.follow(UUID.randomUUID(), tag.getId())).isZero();
     }
 
     @Test

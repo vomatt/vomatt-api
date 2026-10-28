@@ -9,7 +9,6 @@ import com.vomatt.common.email.EmailService;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.dto.ReportRequest;
-import com.vomatt.common.util.UUIDv7Generator;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.time.OffsetDateTime;
@@ -146,7 +145,8 @@ public class VoteService {
 
         tagRepository.incrementUsageCount(countedTagIds(vote));
 
-        return toResponse(vote, creatorId);
+        // A new Poll has no bookmark yet
+        return toResponses(List.of(vote), creatorId, Set.of()).getFirst();
     }
 
     /**
@@ -248,8 +248,12 @@ public class VoteService {
     /** Bookmarks a Poll the caller can reach, in any state; idempotent, a repeat keeps the first bookmark time. */
     public void bookmark(String voteId, String userId) {
         Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
-        if (bookmarkRepository.insertIfAbsent(UUIDv7Generator.generateId(), UUID.fromString(userId), vote.getId()) > 0) {
+        UUID userUuid = UUID.fromString(userId);
+        if (bookmarkRepository.insertIfAbsent(UUIDv7Generator.generateId(), userUuid, vote.getId()) > 0) {
             log.info("User {} bookmarked vote {}", userId, voteId);
+        } else if (!userRepository.existsById(userUuid)) {
+            // An access token outlives account deletion, so the signed-in user may be gone
+            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
         }
     }
 
@@ -874,8 +878,11 @@ public class VoteService {
         return toResponse(vote, userId);
     }
 
+    // One Poll: the bookmark is a single existence check on its unique key
     private VoteResponse toResponse(Vote vote, String userId) {
-        return toResponses(List.of(vote), userId).getFirst();
+        boolean bookmarked = userId != null
+            && bookmarkRepository.existsByUserIdAndVoteId(UUID.fromString(userId), vote.getId());
+        return toResponses(List.of(vote), userId, bookmarked ? Set.of(vote.getId()) : Set.of()).getFirst();
     }
 
     // After a Ballot change the caller already knows the Selection, so it overrides the looked-up one.

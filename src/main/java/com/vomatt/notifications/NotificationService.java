@@ -91,7 +91,8 @@ public class NotificationService {
         UUID userUuid = UUID.fromString(userId);
         OffsetDateTime now = OffsetDateTime.now();
         NotificationId notification = isUuid(id) ? currentForPoll(userId, id, now) : NotificationId.parse(id);
-        if (!notificationRepository.exists(userUuid, notification.kind(), notification.sourceId(), now)) {
+        if (!notificationRepository.exists(userUuid, notification.kind(), notification.sourceId(),
+                NotificationPreference.enabledKinds(preferences(userUuid)), now)) {
             throw ApiException.notFound(MessageKey.NOTIFICATION_NOT_FOUND);
         }
         notificationRepository.markRead(userUuid, notification.kind(), notification.sourceId(), now);

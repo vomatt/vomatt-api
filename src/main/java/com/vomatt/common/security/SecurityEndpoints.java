@@ -1,5 +1,8 @@
 package com.vomatt.common.security;
 
+import java.util.Arrays;
+import java.util.stream.Stream;
+
 /**
  * Centralized security endpoint configuration.
  * <p>
@@ -20,14 +23,20 @@ public final class SecurityEndpoints {
             "/api/auth/admin/passkey/login/verify" };
 
     /**
+     * Tag sub-paths for the caller's followed tags; {@code /api/tags/**} in {@link #PUBLIC_GET} would otherwise permit
+     * them. Wired through {@link #AUTHENTICATED_USERS}.
+     */
+    public static final String[] AUTHENTICATED_TAGS = { "/api/tags/following", "/api/tags/*/follow" };
+
+    /**
      * Authenticated /api/users sub-paths; must be matched before {@link #PUBLIC_GET},
      * otherwise {@code /api/users/{username}} would also permit {@code /me} and {@code /search}.
      * A user's follower, following and mutual follower lists are for signed-in users only.
-     * The caller's followed tags sit under /api/tags, whose {@code /api/tags/**} in {@link #PUBLIC_GET} would otherwise permit them.
+     * Also carries {@link #AUTHENTICATED_TAGS}, which needs the same ordering before {@link #PUBLIC_GET}.
      */
-    public static final String[] AUTHENTICATED_USERS = { "/api/users/me", "/api/users/me/**", "/api/users/search",
-            "/api/users/search/**", "/api/users/*/followers", "/api/users/*/following", "/api/users/*/mutual-followers",
-            "/api/tags/following", "/api/tags/*/follow" };
+    public static final String[] AUTHENTICATED_USERS = concat(new String[] { "/api/users/me", "/api/users/me/**",
+            "/api/users/search", "/api/users/search/**", "/api/users/*/followers", "/api/users/*/following",
+            "/api/users/*/mutual-followers" }, AUTHENTICATED_TAGS);
 
     /**
      * Authenticated /api/votes sub-paths. The Poll paths in {@link #PUBLIC_GET} only match UUIDs, so they already don't permit these paths;
@@ -56,4 +65,8 @@ public final class SecurityEndpoints {
 
     /** Admin endpoints – ADMIN role required (enforced at filter chain level) */
     public static final String[] AUTHENTICATED_ADMIN = { "/api/admin/**" };
+
+    private static String[] concat(String[] a, String[] b) {
+        return Stream.concat(Arrays.stream(a), Arrays.stream(b)).toArray(String[]::new);
+    }
 }

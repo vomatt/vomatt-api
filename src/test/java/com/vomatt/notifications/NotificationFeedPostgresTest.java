@@ -264,6 +264,22 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should return notification.not_found when reading a MENTION the feed lists as COMMENT, and read it once COMMENT is off")
+    void shouldNotReadMentionWhenFeedListsItAsComment() {
+        Vote mine = poll(me, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        VoteComment onMine = mention(alice, mine, null, me);
+        em.flush();
+
+        assertThatThrownBy(() -> notificationService.markRead(me.getId().toString(), "mention_" + onMine.getId()))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.NOTIFICATION_NOT_FOUND));
+
+        preferences(me, null, null, false, null);
+        notificationService.markRead(me.getId().toString(), "mention_" + onMine.getId());
+        assertThat(unread(me)).isZero();
+    }
+
+    @Test
     @DisplayName("should list MENTION for what would be COMMENT when COMMENT is switched off")
     void shouldListMentionWhenCommentSwitchedOff() {
         Vote mine = poll(me, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));

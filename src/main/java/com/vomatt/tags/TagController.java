@@ -153,7 +153,8 @@ public class TagController {
             **Side effects**: none
             **Errors**:
             - 400 `common.bad_request`: `tagId` is not a valid id
-            - 404 `tag.not_found`: no tag with this id""")
+            - 404 `tag.not_found`: no tag with this id
+            - 404 `user.not_found`: the signed-in account no longer exists""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> followTag(
             @Parameter(description = "Id of the tag to follow", required = true, example = "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70")
             @PathVariable String tagId,

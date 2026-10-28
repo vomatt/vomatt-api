@@ -114,16 +114,17 @@ public class VoteListRepository {
     /**
      * Following list: Open Public Polls created by users the follower follows or carrying a tag the follower follows,
      * most recently opened first, each once. Nothing from the follower themselves, a suspended creator, or a creator
-     * either side blocked. The user branch starts from the follower's follows and keeps at most a page per followed user
-     * (read through idx_votes_creator_start_id); the tag branch reads only Polls not yet Ended (idx_votes_end_id; OFFSET 0
-     * keeps the planner from walking idx_votes_start_id through Ended history instead) and probes each one's tags by primary
-     * key (OFFSET 0 in the EXISTS stops a hash over every row of the followed tags).
-     * Both filter before their LIMIT, so filtered rows never shorten a page; IN drops duplicates.
+     * either side blocked. Each branch starts from the follower's follows and keeps at most a page per followed user
+     * (read through idx_votes_creator_start_id) or per followed tag (its Polls through idx_vote_tags_tag_id; OFFSET 0
+     * keeps the planner from walking idx_votes_start_id over every live Poll instead), so the cost grows with the
+     * follows, not with every Open Poll. A Poll in the page's top rows is in the top rows of each
+     * of its followed tags, so the per-tag pages cannot miss it; IN drops the duplicates. Both filter before their
+     * LIMIT, so filtered rows never shorten a page.
      */
     @SuppressWarnings("unchecked")
     public List<Vote> findFollowing(UUID followerId, Cursor after, OffsetDateTime now, int limit) {
-        // ponytail: the user branch walks each followed user's Polls past Ended ones, and the tag branch checks every
-        // not-yet-Ended Poll per page; add Open-only partial indexes if creators pile up history or live Polls grow large
+        // ponytail: both branches walk past Ended Polls (a followed user's, a followed tag's); add Open-only partial
+        // indexes if creators or tags pile up history
         String open = """
                 v.deleted_at IS NULL AND v.audience = 'PUBLIC' AND v.start_time <= :now AND v.end_time > :now"""
                 + (after == null ? "" : " AND (v.start_time, v.id) < (:afterKey, :afterId)")
@@ -138,14 +139,14 @@ public class VoteListRepository {
                         ORDER BY v.start_time DESC, v.id DESC LIMIT :limit) fv
                     WHERE f.follower_id = :viewerId
                     UNION ALL
-                    (SELECT tv.id FROM (
-                        SELECT v.id, v.start_time FROM vomatt.votes v
+                    SELECT tv.id FROM vomatt.tag_follows tf
+                    CROSS JOIN LATERAL (
+                        SELECT v.id FROM (SELECT vt.vote_id FROM vomatt.vote_tags vt WHERE vt.tag_id = tf.tag_id OFFSET 0) vt
+                        JOIN vomatt.votes v ON v.id = vt.vote_id
                         WHERE v.creator_id <> :viewerId AND\s""" + open + """
 
-                          AND EXISTS (SELECT 1 FROM vomatt.vote_tags vt JOIN vomatt.tag_follows tf ON tf.tag_id = vt.tag_id
-                                      WHERE vt.vote_id = v.id AND tf.user_id = :viewerId OFFSET 0)
-                        OFFSET 0) tv
-                     ORDER BY tv.start_time DESC, tv.id DESC LIMIT :limit))
+                        ORDER BY v.start_time DESC, v.id DESC LIMIT :limit) tv
+                    WHERE tf.user_id = :viewerId)
                 ORDER BY v.start_time DESC, v.id DESC LIMIT :limit""";
         Query nativeQuery = em.createNativeQuery(sql, Vote.class)
                 .setParameter("viewerId", followerId)

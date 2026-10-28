@@ -146,7 +146,7 @@ class NotificationServiceTest {
     @DisplayName("should mark a notification read by its id when the user has it")
     void shouldMarkReadWhenNotificationExists() {
         UUID commentId = UUID.randomUUID();
-        when(notificationRepository.exists(eq(USER_ID), eq(NotificationKind.COMMENT), eq(commentId), any())).thenReturn(true);
+        when(notificationRepository.exists(eq(USER_ID), eq(NotificationKind.COMMENT), eq(commentId), any(), any())).thenReturn(true);
 
         notificationService.markRead(USER, "comment_" + commentId);
 
@@ -174,7 +174,7 @@ class NotificationServiceTest {
         when(voteService.findAccessibleVote(voteId, USER)).thenReturn(vote);
         when(notificationRepository.findCurrentForPoll(eq(USER_ID), eq(voteId), any())).thenReturn(Optional.of(
                 new NotificationRow(NotificationKind.RESULT, voteId, OffsetDateTime.now(), null, voteId, null, false)));
-        when(notificationRepository.exists(eq(USER_ID), eq(NotificationKind.RESULT), eq(voteId), any())).thenReturn(true);
+        when(notificationRepository.exists(eq(USER_ID), eq(NotificationKind.RESULT), eq(voteId), any(), any())).thenReturn(true);
 
         notificationService.markRead(USER, voteId.toString());
 

@@ -26,7 +26,7 @@ public class VoteListRepository {
     /**
      * Ids of Polls the user owns, holds a Ballot in or is invited to. A UNION lets each branch use its own index; an
      * {@code creator_id = :userId OR EXISTS (...)} predicate cannot, and scans every Poll.
-     * Shared by the "my Polls" list and Ended Notifications; changing it changes both.
+     * Shared by the "my Polls" list and Ended Notifications (which add bookmarked Polls); changing it changes both.
      */
     static final String MY_POLL_IDS = """
             (SELECT uv.vote_id FROM vomatt.user_votes uv WHERE uv.user_id = :userId

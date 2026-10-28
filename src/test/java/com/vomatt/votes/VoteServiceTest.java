@@ -84,6 +84,7 @@ class VoteServiceTest {
     @Mock com.vomatt.lookups.LookupService lookupService;
     @Mock VoteViewRecorder viewRecorder;
     @Mock com.vomatt.repository.VoteReportRepository voteReportRepository;
+    @Mock com.vomatt.repository.VoteBookmarkRepository bookmarkRepository;
     // Real helper over a stubbed EntityManager, so lockVote still runs the Poll-row lock it wraps
     @Spy com.vomatt.repository.LockTimeout lockTimeout = new com.vomatt.repository.LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @Spy VoteMapper voteMapper = new VoteMapper();
@@ -470,6 +471,58 @@ class VoteServiceTest {
             when(voteRepository.findById(voteId)).thenReturn(Optional.empty());
             assertThatThrownBy(() -> voteService.getInviteOnlyCreator(id))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
+        }
+    }
+
+    // ─── bookmark / unbookmark ────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("bookmark / unbookmark")
+    class BookmarkTests {
+
+        @Test
+        @DisplayName("should insert the caller's bookmark when the Poll is reachable")
+        void shouldInsertBookmarkWhenPollIsReachable() {
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+
+            voteService.bookmark(voteId.toString(), userId.toString());
+
+            verify(bookmarkRepository).insertIfAbsent(any(UUID.class), eq(userId), eq(voteId));
+        }
+
+        @Test
+        @DisplayName("should delete the caller's bookmark without reading the Poll")
+        void shouldDeleteBookmarkWhenUnbookmarking() {
+            voteService.unbookmark(voteId.toString(), userId.toString());
+
+            verify(bookmarkRepository).deleteByUserIdAndVoteId(userId, voteId);
+            verifyNoInteractions(voteRepository);
+        }
+
+        @Test
+        @DisplayName("should throw 404 VOTE_NOT_FOUND and write nothing when bookmarking an Invite-only Poll the caller is not invited to")
+        void shouldThrowWhenBookmarkingHiddenPoll() {
+            vote.setAudience(Audience.INVITE_ONLY);
+            vote.setCreator(User.builder().id(UUID.randomUUID()).build());
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            String id = voteId.toString();
+            String caller = userId.toString();
+
+            assertThatThrownBy(() -> voteService.bookmark(id, caller))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
+            verifyNoInteractions(bookmarkRepository);
+        }
+
+        @Test
+        @DisplayName("should flag every listed Poll bookmarked without looking the flags up")
+        void shouldSkipBookmarkLookupWhenListingBookmarks() {
+            com.vomatt.entity.VoteBookmark row = new com.vomatt.entity.VoteBookmark(user, vote);
+            when(bookmarkRepository.findPage(eq(userId), isNull(), isNull(), any())).thenReturn(List.of(row));
+
+            var page = voteService.listBookmarkedVotes(userId.toString(), null, null);
+
+            assertThat(page.items()).singleElement().satisfies(r -> assertThat(r.getBookmarked()).isTrue());
+            verify(bookmarkRepository, never()).findVoteIds(any(), any());
         }
     }
 

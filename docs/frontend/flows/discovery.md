@@ -33,6 +33,7 @@ sequenceDiagram
 | Search | `GET /api/votes?q={text}` | Same as Explore | Matches title and description, **not option text**; at least 2 characters; can be combined with `tag`, `status`, `sort` |
 | My Polls (open) | `GET /api/votes/my` | Ending soonest first | Login required. Includes your own **Scheduled** and Open Polls, Open Polls where you hold a Ballot, and Scheduled / Open Polls you are invited to, Unlisted and Invite-only included; each item has `unread` (whether your Invitation is unread; `false` otherwise) |
 | My Polls (ended) | `GET /api/votes/my?status=ended` | Most recently ended first | Includes Cancelled; each item has `unread` (whether the Ended Notification is unread) |
+| Bookmarked | `GET /api/votes/bookmarked` | Most recently bookmarked first | Login required. Any state and Audience; bookmark with `PUT` / `DELETE /api/votes/{voteId}/bookmark`. Every Poll response carries `bookmarked` for the signed-in caller. A Poll bookmarked before it Ends gives a `RESULT` notification when it Ends; Polls whose owner blocked you are left out, and `DELETE` always succeeds |
 | Polls on a user's public page | `GET /api/users/{username}/votes` | Most recently opened first | Public; lists only opened Public Polls created by that user (Open, Ended), excluding Scheduled ones and ones cancelled before opening. Does not support `status` / `sort` / `tag` / `q`. See [profile.md](profile.md) |
 
 ### Parameters

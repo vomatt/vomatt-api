@@ -700,6 +700,67 @@ class VoteControllerTest {
         }
     }
 
+    // ─── Bookmarks ────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("PUT / DELETE /api/votes/{voteId}/bookmark, GET /api/votes/bookmarked")
+    class BookmarkTests {
+
+        private final String voteId = UUID.randomUUID().toString();
+
+        @Test
+        @DisplayName("should require sign-in for every bookmark route")
+        void shouldRequireSignInWhenBookmarking() {
+            assertThat(isPublic("PUT", "/api/votes/" + voteId + "/bookmark")).isFalse();
+            assertThat(isPublic("DELETE", "/api/votes/" + voteId + "/bookmark")).isFalse();
+            assertThat(isPublic("GET", "/api/votes/bookmarked")).isFalse();
+        }
+
+        @Test
+        @DisplayName("should return 200 and bookmark for the caller when the Poll is reachable")
+        void shouldBookmarkWhenAuthenticated() throws Exception {
+            authenticate();
+
+            mockMvc.perform(put("/api/votes/{voteId}/bookmark", voteId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.success").value(true));
+            verify(voteService).bookmark(voteId, USER_ID);
+        }
+
+        @Test
+        @DisplayName("should return 200 and remove the caller's bookmark")
+        void shouldUnbookmarkWhenAuthenticated() throws Exception {
+            authenticate();
+
+            mockMvc.perform(delete("/api/votes/{voteId}/bookmark", voteId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.success").value(true));
+            verify(voteService).unbookmark(voteId, USER_ID);
+        }
+
+        @Test
+        @DisplayName("should return 404 when the Poll is not reachable")
+        void shouldReturn404WhenBookmarkingHiddenPoll() throws Exception {
+            authenticate();
+            doThrow(ApiException.notFound(MessageKey.VOTE_NOT_FOUND)).when(voteService).bookmark(voteId, USER_ID);
+
+            mockMvc.perform(put("/api/votes/{voteId}/bookmark", voteId))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.errorCode").value(MessageKey.VOTE_NOT_FOUND.code()));
+        }
+
+        @Test
+        @DisplayName("should pass the caller, cursor and limit to the bookmarked list")
+        void shouldReturnBookmarkedPageWhenAuthenticated() throws Exception {
+            authenticate();
+            when(voteService.listBookmarkedVotes(USER_ID, "c1", 5)).thenReturn(new CursorResponse<>(List.of(), null));
+
+            mockMvc.perform(get("/api/votes/bookmarked").param("cursor", "c1").param("limit", "5"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+        }
+    }
+
     // ─── POST /api/votes/{voteId}/vote ────────────────────────────────────────
 
 

@@ -34,7 +34,7 @@ Notifications are **not stored**; they are derived from Polls, Invitations, foll
 
 | `kind` | When | `actor` | `poll` | `comment` | Switch |
 |--------|------|---------|--------|-----------|--------|
-| `RESULT` | A Poll you own, hold a Ballot in or are an Invitee of has Ended (Deadline passed, Closed, or every Invitee voted). Not after a Retraction unless you are an Invitee | null | yes | null | `resultsIn` |
+| `RESULT` | A Poll you own, hold a Ballot in, are an Invitee of or bookmarked before it Ended has Ended (Deadline passed, Closed, or every Invitee voted); bookmarking an already Ended Poll gives none. Not after a Retraction unless you are an Invitee or bookmarked it. One item per Poll whatever the reasons | null | yes | null | `resultsIn` |
 | `CANCELLED` | An Invite-only Poll you are invited to was Cancelled before it opened (only Polls Cancelled before 2026-10-14) | owner | yes | null | `resultsIn` |
 | `INVITATION` | You are an Invitee of a Scheduled or Open Invite-only Poll. Replaced by `RESULT` once the Poll Ends. Removed and invited again: a new, unread one | owner | yes | null | `invitations` |
 | `FOLLOWED` | Someone followed you. One item per follower: group them ("@bkim and 3 others followed you") | follower | null | null | none |

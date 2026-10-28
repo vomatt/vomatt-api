@@ -4,6 +4,7 @@ import com.vomatt.lookups.LookupService;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.util.AfterCommit;
 import com.vomatt.common.util.TextUtil;
+import com.vomatt.common.util.UUIDv7Generator;
 import com.vomatt.common.email.EmailService;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.i18n.MessageKey;
@@ -54,6 +55,7 @@ import com.vomatt.repository.UserRepository;
 import com.vomatt.entity.Tag;
 import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
+import com.vomatt.entity.VoteBookmark;
 import com.vomatt.entity.VoteOption;
 import com.vomatt.entity.VoteStatus;
 import com.vomatt.entity.VoterVisibility;
@@ -67,6 +69,7 @@ import com.vomatt.repository.IdCount;
 import com.vomatt.repository.InviteeRepository;
 import com.vomatt.repository.LockTimeout;
 import com.vomatt.repository.NotificationRepository;
+import com.vomatt.repository.VoteBookmarkRepository;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.repository.VoteListRepository;
 import com.vomatt.repository.VoteReportRepository;
@@ -103,6 +106,7 @@ public class VoteService {
     private final LookupService lookupService;
     private final VoteViewRecorder viewRecorder;
     private final VoteReportRepository voteReportRepository;
+    private final VoteBookmarkRepository bookmarkRepository;
 
     private static final String INVITATION_COUNTER_NS = "email:invitation";
     private static final String BALLOT_RATE_LIMIT_NS = "rate:limit:ballot";
@@ -239,6 +243,35 @@ public class VoteService {
             // Deleted since the lookup above; a query, as findById would return the stale managed entity
             throw ApiException.notFound(MessageKey.VOTE_NOT_FOUND);
         }
+    }
+
+    /** Bookmarks a Poll the caller can reach, in any state; idempotent, a repeat keeps the first bookmark time. */
+    public void bookmark(String voteId, String userId) {
+        Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
+        if (bookmarkRepository.insertIfAbsent(UUIDv7Generator.generateId(), UUID.fromString(userId), vote.getId()) > 0) {
+            log.info("User {} bookmarked vote {}", userId, voteId);
+        }
+    }
+
+    /** Removes the caller's bookmark; idempotent, and also for a Poll they can no longer reach. */
+    public void unbookmark(String voteId, String userId) {
+        if (bookmarkRepository.deleteByUserIdAndVoteId(UUID.fromString(userId), UUID.fromString(voteId)) > 0) {
+            log.info("User {} removed bookmark on vote {}", userId, voteId);
+        }
+    }
+
+    /** The caller's bookmarked Polls, most recently bookmarked first; Deleted and no longer reachable ones are left out. */
+    @Transactional(readOnly = true)
+    public CursorResponse<VoteResponse> listBookmarkedVotes(String userId, String cursor, Integer limit) {
+        int size = CursorResponse.limit(limit);
+        Cursor after = Cursor.decode(cursor, Cursor.Scope.BOOKMARKS);
+        List<VoteBookmark> rows = bookmarkRepository.findPage(UUID.fromString(userId),
+            after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
+        return CursorResponse.of(rows, size, Cursor.Scope.BOOKMARKS, b -> Cursor.of(b.getCreatedAt(), b.getId()),
+            page -> {
+                List<Vote> votes = page.stream().map(VoteBookmark::getVote).toList();
+                return toResponses(votes, userId, votes.stream().map(Vote::getId).collect(Collectors.toSet()));
+            });
     }
 
     /**
@@ -866,6 +899,16 @@ public class VoteService {
         if (votes.isEmpty()) {
             return List.of();
         }
+        Set<UUID> bookmarked = userId == null ? Set.of()
+            : Set.copyOf(bookmarkRepository.findVoteIds(UUID.fromString(userId), votes.stream().map(Vote::getId).toList()));
+        return toResponses(votes, userId, bookmarked);
+    }
+
+    /** @param bookmarked of {@code votes}, those the caller bookmarked; ignored when {@code userId} is null */
+    private List<VoteResponse> toResponses(List<Vote> votes, String userId, Set<UUID> bookmarked) {
+        if (votes.isEmpty()) {
+            return List.of();
+        }
         List<UUID> ids = votes.stream().map(Vote::getId).toList();
         OffsetDateTime now = OffsetDateTime.now();
         Map<UUID, Long> commentCounts = voteCommentRepository.countVisibleByVoteIds(ids).stream()
@@ -886,6 +929,9 @@ public class VoteService {
             response.setMyOptionId(mine == null || mine.getOptionId() == null ? null : mine.getOptionId().toString());
             response.setMyBallotAnonymous(mine == null ? null : mine.isAnonymous());
             response.setCommentCount(commentCounts.getOrDefault(vote.getId(), 0L));
+            if (userId != null) {
+                response.setBookmarked(bookmarked.contains(vote.getId()));
+            }
             if (vote.getAudience() == Audience.INVITE_ONLY) {
                 response.setInviteeCount(inviteeCounts.getOrDefault(vote.getId(), 0L));
             }

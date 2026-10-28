@@ -361,6 +361,54 @@ public class VoteController {
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 
+    @PutMapping("/{voteId}/bookmark")
+    @CommonApiResponses
+    @Operation(summary = "Bookmark a Poll", description = """
+            **Auth**: required
+            **Precondition**: the caller can reach the Poll (any state: Scheduled, Open or Ended)
+            **Behavior**: bookmarks the Poll for the caller: it shows in `GET /api/votes/bookmarked` and Poll responses carry `bookmarked: true`. \
+            Idempotent: bookmarking again succeeds and keeps the first bookmark time (and so its place in the list).
+            **Side effects**: once the Poll Ends, the caller gets its RESULT notification (`GET /api/notifications`), dated to the Poll's end; \
+            one per Poll even when the caller also owns, voted in or is invited to it. Only a bookmark made before the Poll Ended counts: \
+            bookmarking an already Ended Poll gives no RESULT. A Poll Cancelled before it opened gives no RESULT.
+            **Errors**:
+            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee
+            """)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Bookmarked (or already bookmarked)",
+            content = @Content(examples = @ExampleObject(name = "Bookmarked", value = """
+                    {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller (`vote.not_found`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> bookmark(
+            @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
+            @PathVariable String voteId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        voteService.bookmark(voteId, principal.userId());
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
+    @DeleteMapping("/{voteId}/bookmark")
+    @CommonApiResponses
+    @Operation(summary = "Remove a bookmark", description = """
+            **Auth**: required
+            **Precondition**: none; the Poll need not be reachable, so a bookmark of a Poll the caller lost access to can still be removed
+            **Behavior**: removes the caller's bookmark, so the Poll leaves `GET /api/votes/bookmarked` and responses carry `bookmarked: false`. \
+            Idempotent: always succeeds, also when there was no bookmark or no such Poll.
+            **Side effects**: the Poll's RESULT notification goes away too, unless the caller also owns, voted in or is invited to the Poll
+            **Errors**: none beyond the common ones
+            """)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Bookmark removed (or there was none)",
+            content = @Content(examples = @ExampleObject(name = "Removed", value = """
+                    {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> unbookmark(
+            @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
+            @PathVariable String voteId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        voteService.unbookmark(voteId, principal.userId());
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
     @GetMapping
     @PublicApiResponse
     @Operation(summary = "List Polls (Feed / Explore / Search / Top)", description = """
@@ -443,6 +491,28 @@ public class VoteController {
         return ResponseEntity.ok(ApiResponse.ok(voteService.getMyPolls(principal.userId(), status, cursor, limit)));
     }
 
+    @GetMapping("/bookmarked")
+    @CommonApiResponses
+    @Operation(summary = "Bookmarked Polls", description = """
+            **Auth**: required
+            **Precondition**: none
+            **Behavior**: cursor-paged Polls the caller bookmarked (`PUT /api/votes/{voteId}/bookmark`), any state and Audience, \
+            most recently bookmarked first. Deleted Polls, INVITE_ONLY Polls the caller can no longer reach (removed as an Invitee) \
+            and Polls whose owner blocked the caller are left out; remove those with `DELETE /api/votes/{voteId}/bookmark`. \
+            Each item carries `bookmarked: true`. `nextCursor` null means the last page; `limit` is clamped to 1-50 (default 20).
+            **Side effects**: none
+            **Errors**:
+            - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list
+            """)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of bookmarked Polls",
+            content = @Content(examples = @ExampleObject(name = "Page", value = EX_PAGE_OF_POLLS)))
+    public ResponseEntity<ApiResponse<CursorResponse<VoteResponse>>> getBookmarkedVotes(
+            @Parameter(description = "`nextCursor` of the previous page; omit for the first page") @RequestParam(required = false) String cursor,
+            @Parameter(description = "Page size, 1-50 (default 20); out-of-range values are clamped", example = "20") @RequestParam(required = false) Integer limit,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(voteService.listBookmarkedVotes(principal.userId(), cursor, limit)));
+    }
+
     @PostMapping("/{voteId}/vote")
     @CommonApiResponses
     @Operation(summary = "Cast a Ballot", description = """
@@ -498,7 +568,7 @@ public class VoteController {
             **Auth**: required
             **Precondition**: the Poll is Open (not Scheduled, not Ended)
             **Behavior**: withdraws the caller's whole Ballot (Retraction); the caller is no longer a Participant. Idempotent: succeeds, changing nothing, when the caller holds no Ballot.
-            **Side effects**: Turnout -1 when a Ballot was removed. A Participant who Retracted gets no Ended Notification, unless they are an Invitee: every Invitee of an INVITE_ONLY Poll still gets it.
+            **Side effects**: Turnout -1 when a Ballot was removed. A Participant who Retracted gets no Ended Notification, unless they are an Invitee (every Invitee of an INVITE_ONLY Poll still gets it) or bookmarked the Poll before it Ended.
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen

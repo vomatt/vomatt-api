@@ -29,6 +29,7 @@ import com.vomatt.common.response.Cursor;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.UserVoteRepository;
+import com.vomatt.repository.VoteBookmarkRepository;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.VoteRepository;
@@ -75,6 +76,7 @@ public class UserService {
     private final FeedbackRepository feedbackRepository;
     private final RedisService redisService;
     private final VoteViewRecorder voteViewRecorder;
+    private final VoteBookmarkRepository bookmarkRepository;
 
     /** One export per user per UTC day: the response is the account's whole footprint and is not cheap to build. */
     private static final String EXPORT_COUNTER_NS = "export:daily";
@@ -383,12 +385,15 @@ public class UserService {
                 .map(b -> new UserDataExportResponse.RelationExport(b.getBlocked().getId().toString(),
                         b.getBlocked().getUsername(), b.getCreatedAt()))
                 .toList();
+        List<UserDataExportResponse.BookmarkExport> bookmarks = bookmarkRepository.findByUserIdOrderByCreatedAt(userUuid).stream()
+                .map(b -> new UserDataExportResponse.BookmarkExport(b.getVote().getId().toString(), b.getCreatedAt()))
+                .toList();
         if (redisService.incrementAndExpire(EXPORT_COUNTER_NS, counterKey, Duration.ofDays(1)) > 1) {
             throw ApiException.tooManyRequests(MessageKey.COMMON_RATE_LIMITED);
         }
         log.info("Data export produced for user {}", userId);
         return new UserDataExportResponse(OffsetDateTime.now(), profile, preferences, polls, comments, ballots, feedback,
-                following, blocking);
+                following, blocking, bookmarks);
     }
 
     @Transactional

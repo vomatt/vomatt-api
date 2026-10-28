@@ -2337,6 +2337,20 @@
         },
         "type" : "object"
       },
+      "BookmarkExport" : {
+        "description" : "A Poll the caller bookmarked",
+        "properties" : {
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "voteId" : {
+            "example" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "CommentDto" : {
         "description" : "A Comment (top-level) or a Reply (parentId set) on a Poll",
         "nullable" : true,
@@ -4758,7 +4772,7 @@
         "type" : "object"
       },
       "UserDataExportResponse" : {
-        "description" : "Export of the caller's own data: profile, preferences, Polls created, Comments written, Ballots cast, feedback sent, follows and blocks",
+        "description" : "Export of the caller's own data: profile, preferences, Polls created, Comments written, Ballots cast, feedback sent, follows, blocks and bookmarks",
         "nullable" : true,
         "properties" : {
           "ballots" : {
@@ -4772,6 +4786,13 @@
             "description" : "Users the caller blocked, oldest first, suspended ones included",
             "items" : {
               "$ref" : "#/components/schemas/RelationExport"
+            },
+            "type" : "array"
+          },
+          "bookmarks" : {
+            "description" : "Polls the caller bookmarked, oldest first",
+            "items" : {
+              "$ref" : "#/components/schemas/BookmarkExport"
             },
             "type" : "array"
           },
@@ -5251,6 +5272,12 @@
             "enum" : [ "PUBLIC", "UNLISTED", "INVITE_ONLY" ],
             "example" : "PUBLIC",
             "type" : "string"
+          },
+          "bookmarked" : {
+            "description" : "Whether the caller bookmarked the Poll (`PUT /api/votes/{voteId}/bookmark`). Null when the caller is not signed in and in admin views",
+            "example" : false,
+            "nullable" : true,
+            "type" : "boolean"
           },
           "commentCount" : {
             "description" : "Number of Comments and Replies on the Poll, excluding deleted ones",
@@ -12729,7 +12756,7 @@
     },
     "/api/notifications" : {
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: the caller's notifications, newest `createdAt` first, cursor-paged. They are not stored but derived from Polls, Invitations, follows and Comments when read, so an item disappears when what it is about goes away (a Comment deleted, a follow undone, a Poll Deleted). Kinds:\n- RESULT: a Poll the caller owns, holds a Ballot in or is an Invitee of has Ended (end time passed, Closed, or every Invitee voted). A Participant who made a Retraction and is not an Invitee gets none\n- CANCELLED: an Invite-only Poll the caller is an Invitee of was Cancelled before it opened (only Polls Cancelled before 2026-10-14; a Scheduled Poll is now Deleted, which notifies nobody)\n- INVITATION: the caller is an Invitee of a Scheduled or Open Invite-only Poll; listed until the Poll Ends, when its RESULT takes over. Being removed and invited again is a new, unread INVITATION\n- FOLLOWED: someone followed the caller (one item per follower; group them in the UI)\n- COMMENT: someone else commented on or replied under the caller's Poll, or replied to the caller's Comment, on a Poll the caller can see; not a Reply in a thread started by a user the caller blocked (the Comment lists hide that thread)\n- CLOSING_SOON: an Open Poll ends within 24 hours and the caller holds no Ballot in it, if the caller is its Invitee, or it is a Public Poll of a user the caller follows. Gone once the caller casts a Ballot or the Poll Ends. Off by default\nKinds switched off in the caller's preferences are left out (FOLLOWED cannot be switched off). Nothing from a suspended user, a user the caller blocked or a user who blocked the caller is listed, nor anything about a Poll whose owner blocked the caller. `poll` never carries per-option counts, its outcome (`winningOptionIds`, `winningOptionLabels`, `tie`) stays null until the Poll has Ended, and `actor` is never a voter, so Sealed results and Anonymous Ballots stay hidden. Each item carries what a row needs: the caller's Selection (`poll.myOptionId`), the caller's follows with the actor both ways (`actor.isFollowing`, `actor.followsYou`), and for a Reply the Comment it is under (`comment.parentId`). An item can appear or vanish behind a cursor (a follow, a block); de-duplicate by `id`.\n**Side effects**: none\n**Errors**:\n- 400 `common.cursor_invalid`: `cursor` came from another list",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: the caller's notifications, newest `createdAt` first, cursor-paged. They are not stored but derived from Polls, Invitations, follows and Comments when read, so an item disappears when what it is about goes away (a Comment deleted, a follow undone, a Poll Deleted). Kinds:\n- RESULT: a Poll the caller owns, holds a Ballot in, is an Invitee of or bookmarked has Ended (end time passed, Closed, or every Invitee voted); one item per Poll whatever the reasons. A Participant who made a Retraction and is neither an Invitee nor bookmarked it gets none\n- CANCELLED: an Invite-only Poll the caller is an Invitee of was Cancelled before it opened (only Polls Cancelled before 2026-10-14; a Scheduled Poll is now Deleted, which notifies nobody)\n- INVITATION: the caller is an Invitee of a Scheduled or Open Invite-only Poll; listed until the Poll Ends, when its RESULT takes over. Being removed and invited again is a new, unread INVITATION\n- FOLLOWED: someone followed the caller (one item per follower; group them in the UI)\n- COMMENT: someone else commented on or replied under the caller's Poll, or replied to the caller's Comment, on a Poll the caller can see; not a Reply in a thread started by a user the caller blocked (the Comment lists hide that thread)\n- CLOSING_SOON: an Open Poll ends within 24 hours and the caller holds no Ballot in it, if the caller is its Invitee, or it is a Public Poll of a user the caller follows. Gone once the caller casts a Ballot or the Poll Ends. Off by default\nKinds switched off in the caller's preferences are left out (FOLLOWED cannot be switched off). Nothing from a suspended user, a user the caller blocked or a user who blocked the caller is listed, nor anything about a Poll whose owner blocked the caller. `poll` never carries per-option counts, its outcome (`winningOptionIds`, `winningOptionLabels`, `tie`) stays null until the Poll has Ended, and `actor` is never a voter, so Sealed results and Anonymous Ballots stay hidden. Each item carries what a row needs: the caller's Selection (`poll.myOptionId`), the caller's follows with the actor both ways (`actor.isFollowing`, `actor.followsYou`), and for a Reply the Comment it is under (`comment.parentId`). An item can appear or vanish behind a cursor (a follow, a block); de-duplicate by `id`.\n**Side effects**: none\n**Errors**:\n- 400 `common.cursor_invalid`: `cursor` came from another list",
         "operationId" : "list",
         "parameters" : [ {
           "description" : "`nextCursor` of the previous page; omit for the first page",
@@ -15900,6 +15927,127 @@
         "tags" : [ "Vote" ]
       }
     },
+    "/api/votes/bookmarked" : {
+      "get" : {
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: cursor-paged Polls the caller bookmarked (`PUT /api/votes/{voteId}/bookmark`), any state and Audience, most recently bookmarked first. Deleted Polls, INVITE_ONLY Polls the caller can no longer reach (removed as an Invitee) and Polls whose owner blocked the caller are left out; remove those with `DELETE /api/votes/{voteId}/bookmark`. Each item carries `bookmarked: true`. `nextCursor` null means the last page; `limit` is clamped to 1-50 (default 20).\n**Side effects**: none\n**Errors**:\n- 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list\n",
+        "operationId" : "getBookmarkedVotes",
+        "parameters" : [ {
+          "description" : "`nextCursor` of the previous page; omit for the first page",
+          "in" : "query",
+          "name" : "cursor",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "description" : "Page size, 1-50 (default 20); out-of-range values are clamped",
+          "example" : 20,
+          "in" : "query",
+          "name" : "limit",
+          "required" : false,
+          "schema" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "Page" : {
+                    "description" : "Page",
+                    "value" : {
+                      "data" : {
+                        "items" : [ {
+                          "audience" : "PUBLIC",
+                          "commentCount" : 7,
+                          "creatorUsername" : "alice",
+                          "deadline" : "2026-10-19T09:00:00+08:00",
+                          "endTime" : "2026-10-19T09:00:00+08:00",
+                          "id" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05",
+                          "inviteeCount" : null,
+                          "myBallotAnonymous" : null,
+                          "myOptionId" : null,
+                          "options" : [ {
+                            "text" : "Java",
+                            "votes" : null
+                          }, {
+                            "text" : "Kotlin",
+                            "votes" : null
+                          } ],
+                          "participantCount" : 42,
+                          "shareCount" : 18,
+                          "startTime" : "2026-10-12T09:00:00+08:00",
+                          "title" : "Which language should we use for the next side project?",
+                          "voterVisibility" : "OWNER",
+                          "votingActive" : true
+                        } ],
+                        "nextCursor" : "MDE5OWYyYTMtNWI3ZS03ZDQwLWExYzgtOWUzYjJmNmQ0YzA1fDIwMjYtMTAtMTlUMDE6MDA6MDBa"
+                      },
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseCursorResponseVoteResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Bookmarked Polls",
+        "tags" : [ "Vote" ]
+      }
+    },
     "/api/votes/following" : {
       "get" : {
         "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: cursor-paged Open PUBLIC Polls created by users the caller follows (`POST /api/users/me/follows/{userId}`), most recently opened first. Scheduled, Ended, UNLISTED and INVITE_ONLY Polls never appear, nor Polls of users the caller blocked or who blocked the caller. `nextCursor` null means the last page; `limit` is clamped to 1-50 (default 20).\n**Side effects**: none\n**Errors**:\n- 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list\n",
@@ -16620,6 +16768,208 @@
           }
         },
         "summary" : "Edit a Scheduled Poll",
+        "tags" : [ "Vote" ]
+      }
+    },
+    "/api/votes/{voteId}/bookmark" : {
+      "delete" : {
+        "description" : "**Auth**: required\n**Precondition**: none; the Poll need not be reachable, so a bookmark of a Poll the caller lost access to can still be removed\n**Behavior**: removes the caller's bookmark, so the Poll leaves `GET /api/votes/bookmarked` and responses carry `bookmarked: false`. Idempotent: always succeeds, also when there was no bookmark or no such Poll.\n**Side effects**: the Poll's RESULT notification goes away too, unless the caller also owns, voted in or is invited to the Poll\n**Errors**: none beyond the common ones\n",
+        "operationId" : "unbookmark",
+        "parameters" : [ {
+          "description" : "Poll ID",
+          "example" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05",
+          "in" : "path",
+          "name" : "voteId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "Removed" : {
+                    "description" : "Removed",
+                    "value" : {
+                      "data" : {
+                        "id" : null,
+                        "message" : null,
+                        "status" : null,
+                        "success" : true
+                      },
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseSimpleResultResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Remove a bookmark",
+        "tags" : [ "Vote" ]
+      },
+      "put" : {
+        "description" : "**Auth**: required\n**Precondition**: the caller can reach the Poll (any state: Scheduled, Open or Ended)\n**Behavior**: bookmarks the Poll for the caller: it shows in `GET /api/votes/bookmarked` and Poll responses carry `bookmarked: true`. Idempotent: bookmarking again succeeds and keeps the first bookmark time (and so its place in the list).\n**Side effects**: once the Poll Ends, the caller gets its RESULT notification (`GET /api/notifications`), dated to the Poll's end; one per Poll even when the caller also owns, voted in or is invited to it. Only a bookmark made before the Poll Ended counts: bookmarking an already Ended Poll gives no RESULT. A Poll Cancelled before it opened gives no RESULT.\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee\n",
+        "operationId" : "bookmark",
+        "parameters" : [ {
+          "description" : "Poll ID",
+          "example" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05",
+          "in" : "path",
+          "name" : "voteId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "Bookmarked" : {
+                    "description" : "Bookmarked",
+                    "value" : {
+                      "data" : {
+                        "id" : null,
+                        "message" : null,
+                        "status" : null,
+                        "success" : true
+                      },
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseSimpleResultResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "vote.not_found" : {
+                    "description" : "vote.not_found",
+                    "value" : {
+                      "data" : null,
+                      "error" : "Poll not found",
+                      "errorCode" : "vote.not_found",
+                      "message" : "Poll not found",
+                      "success" : false
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller (`vote.not_found`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Bookmark a Poll",
         "tags" : [ "Vote" ]
       }
     },
@@ -18890,7 +19240,7 @@
     },
     "/api/votes/{voteId}/vote" : {
       "delete" : {
-        "description" : "**Auth**: required\n**Precondition**: the Poll is Open (not Scheduled, not Ended)\n**Behavior**: withdraws the caller's whole Ballot (Retraction); the caller is no longer a Participant. Idempotent: succeeds, changing nothing, when the caller holds no Ballot.\n**Side effects**: Turnout -1 when a Ballot was removed. A Participant who Retracted gets no Ended Notification, unless they are an Invitee: every Invitee of an INVITE_ONLY Poll still gets it.\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller\n- 400 `vote.ended`: the Poll has Ended; Ballots are frozen\n- 400 `vote.not_allowed`: the Poll is still Scheduled\n- 429 `common.rate_limited`: more than 30 Ballot writes (cast, Retract, remove Selection) by the caller within 60 seconds; no `Retry-After`\n- 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was recorded, try again\n",
+        "description" : "**Auth**: required\n**Precondition**: the Poll is Open (not Scheduled, not Ended)\n**Behavior**: withdraws the caller's whole Ballot (Retraction); the caller is no longer a Participant. Idempotent: succeeds, changing nothing, when the caller holds no Ballot.\n**Side effects**: Turnout -1 when a Ballot was removed. A Participant who Retracted gets no Ended Notification, unless they are an Invitee (every Invitee of an INVITE_ONLY Poll still gets it) or bookmarked the Poll before it Ended.\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller\n- 400 `vote.ended`: the Poll has Ended; Ballots are frozen\n- 400 `vote.not_allowed`: the Poll is still Scheduled\n- 429 `common.rate_limited`: more than 30 Ballot writes (cast, Retract, remove Selection) by the caller within 60 seconds; no `Retry-After`\n- 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was recorded, try again\n",
         "operationId" : "retract",
         "parameters" : [ {
           "description" : "Poll ID",

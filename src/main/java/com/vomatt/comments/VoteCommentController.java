@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.vomatt.comments.dto.CreateCommentRequest;
 import com.vomatt.comments.dto.UpdateCommentRequest;
-import com.vomatt.comments.dto.ReportCommentRequest;
+import com.vomatt.common.dto.ReportRequest;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.response.SimpleResultResponse;
@@ -510,7 +510,7 @@ public class VoteCommentController {
     public ResponseEntity<ApiResponse<SimpleResultResponse>> reportComment(
             @Parameter(description = "Poll ID", required = true) @PathVariable String voteId,
             @Parameter(description = "Comment ID", required = true) @PathVariable UUID commentId,
-            @Valid @RequestBody ReportCommentRequest request,
+            @Valid @RequestBody ReportRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
         commentService.reportComment(commentId, principal.userId(), request);
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));

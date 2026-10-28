@@ -24,11 +24,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.vomatt.comments.dto.CommentDto;
-import com.vomatt.comments.dto.ReportCommentRequest;
+import com.vomatt.common.dto.ReportRequest;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.CursorResponse;
-import com.vomatt.entity.CommentReportReason;
+import com.vomatt.entity.ReportReason;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
@@ -175,7 +175,7 @@ class VoteCommentServiceTest {
         when(userRepository.existsById(viewerId)).thenReturn(true);
 
         assertThatThrownBy(() -> commentService.reportComment(target.getId(), viewerId.toString(),
-                new ReportCommentRequest(CommentReportReason.SPAM, null)))
+                new ReportRequest(ReportReason.SPAM, null)))
                 .isInstanceOfSatisfying(ApiException.class,
                         ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMENT_NOT_FOUND));
     }

@@ -22,6 +22,8 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
 
     long countByCreatorId(UUID creatorId);
 
+    boolean existsByIdAndDeletedAtIsNull(UUID id);
+
     /** Every Poll the user created, Deleted ones included (data export). */
     List<Vote> findByCreatorIdOrderByCreatedAtDesc(UUID creatorId);
 

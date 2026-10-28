@@ -5,7 +5,7 @@ import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.comments.dto.CreateCommentRequest;
 import com.vomatt.comments.dto.UpdateCommentRequest;
 import com.vomatt.comments.dto.CommentDto;
-import com.vomatt.comments.dto.ReportCommentRequest;
+import com.vomatt.common.dto.ReportRequest;
 import com.vomatt.entity.User;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.entity.Vote;
@@ -207,15 +207,14 @@ public class VoteCommentService {
     }
 
     /** Reports a live Comment or Reply of someone else; idempotent, a repeat report keeps the first one. */
-    public void reportComment(UUID commentId, String userId, ReportCommentRequest request) {
+    public void reportComment(UUID commentId, String userId, ReportRequest request) {
         VoteComment comment = findVisibleComment(commentId, userId);
         UUID reporterId = UUID.fromString(userId);
         if (comment.getUser().getId().equals(reporterId)) {
             throw ApiException.badRequest(MessageKey.COMMENT_REPORT_SELF);
         }
-        String note = request.note() == null || request.note().isBlank() ? null : request.note().strip();
         if (commentReportRepository.insertIfAbsent(UUIDv7Generator.generateId(), commentId, reporterId,
-                request.reason().name(), note) > 0) {
+                request.reason().name(), request.note()) > 0) {
             log.info("User {} reported comment {} as {}", userId, commentId, request.reason());
         } else if (!userRepository.existsById(reporterId)) {
             // An access token outlives account deletion, so the signed-in user may be gone

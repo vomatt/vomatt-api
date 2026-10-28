@@ -528,6 +528,70 @@
         },
         "type" : "object"
       },
+      "AdminVoteReportResponse" : {
+        "description" : "A user's report of a Poll, with the Poll as it is now (Deleted ones keep owner and title)",
+        "properties" : {
+          "createdAt" : {
+            "description" : "When it was reported",
+            "example" : "2026-10-26T10:00:00+08:00",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "id" : {
+            "description" : "Report ID (UUIDv7)",
+            "example" : "0199f4c2-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+            "type" : "string"
+          },
+          "note" : {
+            "description" : "Reporter's note; null when none was given",
+            "example" : "The options spread a false health claim.",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "ownerId" : {
+            "description" : "Poll owner's user ID",
+            "example" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
+            "type" : "string"
+          },
+          "ownerUsername" : {
+            "description" : "Poll owner's username",
+            "example" : "troll",
+            "type" : "string"
+          },
+          "reason" : {
+            "description" : "Reason given",
+            "enum" : [ "SPAM", "HARASSMENT", "HATE", "MISINFORMATION", "OTHER" ],
+            "example" : "MISINFORMATION",
+            "type" : "string"
+          },
+          "reporterId" : {
+            "description" : "Reporter's user ID",
+            "example" : "0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f",
+            "type" : "string"
+          },
+          "reporterUsername" : {
+            "description" : "Reporter's username",
+            "example" : "alice",
+            "type" : "string"
+          },
+          "voteDeleted" : {
+            "description" : "Whether the Poll has since been Deleted",
+            "example" : false,
+            "type" : "boolean"
+          },
+          "voteId" : {
+            "description" : "Reported Poll ID",
+            "example" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05",
+            "type" : "string"
+          },
+          "voteTitle" : {
+            "description" : "Poll title, also when Deleted",
+            "example" : "Does garlic cure the flu?",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "AdminVoteResponse" : {
         "description" : "A Poll as seen in the back office: the regular Poll (results still Sealed until it has Ended) plus moderation fields",
         "nullable" : true,
@@ -1536,6 +1600,38 @@
         "properties" : {
           "data" : {
             "$ref" : "#/components/schemas/PageResponseAdminUserResponse"
+          },
+          "error" : {
+            "description" : "Legacy duplicate of `message` on errors; null on success. Use `message` instead",
+            "example" : "Poll not found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "errorCode" : {
+            "description" : "Stable machine-readable error code (lowercase, dot-separated); branch on this, not on `message`. Null on success",
+            "example" : "vote.not_found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "message" : {
+            "description" : "Localized text following Accept-Language. On success it is usually null, except operations that attach a toast-ready text; on error it is the error message",
+            "example" : "Operation completed",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "success" : {
+            "description" : "true on success, false on error",
+            "example" : true,
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponsePageResponseAdminVoteReportResponse" : {
+        "description" : "Envelope of every API response, success or error",
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/PageResponseAdminVoteReportResponse"
           },
           "error" : {
             "description" : "Legacy duplicate of `message` on errors; null on success. Use `message` instead",
@@ -3546,6 +3642,38 @@
         },
         "type" : "object"
       },
+      "PageResponseAdminVoteReportResponse" : {
+        "description" : "Offset-style page container (page number and total count); most list endpoints use CursorResponse instead",
+        "nullable" : true,
+        "properties" : {
+          "content" : {
+            "description" : "Items of this page",
+            "items" : {
+              "$ref" : "#/components/schemas/AdminVoteReportResponse"
+            },
+            "type" : "array"
+          },
+          "limit" : {
+            "description" : "Page size",
+            "example" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "page" : {
+            "description" : "Current page number (1-based)",
+            "example" : 1,
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "total" : {
+            "description" : "Total number of items across all pages",
+            "example" : 123,
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "PageResponseAdminVoteResponse" : {
         "description" : "Offset-style page container (page number and total count); most list endpoints use CursorResponse instead",
         "nullable" : true,
@@ -4185,12 +4313,12 @@
         },
         "type" : "object"
       },
-      "ReportCommentRequest" : {
-        "description" : "Why the caller reports a Comment or Reply",
+      "ReportRequest" : {
+        "description" : "Why the caller reports a Poll, Comment or Reply",
         "properties" : {
           "note" : {
-            "description" : "Optional details for the moderators, max 500 characters",
-            "example" : "Insults me in every thread.",
+            "description" : "Optional details for the moderators, max 500 characters; blank is stored as none",
+            "example" : "Posts the same link in every thread.",
             "maxLength" : 500,
             "minLength" : 0,
             "nullable" : true,
@@ -4199,7 +4327,7 @@
           "reason" : {
             "description" : "Reason",
             "enum" : [ "SPAM", "HARASSMENT", "HATE", "MISINFORMATION", "OTHER" ],
-            "example" : "HARASSMENT",
+            "example" : "SPAM",
             "type" : "string"
           }
         },
@@ -5611,7 +5739,7 @@
     "/api/admin/comment-reports" : {
       "get" : {
         "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: offset page of reports from all users, newest first, each with the reported Comment as it is now (text and author kept when deleted), its author, the reporter, `reason` and `note`. A user reports a Comment at most once. Reports go away with the Comment's or the reporter's account. `page` is 1-based (default 1), `limit` 1-50 (default 20)\n**Side effects**: written to the audit log (action `VIEW`, resource `COMMENT_REPORT`), since notes may hold personal data\n**Errors**: none specific to this endpoint",
-        "operationId" : "listReports",
+        "operationId" : "listReports_1",
         "parameters" : [ {
           "description" : "Page number, 1-based (default 1)",
           "in" : "query",
@@ -8427,6 +8555,118 @@
         },
         "summary" : "Unsuspend User",
         "tags" : [ "Admin - User" ]
+      }
+    },
+    "/api/admin/vote-reports" : {
+      "get" : {
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: offset page of reports from all users, newest first, each with the reported Poll as it is now (title and owner kept when Deleted), its owner, the reporter, `reason` and `note`. A user reports a Poll at most once. Reports go away with the owner's or the reporter's account. `page` is 1-based (default 1), `limit` 1-50 (default 20)\n**Side effects**: written to the audit log (action `VIEW`, resource `VOTE_REPORT`), since notes may hold personal data\n**Errors**: none specific to this endpoint",
+        "operationId" : "listReports",
+        "parameters" : [ {
+          "description" : "Page number, 1-based (default 1)",
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "description" : "Page size (1-50, default 20)",
+          "in" : "query",
+          "name" : "limit",
+          "required" : false,
+          "schema" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "Reports" : {
+                    "description" : "Reports",
+                    "value" : {
+                      "data" : {
+                        "content" : [ {
+                          "createdAt" : "2026-10-26T10:00:00+08:00",
+                          "id" : "0199f4c2-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+                          "note" : "The options spread a false health claim.",
+                          "ownerId" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
+                          "ownerUsername" : "troll",
+                          "reason" : "MISINFORMATION",
+                          "reporterId" : "0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f",
+                          "reporterUsername" : "alice",
+                          "voteDeleted" : false,
+                          "voteId" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05",
+                          "voteTitle" : "Does garlic cure the flu?"
+                        } ],
+                        "limit" : 20,
+                        "page" : 1,
+                        "total" : 1
+                      },
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePageResponseAdminVoteReportResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "List Poll reports",
+        "tags" : [ "Admin - Poll Report" ]
       }
     },
     "/api/admin/votes" : {
@@ -17317,7 +17557,7 @@
                 }
               },
               "schema" : {
-                "$ref" : "#/components/schemas/ReportCommentRequest"
+                "$ref" : "#/components/schemas/ReportRequest"
               }
             }
           },
@@ -18248,6 +18488,144 @@
         "tags" : [ "Vote" ]
       }
     },
+    "/api/votes/{voteId}/report" : {
+      "post" : {
+        "description" : "**Auth**: required\n**Precondition**: the caller can reach the Poll (any state: Scheduled, Open or Ended) and did not create it\n**Behavior**: records the report for moderators with `reason` (SPAM, HARASSMENT, HATE, MISINFORMATION or OTHER) and an optional `note` (max 500 characters; blank is stored as none). Idempotent: reporting the same Poll again succeeds and keeps the first report. The owner is not told, and the Poll stays visible until a moderator acts\n**Side effects**: the report is listed in `GET /api/admin/vote-reports` and written to the audit log\n**Errors**:\n- 400 `vote.report.self`: the caller created the Poll\n- 400 `common.validation_failed`: `reason` missing, or `note` over 500 characters\n- 400 `common.bad_request`: `reason` is not one of the values above\n- 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller\n- 404 `user.not_found`: signed-in user no longer exists\n",
+        "operationId" : "report",
+        "parameters" : [ {
+          "description" : "Poll ID",
+          "example" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05",
+          "in" : "path",
+          "name" : "voteId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "examples" : {
+                "reasonOnly" : {
+                  "description" : "reasonOnly",
+                  "value" : {
+                    "reason" : "SPAM"
+                  }
+                },
+                "withNote" : {
+                  "description" : "withNote",
+                  "value" : {
+                    "note" : "The options spread a false health claim.",
+                    "reason" : "MISINFORMATION"
+                  }
+                }
+              },
+              "schema" : {
+                "$ref" : "#/components/schemas/ReportRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "reported" : {
+                    "description" : "reported",
+                    "value" : {
+                      "data" : {
+                        "id" : null,
+                        "message" : null,
+                        "status" : null,
+                        "success" : true
+                      },
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseSimpleResultResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "vote.not_found" : {
+                    "description" : "vote.not_found",
+                    "value" : {
+                      "data" : null,
+                      "error" : "Poll not found",
+                      "errorCode" : "vote.not_found",
+                      "message" : "Poll not found",
+                      "success" : false
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller, or its owner blocked the caller (`vote.not_found`), or the current user no longer exists (`user.not_found`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Report a Poll",
+        "tags" : [ "Vote" ]
+      }
+    },
     "/api/votes/{voteId}/results" : {
       "get" : {
         "description" : "**Auth**: public\n**Precondition**: the Poll has Ended (Sealed before that, for everyone including the owner)\n**Behavior**: returns per-option counts and Support (`percentage`, 0-100, share of Participants) plus Turnout.\n**Side effects**: none\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller\n- 403 `vote.results.sealed`: the Poll is still Scheduled or Open\n",
@@ -19171,6 +19549,9 @@
   }, {
     "description" : "Poll APIs: create, edit, Close, cast / retract a Ballot, results, Participants, Feed / Explore / Search listing",
     "name" : "Vote"
+  }, {
+    "description" : "Reading users' reports of Polls (Admin)",
+    "name" : "Admin - Poll Report"
   }, {
     "description" : "Comment moderation APIs (Admin)",
     "name" : "Admin - Comment"

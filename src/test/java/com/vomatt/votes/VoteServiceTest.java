@@ -83,6 +83,7 @@ class VoteServiceTest {
     @Mock TransactionTemplate transactionTemplate;
     @Mock com.vomatt.lookups.LookupService lookupService;
     @Mock VoteViewRecorder viewRecorder;
+    @Mock com.vomatt.repository.VoteReportRepository voteReportRepository;
     // Real helper over a stubbed EntityManager, so lockVote still runs the Poll-row lock it wraps
     @Spy com.vomatt.repository.LockTimeout lockTimeout = new com.vomatt.repository.LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @Spy VoteMapper voteMapper = new VoteMapper();
@@ -1856,6 +1857,51 @@ class VoteServiceTest {
 
             verify(tagRepository, never()).findAllById(any());
             verify(tagRepository, never()).incrementUsageCount(argThat(ids -> !ids.isEmpty()));
+        }
+    }
+
+    @Nested
+    @DisplayName("reportVote")
+    class ReportVoteTests {
+
+        private final UUID reporterId = UUID.randomUUID();
+        private final com.vomatt.common.dto.ReportRequest request =
+                new com.vomatt.common.dto.ReportRequest(com.vomatt.entity.ReportReason.SPAM, "  spam  ");
+
+        @Test
+        @DisplayName("should reject reporting one's own Poll before writing anything")
+        void shouldThrowVoteReportSelfWhenOwnerReports() {
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+
+            assertThatThrownBy(() -> voteService.reportVote(voteId.toString(), userId.toString(), request))
+                    .isInstanceOfSatisfying(ApiException.class,
+                            ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_REPORT_SELF));
+            verifyNoInteractions(voteReportRepository);
+        }
+
+        @Test
+        @DisplayName("should store a stripped note and succeed again without a second row when already reported")
+        void shouldSucceedWhenAlreadyReported() {
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteReportRepository.insertIfAbsent(any(), eq(voteId), eq(reporterId), eq("SPAM"), eq("spam")))
+                    .thenReturn(0);
+            when(userRepository.existsById(reporterId)).thenReturn(true);
+            when(voteRepository.existsByIdAndDeletedAtIsNull(voteId)).thenReturn(true);
+
+            voteService.reportVote(voteId.toString(), reporterId.toString(), request);
+        }
+
+        @Test
+        @DisplayName("should return vote.not_found when the Poll is Deleted between its lookup and the report")
+        void shouldThrowVoteNotFoundWhenPollDeletedBeforeReportInsert() {
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteReportRepository.insertIfAbsent(any(), eq(voteId), eq(reporterId), any(), any())).thenReturn(0);
+            when(userRepository.existsById(reporterId)).thenReturn(true);
+            when(voteRepository.existsByIdAndDeletedAtIsNull(voteId)).thenReturn(false);
+
+            assertThatThrownBy(() -> voteService.reportVote(voteId.toString(), reporterId.toString(), request))
+                    .isInstanceOfSatisfying(ApiException.class,
+                            ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_NOT_FOUND));
         }
     }
 }

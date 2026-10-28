@@ -288,6 +288,63 @@ class VoteControllerTest {
         }
     }
 
+    // ─── POST /api/votes/{voteId}/report ──────────────────────────────────────
+
+    @Nested
+    @DisplayName("POST /api/votes/{voteId}/report")
+    class ReportTests {
+
+        private final String voteId = UUID.randomUUID().toString();
+
+        @Test
+        @DisplayName("should require sign-in")
+        void shouldRequireSignInWhenReporting() {
+            assertThat(isPublic("POST", "/api/votes/" + voteId + "/report")).isFalse();
+        }
+
+        @Test
+        @DisplayName("should return 200 when the reason is valid")
+        void shouldReturnOkWhenReasonIsValid() throws Exception {
+            authenticate();
+
+            mockMvc.perform(post("/api/votes/{voteId}/report", voteId)
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"SPAM\",\"note\":\"ads\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.success").value(true));
+            verify(voteService).reportVote(voteId, USER_ID,
+                    new com.vomatt.common.dto.ReportRequest(com.vomatt.entity.ReportReason.SPAM, "ads"));
+        }
+
+        @Test
+        @DisplayName("should return 400 vote.report.self when the owner reports their own Poll")
+        void shouldReturn400WhenOwnerReports() throws Exception {
+            authenticate();
+            doThrow(ApiException.badRequest(MessageKey.VOTE_REPORT_SELF)).when(voteService).reportVote(eq(voteId), eq(USER_ID), any());
+
+            mockMvc.perform(post("/api/votes/{voteId}/report", voteId)
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"SPAM\"}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errorCode").value(MessageKey.VOTE_REPORT_SELF.code()));
+        }
+
+        @Test
+        @DisplayName("should return 400 when the reason is missing or the note is too long")
+        void shouldReturn400WhenBodyIsInvalid() throws Exception {
+            authenticate();
+
+            mockMvc.perform(post("/api/votes/{voteId}/report", voteId)
+                            .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errorCode").value(MessageKey.COMMON_VALIDATION_FAILED.code()));
+            mockMvc.perform(post("/api/votes/{voteId}/report", voteId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"reason\":\"SPAM\",\"note\":\"" + "x".repeat(501) + "\"}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errorCode").value(MessageKey.COMMON_VALIDATION_FAILED.code()));
+            verifyNoInteractions(voteService);
+        }
+    }
+
     // ─── /api/votes/{voteId}/invitees ─────────────────────────────────────────
 
     @Nested

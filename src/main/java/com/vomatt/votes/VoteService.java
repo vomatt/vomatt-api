@@ -7,6 +7,8 @@ import com.vomatt.common.util.TextUtil;
 import com.vomatt.common.email.EmailService;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.common.dto.ReportRequest;
+import com.vomatt.common.util.UUIDv7Generator;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.time.OffsetDateTime;
@@ -67,6 +69,7 @@ import com.vomatt.repository.LockTimeout;
 import com.vomatt.repository.NotificationRepository;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.repository.VoteListRepository;
+import com.vomatt.repository.VoteReportRepository;
 import com.vomatt.repository.VoteRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -99,6 +102,7 @@ public class VoteService {
     private final LockTimeout lockTimeout;
     private final LookupService lookupService;
     private final VoteViewRecorder viewRecorder;
+    private final VoteReportRepository voteReportRepository;
 
     private static final String INVITATION_COUNTER_NS = "email:invitation";
     private static final String BALLOT_RATE_LIMIT_NS = "rate:limit:ballot";
@@ -216,6 +220,25 @@ public class VoteService {
         log.info("User {} shared vote {} via {}", userId, voteId, request.channel());
         // ponytail: count read before the increment, so a concurrent sharer's +1 may be missing until the next read
         return new VoteShareResponse(vote.getShareCount() + 1L);
+    }
+
+    /** Reports a Poll of someone else that the caller can reach; idempotent, a repeat report keeps the first one. */
+    public void reportVote(String voteId, String userId, ReportRequest request) {
+        Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
+        if (vote.isOwnedBy(userId)) {
+            throw ApiException.badRequest(MessageKey.VOTE_REPORT_SELF);
+        }
+        UUID reporterId = UUID.fromString(userId);
+        if (voteReportRepository.insertIfAbsent(UUIDv7Generator.generateId(), vote.getId(), reporterId,
+                request.reason().name(), request.note()) > 0) {
+            log.info("User {} reported vote {} as {}", userId, voteId, request.reason());
+        } else if (!userRepository.existsById(reporterId)) {
+            // An access token outlives account deletion, so the signed-in user may be gone
+            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
+        } else if (!voteRepository.existsByIdAndDeletedAtIsNull(vote.getId())) {
+            // Deleted since the lookup above; a query, as findById would return the stale managed entity
+            throw ApiException.notFound(MessageKey.VOTE_NOT_FOUND);
+        }
     }
 
     /**

@@ -11,13 +11,16 @@ import com.vomatt.admin.dto.AdminUserBlockResponse;
 import com.vomatt.admin.dto.AdminUserDetail;
 import com.vomatt.admin.dto.AdminUserResponse;
 import com.vomatt.admin.dto.AuditLogResponse;
+import com.vomatt.admin.dto.AdminVoteReportResponse;
 import com.vomatt.common.audit.AuditLog;
 import com.vomatt.common.util.TextUtil;
 import com.vomatt.entity.CommentReport;
 import com.vomatt.entity.Feedback;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserBlock;
+import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
+import com.vomatt.entity.VoteReport;
 
 /**
  * Back-office views; unlike the public mappers nothing is masked (deleted Comments keep author and text), except the
@@ -63,6 +66,14 @@ public class AdminMapper {
                 comment.getVote().getId().toString(),
                 comment.getParent() == null ? null : comment.getParent().getId().toString(), comment.getContent(),
                 comment.isDeleted(), comment.getUser().getId().toString(), comment.getUser().getUsername(),
+                report.getReporter().getId().toString(), report.getReporter().getUsername(), report.getReason(),
+                report.getNote(), report.getCreatedAt());
+    }
+
+    public AdminVoteReportResponse toVoteReportResponse(VoteReport report) {
+        Vote vote = report.getVote();
+        return new AdminVoteReportResponse(report.getId().toString(), vote.getId().toString(), vote.getTitle(),
+                vote.getDeletedAt() != null, vote.getCreator().getId().toString(), vote.getCreator().getUsername(),
                 report.getReporter().getId().toString(), report.getReporter().getUsername(), report.getReason(),
                 report.getNote(), report.getCreatedAt());
     }

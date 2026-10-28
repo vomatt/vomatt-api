@@ -14,6 +14,8 @@ import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.ParameterizedTest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -248,19 +250,30 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("should list only COMMENT when the mentioning Comment is on the user's Poll or replies to the user's Comment, even once that Comment is deleted")
+    @DisplayName("should list only COMMENT when the mentioning Comment is on the user's Poll or replies to the user's Comment")
     void shouldNotDuplicateCommentWithMentionWhenBothApply() {
         Vote mine = poll(me, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
         Vote alices = poll(alice, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
         VoteComment onMine = mention(alice, mine, null, me);
         VoteComment myComment = comment(me, alices, null, "mine");
         VoteComment reply = mention(bob, alices, myComment, me);
-        VoteComment myDeleted = comment(me, alices, null, "gone");
-        myDeleted.softDelete();
-        mention(bob, alices, myDeleted, me);
 
         assertThat(feed(me)).extracting(NotificationResponse::id).containsExactlyInAnyOrder(
                 "comment_" + onMine.getId(), "comment_" + reply.getId());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = { true, false })
+    @DisplayName("should list MENTION for a Reply that mentions the user under their deleted Comment, whether COMMENT is on or off")
+    void shouldListMentionWhenReplyUnderDeletedComment(boolean commentsOn) {
+        Vote alices = poll(alice, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        VoteComment myDeleted = comment(me, alices, null, "gone");
+        myDeleted.softDelete();
+        VoteComment reply = mention(bob, alices, myDeleted, me);
+        preferences(me, null, null, commentsOn, null);
+
+        assertThat(feed(me)).extracting(NotificationResponse::id).containsExactly("mention_" + reply.getId());
+        assertThat(unread(me)).isEqualTo(1);
     }
 
     @Test

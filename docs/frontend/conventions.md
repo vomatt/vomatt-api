@@ -25,11 +25,11 @@ The value of `errorCode` is `MessageKey.code()` (`vote.not_found`), not the enum
 | 200 | - | Read `data` |
 | 400 | `common.validation_failed`, `common.bad_request`, `common.missing_param`, `common.type_mismatch` | Ask the user to fix the input; see the validation format below |
 | 401 | `common.unauthorized` (no token), `auth.token.expired`, `auth.token.invalid` | `expired` -> get a new token with the refresh token and retry the original request; `invalid` / `unauthorized` -> clear the signed-in state and go to the login page |
-| 403 | `common.forbidden` | Signed in but lacking permission; show a no-permission message. Do not refresh, do not log out |
-| 404 | Each domain's `*.not_found` | Show a not-found message |
+| 403 | `common.forbidden`, `auth.account_banned` | `common.forbidden`: signed in but lacking permission; show a no-permission message. Do not refresh, do not log out. `auth.account_banned`: the account is suspended (see [auth-flow.md](auth-flow.md) §8) |
+| 404 | Each domain's `*.not_found`, `common.not_found` (unknown path while signed in; signed out it is 401 `common.unauthorized`) | Show a not-found message |
 | 405 / 415 | `common.bad_request` | Wrong HTTP method / unsupported `Content-Type`; a frontend bug, not a user error |
 | 409 | `common.conflict`, each domain's conflict codes | `common.conflict` (Poll busy, or a uniqueness clash such as a username taken at the same moment): retry once. Others: show the message matching the `errorCode` |
-| 429 | `common.rate_limited` | Read the `Retry-After` header (seconds) and do not resend before it expires; the UI shows "try again later" |
+| 429 | `common.rate_limited`, `auth.otp.daily_limit` | Read the `Retry-After` header (seconds) when present and do not resend before it expires; the UI shows "try again later". See §5 for the limits that send none |
 | 500 | `common.internal_error` | Generic error message; do not retry automatically |
 | 503 | `common.service_unavailable` | Transient failure (e.g. Redis); may retry (exponential backoff recommended) |
 
@@ -49,20 +49,23 @@ List endpoints return `ApiResponse<CursorResponse<T>>`:
 
 - `limit`: default 20, max 50; out-of-range values are **clamped** (below 1 becomes 1, above 50 becomes 50) rather than rejected.
 - `nextCursor`: an opaque string; pass it back unchanged as the `cursor` parameter to get the next page. `null` means there is no next page.
+- A cursor is accepted only by the list and ordering (and, for per-user lists, the user) that issued it; anything else returns 400 `common.cursor_invalid`. Changing `tag` or `q` keeps it valid.
 - Jumping to arbitrary pages is not supported, and there is no total count.
+- Exception: `/api/admin/**` lists are offset-paged (`PageResponse`: `content`, `total`, `page` starting at 1, `limit` 1-50, default 20).
 
 ## 4. Time, IDs, i18n, CORS
 
-- **Time**: ISO-8601 with timezone offset (e.g. `2026-10-09T12:34:56+08:00`). The frontend converts to the user's timezone for display.
-- **ID**: UUIDv7 strings. A malformed ID in the path returns 400.
+- **Time**: ISO-8601 with timezone offset (e.g. `2026-10-09T04:34:56Z`). The offset follows the server's default time zone, which is not configured (deployments typically answer in UTC, a local run in your machine's zone), so never assume `+08:00`: parse the offset and convert to the user's timezone for display.
+- **ID**: UUIDv7 strings. A malformed ID in the path returns 400 (`common.bad_request` or `common.type_mismatch`). Signed out, a malformed Poll ID on a public path gets 401 `common.unauthorized` instead, because public Poll paths match only UUIDs.
 - **i18n**: `Accept-Language` determines the language of `message`; `zh-TW` (default) and `en` are supported. Filter-layer errors (401 / 403 / 429) are localized the same way.
-- **CORS**: allowed origins are set by `app.security.cors-allowed-origins` (env var `CORS_ALLOWED_ORIGINS`, default `http://localhost:3000`); ask the backend to add any new frontend domain.
+- **CORS**: allowed origins are set by `app.security.cors-allowed-origins` (env var `CORS_ALLOWED_ORIGINS`, default `http://localhost:3000`; `*` is not allowed); ask the backend to add any new frontend domain. Only `Content-Type`, `Authorization` and `Accept` may be sent as request headers (plus the CORS-safelisted ones such as `Accept-Language`), credentials are not allowed (do not use `credentials: 'include'`), and `Retry-After` is exposed to scripts.
 
 ## 5. Rate limiting
 
-- Rate limited (configured in `rate-limit.paths`): every request under `/api/auth/**`, and write requests (POST / PUT / PATCH / DELETE) under `/api/votes/**` and `/api/users/**`. GET / HEAD / OPTIONS requests outside `/api/auth/**` are not limited.
-- All limited requests from one IP share one counter.
-- Counted per client IP; default 300 requests per 60 seconds (fixed window). Auth and write requests use separate counters, so heavy voting does not block login or token refresh. Exceeding it returns 429 + `Retry-After`.
+- Rate limited (configured in `rate-limit.paths`): every request under `/api/auth/**`, and write requests (POST / PUT / PATCH / DELETE) under `/api/votes/**`, `/api/users/**` and `/api/feedback/**`. GET / HEAD / OPTIONS requests outside `/api/auth/**` are not limited.
+- Counted per client IP; default 300 requests per 60 seconds (fixed window). Each IP has two counters, one for `/api/auth/**` and one shared by all limited write requests, so heavy voting does not block login or token refresh. Exceeding either returns 429 + `Retry-After`.
+- Server-side callers (vomatt-web) must send the end user's IP in `X-Client-IP` together with `X-Client-IP-Secret` (the shared `CLIENT_IP_SECRET`); it is honored only through the platform ingress. Without it every user behind that server shares its IP for rate limits and OTP lockouts. Browsers and apps calling the API directly never send these headers.
 - If Redis fails, `/api/auth/**` fails closed (returns 429 directly) while other paths are let through.
 - Ballot writes (cast, Retract, remove Selection) also have a per-account limit: 30 per 60 seconds (fixed window), on top of the per-IP one. Exceeding it returns 429 `common.rate_limited` **without** `Retry-After`; wait about a minute. If Redis fails this check lets the request through.
-- Frontend: on 429, count down using `Retry-After` and disable the submit button during the countdown. When the rate limiter itself is down, auth endpoints return 429 without `Retry-After`; show "try again later".
+- Other per-account or per-identifier quotas also return 429 **without** `Retry-After`, counted per UTC day: `POST /api/feedback` (default 10 per user, `common.rate_limited`), `GET /api/users/me/export` (once per user, `common.rate_limited`), and OTP sends (`auth.otp.daily_limit`, see [auth-flow.md](auth-flow.md) §2).
+- Frontend: on 429, count down using `Retry-After` and disable the submit button during the countdown. Without `Retry-After` (the quotas above, or auth endpoints while the rate limiter itself is down), show "try again later".

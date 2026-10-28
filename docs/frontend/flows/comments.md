@@ -62,19 +62,21 @@ Key points:
 - **Optimistic update after delete**: if a top-level Comment has `replyCount > 0`, show the placeholder; otherwise remove it. Deleting a Reply removes it from the list and decrements the top-level Comment's `replyCount` by 1.
 - **Likes** can be updated optimistically; repeated like or unlike both succeed, so there are no conflicts to handle.
 - Editing / deleting / liking an already-deleted comment returns `comment.not_found`.
+- **Blocks** (Comment hiding is one-way, applied only when the token is sent): threads started by a user you blocked are left out with all their Replies, and that user's Replies elsewhere are left out and not counted in `replyCount`. Liking, reporting or replying to such a Comment returns `comment.not_found`; unliking still works. A user who blocked you still sees your Comments, but every Poll that user created is 404 `vote.not_found` for you, Comment endpoints included (even editing, deleting or unliking your own). `commentCount` on the Poll is not filtered.
 
 ## Common errors
 
 | errorCode | HTTP | When | Suggested UI |
 |-----------|------|------|--------------|
-| `common.validation_failed` | 400 | `text` is blank or over 2000 characters | Highlight the input, keep the draft |
+| `common.validation_failed` | 400 | `text` is blank or over 2000 characters; report `reason` missing or `note` over 500 characters | Highlight the input, keep the draft |
 | `comment.report.self` | 400 | Reporting your own Comment | Hide the report action on your own Comments |
+| `common.bad_request` | 400 | Report `reason` is not one of the listed values | Offer only the listed reasons |
 | `comment.parent.invalid` | 400 | `parentId` does not exist, is deleted, or belongs to another Poll | Show "The comment you are replying to no longer exists" and refresh the list |
 | `common.cursor_invalid` | 400 | `cursor` was not returned by the server | Drop the cursor and reload from the first page |
 | `auth.token.expired` | 401 | Access token expired | Follow the refresh flow in [conventions.md](../conventions.md#2-http-status-and-frontend-handling), then retry |
 | `common.unauthorized` | 401 | Write endpoint called without a token | Redirect to login |
 | `comment.forbidden` | 403 | Editing / deleting someone else's comment | Hide edit / delete buttons on others' comments; show a toast if received |
-| `vote.not_found` | 404 | Poll does not exist | Show Poll not found |
-| `comment.not_found` | 404 | Comment does not exist / is deleted, or the replies `commentId` is not a top-level Comment of this Poll | Remove the item from the list and refresh |
+| `vote.not_found` | 404 | Poll does not exist, is Deleted, or is not reachable by the caller (Invite-only, or its owner blocked you) | Show Poll not found |
+| `comment.not_found` | 404 | Comment does not exist / is deleted, is hidden from you by a block (see above), or the replies `commentId` is not a top-level Comment of this Poll | Remove the item from the list and refresh |
 | `user.not_found` | 404 | The logged-in account no longer exists | Treat as logged out and clear login state |
 | `common.rate_limited` | 429 | Rate limit hit | Count down using `Retry-After` |

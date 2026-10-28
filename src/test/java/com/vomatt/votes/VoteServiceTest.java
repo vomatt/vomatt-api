@@ -496,11 +496,37 @@ class VoteServiceTest {
         void shouldSkipUserLookupWhenAlreadyBookmarked() {
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             when(bookmarkRepository.insertIfAbsent(any(UUID.class), eq(userId), eq(voteId))).thenReturn(0);
-            when(bookmarkRepository.existsByUserIdAndVoteId(userId, voteId)).thenReturn(true);
+            when(bookmarkRepository.existsByUserIdAndVoteIdAndVoteDeletedAtIsNull(userId, voteId)).thenReturn(true);
 
             voteService.bookmark(voteId.toString(), userId.toString());
 
             verify(userRepository, never()).existsById(any());
+            verify(voteRepository, never()).existsByIdAndDeletedAtIsNull(any());
+        }
+
+        @Test
+        @DisplayName("should return vote.not_found when the Poll is Deleted after its lookup, even on a repeat bookmark")
+        void shouldThrowVoteNotFoundWhenPollDeletedBeforeBookmarkInsert() {
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(bookmarkRepository.insertIfAbsent(any(UUID.class), eq(userId), eq(voteId))).thenReturn(0);
+            // The existing bookmark of a Deleted Poll is no repeat on a live Poll
+            when(bookmarkRepository.existsByUserIdAndVoteIdAndVoteDeletedAtIsNull(userId, voteId)).thenReturn(false);
+            when(voteRepository.existsByIdAndDeletedAtIsNull(voteId)).thenReturn(false);
+
+            assertThatThrownBy(() -> voteService.bookmark(voteId.toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
+            verify(userRepository, never()).existsById(any());
+        }
+
+        @Test
+        @DisplayName("should return user.not_found when the Poll is live but the account is gone")
+        void shouldThrowUserNotFoundWhenUserDeletedBeforeBookmarkInsert() {
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(bookmarkRepository.insertIfAbsent(any(UUID.class), eq(userId), eq(voteId))).thenReturn(0);
+            when(voteRepository.existsByIdAndDeletedAtIsNull(voteId)).thenReturn(true);
+
+            assertThatThrownBy(() -> voteService.bookmark(voteId.toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.USER_NOT_FOUND));
         }
 
         @Test
@@ -1952,7 +1978,7 @@ class VoteServiceTest {
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             when(voteReportRepository.insertIfAbsent(any(), eq(voteId), eq(reporterId), eq("SPAM"), eq("spam")))
                     .thenReturn(0);
-            when(voteReportRepository.existsByVoteIdAndReporterId(voteId, reporterId)).thenReturn(true);
+            when(voteReportRepository.existsByVoteIdAndReporterIdAndVoteDeletedAtIsNull(voteId, reporterId)).thenReturn(true);
 
             voteService.reportVote(voteId.toString(), reporterId.toString(), request);
 
@@ -1961,16 +1987,19 @@ class VoteServiceTest {
         }
 
         @Test
-        @DisplayName("should return vote.not_found when the Poll is Deleted between its lookup and the report")
+        @DisplayName("should return vote.not_found when the Poll is Deleted after its lookup, even on a repeat report")
         void shouldThrowVoteNotFoundWhenPollDeletedBeforeReportInsert() {
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             when(voteReportRepository.insertIfAbsent(any(), eq(voteId), eq(reporterId), any(), any())).thenReturn(0);
-            when(userRepository.existsById(reporterId)).thenReturn(true);
+            // The existing report of a Deleted Poll is no repeat on a live Poll
+            when(voteReportRepository.existsByVoteIdAndReporterIdAndVoteDeletedAtIsNull(voteId, reporterId))
+                    .thenReturn(false);
             when(voteRepository.existsByIdAndDeletedAtIsNull(voteId)).thenReturn(false);
 
             assertThatThrownBy(() -> voteService.reportVote(voteId.toString(), reporterId.toString(), request))
                     .isInstanceOfSatisfying(ApiException.class,
                             ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_NOT_FOUND));
+            verify(userRepository, never()).existsById(any());
         }
     }
 }

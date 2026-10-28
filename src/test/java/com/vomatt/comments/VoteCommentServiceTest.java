@@ -159,7 +159,6 @@ class VoteCommentServiceTest {
         VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "hi");
         when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(Optional.of(target), Optional.empty());
         when(commentLikeRepository.insertIfAbsent(any(), eq(target.getId()), eq(viewerId))).thenReturn(0);
-        when(userRepository.existsById(viewerId)).thenReturn(true);
 
         assertThatThrownBy(() -> commentService.likeComment(target.getId(), viewerId.toString()))
                 .isInstanceOfSatisfying(ApiException.class,
@@ -174,12 +173,43 @@ class VoteCommentServiceTest {
         VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "hi");
         when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(Optional.of(target), Optional.empty());
         when(commentReportRepository.insertIfAbsent(any(), eq(target.getId()), eq(viewerId), any(), any())).thenReturn(0);
-        when(userRepository.existsById(viewerId)).thenReturn(true);
 
         assertThatThrownBy(() -> commentService.reportComment(target.getId(), viewerId.toString(),
                 new ReportRequest(ReportReason.SPAM, null)))
                 .isInstanceOfSatisfying(ApiException.class,
                         ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMENT_NOT_FOUND));
+        org.mockito.Mockito.verify(userRepository, org.mockito.Mockito.never()).existsById(any());
+    }
+
+    @Test
+    @DisplayName("should return comment.not_found on a repeat like when the Comment goes after its lookup")
+    void shouldThrowCommentNotFoundWhenRepeatLikeOnDeletedComment() {
+        Vote vote = new Vote();
+        ReflectionTestUtils.setField(vote, "id", voteId);
+        VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "hi");
+        when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(Optional.of(target), Optional.empty());
+        when(commentLikeRepository.insertIfAbsent(any(), eq(target.getId()), eq(viewerId))).thenReturn(0);
+        // The existing like of a deleted Comment is no repeat on a live Comment
+        when(commentLikeRepository.existsByCommentIdAndUserIdAndCommentIsDeletedFalse(target.getId(), viewerId))
+                .thenReturn(false);
+
+        assertThatThrownBy(() -> commentService.likeComment(target.getId(), viewerId.toString()))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMENT_NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("should return user.not_found when the Comment is live but the account is gone")
+    void shouldThrowUserNotFoundWhenLikerDeletedBeforeLikeInsert() {
+        Vote vote = new Vote();
+        ReflectionTestUtils.setField(vote, "id", voteId);
+        VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "hi");
+        when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(Optional.of(target));
+        when(commentLikeRepository.insertIfAbsent(any(), eq(target.getId()), eq(viewerId))).thenReturn(0);
+
+        assertThatThrownBy(() -> commentService.likeComment(target.getId(), viewerId.toString()))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND));
     }
 
     @Test
@@ -190,7 +220,7 @@ class VoteCommentServiceTest {
         VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "hi");
         when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(Optional.of(target));
         when(commentLikeRepository.insertIfAbsent(any(), eq(target.getId()), eq(viewerId))).thenReturn(0);
-        when(commentLikeRepository.existsByCommentIdAndUserId(target.getId(), viewerId)).thenReturn(true);
+        when(commentLikeRepository.existsByCommentIdAndUserIdAndCommentIsDeletedFalse(target.getId(), viewerId)).thenReturn(true);
 
         commentService.likeComment(target.getId(), viewerId.toString());
 

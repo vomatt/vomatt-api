@@ -16,8 +16,9 @@ public interface CommentLikeRepository extends JpaRepository<CommentLike, UUID> 
 
     /**
      * Idempotent, also under concurrent requests; returns 1 when the like is new, 0 when it already existed or the
-     * user does not exist or the Comment is gone or deleted. The user and Comment rows are locked, so an account
-     * deletion or Comment delete still in flight is waited for and no like is left on a row deleted meanwhile.
+     * user does not exist or the Comment is gone or deleted. The user and Comment rows are locked, user first as in
+     * account deletion, so an account deletion or Comment delete still in flight is waited for and no like is left on
+     * a row deleted meanwhile.
      */
     @Modifying
     @Query(value = """
@@ -28,7 +29,8 @@ public interface CommentLikeRepository extends JpaRepository<CommentLike, UUID> 
             ON CONFLICT (comment_id, user_id) DO NOTHING""", nativeQuery = true)
     int insertIfAbsent(@Param("id") UUID id, @Param("commentId") UUID commentId, @Param("userId") UUID userId);
 
-    boolean existsByCommentIdAndUserId(UUID commentId, UUID userId);
+    /** The like exists and its Comment is not deleted. */
+    boolean existsByCommentIdAndUserIdAndCommentIsDeletedFalse(UUID commentId, UUID userId);
 
     /** Like counts for a page of comments. */
     @Query("SELECT cl.comment.id AS id, COUNT(cl) AS count FROM CommentLike cl "

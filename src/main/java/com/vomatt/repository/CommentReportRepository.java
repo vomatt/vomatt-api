@@ -19,7 +19,8 @@ public interface CommentReportRepository extends JpaRepository<CommentReport, UU
     /**
      * Idempotent, also under concurrent requests: a user's later reports of the same Comment are dropped. Returns 1
      * when the report is new, 0 when it already existed, the reporter does not exist or the Comment is gone or deleted.
-     * The reporter and Comment rows are locked, so an account deletion or Comment delete still in flight is waited for.
+     * The reporter and Comment rows are locked, user first as in account deletion, so an account deletion or Comment
+     * delete still in flight is waited for.
      */
     @Modifying
     @Query(value = """
@@ -31,7 +32,8 @@ public interface CommentReportRepository extends JpaRepository<CommentReport, UU
     int insertIfAbsent(@Param("id") UUID id, @Param("commentId") UUID commentId, @Param("reporterId") UUID reporterId,
                        @Param("reason") String reason, @Param("note") String note);
 
-    boolean existsByCommentIdAndReporterId(UUID commentId, UUID reporterId);
+    /** The report exists and its Comment is not deleted. */
+    boolean existsByCommentIdAndReporterIdAndCommentIsDeletedFalse(UUID commentId, UUID reporterId);
 
     /** Back-office list, newest first, with the Comment, its author and the reporter. */
     @EntityGraph(attributePaths = { "comment", "comment.user", "reporter" })

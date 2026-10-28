@@ -14,6 +14,7 @@ import com.vomatt.entity.VoteComment;
 import com.vomatt.common.response.Cursor;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.util.UUIDv7Generator;
+import com.vomatt.common.util.UserGuard;
 import com.vomatt.repository.CommentLikeRepository;
 import com.vomatt.repository.CommentReportRepository;
 import com.vomatt.repository.IdCount;
@@ -242,13 +243,9 @@ public class VoteCommentService {
         UUID userUuid = UUID.fromString(userId);
         if (commentLikeRepository.insertIfAbsent(UUIDv7Generator.generateId(), commentId, userUuid) > 0) {
             log.info("User {} liked comment {}", userId, commentId);
-        } else if (!commentLikeRepository.existsByCommentIdAndUserId(commentId, userUuid)) {
-            // Not already liked (the common no-op): the user or the Comment is gone
-            requireUserExists(userUuid);
-            if (commentRepository.findByIdAndNotDeleted(commentId).isEmpty()) {
-                // Deleted since the lookup above
-                throw ApiException.notFound(MessageKey.COMMENT_NOT_FOUND);
-            }
+        } else if (!commentLikeRepository.existsByCommentIdAndUserIdAndCommentIsDeletedFalse(commentId, userUuid)) {
+            // Not a repeat on a live Comment (the common no-op): the Comment or the user is gone
+            requireLiveComment(commentId, userUuid);
         }
     }
 
@@ -262,12 +259,8 @@ public class VoteCommentService {
         if (commentReportRepository.insertIfAbsent(UUIDv7Generator.generateId(), commentId, reporterId,
                 request.reason().name(), request.note()) > 0) {
             log.info("User {} reported comment {} as {}", userId, commentId, request.reason());
-        } else if (!commentReportRepository.existsByCommentIdAndReporterId(commentId, reporterId)) {
-            requireUserExists(reporterId);
-            if (commentRepository.findByIdAndNotDeleted(commentId).isEmpty()) {
-                // Deleted since the lookup above
-                throw ApiException.notFound(MessageKey.COMMENT_NOT_FOUND);
-            }
+        } else if (!commentReportRepository.existsByCommentIdAndReporterIdAndCommentIsDeletedFalse(commentId, reporterId)) {
+            requireLiveComment(commentId, reporterId);
         }
     }
 
@@ -281,13 +274,14 @@ public class VoteCommentService {
     }
 
     /**
-     * For a write that inserted nothing although the signed-in user's row guarded it: an access token outlives account
-     * deletion, so the user may be gone since the request passed the filter.
+     * For a guarded insert that wrote nothing and was no repeat: the Comment was deleted since the lookup, or the user is
+     * gone.
      */
-    private void requireUserExists(UUID userId) {
-        if (!userRepository.existsById(userId)) {
-            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
+    private void requireLiveComment(UUID commentId, UUID userId) {
+        if (commentRepository.findByIdAndNotDeleted(commentId).isEmpty()) {
+            throw ApiException.notFound(MessageKey.COMMENT_NOT_FOUND);
         }
+        UserGuard.requireExists(userRepository, userId);
     }
 
     private List<CommentDto> toDtos(List<VoteComment> comments, String currentUserId) {

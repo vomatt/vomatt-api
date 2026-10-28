@@ -5,6 +5,7 @@ import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.util.AfterCommit;
 import com.vomatt.common.util.TextUtil;
 import com.vomatt.common.util.UUIDv7Generator;
+import com.vomatt.common.util.UserGuard;
 import com.vomatt.common.email.EmailService;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.i18n.MessageKey;
@@ -236,13 +237,9 @@ public class VoteService {
         if (voteReportRepository.insertIfAbsent(UUIDv7Generator.generateId(), vote.getId(), reporterId,
                 request.reason().name(), request.note()) > 0) {
             log.info("User {} reported vote {} as {}", userId, voteId, request.reason());
-        } else if (!voteReportRepository.existsByVoteIdAndReporterId(vote.getId(), reporterId)) {
-            // Not already reported (the common no-op): the user or the Poll is gone
-            requireUserExists(reporterId);
-            if (!voteRepository.existsByIdAndDeletedAtIsNull(vote.getId())) {
-                // Deleted since the lookup above; a query, as findById would return the stale managed entity
-                throw ApiException.notFound(MessageKey.VOTE_NOT_FOUND);
-            }
+        } else if (!voteReportRepository.existsByVoteIdAndReporterIdAndVoteDeletedAtIsNull(vote.getId(), reporterId)) {
+            // Not a repeat on a live Poll (the common no-op): the Poll or the user is gone
+            requireLiveVote(vote.getId(), reporterId);
         }
     }
 
@@ -252,19 +249,21 @@ public class VoteService {
         UUID userUuid = UUID.fromString(userId);
         if (bookmarkRepository.insertIfAbsent(UUIDv7Generator.generateId(), userUuid, vote.getId()) > 0) {
             log.info("User {} bookmarked vote {}", userId, voteId);
-        } else if (!bookmarkRepository.existsByUserIdAndVoteId(userUuid, vote.getId())) {
-            requireUserExists(userUuid);
+        } else if (!bookmarkRepository.existsByUserIdAndVoteIdAndVoteDeletedAtIsNull(userUuid, vote.getId())) {
+            requireLiveVote(vote.getId(), userUuid);
         }
     }
 
     /**
-     * For a write that inserted nothing although the signed-in user's row guarded it: an access token outlives account
-     * deletion, so the user may be gone since the request passed the filter.
+     * For a guarded insert that wrote nothing and was no repeat: the Poll was Deleted since the lookup, or the user is
+     * gone.
      */
-    private void requireUserExists(UUID userId) {
-        if (!userRepository.existsById(userId)) {
-            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
+    private void requireLiveVote(UUID voteId, UUID userId) {
+        // A query, as findById would return the stale managed entity
+        if (!voteRepository.existsByIdAndDeletedAtIsNull(voteId)) {
+            throw ApiException.notFound(MessageKey.VOTE_NOT_FOUND);
         }
+        UserGuard.requireExists(userRepository, userId);
     }
 
     /** Removes the caller's bookmark; idempotent, and also for a Poll they can no longer reach. */

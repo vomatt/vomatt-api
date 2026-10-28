@@ -23,6 +23,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.vomatt.common.util.UUIDv7Generator;
 import com.vomatt.entity.Tag;
 import com.vomatt.entity.User;
+import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
 
@@ -39,6 +40,8 @@ class UserGuardLockPostgresTest extends PostgresRepositoryTest {
     @Autowired TagRepository tagRepository;
     @Autowired CommentLikeRepository likeRepository;
     @Autowired CommentReportRepository commentReportRepository;
+    @Autowired UserRepository userRepository;
+    @Autowired VoteRepository voteRepository;
 
     private final ExecutorService pool = Executors.newFixedThreadPool(6);
     private User owner;
@@ -98,6 +101,74 @@ class UserGuardLockPostgresTest extends PostgresRepositoryTest {
         for (Future<Integer> insert : inserts) {
             assertThat(insert.get(5, TimeUnit.SECONDS)).isZero();
         }
+    }
+
+    @Test
+    void shouldNotDeadlockWhenUserReportsBallotedPollDuringOwnAccountDeletion() throws Exception {
+        tx.executeWithoutResult(s -> em.persist(new UserVote(em.find(User.class, me.getId()),
+                em.find(Vote.class, poll.getId()), poll.getOptions().iterator().next())));
+        UUID userId = me.getId();
+        // As UserService.deleteUser: the user row first, then the Poll rows of their Ballots, then the delete
+        CountDownLatch pollLocked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Future<?> deletion = pool.submit(() -> tx.executeWithoutResult(s -> {
+            userRepository.lockForDelete(userId);
+            voteRepository.decrementTurnoutForUserBallots(userId);
+            pollLocked.countDown();
+            await(release);
+            em.createNativeQuery("DELETE FROM vomatt.users WHERE id = :id").setParameter("id", userId).executeUpdate();
+        }));
+        assertThat(pollLocked.await(5, TimeUnit.SECONDS)).isTrue();
+
+        // Before the user-row lock the report took users then waited on the Poll that deletion held: a cycle
+        Future<Integer> report = insert(() -> voteReportRepository.insertIfAbsent(UUIDv7Generator.generateId(),
+                poll.getId(), userId, "SPAM", null));
+        Thread.sleep(300);
+        assertThat(report.isDone()).isFalse();
+        release.countDown();
+
+        deletion.get(5, TimeUnit.SECONDS);
+        assertThat(report.get(5, TimeUnit.SECONDS)).isZero();
+    }
+
+    @Test
+    void shouldNotDeadlockWhenUserBookmarksOwnPollDuringOwnAccountDeletion() throws Exception {
+        Vote own = tx.execute(s -> persistPoll(em.find(User.class, me.getId()), OffsetDateTime.now().minusHours(1),
+                OffsetDateTime.now().plusDays(1), "A", "B"));
+        UUID userId = me.getId();
+        CountDownLatch userLocked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Future<?> deletion = pool.submit(() -> tx.executeWithoutResult(s -> {
+            userRepository.lockForDelete(userId);
+            userLocked.countDown();
+            await(release);
+            // Cascades to the user's own Poll, after the user row
+            em.createNativeQuery("DELETE FROM vomatt.users WHERE id = :id").setParameter("id", userId).executeUpdate();
+        }));
+        assertThat(userLocked.await(5, TimeUnit.SECONDS)).isTrue();
+
+        Future<Integer> bookmark = insert(() -> bookmarkRepository.insertIfAbsent(UUIDv7Generator.generateId(), userId,
+                own.getId()));
+        Thread.sleep(300);
+        assertThat(bookmark.isDone()).isFalse();
+        release.countDown();
+
+        deletion.get(5, TimeUnit.SECONDS);
+        assertThat(bookmark.get(5, TimeUnit.SECONDS)).isZero();
+    }
+
+    @Test
+    void shouldNotBookmarkDeletedPollAndNotCountOldBookmarkAsRepeat() {
+        UUID userId = me.getId();
+        tx.executeWithoutResult(s -> bookmarkRepository.insertIfAbsent(UUIDv7Generator.generateId(), userId,
+                poll.getId()));
+        tx.executeWithoutResult(s -> em.createNativeQuery("UPDATE vomatt.votes SET deleted_at = now() WHERE id = :id")
+                .setParameter("id", poll.getId()).executeUpdate());
+
+        Integer inserted = tx.execute(s -> bookmarkRepository.insertIfAbsent(UUIDv7Generator.generateId(),
+                owner.getId(), poll.getId()));
+        assertThat(inserted).isZero();
+        assertThat(bookmarkRepository.existsByUserIdAndVoteIdAndVoteDeletedAtIsNull(userId, poll.getId())).isFalse();
     }
 
     private Future<Integer> insert(Supplier<Integer> insert) {

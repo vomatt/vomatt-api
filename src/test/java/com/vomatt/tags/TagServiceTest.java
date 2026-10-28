@@ -363,11 +363,11 @@ class TagServiceTest {
         void shouldThrowUserNotFoundWhenFollowerIsGone() {
             UUID tagId = UUID.randomUUID();
             when(tagRepository.follow(userId, tagId)).thenReturn(0);
+            when(tagRepository.existsById(tagId)).thenReturn(true);
             when(userRepository.existsById(userId)).thenReturn(false);
 
             assertThatThrownBy(() -> tagService.followTag(userId.toString(), tagId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.USER_NOT_FOUND));
-            verify(tagRepository, never()).existsById(any());
         }
 
         @Test
@@ -375,11 +375,11 @@ class TagServiceTest {
         void shouldThrowNotFoundWhenFollowingUnknownTag() {
             UUID tagId = UUID.randomUUID();
             when(tagRepository.follow(userId, tagId)).thenReturn(0);
-            when(userRepository.existsById(userId)).thenReturn(true);
             when(tagRepository.existsById(tagId)).thenReturn(false);
 
             assertThatThrownBy(() -> tagService.followTag(userId.toString(), tagId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.TAG_NOT_FOUND));
+            verify(userRepository, never()).existsById(any());
         }
 
         @Test

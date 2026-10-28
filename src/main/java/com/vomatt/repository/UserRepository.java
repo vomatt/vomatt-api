@@ -64,6 +64,15 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Query(value = "SELECT id FROM vomatt.users WHERE active = true AND 'admin' = ANY(roles) ORDER BY id FOR NO KEY UPDATE", nativeQuery = true)
     List<UUID> lockActiveAdminIds();
 
+    /**
+     * Locks the account row before its deletion touches any other row, so deletion locks users before Polls and
+     * Comments, the order every users-guarded insert (reports, bookmarks, likes, tag follows) takes. A cycle remains
+     * only with the same user acting on a row that deletion also locks while their own account is being deleted
+     * (changing a Ballot, or writing to their own Poll by foreign key); Postgres aborts one side of it.
+     */
+    @Query(value = "SELECT id FROM vomatt.users WHERE id = :id FOR UPDATE", nativeQuery = true)
+    Optional<UUID> lockForDelete(@Param("id") UUID id);
+
     /** Whether the account is active and still holds the admin role; checked per request on /api/admin/**. */
     @Query(value = "SELECT EXISTS (SELECT 1 FROM vomatt.users WHERE id = :id AND active = true AND 'admin' = ANY(roles))",
            nativeQuery = true)

@@ -104,6 +104,7 @@ public class UserService {
         }
         User user = findUserById(userId);
         requireAnotherActiveAdmin(user);
+        userRepository.lockForDelete(user.getId());
         // After commit: a sign-in or refresh before then still sees the account, and a rollback keeps its tokens
         revokeTokensAfterCommit(userId);
         AfterCommit.run(() -> voteViewRecorder.forgetViewer(userId));

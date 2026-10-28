@@ -19,7 +19,8 @@ public interface VoteReportRepository extends JpaRepository<VoteReport, UUID> {
     /**
      * Idempotent, also under concurrent requests: a user's later reports of the same Poll are dropped. Returns 1 when
      * the report is new, 0 when it already existed, the reporter does not exist or the Poll is gone or Deleted.
-     * The reporter and Poll rows are locked, so an account deletion or Poll delete still in flight is waited for.
+     * The reporter and Poll rows are locked, user first as in account deletion, so an account deletion or Poll delete
+     * still in flight is waited for.
      */
     @Modifying
     @Query(value = """
@@ -31,7 +32,8 @@ public interface VoteReportRepository extends JpaRepository<VoteReport, UUID> {
     int insertIfAbsent(@Param("id") UUID id, @Param("voteId") UUID voteId, @Param("reporterId") UUID reporterId,
                        @Param("reason") String reason, @Param("note") String note);
 
-    boolean existsByVoteIdAndReporterId(UUID voteId, UUID reporterId);
+    /** The report exists and its Poll is not Deleted. */
+    boolean existsByVoteIdAndReporterIdAndVoteDeletedAtIsNull(UUID voteId, UUID reporterId);
 
     /** Back-office list, newest first, with the Poll, its owner and the reporter. */
     @EntityGraph(attributePaths = { "vote", "vote.creator", "reporter" })

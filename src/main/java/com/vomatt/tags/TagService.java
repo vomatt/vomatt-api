@@ -8,6 +8,7 @@ import com.vomatt.tags.dto.TagDto;
 import com.vomatt.entity.Tag;
 import com.vomatt.common.response.Cursor;
 import com.vomatt.common.response.CursorResponse;
+import com.vomatt.common.util.UserGuard;
 import com.vomatt.repository.TagRepository;
 import com.vomatt.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -112,10 +113,11 @@ public class TagService {
         if (tagRepository.follow(userUuid, id) > 0) {
             log.info("User {} followed tag {}", userId, tagId);
         } else if (!tagRepository.isFollowing(userUuid, id)) {
-            requireUserExists(userUuid);
+            // Not a repeat (a follow is deleted with its tag): the tag or the user is gone
             if (!tagRepository.existsById(id)) {
                 throw ApiException.notFound(MessageKey.TAG_NOT_FOUND);
             }
+            UserGuard.requireExists(userRepository, userUuid);
         }
     }
 
@@ -130,16 +132,6 @@ public class TagService {
     @Transactional(readOnly = true)
     public List<TagDto> getFollowedTags(String userId) {
         return tagRepository.findFollowedBy(UUID.fromString(userId)).stream().map(TagDto::from).toList();
-    }
-
-    /**
-     * For a write that inserted nothing although the signed-in user's row guarded it: an access token outlives account
-     * deletion, so the user may be gone since the request passed the filter.
-     */
-    private void requireUserExists(UUID userId) {
-        if (!userRepository.existsById(userId)) {
-            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
-        }
     }
 
     private Tag findTag(UUID id) {

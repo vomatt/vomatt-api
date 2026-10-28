@@ -7,6 +7,8 @@ import io.jsonwebtoken.security.Keys;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.core.env.MutablePropertySources;
@@ -198,22 +200,53 @@ class SecurityErrorHandlersTest {
         return response;
     }
 
-    @Test
-    void shouldReturn403WhenTokenAdminNoLongerAdminInDatabase() throws Exception {
+    @ParameterizedTest(name = "{0} by {1} token, account {2} -> {3} {4}")
+    @CsvSource(nullValues = "-", value = {
+            // method, token, account (deleted | suspended | active | admin), status, errorCode
+            "GET,  user,  deleted,   404, user.not_found",
+            "POST, user,  deleted,   404, user.not_found",
+            "GET,  admin, deleted,   404, user.not_found",
+            "POST, admin, deleted,   404, user.not_found",
+            "GET,  user,  suspended, 403, auth.account_banned",
+            "POST, user,  suspended, 403, auth.account_banned",
+            "GET,  admin, suspended, 403, auth.account_banned",
+            "POST, admin, suspended, 403, auth.account_banned",
+            "GET,  user,  active,    403, common.forbidden",
+            "POST, user,  active,    403, common.forbidden",
+            // Token still claims admin, database says demoted
+            "GET,  admin, active,    403, common.forbidden",
+            "POST, admin, active,    403, common.forbidden",
+            "GET,  admin, admin,     200, -",
+            "POST, admin, admin,     200, -",
+    })
+    void shouldDecideAdminPathByAccountStateAndRoleWhenReadOrWrite(
+            String method, String token, String account, int status, String errorCode) throws Exception {
         UUID userId = UUID.randomUUID();
-        when(userRepository.isActiveAdmin(userId)).thenReturn(false);
+        when(userRepository.isActiveAdmin(userId)).thenReturn(account.equals("admin"));
+        when(userRepository.findActiveById(userId)).thenReturn(switch (account) {
+            case "deleted" -> Optional.empty();
+            case "suspended" -> Optional.of(false);
+            default -> Optional.of(true);
+        });
         FilterChain chain = mock(FilterChain.class);
 
-        MockHttpServletResponse response = filterAsAdmin(userId, "GET", "/api/admin/users", chain);
+        MockHttpServletResponse response = token.equals("admin")
+                ? filterAsAdmin(userId, method, "/api/admin/users", chain)
+                : filterAs(userId, method, "/api/admin/users", chain);
 
-        assertThat(response.getStatus()).isEqualTo(403);
-        assertThat(response.getContentAsString()).contains("\"errorCode\":\"" + MessageKey.COMMON_FORBIDDEN.code() + "\"");
-        verifyNoInteractions(chain);
+        assertThat(response.getStatus()).isEqualTo(status);
+        if (errorCode == null) {
+            verify(chain).doFilter(any(), any());
+        } else {
+            assertThat(response.getContentAsString()).contains("\"errorCode\":\"" + errorCode + "\"");
+            verifyNoInteractions(chain);
+        }
     }
 
     @Test
     void shouldReturn403WhenDemotedAdminUsesEncodedAdminPath() throws Exception {
         UUID userId = UUID.randomUUID();
+        when(userRepository.findActiveById(userId)).thenReturn(Optional.of(true));
         FilterChain chain = mock(FilterChain.class);
 
         // %61 decodes to "a": the security rules and MVC see /api/admin/users
@@ -222,29 +255,6 @@ class SecurityErrorHandlersTest {
         assertThat(response.getStatus()).isEqualTo(403);
         verify(userRepository).isActiveAdmin(userId);
         verifyNoInteractions(chain);
-    }
-
-    @Test
-    void shouldSkipAdminCheckWhenTokenHasNoAdminRole() throws Exception {
-        FilterChain chain = mock(FilterChain.class);
-
-        // The security rule refuses it (no ROLE_ADMIN), so no DB check is needed
-        filterAs(UUID.randomUUID(), "GET", "/api/admin/users", chain);
-
-        verify(chain).doFilter(any(), any());
-        verifyNoInteractions(userRepository);
-    }
-
-    @Test
-    void shouldReturnAccountBannedWhenSuspendedAdminCallsAdmin() throws Exception {
-        UUID userId = UUID.randomUUID();
-        when(userRepository.findActiveById(userId)).thenReturn(Optional.of(false));
-        FilterChain chain = mock(FilterChain.class);
-
-        MockHttpServletResponse response = filterAsAdmin(userId, "GET", "/api/admin/users", chain);
-
-        assertThat(response.getStatus()).isEqualTo(403);
-        assertThat(response.getContentAsString()).contains("\"errorCode\":\"" + MessageKey.AUTH_ACCOUNT_BANNED.code() + "\"");
     }
 
     @Test
@@ -261,59 +271,9 @@ class SecurityErrorHandlersTest {
     }
 
     @Test
-    void shouldReturn404UserNotFoundWhenDeletedAdminWritesAdmin() throws Exception {
-        UUID userId = UUID.randomUUID();
-        FilterChain chain = mock(FilterChain.class);
-
-        // Same as any other write by a deleted account
-        MockHttpServletResponse response = filterAsAdmin(userId, "DELETE", "/api/admin/votes/" + UUID.randomUUID(), chain);
-
-        assertThat(response.getStatus()).isEqualTo(404);
-        assertThat(response.getContentAsString()).contains("\"errorCode\":\"" + MessageKey.USER_NOT_FOUND.code() + "\"");
-        verifyNoInteractions(chain);
-    }
-
-    @Test
-    void shouldReturn403ForbiddenWhenDeletedAdminReadsAdmin() throws Exception {
-        FilterChain chain = mock(FilterChain.class);
-
-        MockHttpServletResponse response = filterAsAdmin(UUID.randomUUID(), "GET", "/api/admin/users", chain);
-
-        assertThat(response.getStatus()).isEqualTo(403);
-        assertThat(response.getContentAsString()).contains("\"errorCode\":\"" + MessageKey.COMMON_FORBIDDEN.code() + "\"");
-        verifyNoInteractions(chain);
-    }
-
-    @Test
-    void shouldReturn403ForbiddenWhenDemotedAdminWritesAdmin() throws Exception {
-        UUID userId = UUID.randomUUID();
-        when(userRepository.findActiveById(userId)).thenReturn(Optional.of(true));
-        FilterChain chain = mock(FilterChain.class);
-
-        MockHttpServletResponse response = filterAsAdmin(userId, "DELETE", "/api/admin/votes/" + UUID.randomUUID(), chain);
-
-        assertThat(response.getStatus()).isEqualTo(403);
-        assertThat(response.getContentAsString()).contains("\"errorCode\":\"" + MessageKey.COMMON_FORBIDDEN.code() + "\"");
-        verifyNoInteractions(chain);
-    }
-
-    @Test
-    void shouldPassToSecurityRuleWhenNonAdminActiveUserWritesAdmin() throws Exception {
-        UUID userId = UUID.randomUUID();
-        when(userRepository.findActiveById(userId)).thenReturn(Optional.of(true));
-        FilterChain chain = mock(FilterChain.class);
-
-        // The filter lets it through; the security rule refuses it with 403 (no ROLE_ADMIN)
-        MockHttpServletResponse response = filterAs(userId, "DELETE", "/api/admin/votes/" + UUID.randomUUID(), chain);
-
-        assertThat(response.getStatus()).isEqualTo(200);
-        verify(chain).doFilter(any(), any());
-        verify(userRepository, never()).isActiveAdmin(any());
-    }
-
-    @Test
     void shouldCheckDatabaseWhenTokenClaimsDifferentRoleCase() throws Exception {
         UUID userId = UUID.randomUUID();
+        when(userRepository.findActiveById(userId)).thenReturn(Optional.of(true));
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/admin/users");
         // "ADMIN" still maps to ROLE_ADMIN, so it must go through the database check too
         request.addHeader("Authorization", "Bearer " + jwtUtil.generateToken(userId.toString(), List.of("ADMIN"), true));

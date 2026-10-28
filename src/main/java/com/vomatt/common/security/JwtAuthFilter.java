@@ -62,32 +62,32 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 log.debug("Invalid JWT token: {}", ex.getMessage());
             }
         }
-        // Admin roles outlive a demotion or suspension in the token, so every /api/admin/** call (reads included) with a
-        // token granting ROLE_ADMIN (same upper-casing as the authorities above) re-checks the account in one query;
-        // other tokens are refused by the security rule. Matched on the decoded path like the security rules, so an
-        // encoded /api/%61dmin/... cannot skip the check
-        boolean adminCall = principal != null && ADMIN_PATHS.matches(request) && principal.grantsAdmin();
-        // Access tokens outlive a suspension or account deletion, so writes re-check the account; reads skip the DB hit.
-        // The public auth endpoints keep their own handling (login and refresh already reject suspended users)
-        boolean write = principal != null && !READ_METHODS.contains(request.getMethod()) && !PUBLIC_AUTH_PATHS.matches(request);
-        if (adminCall || write) {
+        // Roles outlive a demotion, and access tokens a suspension or deletion, so every signed-in /api/admin/** call
+        // (reads included, any role) and every other write re-checks the account. Matched on the decoded path like the
+        // security rules, so an encoded /api/%61dmin/... cannot skip the check. Other reads skip the DB hit; the public
+        // auth endpoints keep their own handling (login and refresh already reject suspended users)
+        boolean adminPath = principal != null && ADMIN_PATHS.matches(request);
+        boolean write = principal != null && !adminPath && !READ_METHODS.contains(request.getMethod())
+                && !PUBLIC_AUTH_PATHS.matches(request);
+        if (adminPath || write) {
             UUID userId = UUID.fromString(principal.userId());
-            if (adminCall && userRepository.isActiveAdmin(userId)) {
+            // grantsAdmin uses the same upper-casing as the authorities above
+            if (adminPath && principal.grantsAdmin() && userRepository.isActiveAdmin(userId)) {
                 filterChain.doFilter(request, response);
                 return;
             }
-            // For an admin call, read only on refusal: empty is a deleted account, false a suspended one
+            // Empty is a deleted account, false a suspended one
             Optional<Boolean> active = userRepository.findActiveById(userId);
-            if (active.isEmpty() && write) {
+            if (active.isEmpty()) {
                 errorWriter.write(request, response, HttpServletResponse.SC_NOT_FOUND, MessageKey.USER_NOT_FOUND);
                 return;
             }
-            if (active.isPresent() && !active.get()) {
+            if (!active.get()) {
                 errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN, MessageKey.AUTH_ACCOUNT_BANNED);
                 return;
             }
-            if (adminCall) {
-                // Demoted, or deleted on a read
+            if (adminPath) {
+                // Active but not (or no longer) an admin
                 errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN, MessageKey.COMMON_FORBIDDEN);
                 return;
             }

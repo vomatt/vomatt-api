@@ -92,11 +92,11 @@ class NotificationServiceTest {
         assertThat(kindsListed()).isEqualTo(defaults);
         assertThat(kindsCounted()).isEqualTo(defaults);
         assertThat(notificationService.getPreferences(USER))
-                .isEqualTo(new NotificationPreferencesResponse(true, true, true, false));
+                .isEqualTo(new NotificationPreferencesResponse(true, true, true, false, true));
     }
 
     @ParameterizedTest
-    @EnumSource(value = NotificationPreference.class, names = { "RESULTS_IN", "INVITATIONS", "COMMENTS" })
+    @EnumSource(value = NotificationPreference.class, names = { "RESULTS_IN", "INVITATIONS", "COMMENTS", "MENTIONS" })
     @DisplayName("should leave a switched-off kind out of the feed and the count, keeping FOLLOWED")
     void shouldLeaveKindOutWhenSwitchedOff(NotificationPreference preference) {
         stored(preference, false);
@@ -105,6 +105,7 @@ class NotificationServiceTest {
             case INVITATIONS -> EnumSet.of(NotificationKind.INVITATION);
             case COMMENTS -> EnumSet.of(NotificationKind.COMMENT);
             case CLOSING_SOON -> EnumSet.of(NotificationKind.CLOSING_SOON);
+            case MENTIONS -> EnumSet.of(NotificationKind.MENTION);
         };
 
         assertThat(kindsListed()).doesNotContainAnyElementsOf(off).contains(NotificationKind.FOLLOWED);
@@ -124,7 +125,7 @@ class NotificationServiceTest {
     void shouldUpsertOnlySentSwitchesWhenUpdating() {
         when(userRepository.existsById(USER_ID)).thenReturn(true);
 
-        notificationService.updatePreferences(USER, new UpdateNotificationPreferencesRequest(null, null, false, null));
+        notificationService.updatePreferences(USER, new UpdateNotificationPreferencesRequest(null, null, false, null, null));
 
         verify(preferenceRepository).upsert(any(), eq(USER_ID), eq("notifications.comments"), eq("false"));
         verify(preferenceRepository, never()).upsert(any(), any(), eq("notifications.resultsIn"), any());
@@ -136,7 +137,7 @@ class NotificationServiceTest {
     @DisplayName("should return 404 when the account updating its preferences no longer exists")
     void shouldRejectUpdateWhenUserMissing() {
         assertThatThrownBy(() -> notificationService.updatePreferences(USER,
-                new UpdateNotificationPreferencesRequest(true, null, null, null)))
+                new UpdateNotificationPreferencesRequest(true, null, null, null, null)))
                 .isInstanceOfSatisfying(ApiException.class,
                         ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND));
     }

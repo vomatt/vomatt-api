@@ -120,6 +120,7 @@ public class NotificationService {
         changes.put(NotificationPreference.INVITATIONS, request.invitations());
         changes.put(NotificationPreference.COMMENTS, request.comments());
         changes.put(NotificationPreference.CLOSING_SOON, request.closingSoon());
+        changes.put(NotificationPreference.MENTIONS, request.mentions());
         changes.forEach((preference, on) -> {
             if (on != null) {
                 preferenceRepository.upsert(UUIDv7Generator.generateId(), userUuid, preference.preferenceKey(), on.toString());
@@ -145,7 +146,7 @@ public class NotificationService {
     private static NotificationPreferencesResponse toResponse(Map<NotificationPreference, Boolean> settings) {
         return new NotificationPreferencesResponse(settings.get(NotificationPreference.RESULTS_IN),
                 settings.get(NotificationPreference.INVITATIONS), settings.get(NotificationPreference.COMMENTS),
-                settings.get(NotificationPreference.CLOSING_SOON));
+                settings.get(NotificationPreference.CLOSING_SOON), settings.get(NotificationPreference.MENTIONS));
     }
 
     private NotificationId currentForPoll(String userId, String voteId, OffsetDateTime now) {

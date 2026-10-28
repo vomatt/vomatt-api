@@ -37,6 +37,7 @@ import com.vomatt.repository.CommentReportRepository;
 import com.vomatt.repository.IdCount;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.VoteCommentRepository;
+import com.vomatt.lookups.LookupService;
 import com.vomatt.votes.VoteService;
 
 @ExtendWith(MockitoExtension.class)
@@ -48,6 +49,7 @@ class VoteCommentServiceTest {
     @Mock UserRepository userRepository;
     @Mock CommentLikeRepository commentLikeRepository;
     @Mock CommentReportRepository commentReportRepository;
+    @Mock LookupService lookupService;
     @Spy CommentMapper commentMapper = new CommentMapper();
     @InjectMocks VoteCommentService commentService;
 
@@ -194,5 +196,41 @@ class VoteCommentServiceTest {
 
         org.mockito.Mockito.verify(userRepository, org.mockito.Mockito.never()).existsById(any());
         org.mockito.Mockito.verify(commentRepository, org.mockito.Mockito.times(1)).findByIdAndNotDeleted(target.getId());
+    }
+
+    @Test
+    @DisplayName("should parse @username handles lowercased in text order, skipping emails, handles glued to a word of any script and over-long tokens")
+    void shouldParseMentionsWhenTextHasHandles() {
+        assertThat(VoteCommentService.mentionedUsernames(
+                "@Alice 嗨 @bob_1你好 (@carol), mail a@dave.com, foo@erin, 測試@frank, café@gina, ٣@hank, @ab, @"
+                        + "x".repeat(51) + " @alice"))
+                .containsExactly("alice", "bob_1", "carol");
+        assertThat(VoteCommentService.mentionedUsernames("no handles here")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("should store the ids of mentioned users that exist when creating a Comment")
+    void shouldStoreMentionedUserIdsWhenCreatingComment() {
+        Vote vote = new Vote();
+        ReflectionTestUtils.setField(vote, "id", voteId);
+        User author = User.builder().id(viewerId).username("author").build();
+        User alice = User.builder().id(UUID.randomUUID()).username("alice").build();
+        when(voteService.findAccessibleVote(voteId, viewerId.toString())).thenReturn(vote);
+        when(userRepository.findById(viewerId)).thenReturn(java.util.Optional.of(author));
+        when(lookupService.configInt(VoteCommentService.MAX_MENTIONS_KEY, VoteCommentService.MAX_MENTIONS)).thenReturn(10);
+        when(userRepository.findByUsernameIn(List.of("alice", "ghost"))).thenReturn(List.of(alice));
+        when(commentRepository.saveAndFlush(any())).thenAnswer(invocation -> {
+            VoteComment saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            return saved;
+        });
+        com.vomatt.comments.dto.CreateCommentRequest request = new com.vomatt.comments.dto.CreateCommentRequest();
+        request.setText("@alice and @ghost, look");
+
+        commentService.createComment(voteId.toString(), viewerId.toString(), request);
+
+        org.mockito.ArgumentCaptor<VoteComment> saved = org.mockito.ArgumentCaptor.forClass(VoteComment.class);
+        org.mockito.Mockito.verify(commentRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getMentionedUserIds()).containsExactly(alice.getId());
     }
 }

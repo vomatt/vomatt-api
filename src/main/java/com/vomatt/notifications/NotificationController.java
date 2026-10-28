@@ -29,7 +29,7 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/notifications")
 @RequiredArgsConstructor
-@Tag(name = "Notification", description = "The notification feed: Poll results, Invitations, follows, Comments and closing-soon "
+@Tag(name = "Notification", description = "The notification feed: Poll results, Invitations, follows, Comments, mentions and closing-soon "
         + "reminders, derived when read (no push, no email). Kinds can be switched off with `/api/users/me/notification-preferences`")
 public class NotificationController {
 
@@ -76,6 +76,9 @@ public class NotificationController {
             - FOLLOWED: someone followed the caller (one item per follower; group them in the UI)
             - COMMENT: someone else commented on or replied under the caller's Poll, or replied to the caller's Comment, on a Poll the caller can see; \
             not a Reply in a thread started by a user the caller blocked (the Comment lists hide that thread)
+            - MENTION: someone else @mentioned the caller (`@<username>`) in a Comment or Reply on a Poll the caller can see, \
+            unless that Comment is the caller's COMMENT (one Comment, one notification) and COMMENT is switched on; \
+            same thread-starter block rule as COMMENT
             - CLOSING_SOON: an Open Poll ends within 24 hours and the caller holds no Ballot in it, if the caller is its Invitee, \
             or it is a Public Poll of a user the caller follows. Gone once the caller casts a Ballot or the Poll Ends. Off by default
             Kinds switched off in the caller's preferences are left out (FOLLOWED cannot be switched off). Nothing from a suspended user, \

@@ -3451,6 +3451,11 @@
             "example" : true,
             "type" : "boolean"
           },
+          "mentions" : {
+            "description" : "MENTION; default true",
+            "example" : true,
+            "type" : "boolean"
+          },
           "resultsIn" : {
             "description" : "RESULT and CANCELLED; default true",
             "example" : true,
@@ -3460,7 +3465,7 @@
         "type" : "object"
       },
       "NotificationResponse" : {
-        "description" : "One notification of the feed. Which of `actor`, `poll` and `comment` are set depends on `kind`: RESULT has `poll`; CANCELLED, INVITATION and CLOSING_SOON have `actor` (the Poll's owner) and `poll`; FOLLOWED has `actor` (the new follower); COMMENT has `actor` (the author), `poll` and `comment`",
+        "description" : "One notification of the feed. Which of `actor`, `poll` and `comment` are set depends on `kind`: RESULT has `poll`; CANCELLED, INVITATION and CLOSING_SOON have `actor` (the Poll's owner) and `poll`; FOLLOWED has `actor` (the new follower); COMMENT and MENTION have `actor` (the author), `poll` and `comment`",
         "properties" : {
           "actor" : {
             "$ref" : "#/components/schemas/FollowUserDto"
@@ -3469,7 +3474,7 @@
             "$ref" : "#/components/schemas/CommentSummary"
           },
           "createdAt" : {
-            "description" : "When it happened: the Poll's end (RESULT, CANCELLED), the Invitation, the follow, the Comment, or 24 hours before the Poll's end (CLOSING_SOON; the Poll's start if later). The feed is ordered by it, newest first",
+            "description" : "When it happened: the Poll's end (RESULT, CANCELLED), the Invitation, the follow, the Comment (COMMENT, MENTION), or 24 hours before the Poll's end (CLOSING_SOON; the Poll's start if later). The feed is ordered by it, newest first",
             "example" : "2026-10-26T09:30:00+08:00",
             "format" : "date-time",
             "type" : "string"
@@ -3480,8 +3485,8 @@
             "type" : "string"
           },
           "kind" : {
-            "description" : "RESULT: a Poll you own, hold a Ballot in or are invited to has Ended. CANCELLED: an Invite-only Poll you are invited to was Cancelled before it opened. INVITATION: you are invited to a Scheduled or Open Invite-only Poll (replaced by RESULT once it Ends). FOLLOWED: someone followed you. COMMENT: someone commented on your Poll or replied to your Comment. CLOSING_SOON: a Poll you are invited to, or a Public Poll of someone you follow, ends within 24 hours and you hold no Ballot in it",
-            "enum" : [ "RESULT", "CANCELLED", "INVITATION", "FOLLOWED", "COMMENT", "CLOSING_SOON" ],
+            "description" : "RESULT: a Poll you own, hold a Ballot in or are invited to has Ended. CANCELLED: an Invite-only Poll you are invited to was Cancelled before it opened. INVITATION: you are invited to a Scheduled or Open Invite-only Poll (replaced by RESULT once it Ends). FOLLOWED: someone followed you. COMMENT: someone commented on your Poll or replied to your Comment. MENTION: someone @mentioned you in a Comment or Reply that is not already your COMMENT. CLOSING_SOON: a Poll you are invited to, or a Public Poll of someone you follow, ends within 24 hours and you hold no Ballot in it",
+            "enum" : [ "RESULT", "CANCELLED", "INVITATION", "FOLLOWED", "COMMENT", "MENTION", "CLOSING_SOON" ],
             "example" : "COMMENT",
             "type" : "string"
           },
@@ -4616,6 +4621,12 @@
           },
           "invitations" : {
             "description" : "INVITATION",
+            "example" : true,
+            "nullable" : true,
+            "type" : "boolean"
+          },
+          "mentions" : {
+            "description" : "MENTION",
             "example" : true,
             "nullable" : true,
             "type" : "boolean"
@@ -12756,7 +12767,7 @@
     },
     "/api/notifications" : {
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: the caller's notifications, newest `createdAt` first, cursor-paged. They are not stored but derived from Polls, Invitations, follows and Comments when read, so an item disappears when what it is about goes away (a Comment deleted, a follow undone, a Poll Deleted). Kinds:\n- RESULT: a Poll the caller owns, holds a Ballot in, is an Invitee of or bookmarked has Ended (end time passed, Closed, or every Invitee voted); one item per Poll whatever the reasons. A Participant who made a Retraction and is neither an Invitee nor bookmarked it gets none\n- CANCELLED: an Invite-only Poll the caller is an Invitee of was Cancelled before it opened (only Polls Cancelled before 2026-10-14; a Scheduled Poll is now Deleted, which notifies nobody)\n- INVITATION: the caller is an Invitee of a Scheduled or Open Invite-only Poll; listed until the Poll Ends, when its RESULT takes over. Being removed and invited again is a new, unread INVITATION\n- FOLLOWED: someone followed the caller (one item per follower; group them in the UI)\n- COMMENT: someone else commented on or replied under the caller's Poll, or replied to the caller's Comment, on a Poll the caller can see; not a Reply in a thread started by a user the caller blocked (the Comment lists hide that thread)\n- CLOSING_SOON: an Open Poll ends within 24 hours and the caller holds no Ballot in it, if the caller is its Invitee, or it is a Public Poll of a user the caller follows. Gone once the caller casts a Ballot or the Poll Ends. Off by default\nKinds switched off in the caller's preferences are left out (FOLLOWED cannot be switched off). Nothing from a suspended user, a user the caller blocked or a user who blocked the caller is listed, nor anything about a Poll whose owner blocked the caller. `poll` never carries per-option counts, its outcome (`winningOptionIds`, `winningOptionLabels`, `tie`) stays null until the Poll has Ended, and `actor` is never a voter, so Sealed results and Anonymous Ballots stay hidden. Each item carries what a row needs: the caller's Selection (`poll.myOptionId`), the caller's follows with the actor both ways (`actor.isFollowing`, `actor.followsYou`), and for a Reply the Comment it is under (`comment.parentId`). An item can appear or vanish behind a cursor (a follow, a block); de-duplicate by `id`.\n**Side effects**: none\n**Errors**:\n- 400 `common.cursor_invalid`: `cursor` came from another list",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: the caller's notifications, newest `createdAt` first, cursor-paged. They are not stored but derived from Polls, Invitations, follows and Comments when read, so an item disappears when what it is about goes away (a Comment deleted, a follow undone, a Poll Deleted). Kinds:\n- RESULT: a Poll the caller owns, holds a Ballot in, is an Invitee of or bookmarked has Ended (end time passed, Closed, or every Invitee voted); one item per Poll whatever the reasons. A Participant who made a Retraction and is neither an Invitee nor bookmarked it gets none\n- CANCELLED: an Invite-only Poll the caller is an Invitee of was Cancelled before it opened (only Polls Cancelled before 2026-10-14; a Scheduled Poll is now Deleted, which notifies nobody)\n- INVITATION: the caller is an Invitee of a Scheduled or Open Invite-only Poll; listed until the Poll Ends, when its RESULT takes over. Being removed and invited again is a new, unread INVITATION\n- FOLLOWED: someone followed the caller (one item per follower; group them in the UI)\n- COMMENT: someone else commented on or replied under the caller's Poll, or replied to the caller's Comment, on a Poll the caller can see; not a Reply in a thread started by a user the caller blocked (the Comment lists hide that thread)\n- MENTION: someone else @mentioned the caller (`@<username>`) in a Comment or Reply on a Poll the caller can see, unless that Comment is the caller's COMMENT (one Comment, one notification) and COMMENT is switched on; same thread-starter block rule as COMMENT\n- CLOSING_SOON: an Open Poll ends within 24 hours and the caller holds no Ballot in it, if the caller is its Invitee, or it is a Public Poll of a user the caller follows. Gone once the caller casts a Ballot or the Poll Ends. Off by default\nKinds switched off in the caller's preferences are left out (FOLLOWED cannot be switched off). Nothing from a suspended user, a user the caller blocked or a user who blocked the caller is listed, nor anything about a Poll whose owner blocked the caller. `poll` never carries per-option counts, its outcome (`winningOptionIds`, `winningOptionLabels`, `tie`) stays null until the Poll has Ended, and `actor` is never a voter, so Sealed results and Anonymous Ballots stay hidden. Each item carries what a row needs: the caller's Selection (`poll.myOptionId`), the caller's follows with the actor both ways (`actor.isFollowing`, `actor.followsYou`), and for a Reply the Comment it is under (`comment.parentId`). An item can appear or vanish behind a cursor (a follow, a block); de-duplicate by `id`.\n**Side effects**: none\n**Errors**:\n- 400 `common.cursor_invalid`: `cursor` came from another list",
         "operationId" : "list",
         "parameters" : [ {
           "description" : "`nextCursor` of the previous page; omit for the first page",
@@ -14318,7 +14329,7 @@
     },
     "/api/users/me/notification-preferences" : {
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: which notification kinds the feed and the unread count include. Defaults: `resultsIn`, `invitations` and `comments` on, `closingSoon` off. FOLLOWED has no switch. There is no push or email channel; these switches only filter the in-app feed.\n**Side effects**: none\n**Errors**: none specific to this endpoint",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: which notification kinds the feed and the unread count include. Defaults: `resultsIn`, `invitations` and `comments` and `mentions` on, `closingSoon` off. FOLLOWED has no switch. There is no push or email channel; these switches only filter the in-app feed.\n**Side effects**: none\n**Errors**: none specific to this endpoint",
         "operationId" : "get",
         "responses" : {
           "200" : {
@@ -14329,6 +14340,7 @@
                     "closingSoon" : false,
                     "comments" : true,
                     "invitations" : true,
+                    "mentions" : true,
                     "resultsIn" : true
                   },
                   "error" : null,
@@ -14399,7 +14411,8 @@
             "application/json" : {
               "example" : {
                 "closingSoon" : true,
-                "comments" : false
+                "comments" : false,
+                "mentions" : true
               },
               "schema" : {
                 "$ref" : "#/components/schemas/UpdateNotificationPreferencesRequest"
@@ -14417,6 +14430,7 @@
                     "closingSoon" : true,
                     "comments" : false,
                     "invitations" : true,
+                    "mentions" : true,
                     "resultsIn" : true
                   },
                   "error" : null,
@@ -17147,7 +17161,7 @@
         "tags" : [ "Vote Comment" ]
       },
       "post" : {
-        "description" : "**Auth**: required\n**Precondition**: the Poll exists (any Poll state is accepted). When `parentId` is sent it must be a non-deleted Comment or Reply of the same Poll\n**Behavior**: without `parentId` creates a top-level Comment. With `parentId` creates a Reply; Replies are one level deep, so replying to a Reply attaches the new Reply to that Reply's top-level Comment (the response `parentId` is the top-level Comment, not the id you sent). Responds 201\n**Side effects**: the top-level Comment's `replyCount` grows by 1 in later list reads\n**Errors**:\n- 400 `comment.parent.invalid`: `parentId` does not exist, is deleted, or belongs to another Poll\n- 404 `comment.not_found`: `parentId` is hidden from the caller as in the lists (written by a user the caller blocked, or a Reply in a thread such a user started)\n- 404 `vote.not_found`: Poll does not exist or is Deleted, or its owner blocked the caller\n- 404 `user.not_found`: the signed-in user no longer exists\n",
+        "description" : "**Auth**: required\n**Precondition**: the Poll exists (any Poll state is accepted). When `parentId` is sent it must be a non-deleted Comment or Reply of the same Poll\n**Behavior**: without `parentId` creates a top-level Comment. With `parentId` creates a Reply; Replies are one level deep, so replying to a Reply attaches the new Reply to that Reply's top-level Comment (the response `parentId` is the top-level Comment, not the id you sent). Mentions: `@<username>` in the text (a username, 3-50 characters of `[a-z0-9_]`, matched case-insensitively, not preceded by a letter or digit of any script or `_`, so `a@b.com` and `測試@alice` are no mentions) names that user; a handle with no account is plain text. At most 10 distinct users per Comment (admin-tunable), the first handles in the text; later ones are plain text, not an error. Responds 201\n**Side effects**: the top-level Comment's `replyCount` grows by 1 in later list reads. Each mentioned user other than the author gets a MENTION notification while they can see the Poll, unless the Comment already gives them a COMMENT (it is on their Poll or replies to their Comment)\n**Errors**:\n- 400 `comment.parent.invalid`: `parentId` does not exist, is deleted, or belongs to another Poll\n- 404 `comment.not_found`: `parentId` is hidden from the caller as in the lists (written by a user the caller blocked, or a Reply in a thread such a user started)\n- 404 `vote.not_found`: Poll does not exist or is Deleted, or its owner blocked the caller\n- 404 `user.not_found`: the signed-in user no longer exists\n",
         "operationId" : "createComment",
         "parameters" : [ {
           "description" : "Poll ID",
@@ -17392,7 +17406,7 @@
         "tags" : [ "Vote Comment" ]
       },
       "put" : {
-        "description" : "**Auth**: required\n**Precondition**: the caller is the author and the Comment is not deleted. Works on both Comments and Replies, in any Poll state\n**Behavior**: replaces the text. The Poll in the path is not checked; the Comment is looked up by `commentId` only\n**Side effects**: `updatedAt` moves forward, so `edited` becomes true (it is derived: `updatedAt` after `createdAt`, and never true for a deleted placeholder). Likes are kept\n**Errors**:\n- 403 `comment.forbidden`: the caller is not the author\n- 404 `comment.not_found`: Comment does not exist or is deleted\n- 404 `vote.not_found`: the Comment's Poll is Deleted, or its owner blocked the caller\n",
+        "description" : "**Auth**: required\n**Precondition**: the caller is the author and the Comment is not deleted. Works on both Comments and Replies, in any Poll state\n**Behavior**: replaces the text. The Poll in the path is not checked; the Comment is looked up by `commentId` only\n**Side effects**: `updatedAt` moves forward, so `edited` becomes true (it is derived: `updatedAt` after `createdAt`, and never true for a deleted placeholder). Likes are kept. An edit can only remove mentions: a mentioned user whose current `@<username>` the new text no longer holds loses their MENTION, and a handle the edit adds mentions nobody (no notifying people after the fact, nor retargeting a mention to whoever took a renamed user's handle)\n**Errors**:\n- 403 `comment.forbidden`: the caller is not the author\n- 404 `comment.not_found`: Comment does not exist or is deleted\n- 404 `vote.not_found`: the Comment's Poll is Deleted, or its owner blocked the caller\n",
         "operationId" : "updateComment",
         "parameters" : [ {
           "description" : "Poll ID",
@@ -19921,6 +19935,9 @@
     "description" : "Reading users' reports of Comments (Admin)",
     "name" : "Admin - Comment Report"
   }, {
+    "description" : "The notification feed: Poll results, Invitations, follows, Comments, mentions and closing-soon reminders, derived when read (no push, no email). Kinds can be switched off with `/api/users/me/notification-preferences`",
+    "name" : "Notification"
+  }, {
     "description" : "Poll moderation APIs (Admin)",
     "name" : "Admin - Poll"
   }, {
@@ -19935,8 +19952,5 @@
   }, {
     "description" : "Reading user feedback (Admin)",
     "name" : "Admin - Feedback"
-  }, {
-    "description" : "The notification feed: Poll results, Invitations, follows, Comments and closing-soon reminders, derived when read (no push, no email). Kinds can be switched off with `/api/users/me/notification-preferences`",
-    "name" : "Notification"
   } ]
 }

@@ -39,6 +39,7 @@ Notifications are **not stored**; they are derived from Polls, Invitations, foll
 | `INVITATION` | You are an Invitee of a Scheduled or Open Invite-only Poll. Replaced by `RESULT` once the Poll Ends. Removed and invited again: a new, unread one | owner | yes | null | `invitations` |
 | `FOLLOWED` | Someone followed you. One item per follower: group them ("@bkim and 3 others followed you") | follower | null | null | none |
 | `COMMENT` | Someone else commented on or replied under your Poll, or replied to your Comment | author | yes | `{ id, parentId, excerpt }` | `comments` |
+| `MENTION` | Someone else wrote `@<your username>` in a Comment or Reply on a Poll you can see. Not listed when the same Comment gives you a `COMMENT` (on your Poll, or a Reply to your Comment, also once that Comment is deleted), unless `comments` is off; nor for a Reply in a thread started by a user you blocked | author | yes | `{ id, parentId, excerpt }` | `mentions` |
 | `CLOSING_SOON` | An Open Poll ends within 24 hours, you hold no Ballot, and you are its Invitee or it is a Public Poll of someone you follow. Gone once you vote or it Ends | owner | yes | null | `closingSoon` (off by default) |
 
 - `createdAt` is when it happened: the Poll's end, the Invitation, the follow, the Comment, or 24 hours before the Poll's end for `CLOSING_SOON` (its start if later). Group by day with it.

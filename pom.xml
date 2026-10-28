@@ -26,7 +26,7 @@
         <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
         <uuid-generator.version>5.2.0</uuid-generator.version>
         <postgresql.version>42.7.7</postgresql.version>
-        <resend.version>4.28.0</resend.version>
+        <resend.version>4.29.0</resend.version>
         <webauthn4j.version>0.31.11.RELEASE</webauthn4j.version>
     </properties>
 

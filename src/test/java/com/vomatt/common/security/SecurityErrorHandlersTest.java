@@ -203,16 +203,17 @@ class SecurityErrorHandlersTest {
     @ParameterizedTest(name = "{0} by {1} token, account {2} -> {3} {4}")
     @CsvSource(nullValues = "-", value = {
             // method, token, account (deleted | suspended | active | admin), status, errorCode
-            "GET,  user,  deleted,   404, user.not_found",
-            "POST, user,  deleted,   404, user.not_found",
+            // A token without the admin role passes on to the role rule (403 common.forbidden) with no DB hit
+            "GET,  user,  deleted,   200, -",
+            "POST, user,  deleted,   200, -",
+            "GET,  user,  suspended, 200, -",
+            "POST, user,  suspended, 200, -",
+            "GET,  user,  active,    200, -",
+            "POST, user,  active,    200, -",
             "GET,  admin, deleted,   404, user.not_found",
             "POST, admin, deleted,   404, user.not_found",
-            "GET,  user,  suspended, 403, auth.account_banned",
-            "POST, user,  suspended, 403, auth.account_banned",
             "GET,  admin, suspended, 403, auth.account_banned",
             "POST, admin, suspended, 403, auth.account_banned",
-            "GET,  user,  active,    403, common.forbidden",
-            "POST, user,  active,    403, common.forbidden",
             // Token still claims admin, database says demoted
             "GET,  admin, active,    403, common.forbidden",
             "POST, admin, active,    403, common.forbidden",
@@ -235,6 +236,9 @@ class SecurityErrorHandlersTest {
                 : filterAs(userId, method, "/api/admin/users", chain);
 
         assertThat(response.getStatus()).isEqualTo(status);
+        if (token.equals("user")) {
+            verifyNoInteractions(userRepository);
+        }
         if (errorCode == null) {
             verify(chain).doFilter(any(), any());
         } else {

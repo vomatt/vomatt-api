@@ -62,17 +62,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 log.debug("Invalid JWT token: {}", ex.getMessage());
             }
         }
-        // Roles outlive a demotion, and access tokens a suspension or deletion, so every signed-in /api/admin/** call
-        // (reads included, any role) and every other write re-checks the account. Matched on the decoded path like the
-        // security rules, so an encoded /api/%61dmin/... cannot skip the check. Other reads skip the DB hit; the public
-        // auth endpoints keep their own handling (login and refresh already reject suspended users)
+        // Roles outlive a demotion, and access tokens a suspension or deletion. On /api/admin/** (matched on the decoded
+        // path like the security rules, so an encoded /api/%61dmin/... cannot skip it) a token granting the admin role
+        // re-checks the account on every call, reads included; other tokens are left to the role rule, no DB hit.
+        // Elsewhere only writes re-check; the public auth endpoints keep their own handling (login and refresh
+        // already reject suspended users)
         boolean adminPath = principal != null && ADMIN_PATHS.matches(request);
-        boolean write = principal != null && !adminPath && !READ_METHODS.contains(request.getMethod())
-                && !PUBLIC_AUTH_PATHS.matches(request);
-        if (adminPath || write) {
+        // grantsAdmin uses the same upper-casing as the authorities above
+        boolean recheck = adminPath ? principal.grantsAdmin()
+                : principal != null && !READ_METHODS.contains(request.getMethod()) && !PUBLIC_AUTH_PATHS.matches(request);
+        if (recheck) {
             UUID userId = UUID.fromString(principal.userId());
-            // grantsAdmin uses the same upper-casing as the authorities above
-            if (adminPath && principal.grantsAdmin() && userRepository.isActiveAdmin(userId)) {
+            if (adminPath && userRepository.isActiveAdmin(userId)) {
                 filterChain.doFilter(request, response);
                 return;
             }
@@ -87,7 +88,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 return;
             }
             if (adminPath) {
-                // Active but not (or no longer) an admin
+                // Token still claims admin, database says demoted
                 errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN, MessageKey.COMMON_FORBIDDEN);
                 return;
             }

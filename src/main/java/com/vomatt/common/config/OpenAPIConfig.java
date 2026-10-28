@@ -59,8 +59,9 @@ public class OpenAPIConfig {
             **Errors**: branch on `errorCode` (lowercase dotted, e.g. `vote.not_found`), never on `message`. \
             Filter-level 401/403/404/429 use the same body. A signed-in write (any method but GET, HEAD and OPTIONS, \
             outside the public auth endpoints) by a suspended account gets 403 `auth.account_banned`, by a deleted account \
-            404 `user.not_found`; so does any signed-in `/api/admin/**` call, reads included, and an active account \
-            without the admin role gets 403 `common.forbidden` there. 429 carries a `Retry-After` header (seconds), \
+            404 `user.not_found`; so does any `/api/admin/**` call, reads included, by a token with the admin role, \
+            and an account no longer an admin gets 403 `common.forbidden` there. A token without the admin role \
+            gets 403 `common.forbidden` on `/api/admin/**` whatever the account's state. 429 carries a `Retry-After` header (seconds), \
             except when the rate limiter itself is unavailable.
 
             **Pagination**: list endpoints return `{ items, nextCursor }`; pass `nextCursor` back as `cursor`. \

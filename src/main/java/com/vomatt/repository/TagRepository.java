@@ -46,14 +46,21 @@ public interface TagRepository extends JpaRepository<Tag, UUID> {
     @Query("SELECT CASE WHEN COUNT(v) > 0 THEN true ELSE false END FROM Vote v JOIN v.tags t WHERE t.id = :tagId")
     boolean isTagReferencedByVotes(@Param("tagId") UUID tagId);
 
-    /** Follows a tag; 0 when already followed, or the tag or the user does not exist. */
+    /**
+     * Follows a tag; 0 when already followed, or the tag or the user does not exist. The user row is key-share-locked,
+     * so an account deletion still in flight is waited for and yields 0 rather than a foreign-key failure.
+     */
     @Modifying
     @Query(value = """
             INSERT INTO vomatt.tag_follows (user_id, tag_id)
             SELECT :userId, t.id FROM vomatt.tags t
-            WHERE t.id = :tagId AND EXISTS (SELECT 1 FROM vomatt.users WHERE id = :userId)
+            WHERE t.id = :tagId AND EXISTS (SELECT 1 FROM vomatt.users WHERE id = :userId FOR KEY SHARE)
             ON CONFLICT (user_id, tag_id) DO NOTHING""", nativeQuery = true)
     int follow(@Param("userId") UUID userId, @Param("tagId") UUID tagId);
+
+    @Query(value = "SELECT EXISTS (SELECT 1 FROM vomatt.tag_follows WHERE user_id = :userId AND tag_id = :tagId)",
+            nativeQuery = true)
+    boolean isFollowing(@Param("userId") UUID userId, @Param("tagId") UUID tagId);
 
     @Modifying
     @Query(value = "DELETE FROM vomatt.tag_follows WHERE user_id = :userId AND tag_id = :tagId", nativeQuery = true)

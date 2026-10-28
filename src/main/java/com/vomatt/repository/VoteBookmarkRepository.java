@@ -19,14 +19,17 @@ public interface VoteBookmarkRepository extends JpaRepository<VoteBookmark, UUID
 
     /**
      * Idempotent, also under concurrent requests; a repeat keeps the first bookmark's created_at. Returns 0 when the
-     * bookmark already existed or the user does not exist.
+     * bookmark already existed or the user does not exist. The user row is key-share-locked, so an account deletion
+     * still in flight is waited for and yields 0 rather than a foreign-key failure.
      */
     @Modifying
     @Query(value = """
             INSERT INTO vomatt.vote_bookmarks (id, user_id, vote_id)
-            SELECT :id, :userId, :voteId WHERE EXISTS (SELECT 1 FROM vomatt.users WHERE id = :userId)
+            SELECT :id, :userId, :voteId WHERE EXISTS (SELECT 1 FROM vomatt.users WHERE id = :userId FOR KEY SHARE)
             ON CONFLICT (user_id, vote_id) DO NOTHING""", nativeQuery = true)
     int insertIfAbsent(@Param("id") UUID id, @Param("userId") UUID userId, @Param("voteId") UUID voteId);
+
+    boolean existsByUserIdAndVoteId(UUID userId, UUID voteId);
 
     /** @return 1 when a bookmark was removed, 0 when there was none */
     @Modifying

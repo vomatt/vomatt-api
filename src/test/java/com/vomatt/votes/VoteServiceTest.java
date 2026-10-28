@@ -492,6 +492,18 @@ class VoteServiceTest {
         }
 
         @Test
+        @DisplayName("should succeed on a repeat bookmark without looking the user up")
+        void shouldSkipUserLookupWhenAlreadyBookmarked() {
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(bookmarkRepository.insertIfAbsent(any(UUID.class), eq(userId), eq(voteId))).thenReturn(0);
+            when(bookmarkRepository.existsByUserIdAndVoteId(userId, voteId)).thenReturn(true);
+
+            voteService.bookmark(voteId.toString(), userId.toString());
+
+            verify(userRepository, never()).existsById(any());
+        }
+
+        @Test
         @DisplayName("should delete the caller's bookmark without reading the Poll")
         void shouldDeleteBookmarkWhenUnbookmarking() {
             voteService.unbookmark(voteId.toString(), userId.toString());
@@ -1940,9 +1952,12 @@ class VoteServiceTest {
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             when(voteReportRepository.insertIfAbsent(any(), eq(voteId), eq(reporterId), eq("SPAM"), eq("spam")))
                     .thenReturn(0);
-            when(voteRepository.existsByIdAndDeletedAtIsNull(voteId)).thenReturn(true);
+            when(voteReportRepository.existsByVoteIdAndReporterId(voteId, reporterId)).thenReturn(true);
 
             voteService.reportVote(voteId.toString(), reporterId.toString(), request);
+
+            verify(userRepository, never()).existsById(any());
+            verify(voteRepository, never()).existsByIdAndDeletedAtIsNull(any());
         }
 
         @Test
@@ -1950,6 +1965,7 @@ class VoteServiceTest {
         void shouldThrowVoteNotFoundWhenPollDeletedBeforeReportInsert() {
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             when(voteReportRepository.insertIfAbsent(any(), eq(voteId), eq(reporterId), any(), any())).thenReturn(0);
+            when(userRepository.existsById(reporterId)).thenReturn(true);
             when(voteRepository.existsByIdAndDeletedAtIsNull(voteId)).thenReturn(false);
 
             assertThatThrownBy(() -> voteService.reportVote(voteId.toString(), reporterId.toString(), request))

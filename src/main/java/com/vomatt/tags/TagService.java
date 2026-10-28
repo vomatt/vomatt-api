@@ -111,8 +111,8 @@ public class TagService {
         UUID userUuid = UUID.fromString(userId);
         if (tagRepository.follow(userUuid, id) > 0) {
             log.info("User {} followed tag {}", userId, tagId);
-        } else {
-            userRepository.requireExists(userUuid);
+        } else if (!tagRepository.isFollowing(userUuid, id)) {
+            requireUserExists(userUuid);
             if (!tagRepository.existsById(id)) {
                 throw ApiException.notFound(MessageKey.TAG_NOT_FOUND);
             }
@@ -130,6 +130,16 @@ public class TagService {
     @Transactional(readOnly = true)
     public List<TagDto> getFollowedTags(String userId) {
         return tagRepository.findFollowedBy(UUID.fromString(userId)).stream().map(TagDto::from).toList();
+    }
+
+    /**
+     * For a write that inserted nothing although the signed-in user's row guarded it: an access token outlives account
+     * deletion, so the user may be gone since the request passed the filter.
+     */
+    private void requireUserExists(UUID userId) {
+        if (!userRepository.existsById(userId)) {
+            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
+        }
     }
 
     private Tag findTag(UUID id) {

@@ -350,9 +350,12 @@ class TagServiceTest {
         void shouldSucceedWhenTagAlreadyFollowed() {
             UUID tagId = UUID.randomUUID();
             when(tagRepository.follow(userId, tagId)).thenReturn(0);
-            when(tagRepository.existsById(tagId)).thenReturn(true);
+            when(tagRepository.isFollowing(userId, tagId)).thenReturn(true);
 
             tagService.followTag(userId.toString(), tagId.toString());
+
+            verify(userRepository, never()).existsById(any());
+            verify(tagRepository, never()).existsById(any());
         }
 
         @Test
@@ -360,7 +363,6 @@ class TagServiceTest {
         void shouldThrowUserNotFoundWhenFollowerIsGone() {
             UUID tagId = UUID.randomUUID();
             when(tagRepository.follow(userId, tagId)).thenReturn(0);
-            doCallRealMethod().when(userRepository).requireExists(userId);
             when(userRepository.existsById(userId)).thenReturn(false);
 
             assertThatThrownBy(() -> tagService.followTag(userId.toString(), tagId.toString()))
@@ -373,6 +375,7 @@ class TagServiceTest {
         void shouldThrowNotFoundWhenFollowingUnknownTag() {
             UUID tagId = UUID.randomUUID();
             when(tagRepository.follow(userId, tagId)).thenReturn(0);
+            when(userRepository.existsById(userId)).thenReturn(true);
             when(tagRepository.existsById(tagId)).thenReturn(false);
 
             assertThatThrownBy(() -> tagService.followTag(userId.toString(), tagId.toString()))

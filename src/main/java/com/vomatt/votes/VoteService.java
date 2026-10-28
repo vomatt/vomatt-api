@@ -236,8 +236,9 @@ public class VoteService {
         if (voteReportRepository.insertIfAbsent(UUIDv7Generator.generateId(), vote.getId(), reporterId,
                 request.reason().name(), request.note()) > 0) {
             log.info("User {} reported vote {} as {}", userId, voteId, request.reason());
-        } else {
-            userRepository.requireExists(reporterId);
+        } else if (!voteReportRepository.existsByVoteIdAndReporterId(vote.getId(), reporterId)) {
+            // Not already reported (the common no-op): the user or the Poll is gone
+            requireUserExists(reporterId);
             if (!voteRepository.existsByIdAndDeletedAtIsNull(vote.getId())) {
                 // Deleted since the lookup above; a query, as findById would return the stale managed entity
                 throw ApiException.notFound(MessageKey.VOTE_NOT_FOUND);
@@ -251,8 +252,18 @@ public class VoteService {
         UUID userUuid = UUID.fromString(userId);
         if (bookmarkRepository.insertIfAbsent(UUIDv7Generator.generateId(), userUuid, vote.getId()) > 0) {
             log.info("User {} bookmarked vote {}", userId, voteId);
-        } else {
-            userRepository.requireExists(userUuid);
+        } else if (!bookmarkRepository.existsByUserIdAndVoteId(userUuid, vote.getId())) {
+            requireUserExists(userUuid);
+        }
+    }
+
+    /**
+     * For a write that inserted nothing although the signed-in user's row guarded it: an access token outlives account
+     * deletion, so the user may be gone since the request passed the filter.
+     */
+    private void requireUserExists(UUID userId) {
+        if (!userRepository.existsById(userId)) {
+            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
         }
     }
 

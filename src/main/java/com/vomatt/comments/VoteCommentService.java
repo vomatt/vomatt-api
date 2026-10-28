@@ -244,7 +244,7 @@ public class VoteCommentService {
             log.info("User {} liked comment {}", userId, commentId);
         } else if (!commentLikeRepository.existsByCommentIdAndUserId(commentId, userUuid)) {
             // Not already liked (the common no-op): the user or the Comment is gone
-            userRepository.requireExists(userUuid);
+            requireUserExists(userUuid);
             if (commentRepository.findByIdAndNotDeleted(commentId).isEmpty()) {
                 // Deleted since the lookup above
                 throw ApiException.notFound(MessageKey.COMMENT_NOT_FOUND);
@@ -262,8 +262,8 @@ public class VoteCommentService {
         if (commentReportRepository.insertIfAbsent(UUIDv7Generator.generateId(), commentId, reporterId,
                 request.reason().name(), request.note()) > 0) {
             log.info("User {} reported comment {} as {}", userId, commentId, request.reason());
-        } else {
-            userRepository.requireExists(reporterId);
+        } else if (!commentReportRepository.existsByCommentIdAndReporterId(commentId, reporterId)) {
+            requireUserExists(reporterId);
             if (commentRepository.findByIdAndNotDeleted(commentId).isEmpty()) {
                 // Deleted since the lookup above
                 throw ApiException.notFound(MessageKey.COMMENT_NOT_FOUND);
@@ -277,6 +277,16 @@ public class VoteCommentService {
 
         if (commentLikeRepository.deleteByCommentIdAndUserId(commentId, UUID.fromString(userId)) > 0) {
             log.info("User {} unliked comment {}", userId, commentId);
+        }
+    }
+
+    /**
+     * For a write that inserted nothing although the signed-in user's row guarded it: an access token outlives account
+     * deletion, so the user may be gone since the request passed the filter.
+     */
+    private void requireUserExists(UUID userId) {
+        if (!userRepository.existsById(userId)) {
+            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
         }
     }
 

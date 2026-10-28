@@ -159,6 +159,7 @@ class VoteCommentServiceTest {
         VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "hi");
         when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(Optional.of(target), Optional.empty());
         when(commentLikeRepository.insertIfAbsent(any(), eq(target.getId()), eq(viewerId))).thenReturn(0);
+        when(userRepository.existsById(viewerId)).thenReturn(true);
 
         assertThatThrownBy(() -> commentService.likeComment(target.getId(), viewerId.toString()))
                 .isInstanceOfSatisfying(ApiException.class,
@@ -173,6 +174,7 @@ class VoteCommentServiceTest {
         VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "hi");
         when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(Optional.of(target), Optional.empty());
         when(commentReportRepository.insertIfAbsent(any(), eq(target.getId()), eq(viewerId), any(), any())).thenReturn(0);
+        when(userRepository.existsById(viewerId)).thenReturn(true);
 
         assertThatThrownBy(() -> commentService.reportComment(target.getId(), viewerId.toString(),
                 new ReportRequest(ReportReason.SPAM, null)))
@@ -192,7 +194,7 @@ class VoteCommentServiceTest {
 
         commentService.likeComment(target.getId(), viewerId.toString());
 
-        org.mockito.Mockito.verify(userRepository, org.mockito.Mockito.never()).requireExists(any());
+        org.mockito.Mockito.verify(userRepository, org.mockito.Mockito.never()).existsById(any());
         org.mockito.Mockito.verify(commentRepository, org.mockito.Mockito.times(1)).findByIdAndNotDeleted(target.getId());
     }
 

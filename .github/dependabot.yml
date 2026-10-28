@@ -1,0 +1,7 @@
+# Security and version updates for Maven dependencies (webauthn4j is pinned to an exact version, so it needs this to move)
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /
+    schedule:
+      interval: weekly

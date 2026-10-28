@@ -160,6 +160,13 @@ otp:
     email: ${OTP_DAILY_LIMIT_EMAIL:20}
     phone: ${OTP_DAILY_LIMIT_PHONE:5}
 
+passkey:
+  # WebAuthn RP ID: the domain web, admin.vomatt.com and the iOS app all sign in under; never the API host. A local
+  # https://vomatt.test page needs PASSKEY_RP_ID=vomatt.test (a browser only accepts the page's domain or a parent of it)
+  rp-id: ${PASSKEY_RP_ID:vomatt.com}
+  # Comma-separated origins accepted in a passkey's clientDataJSON; add https://vomatt.test for local development only
+  allowed-origins: ${PASSKEY_ALLOWED_ORIGINS:https://vomatt.com,https://admin.vomatt.com}
+
 jwt:
   # Comma-separated: the first key signs, every key verifies (see JwtUtil for the rotation steps)
   secret: ${JWT_SECRET}

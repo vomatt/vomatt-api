@@ -13,6 +13,7 @@ import com.vomatt.entity.User;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.invitelists.InviteListService;
 import com.vomatt.votes.VoteService;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -94,6 +95,9 @@ class AuthServiceTest {
     RefreshTokenService refreshTokenService;
     @Mock
     com.vomatt.common.security.AppKey appKey;
+
+    @Mock
+    PasskeyService passkeyService;
 
     @InjectMocks
     AuthService authService;
@@ -594,6 +598,82 @@ class AuthServiceTest {
 
         assertThat(response.token()).isEqualTo("admin-token");
         assertThat(response.refreshToken()).isEqualTo("admin-refresh");
+    }
+
+    // ── passkey sign-in ──────────────────────────────────────────────
+
+    private static final com.vomatt.auth.dto.PasskeyLoginVerifyRequest PASSKEY = new com.vomatt.auth.dto.PasskeyLoginVerifyRequest(null);
+
+    @Test
+    void shouldIssueUserScopeTokensWhenPasskeySignInSucceeds() {
+        User member = User.builder().id(UUID.randomUUID()).email("user@example.com").username("user_0427")
+                .roles(new String[] { "user" }).active(true).build();
+        when(passkeyService.authenticate(PASSKEY)).thenReturn(member);
+        when(jwtUtil.generateToken(member.getId().toString(), List.of("user"), false)).thenReturn("access");
+        when(refreshTokenService.generate(member.getId().toString(), List.of("user"), false)).thenReturn("refresh");
+
+        AuthResponse response = authService.verifyPasskey(PASSKEY);
+
+        // Same shape as an OTP sign-in
+        assertThat(response.token()).isEqualTo("access");
+        assertThat(response.refreshToken()).isEqualTo("refresh");
+        assertThat(response.user().username()).isEqualTo("user_0427");
+        assertThat(response.isNewUser()).isFalse();
+        assertThat(member.getLastLoginAt()).isNotNull();
+    }
+
+    @Test
+    void shouldIssueUserScopeWhenAdminSignsInThroughConsumerPasskeyLogin() {
+        User admin = User.builder().id(UUID.randomUUID()).email("admin@example.com")
+                .roles(new String[] { "user", "admin" }).active(true).build();
+        when(passkeyService.authenticate(PASSKEY)).thenReturn(admin);
+
+        authService.verifyPasskey(PASSKEY);
+
+        verify(jwtUtil).generateToken(anyString(), any(), eq(false));
+        verify(refreshTokenService).generate(anyString(), any(), eq(false));
+        verify(jwtUtil, never()).generateToken(anyString(), any(), eq(true));
+    }
+
+    @Test
+    void shouldIssueAdminScopeWhenAdminPasskeySignInSucceeds() {
+        User admin = User.builder().id(UUID.randomUUID()).email("admin@example.com")
+                .roles(new String[] { "user", "admin" }).active(true).build();
+        when(passkeyService.authenticate(PASSKEY)).thenReturn(admin);
+        when(jwtUtil.generateToken(anyString(), any(), eq(true))).thenReturn("admin-token");
+        when(refreshTokenService.generate(anyString(), any(), eq(true))).thenReturn("admin-refresh");
+
+        AuthResponse response = authService.verifyAdminPasskey(PASSKEY);
+
+        assertThat(response.token()).isEqualTo("admin-token");
+        assertThat(response.refreshToken()).isEqualTo("admin-refresh");
+    }
+
+    @Test
+    void shouldReturn403AdminForbiddenLikeAdminOtpWhenNonAdminUsesAdminPasskeySignIn() {
+        User customer = User.builder().id(UUID.randomUUID()).email("user@example.com")
+                .roles(new String[] { "user" }).active(true).build();
+        when(passkeyService.authenticate(PASSKEY)).thenReturn(customer);
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(customer));
+
+        // The same error /admin/verify-otp gives this user
+        for (ThrowingCallable call : List.<ThrowingCallable>of(() -> authService.verifyAdminPasskey(PASSKEY),
+                () -> authService.verifyAdminOtp("user@example.com", "123456", IP))) {
+            assertThatThrownBy(call).isInstanceOfSatisfying(ApiException.class, ex -> {
+                assertThat(ex.getMessageKey()).isEqualTo(MessageKey.AUTH_ADMIN_FORBIDDEN);
+                assertThat(ex.getStatus()).isEqualTo(org.springframework.http.HttpStatus.FORBIDDEN);
+            });
+        }
+        verify(jwtUtil, never()).generateToken(anyString(), any(), org.mockito.ArgumentMatchers.anyBoolean());
+    }
+
+    @Test
+    void shouldReturn403BannedWhenSuspendedAdminUsesAdminPasskeySignIn() {
+        User admin = User.builder().id(UUID.randomUUID()).roles(new String[] { "user", "admin" }).active(false).build();
+        when(passkeyService.authenticate(PASSKEY)).thenReturn(admin);
+
+        assertThatThrownBy(() -> authService.verifyAdminPasskey(PASSKEY)).isInstanceOfSatisfying(ApiException.class,
+                ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.AUTH_ACCOUNT_BANNED));
     }
 
     @Test

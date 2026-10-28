@@ -1,6 +1,7 @@
 package com.vomatt.auth;
 
 import com.vomatt.auth.dto.AuthResponse;
+import com.vomatt.auth.dto.PasskeyLoginVerifyRequest;
 import com.vomatt.common.constant.LoginUnlock;
 import com.vomatt.common.constant.ReservedUsernames;
 import com.vomatt.common.email.EmailService;
@@ -50,6 +51,7 @@ import java.util.Base64;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
@@ -103,6 +105,7 @@ public class AuthService {
     private final RestClient restClient;
     private final RefreshTokenService refreshTokenService;
     private final AppKey appKey;
+    private final PasskeyService passkeyService;
 
     @Value("${google.client-id:}")
     private String googleClientId;
@@ -264,13 +267,29 @@ public class AuthService {
 
     /** Requires an existing, active account for the email with the ADMIN role; otherwise throws 403. */
     private User requireExistingAdminByEmail(String normalizedEmail) {
-        User user = userRepository.findByEmail(normalizedEmail)
-                .filter(User::isAdmin)
+        return requireActiveAdmin(userRepository.findByEmail(normalizedEmail));
+    }
+
+    /** 403 {@code auth.admin.forbidden} without the ADMIN role, 403 {@code auth.account_banned} when suspended. */
+    private static User requireActiveAdmin(Optional<User> candidate) {
+        User user = candidate.filter(User::isAdmin)
                 .orElseThrow(() -> ApiException.forbidden(MessageKey.AUTH_ADMIN_FORBIDDEN));
         if (!user.isActive()) {
             throw ApiException.forbidden(MessageKey.AUTH_ACCOUNT_BANNED);
         }
         return user;
+    }
+
+    // ── Passkey ──────────────────────────────────────────────────────
+
+    /** Usernameless passkey sign-in; like every consumer login it never grants admin scope. */
+    public AuthResponse verifyPasskey(PasskeyLoginVerifyRequest request) {
+        return buildAuthResponse(passkeyService.authenticate(request), false, false);
+    }
+
+    /** Admin console passkey sign-in: the passkey counterpart of {@link #verifyAdminOtp}, with the same role checks. */
+    public AuthResponse verifyAdminPasskey(PasskeyLoginVerifyRequest request) {
+        return buildAuthResponse(requireActiveAdmin(Optional.of(passkeyService.authenticate(request))), true, false);
     }
 
     private AuthResponse verifyEmailOtp(String normalizedEmail, String code, String clientIp) {

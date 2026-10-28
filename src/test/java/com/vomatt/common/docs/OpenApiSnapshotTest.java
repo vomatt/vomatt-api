@@ -31,7 +31,9 @@ import tools.jackson.databind.json.JsonMapper;
         "app.openapi.dev-url=http://localhost:8080",
         "app.openapi.prod-url=https://api.example.com",
         "jwt.secret=openapi-snapshot-test-secret-0123456789-0123456789",
-        "app.key=openapi-snapshot-test-app-key-0123456789-0123456789"
+        "app.key=openapi-snapshot-test-app-key-0123456789-0123456789",
+        // No Redis here, and /api/auth/** fails closed (429) without it; the 401 checks need the request to reach auth
+        "rate-limit.enabled=false"
 })
 class OpenApiSnapshotTest {
 
@@ -76,6 +78,23 @@ class OpenApiSnapshotTest {
             mockMvc.perform(get(path)).andExpect(status().isUnauthorized());
         }
         mockMvc.perform(get("/api/users/nobody-here")).andExpect(status().isNotFound());
+        // Passkey sign-in is public: without a token the request reaches the controller (400 validation, or 503 for
+        // options as this context has no Redis) instead of the 401 entry point
+        for (String path : java.util.List.of("/api/auth/passkey/login/options", "/api/auth/passkey/login/verify",
+                "/api/auth/admin/passkey/login/verify")) {
+            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path)
+                            .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{}"))
+                    .andExpect(result -> org.assertj.core.api.Assertions.assertThat(result.getResponse().getStatus())
+                            .as(path).isNotIn(401, 403));
+        }
+        // Passkey registration is for signed-in users only
+        for (String path : java.util.List.of("/api/auth/passkey/register/options", "/api/auth/passkey/register/verify")) {
+            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path))
+                    .andExpect(status().isUnauthorized());
+        }
+        mockMvc.perform(get("/api/users/me/passkeys")).andExpect(status().isUnauthorized());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
+                "/api/users/me/passkeys/" + java.util.UUID.randomUUID())).andExpect(status().isUnauthorized());
     }
 
     @Autowired
@@ -92,6 +111,14 @@ class OpenApiSnapshotTest {
         var data = appMapper.convertValue(java.util.Map.of("userId", "u", "email", "e", "roles", java.util.List.of("user"),
                 "sessionId", "s"), com.vomatt.common.security.RefreshTokenService.RefreshTokenData.class);
         org.assertj.core.api.Assertions.assertThat(data.grantsAdmin()).isFalse();
+        // A browser's credential.toJSON() carries fields the API does not read; they must be ignored, not rejected
+        var passkey = appMapper.readValue("""
+                {"credential": {"id": "a", "rawId": "a", "type": "public-key", "authenticatorAttachment": "platform",
+                  "clientExtensionResults": {"credProps": {"rk": true}},
+                  "response": {"clientDataJSON": "b", "attestationObject": "c", "transports": ["internal"],
+                    "authenticatorData": "d", "publicKey": "e", "publicKeyAlgorithm": -7}}}""",
+                com.vomatt.auth.dto.PasskeyRegistrationVerifyRequest.class);
+        org.assertj.core.api.Assertions.assertThat(passkey.credential().response().attestationObject()).isEqualTo("c");
     }
 
     /** ORDER_MAP_ENTRIES_BY_KEYS ignores ObjectNode, so rebuild the tree through a sorted Map. */

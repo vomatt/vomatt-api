@@ -27,6 +27,7 @@
         <uuid-generator.version>5.2.0</uuid-generator.version>
         <postgresql.version>42.7.7</postgresql.version>
         <resend.version>4.28.0</resend.version>
+        <webauthn4j.version>0.31.11.RELEASE</webauthn4j.version>
     </properties>
 
     <dependencies>
@@ -106,6 +107,13 @@
             <version>${springdoc.version}</version>
         </dependency>
 
+        <!-- Passkeys (WebAuthn); all webauthn4j code lives in auth.PasskeyService -->
+        <dependency>
+            <groupId>com.webauthn4j</groupId>
+            <artifactId>webauthn4j-core</artifactId>
+            <version>${webauthn4j.version}</version>
+        </dependency>
+
         <!-- Rate Limiting -->
         <dependency>
             <groupId>com.bucket4j</groupId>
@@ -180,6 +188,13 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Authenticator emulator for passkey tests -->
+        <dependency>
+            <groupId>com.webauthn4j</groupId>
+            <artifactId>webauthn4j-test</artifactId>
+            <version>${webauthn4j.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

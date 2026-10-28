@@ -127,6 +127,12 @@ class FollowingFeedPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should insert nothing, and not fail, when the following user no longer exists")
+    void shouldInsertNothingWhenFollowerIsGone() {
+        assertThat(tagRepository.follow(UUID.randomUUID(), tag.getId())).isZero();
+    }
+
+    @Test
     @DisplayName("should export the user's tag follows oldest first")
     void shouldExportTagFollowsWhenFollowing() {
         tagRepository.follow(viewer.getId(), tag.getId());

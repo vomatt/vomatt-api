@@ -19,12 +19,12 @@ public interface VoteBookmarkRepository extends JpaRepository<VoteBookmark, UUID
 
     /**
      * Idempotent, also under concurrent requests; a repeat keeps the first bookmark's created_at. Returns 0 when the
-     * bookmark already existed.
+     * bookmark already existed or the user does not exist.
      */
     @Modifying
     @Query(value = """
             INSERT INTO vomatt.vote_bookmarks (id, user_id, vote_id)
-            VALUES (:id, :userId, :voteId)
+            SELECT :id, :userId, :voteId WHERE EXISTS (SELECT 1 FROM vomatt.users WHERE id = :userId)
             ON CONFLICT (user_id, vote_id) DO NOTHING""", nativeQuery = true)
     int insertIfAbsent(@Param("id") UUID id, @Param("userId") UUID userId, @Param("voteId") UUID voteId);
 

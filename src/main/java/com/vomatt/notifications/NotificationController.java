@@ -134,7 +134,7 @@ public class NotificationController {
             notification: its INVITATION while the Poll has not Ended, its RESULT after. Use the notification `id`.
             **Side effects**: the unread count drops by 1 (first call only); `read` becomes true in the feed. For a Poll's RESULT \
             or INVITATION, `unread` becomes false on that Poll in `GET /api/votes/my`. A Poll's later RESULT is a separate \
-            notification, unread until read itself.
+            notification, unread until read itself. A Comment read as COMMENT is also read as MENTION, and the other way round, when switching `comments` moves it between the two.
             **Errors**:
             - 404 `notification.not_found`: no such notification for the caller now (unknown or malformed id, a Comment deleted, a follow undone, a `mention_` id the feed lists as `comment_`...)
             - 404 `vote.not_found`: deprecated Poll id only; the Poll does not exist or is Deleted""")

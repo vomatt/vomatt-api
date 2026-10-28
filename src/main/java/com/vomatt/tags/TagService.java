@@ -9,6 +9,7 @@ import com.vomatt.entity.Tag;
 import com.vomatt.common.response.Cursor;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.repository.TagRepository;
+import com.vomatt.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Limit;
@@ -25,6 +26,7 @@ import java.util.stream.Collectors;
 public class TagService {
 
     private final TagRepository tagRepository;
+    private final UserRepository userRepository;
 
     @Transactional
     public TagDto createTag(CreateTagRequest request) {
@@ -106,10 +108,14 @@ public class TagService {
     @Transactional
     public void followTag(String userId, String tagId) {
         UUID id = UUID.fromString(tagId);
-        if (tagRepository.follow(UUID.fromString(userId), id) > 0) {
+        UUID userUuid = UUID.fromString(userId);
+        if (tagRepository.follow(userUuid, id) > 0) {
             log.info("User {} followed tag {}", userId, tagId);
-        } else if (!tagRepository.existsById(id)) {
-            throw ApiException.notFound(MessageKey.TAG_NOT_FOUND);
+        } else {
+            userRepository.requireExists(userUuid);
+            if (!tagRepository.existsById(id)) {
+                throw ApiException.notFound(MessageKey.TAG_NOT_FOUND);
+            }
         }
     }
 

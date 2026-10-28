@@ -11,6 +11,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.util.LikePattern;
 import com.vomatt.entity.User;
 
@@ -50,9 +52,21 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     boolean existsByPhoneNumber(String phoneNumber);
 
-    boolean existsByIdAndActiveFalse(UUID id);
+    /** The account's {@code active} flag: empty when the account no longer exists, false when it is suspended. */
+    @Query("SELECT u.active FROM User u WHERE u.id = :id")
+    Optional<Boolean> findActiveById(@Param("id") UUID id);
 
-    boolean existsByIdAndActiveTrue(UUID id);
+    /**
+     * For a write that inserted nothing although the signed-in user's row guarded it: an access token outlives account
+     * deletion, so the user may be gone since the request passed the filter.
+     *
+     * @throws ApiException 404 {@code user.not_found} when the user no longer exists
+     */
+    default void requireExists(UUID id) {
+        if (!existsById(id)) {
+            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
+        }
+    }
 
     /**
      * Locks every active admin row and returns their ids, so concurrent admin removals serialize: a waiter re-reads the

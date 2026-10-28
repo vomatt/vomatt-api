@@ -280,6 +280,43 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should keep a Comment read as COMMENT read when switching COMMENT off lists it as MENTION")
+    void shouldKeepReadWhenCommentReadThenSwitchedOff() {
+        Vote mine = poll(me, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        VoteComment onMine = mention(alice, mine, null, me);
+        em.flush();
+        notificationService.markRead(me.getId().toString(), "comment_" + onMine.getId());
+
+        preferences(me, null, null, false, null);
+
+        assertThat(feed(me)).singleElement().satisfies(n -> {
+            assertThat(n.id()).isEqualTo("mention_" + onMine.getId());
+            assertThat(n.read()).isTrue();
+        });
+        assertThat(unread(me)).isZero();
+    }
+
+    @Test
+    @DisplayName("should keep a Comment read as MENTION read when switching COMMENT on lists it as COMMENT")
+    void shouldKeepReadWhenMentionReadThenCommentSwitchedOn() {
+        Vote mine = poll(me, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        VoteComment onMine = mention(alice, mine, null, me);
+        preferences(me, null, null, false, null);
+        em.flush();
+        notificationService.markRead(me.getId().toString(), "mention_" + onMine.getId());
+
+        preferences(me, null, null, true, null);
+        // The upsert is native SQL; drop the preference rows the first read cached
+        em.clear();
+
+        assertThat(feed(me)).singleElement().satisfies(n -> {
+            assertThat(n.id()).isEqualTo("comment_" + onMine.getId());
+            assertThat(n.read()).isTrue();
+        });
+        assertThat(unread(me)).isZero();
+    }
+
+    @Test
     @DisplayName("should list MENTION for what would be COMMENT when COMMENT is switched off")
     void shouldListMentionWhenCommentSwitchedOff() {
         Vote mine = poll(me, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));

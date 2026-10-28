@@ -519,11 +519,12 @@ class VoteServiceTest {
         void shouldFlagBookmarkedWhenListingBookmarks() {
             com.vomatt.entity.VoteBookmark row = new com.vomatt.entity.VoteBookmark(user, vote);
             when(bookmarkRepository.findPage(eq(userId), isNull(), isNull(), any())).thenReturn(List.of(row));
-            when(bookmarkRepository.findVoteIds(userId, List.of(voteId))).thenReturn(List.of(voteId));
 
             var page = voteService.listBookmarkedVotes(userId.toString(), null, null);
 
             assertThat(page.items()).singleElement().satisfies(r -> assertThat(r.getBookmarked()).isTrue());
+            // Every listed Poll is bookmarked, so no lookup
+            verify(bookmarkRepository, never()).findVoteIds(any(), any());
         }
     }
 

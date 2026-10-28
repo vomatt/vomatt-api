@@ -242,15 +242,13 @@ public class VoteCommentService {
         UUID userUuid = UUID.fromString(userId);
         if (commentLikeRepository.insertIfAbsent(UUIDv7Generator.generateId(), commentId, userUuid) > 0) {
             log.info("User {} liked comment {}", userId, commentId);
-        } else if (commentLikeRepository.existsByCommentIdAndUserId(commentId, userUuid)) {
-            // Already liked: the common no-op
-            return;
-        } else if (!userRepository.existsById(userUuid)) {
-            // An access token outlives account deletion, so the signed-in user may be gone
-            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
-        } else if (commentRepository.findByIdAndNotDeleted(commentId).isEmpty()) {
-            // Deleted since the lookup above
-            throw ApiException.notFound(MessageKey.COMMENT_NOT_FOUND);
+        } else if (!commentLikeRepository.existsByCommentIdAndUserId(commentId, userUuid)) {
+            // Not already liked (the common no-op): the user or the Comment is gone
+            userRepository.requireExists(userUuid);
+            if (commentRepository.findByIdAndNotDeleted(commentId).isEmpty()) {
+                // Deleted since the lookup above
+                throw ApiException.notFound(MessageKey.COMMENT_NOT_FOUND);
+            }
         }
     }
 
@@ -264,12 +262,12 @@ public class VoteCommentService {
         if (commentReportRepository.insertIfAbsent(UUIDv7Generator.generateId(), commentId, reporterId,
                 request.reason().name(), request.note()) > 0) {
             log.info("User {} reported comment {} as {}", userId, commentId, request.reason());
-        } else if (!userRepository.existsById(reporterId)) {
-            // An access token outlives account deletion, so the signed-in user may be gone
-            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
-        } else if (commentRepository.findByIdAndNotDeleted(commentId).isEmpty()) {
-            // Deleted since the lookup above
-            throw ApiException.notFound(MessageKey.COMMENT_NOT_FOUND);
+        } else {
+            userRepository.requireExists(reporterId);
+            if (commentRepository.findByIdAndNotDeleted(commentId).isEmpty()) {
+                // Deleted since the lookup above
+                throw ApiException.notFound(MessageKey.COMMENT_NOT_FOUND);
+            }
         }
     }
 

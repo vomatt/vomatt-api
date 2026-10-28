@@ -145,7 +145,8 @@ public class VoteService {
 
         tagRepository.incrementUsageCount(countedTagIds(vote));
 
-        return toResponse(vote, creatorId);
+        // A new Poll has no bookmark yet
+        return toResponses(List.of(vote), creatorId, Set.of()).getFirst();
     }
 
     /**
@@ -235,17 +236,23 @@ public class VoteService {
         if (voteReportRepository.insertIfAbsent(UUIDv7Generator.generateId(), vote.getId(), reporterId,
                 request.reason().name(), request.note()) > 0) {
             log.info("User {} reported vote {} as {}", userId, voteId, request.reason());
-        } else if (!voteRepository.existsByIdAndDeletedAtIsNull(vote.getId())) {
-            // Deleted since the lookup above; a query, as findById would return the stale managed entity
-            throw ApiException.notFound(MessageKey.VOTE_NOT_FOUND);
+        } else {
+            userRepository.requireExists(reporterId);
+            if (!voteRepository.existsByIdAndDeletedAtIsNull(vote.getId())) {
+                // Deleted since the lookup above; a query, as findById would return the stale managed entity
+                throw ApiException.notFound(MessageKey.VOTE_NOT_FOUND);
+            }
         }
     }
 
     /** Bookmarks a Poll the caller can reach, in any state; idempotent, a repeat keeps the first bookmark time. */
     public void bookmark(String voteId, String userId) {
         Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
-        if (bookmarkRepository.insertIfAbsent(UUIDv7Generator.generateId(), UUID.fromString(userId), vote.getId()) > 0) {
+        UUID userUuid = UUID.fromString(userId);
+        if (bookmarkRepository.insertIfAbsent(UUIDv7Generator.generateId(), userUuid, vote.getId()) > 0) {
             log.info("User {} bookmarked vote {}", userId, voteId);
+        } else {
+            userRepository.requireExists(userUuid);
         }
     }
 
@@ -264,7 +271,10 @@ public class VoteService {
         List<VoteBookmark> rows = bookmarkRepository.findPage(UUID.fromString(userId),
             after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
         return CursorResponse.of(rows, size, Cursor.Scope.BOOKMARKS, b -> Cursor.of(b.getCreatedAt(), b.getId()),
-            page -> toResponses(page.stream().map(VoteBookmark::getVote).toList(), userId));
+            page -> {
+                List<Vote> votes = page.stream().map(VoteBookmark::getVote).toList();
+                return toResponses(votes, userId, votes.stream().map(Vote::getId).collect(Collectors.toSet()));
+            });
     }
 
     /**
@@ -889,12 +899,17 @@ public class VoteService {
      * @param userId viewer, or null for none (no Selection, no {@code deletable}), as for admin views
      */
     public List<VoteResponse> toResponses(List<Vote> votes, String userId) {
+        Set<UUID> bookmarked = userId == null || votes.isEmpty() ? Set.of()
+            : Set.copyOf(bookmarkRepository.findVoteIds(UUID.fromString(userId), votes.stream().map(Vote::getId).toList()));
+        return toResponses(votes, userId, bookmarked);
+    }
+
+    /** For callers that already know the bookmarks (a new Poll, the bookmarked list); {@code bookmarked} is ignored without a viewer. */
+    private List<VoteResponse> toResponses(List<Vote> votes, String userId, Set<UUID> bookmarked) {
         if (votes.isEmpty()) {
             return List.of();
         }
         List<UUID> ids = votes.stream().map(Vote::getId).toList();
-        Set<UUID> bookmarked = userId == null ? Set.of()
-            : Set.copyOf(bookmarkRepository.findVoteIds(UUID.fromString(userId), ids));
         OffsetDateTime now = OffsetDateTime.now();
         Map<UUID, Long> commentCounts = voteCommentRepository.countVisibleByVoteIds(ids).stream()
             .collect(Collectors.toMap(IdCount::getId, IdCount::getCount));

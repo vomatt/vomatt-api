@@ -23,6 +23,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -34,8 +35,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     public static final String AUTH_ERROR_ATTR = JwtAuthFilter.class.getName() + ".authError";
 
     private static final Set<String> READ_METHODS = Set.of("GET", "HEAD", "OPTIONS");
-    private static final RequestMatcher ADMIN_PATHS = new OrRequestMatcher(Arrays.stream(SecurityEndpoints.AUTHENTICATED_ADMIN)
-            .map(PathPatternRequestMatcher.withDefaults()::matcher).map(RequestMatcher.class::cast).toList());
+    private static final RequestMatcher ADMIN_PATHS = anyOf(SecurityEndpoints.AUTHENTICATED_ADMIN);
+    private static final RequestMatcher PUBLIC_AUTH_PATHS = anyOf(SecurityEndpoints.PUBLIC_AUTH);
 
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
@@ -66,27 +67,37 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         // other tokens are refused by the security rule. Matched on the decoded path like the security rules, so an
         // encoded /api/%61dmin/... cannot skip the check
         boolean adminCall = principal != null && ADMIN_PATHS.matches(request) && principal.grantsAdmin();
-        if (adminCall && !userRepository.isActiveAdmin(UUID.fromString(principal.userId()))) {
-            // Second query only on refusal: suspended gets the same code as other writes, demoted the plain 403
-            UUID userId = UUID.fromString(principal.userId());
-            errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN,
-                    userRepository.existsByIdAndActiveFalse(userId) ? MessageKey.AUTH_ACCOUNT_BANNED : MessageKey.COMMON_FORBIDDEN);
-            return;
-        }
         // Access tokens outlive a suspension or account deletion, so writes re-check the account; reads skip the DB hit.
-        // /api/auth/** keeps its own handling (login and refresh already reject suspended users).
-        if (!adminCall && principal != null && !READ_METHODS.contains(request.getMethod())
-                && !request.getRequestURI().startsWith("/api/auth/")
-                && !userRepository.existsByIdAndActiveTrue(UUID.fromString(principal.userId()))) {
-            // Second query only on refusal: suspended gets the banned code, a deleted account user.not_found
-            if (userRepository.existsByIdAndActiveFalse(UUID.fromString(principal.userId()))) {
-                errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN, MessageKey.AUTH_ACCOUNT_BANNED);
-            } else {
-                errorWriter.write(request, response, HttpServletResponse.SC_NOT_FOUND, MessageKey.USER_NOT_FOUND);
+        // The public auth endpoints keep their own handling (login and refresh already reject suspended users)
+        boolean write = principal != null && !READ_METHODS.contains(request.getMethod()) && !PUBLIC_AUTH_PATHS.matches(request);
+        if (adminCall || write) {
+            UUID userId = UUID.fromString(principal.userId());
+            if (adminCall && userRepository.isActiveAdmin(userId)) {
+                filterChain.doFilter(request, response);
+                return;
             }
-            return;
+            // For an admin call, read only on refusal: empty is a deleted account, false a suspended one
+            Optional<Boolean> active = userRepository.findActiveById(userId);
+            if (active.isEmpty() && write) {
+                errorWriter.write(request, response, HttpServletResponse.SC_NOT_FOUND, MessageKey.USER_NOT_FOUND);
+                return;
+            }
+            if (active.isPresent() && !active.get()) {
+                errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN, MessageKey.AUTH_ACCOUNT_BANNED);
+                return;
+            }
+            if (adminCall) {
+                // Demoted, or deleted on a read
+                errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN, MessageKey.COMMON_FORBIDDEN);
+                return;
+            }
         }
         filterChain.doFilter(request, response);
+    }
+
+    private static RequestMatcher anyOf(String[] patterns) {
+        return new OrRequestMatcher(Arrays.stream(patterns)
+                .map(PathPatternRequestMatcher.withDefaults()::matcher).map(RequestMatcher.class::cast).toList());
     }
 
     private String extractToken(HttpServletRequest request) {

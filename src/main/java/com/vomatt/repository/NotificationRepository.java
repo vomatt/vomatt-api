@@ -135,14 +135,17 @@ public class NotificationRepository {
                                  WHERE pv.id = b.vote_id))""";
 
     // Appended to MENTION when COMMENT is on too: a Comment that is (or was, before its parent went) the user's COMMENT
-    // is not also their MENTION, so one Comment gives one notification and a read COMMENT never returns as a MENTION
-    private static final String MENTION_NOT_COMMENT = " AND c.id NOT IN (" + commentIds("") + ")";
+    // is not also their MENTION, so one Comment gives one notification
+    private static final String MENTION_NOT_COMMENT =
+            " AND NOT EXISTS (SELECT 1 FROM (" + commentIds("") + ") cm WHERE cm.id = c.id)";
 
+    // A Comment is listed as COMMENT or MENTION depending on the COMMENT switch, so either kind's read row reads both
     private static final String READ = """
             (n.created_at <= COALESCE((SELECT ra.read_at FROM vomatt.notification_read_all ra WHERE ra.user_id = :userId),
                                       TIMESTAMPTZ 'epoch')
              OR EXISTS (SELECT 1 FROM vomatt.notification_reads r
-                        WHERE r.user_id = :userId AND r.kind = n.kind AND r.source_id = n.source_id))""";
+                        WHERE r.user_id = :userId AND r.source_id = n.source_id
+                          AND r.kind IN (n.kind, CASE n.kind WHEN 'COMMENT' THEN 'MENTION' WHEN 'MENTION' THEN 'COMMENT' END)))""";
 
     private static final String ROW = "SELECT n.kind, n.source_id, n.created_at, n.actor_id, n.vote_id, n.comment_id, "
             + READ + " AS is_read FROM (";

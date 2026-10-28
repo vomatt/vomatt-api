@@ -1,6 +1,7 @@
 package com.vomatt.votes;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
@@ -13,6 +14,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.entity.Audience;
@@ -74,6 +77,28 @@ class VoteBookmarkPostgresTest extends PostgresRepositoryTest {
     private void backdateBookmark(Vote poll, OffsetDateTime at) {
         em.createNativeQuery("UPDATE vomatt.vote_bookmarks SET created_at = :t WHERE vote_id = :v")
                 .setParameter("t", at).setParameter("v", poll.getId()).executeUpdate();
+    }
+
+    @Test
+    @DisplayName("should return 404 user.not_found and keep no bookmark when the account is deleted after the filter let the request in")
+    void shouldThrowUserNotFoundWhenBookmarkingUserIsGone() {
+        Vote open = poll(Audience.PUBLIC, now.minusHours(1), now.plusDays(1));
+        em.createNativeQuery("DELETE FROM vomatt.users WHERE id = :id").setParameter("id", me.getId()).executeUpdate();
+
+        // The insert's users guard turns the race into 0 rows, not a foreign-key failure
+        assertThatThrownBy(() -> bookmark(open))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND));
+        assertThat(em.createNativeQuery("SELECT COUNT(*) FROM vomatt.vote_bookmarks WHERE vote_id = :v")
+                .setParameter("v", open.getId()).getSingleResult()).isEqualTo(0L);
+    }
+
+    @Test
+    @DisplayName("should return vote.not_found when bookmarking an Invite-only Poll the caller is not invited to")
+    void shouldRejectBookmarkWhenPollIsHidden() {
+        Vote hidden = poll(Audience.INVITE_ONLY, now.minusHours(1), now.plusDays(1));
+
+        assertThatThrownBy(() -> bookmark(hidden)).isInstanceOfSatisfying(ApiException.class,
+                ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_NOT_FOUND));
     }
 
     @Test

@@ -83,6 +83,7 @@ public class PasskeyController {
                     **Side effects**: issues a one-time challenge that expires after 5 minutes; calling again issues another one and leaves earlier ones valid until they expire or are spent
                     **Errors**:
                     - 401 `common.unauthorized`: no or invalid access token
+                    - 403 `auth.account_banned`: the account is suspended
                     - 404 `user.not_found`: the account no longer exists""")
     public ResponseEntity<ApiResponse<PasskeyRegistrationOptionsResponse>> registrationOptions(
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -129,6 +130,7 @@ public class PasskeyController {
                     - 400 `auth.passkey.invalid`: the response is malformed or fails verification (wrong origin or RP ID, unknown, spent, expired or another user's challenge, unsupported algorithm); get new options and retry
                     - 400 `common.validation_failed`: `credential` or one of its required fields is missing, or `name` is too long
                     - 401 `common.unauthorized`: no or invalid access token
+                    - 403 `auth.account_banned`: the account is suspended
                     - 404 `user.not_found`: the account no longer exists
                     - 409 `common.conflict`: this passkey is already registered (to this or another account)""")
     public ResponseEntity<ApiResponse<PasskeyResponse>> verifyRegistration(

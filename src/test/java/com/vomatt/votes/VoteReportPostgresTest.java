@@ -18,12 +18,14 @@ import com.vomatt.admin.AdminVoteReportService;
 import com.vomatt.admin.dto.AdminVoteReportResponse;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.common.util.UUIDv7Generator;
 import com.vomatt.entity.Audience;
 import com.vomatt.entity.ReportReason;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserBlock;
 import com.vomatt.entity.Vote;
 import com.vomatt.repository.PostgresRepositoryTest;
+import com.vomatt.repository.VoteReportRepository;
 import com.vomatt.common.dto.ReportRequest;
 
 @Import({ VoteServiceSlice.class, AdminVoteReportService.class, AdminMapper.class })
@@ -32,6 +34,7 @@ class VoteReportPostgresTest extends PostgresRepositoryTest {
 
     @Autowired VoteService voteService;
     @Autowired AdminVoteReportService reportService;
+    @Autowired VoteReportRepository reportRepository;
 
     private final OffsetDateTime now = OffsetDateTime.now();
     private User owner;
@@ -121,6 +124,26 @@ class VoteReportPostgresTest extends PostgresRepositoryTest {
 
         assertThatThrownBy(() -> report(reporter, poll, ReportReason.SPAM, null))
                 .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("should return 404 user.not_found when the account is deleted after the filter let the request in")
+    void shouldThrowUserNotFoundWhenReporterIsGone() {
+        em.createNativeQuery("DELETE FROM vomatt.users WHERE id = :id").setParameter("id", reporter.getId()).executeUpdate();
+
+        assertThatThrownBy(() -> report(reporter, poll, ReportReason.SPAM, null))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND));
+        assertThat(reports()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("should insert nothing when the Poll was Deleted after it was looked up")
+    void shouldInsertNothingWhenReportedPollDeleted() {
+        em.createNativeQuery("UPDATE vomatt.votes SET deleted_at = now() WHERE id = :id").setParameter("id", poll.getId())
+                .executeUpdate();
+
+        assertThat(reportRepository.insertIfAbsent(UUIDv7Generator.generateId(), poll.getId(), reporter.getId(),
+                ReportReason.SPAM.name(), null)).isZero();
     }
 
     @Test

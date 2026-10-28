@@ -19,6 +19,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -129,7 +130,7 @@ class SecurityErrorHandlersTest {
     @Test
     void shouldReturn403AccountBannedWhenSuspendedUserCastsBallot() throws Exception {
         UUID userId = UUID.randomUUID();
-        when(userRepository.existsByIdAndActiveFalse(userId)).thenReturn(true);
+        when(userRepository.findActiveById(userId)).thenReturn(Optional.of(false));
         FilterChain chain = mock(FilterChain.class);
 
         MockHttpServletResponse response = filterAs(userId, "POST", "/api/votes/" + UUID.randomUUID() + "/vote", chain);
@@ -156,13 +157,13 @@ class SecurityErrorHandlersTest {
         UUID userId = UUID.randomUUID();
         FilterChain chain = mock(FilterChain.class);
 
-        when(userRepository.existsByIdAndActiveTrue(userId)).thenReturn(true);
+        when(userRepository.findActiveById(userId)).thenReturn(Optional.of(true));
 
         MockHttpServletResponse response = filterAs(userId, "POST", "/api/votes/" + UUID.randomUUID() + "/vote", chain);
 
         assertThat(response.getStatus()).isEqualTo(200);
         verify(chain).doFilter(any(), any());
-        verify(userRepository, never()).existsByIdAndActiveFalse(any());
+        verify(userRepository).findActiveById(userId);
     }
 
     @Test
@@ -237,7 +238,7 @@ class SecurityErrorHandlersTest {
     @Test
     void shouldReturnAccountBannedWhenSuspendedAdminCallsAdmin() throws Exception {
         UUID userId = UUID.randomUUID();
-        when(userRepository.existsByIdAndActiveFalse(userId)).thenReturn(true);
+        when(userRepository.findActiveById(userId)).thenReturn(Optional.of(false));
         FilterChain chain = mock(FilterChain.class);
 
         MockHttpServletResponse response = filterAsAdmin(userId, "GET", "/api/admin/users", chain);
@@ -256,7 +257,58 @@ class SecurityErrorHandlersTest {
 
         assertThat(response.getStatus()).isEqualTo(200);
         verify(chain).doFilter(any(), any());
-        verify(userRepository, never()).existsByIdAndActiveTrue(any());
+        verify(userRepository, never()).findActiveById(any());
+    }
+
+    @Test
+    void shouldReturn404UserNotFoundWhenDeletedAdminWritesAdmin() throws Exception {
+        UUID userId = UUID.randomUUID();
+        FilterChain chain = mock(FilterChain.class);
+
+        // Same as any other write by a deleted account
+        MockHttpServletResponse response = filterAsAdmin(userId, "DELETE", "/api/admin/votes/" + UUID.randomUUID(), chain);
+
+        assertThat(response.getStatus()).isEqualTo(404);
+        assertThat(response.getContentAsString()).contains("\"errorCode\":\"" + MessageKey.USER_NOT_FOUND.code() + "\"");
+        verifyNoInteractions(chain);
+    }
+
+    @Test
+    void shouldReturn403ForbiddenWhenDeletedAdminReadsAdmin() throws Exception {
+        FilterChain chain = mock(FilterChain.class);
+
+        MockHttpServletResponse response = filterAsAdmin(UUID.randomUUID(), "GET", "/api/admin/users", chain);
+
+        assertThat(response.getStatus()).isEqualTo(403);
+        assertThat(response.getContentAsString()).contains("\"errorCode\":\"" + MessageKey.COMMON_FORBIDDEN.code() + "\"");
+        verifyNoInteractions(chain);
+    }
+
+    @Test
+    void shouldReturn403ForbiddenWhenDemotedAdminWritesAdmin() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.findActiveById(userId)).thenReturn(Optional.of(true));
+        FilterChain chain = mock(FilterChain.class);
+
+        MockHttpServletResponse response = filterAsAdmin(userId, "DELETE", "/api/admin/votes/" + UUID.randomUUID(), chain);
+
+        assertThat(response.getStatus()).isEqualTo(403);
+        assertThat(response.getContentAsString()).contains("\"errorCode\":\"" + MessageKey.COMMON_FORBIDDEN.code() + "\"");
+        verifyNoInteractions(chain);
+    }
+
+    @Test
+    void shouldPassToSecurityRuleWhenNonAdminActiveUserWritesAdmin() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.findActiveById(userId)).thenReturn(Optional.of(true));
+        FilterChain chain = mock(FilterChain.class);
+
+        // The filter lets it through; the security rule refuses it with 403 (no ROLE_ADMIN)
+        MockHttpServletResponse response = filterAs(userId, "DELETE", "/api/admin/votes/" + UUID.randomUUID(), chain);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        verify(chain).doFilter(any(), any());
+        verify(userRepository, never()).isActiveAdmin(any());
     }
 
     @Test
@@ -283,7 +335,21 @@ class SecurityErrorHandlersTest {
         filterAs(UUID.randomUUID(), "POST", "/api/auth/refresh", chain);
 
         verify(chain).doFilter(any(), any());
-        verify(userRepository, never()).existsByIdAndActiveTrue(any());
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void shouldReturn403AccountBannedWhenSuspendedUserRegistersPasskey() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.findActiveById(userId)).thenReturn(Optional.of(false));
+        FilterChain chain = mock(FilterChain.class);
+
+        // Signed-in auth writes are not exempt, only the public auth endpoints
+        MockHttpServletResponse response = filterAs(userId, "POST", "/api/auth/passkey/register/options", chain);
+
+        assertThat(response.getStatus()).isEqualTo(403);
+        assertThat(response.getContentAsString()).contains("\"errorCode\":\"" + MessageKey.AUTH_ACCOUNT_BANNED.code() + "\"");
+        verifyNoInteractions(chain);
     }
 
     @Test

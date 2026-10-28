@@ -43,10 +43,18 @@ public class VoteListRepository {
     static final String SEARCH_CONDITION = " AND v.search_bigrams @> vomatt.text_bigrams(:q)"
             + " AND lower(COALESCE(v.title, '') || ' ' || COALESCE(v.description, '')) LIKE :pattern ESCAPE '\\'";
 
-    /** The Poll's creator ({@code v}) and the viewer ({@code :viewerId}) have not blocked each other, in either direction. */
-    static final String NOT_BLOCKED_EITHER_WAY =
-            " AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b WHERE b.blocker_id = :viewerId AND b.blocked_id = v.creator_id)"
-            + " AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b WHERE b.blocker_id = v.creator_id AND b.blocked_id = :viewerId)";
+    /** The user in {@code userColumn} and the viewer ({@code :viewerId}) have not blocked each other, in either direction. */
+    private static String notBlockedEitherWay(String userColumn) {
+        return " AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b WHERE b.blocker_id = :viewerId AND b.blocked_id = %1$s)"
+                .formatted(userColumn)
+                + " AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b WHERE b.blocker_id = %1$s AND b.blocked_id = :viewerId)"
+                .formatted(userColumn);
+    }
+
+    /** The user in {@code userColumn} is not suspended. */
+    private static String active(String userColumn) {
+        return " AND EXISTS (SELECT 1 FROM vomatt.users u WHERE u.id = %s AND u.active)".formatted(userColumn);
+    }
 
     private final EntityManager em;
 
@@ -78,7 +86,7 @@ public class VoteListRepository {
             sql.append(SEARCH_CONDITION);
         }
         if (viewerId != null) {
-            sql.append(NOT_BLOCKED_EITHER_WAY);
+            sql.append(notBlockedEitherWay("v.creator_id"));
         }
         if (after != null) {
             sql.append(" AND (").append(String.join(", ", sortColumns)).append(", v.id) ").append(descending ? "<" : ">")
@@ -129,10 +137,8 @@ public class VoteListRepository {
                         WHERE v.creator_id = f.followed_id AND\s""" + open + """
 
                         ORDER BY v.start_time DESC, v.id DESC LIMIT :limit) fv
-                    WHERE f.follower_id = :viewerId
-                      AND EXISTS (SELECT 1 FROM vomatt.users u WHERE u.id = f.followed_id AND u.active)
-                      AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b WHERE b.blocker_id = :viewerId AND b.blocked_id = f.followed_id)
-                      AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b WHERE b.blocker_id = f.followed_id AND b.blocked_id = :viewerId)
+                    WHERE f.follower_id = :viewerId""" + active("f.followed_id") + notBlockedEitherWay("f.followed_id") + """
+
                     UNION ALL
                     SELECT tv.id FROM vomatt.tag_follows tf
                     CROSS JOIN LATERAL (
@@ -142,7 +148,7 @@ public class VoteListRepository {
 
                         JOIN vomatt.votes v ON v.id = vt.vote_id
                         WHERE v.creator_id <> :viewerId AND\s""" + open
-                + " AND EXISTS (SELECT 1 FROM vomatt.users u WHERE u.id = v.creator_id AND u.active)" + NOT_BLOCKED_EITHER_WAY + """
+                + active("v.creator_id") + notBlockedEitherWay("v.creator_id") + """
 
                         ORDER BY v.start_time DESC, v.id DESC LIMIT :limit) tv
                     WHERE tf.user_id = :viewerId)

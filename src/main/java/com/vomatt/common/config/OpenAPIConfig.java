@@ -57,7 +57,9 @@ public class OpenAPIConfig {
             401 `auth.token.expired` means refresh, `auth.token.invalid` means sign in again.
 
             **Errors**: branch on `errorCode` (lowercase dotted, e.g. `vote.not_found`), never on `message`. \
-            Filter-level 401/403/429 use the same body. 429 carries a `Retry-After` header (seconds), \
+            Filter-level 401/403/404/429 use the same body. A signed-in write (any method but GET, HEAD and OPTIONS, \
+            outside the public auth endpoints) by a suspended account gets 403 `auth.account_banned`, by a deleted account \
+            404 `user.not_found`. 429 carries a `Retry-After` header (seconds), \
             except when the rate limiter itself is unavailable.
 
             **Pagination**: list endpoints return `{ items, nextCursor }`; pass `nextCursor` back as `cursor`. \

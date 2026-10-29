@@ -17,11 +17,11 @@ import com.vomatt.entity.User;
 import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
 
-/** Runs the real db/migrations/2026-10-26-notification-reads-by-kind.sql inside the rolled-back test transaction. */
-@DisplayName("2026-10-26-notification-reads-by-kind.sql (Postgres)")
+/** Runs the real db/migration/beforeMigrate__notification_reads_by_kind.sql inside the rolled-back test transaction. */
+@DisplayName("beforeMigrate__notification_reads_by_kind.sql (Postgres)")
 class NotificationReadsByKindMigrationPostgresTest extends PostgresRepositoryTest {
 
-    private static final String SCRIPT = "db/migrations/2026-10-26-notification-reads-by-kind.sql";
+    private static final String SCRIPT = "db/migration/beforeMigrate__notification_reads_by_kind.sql";
 
     // The table as the old schema.sql created it before the feed, one read row per (user, Poll)
     private static final List<String> TO_POLL_READS = List.of(

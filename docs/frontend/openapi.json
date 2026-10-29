@@ -15142,7 +15142,7 @@
     },
     "/api/users/me/sessions" : {
       "delete" : {
-        "description" : "**Auth**: required\n**Precondition**: the calling access token names its session (every token issued after session ids shipped)\n**Behavior**: ends every session of the caller except the calling one, at once, like `DELETE /api/users/me/sessions/{sessionId}` on each. Succeeds when there is nothing else to sign out\n**Side effects**: the sign-out is written to the audit log\n**Errors**:\n- 400 `common.bad_request`: `scope` is not `others`\n- 400 `common.missing_param`: `scope` is missing\n- 409 `auth.current_session_unknown`: the access token predates session ids; refresh, then retry with the new access token",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: ends every session of the caller except the calling one, at once, like `DELETE /api/users/me/sessions/{sessionId}` on each. Succeeds when there is nothing else to sign out\n**Side effects**: the sign-out is written to the audit log\n**Errors**:\n- 400 `common.bad_request`: `scope` is not `others`\n- 400 `common.missing_param`: `scope` is missing",
         "operationId" : "revokeMyOtherSessions",
         "parameters" : [ {
           "description" : "Which sessions to sign out; only `others` is supported",
@@ -15210,23 +15210,6 @@
             },
             "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
           },
-          "409" : {
-            "content" : {
-              "application/json" : {
-                "example" : {
-                  "data" : null,
-                  "error" : "This device could not be identified. Refresh the session and try again",
-                  "errorCode" : "auth.current_session_unknown",
-                  "message" : "This device could not be identified. Refresh the session and try again",
-                  "success" : false
-                },
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description" : "The calling access token predates session ids, so the current device is unknown (errorCode `auth.current_session_unknown`); refresh and retry"
-          },
           "429" : {
             "content" : {
               "application/json" : {
@@ -15243,7 +15226,7 @@
         "tags" : [ "User" ]
       },
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: every session that can still refresh (signed in within the refresh lifetime, 30 days by default, and not signed out), most recently active first; sessions with no `lastSeenAt` come last. `current` marks the session of the calling access token (false on all items when the token predates session ids). `userAgent` is raw: parse it on the client for display. `userAgent`, `createdAt` and `lastSeenAt` are null for sessions signed in before devices were recorded; `userAgent` and `lastSeenAt` fill in on their next refresh. Admin console sign-ins are listed too, with `adminScope` true\n**Side effects**: none\n**Errors**: none beyond 401",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: every session that can still refresh (signed in within the refresh lifetime, 30 days by default, and not signed out), most recently active first; sessions with no `lastSeenAt` come last. `current` marks the session of the calling access token. `userAgent` is raw: parse it on the client for display. `userAgent`, `createdAt` and `lastSeenAt` are null for sessions signed in before devices were recorded; `userAgent` and `lastSeenAt` fill in on their next refresh. Admin console sign-ins are listed too, with `adminScope` true\n**Side effects**: none\n**Errors**: none beyond 401",
         "operationId" : "listMySessions",
         "responses" : {
           "200" : {

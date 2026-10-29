@@ -478,8 +478,7 @@ public class UserController {
             **Precondition**: none
             **Behavior**: every session that can still refresh (signed in within the refresh lifetime, 30 days by \
             default, and not signed out), most recently active first; sessions with no `lastSeenAt` come last. \
-            `current` marks the session of the calling access token (false on all items when the token predates session \
-            ids). `userAgent` is raw: parse it on the client for display. `userAgent`, `createdAt` and `lastSeenAt` are null \
+            `current` marks the session of the calling access token. `userAgent` is raw: parse it on the client for display. `userAgent`, `createdAt` and `lastSeenAt` are null \
             for sessions signed in before devices were recorded; `userAgent` and `lastSeenAt` fill in on their next refresh. \
             Admin console sign-ins are listed too, with `adminScope` true
             **Side effects**: none
@@ -526,20 +525,15 @@ public class UserController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "The calling access token predates session ids, so the current device is unknown (errorCode `auth.current_session_unknown`); refresh and retry",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"This device could not be identified. Refresh the session and try again","errorCode":"auth.current_session_unknown","error":"This device could not be identified. Refresh the session and try again"}""")))
     @Operation(summary = "Sign out all my other devices", description = """
             **Auth**: required
-            **Precondition**: the calling access token names its session (every token issued after session ids shipped)
+            **Precondition**: none
             **Behavior**: ends every session of the caller except the calling one, at once, like \
             `DELETE /api/users/me/sessions/{sessionId}` on each. Succeeds when there is nothing else to sign out
             **Side effects**: the sign-out is written to the audit log
             **Errors**:
             - 400 `common.bad_request`: `scope` is not `others`
-            - 400 `common.missing_param`: `scope` is missing
-            - 409 `auth.current_session_unknown`: the access token predates session ids; refresh, then retry with the new access token""")
+            - 400 `common.missing_param`: `scope` is missing""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> revokeMyOtherSessions(
             @Parameter(description = "Which sessions to sign out; only `others` is supported", required = true,
                     schema = @Schema(allowableValues = "others"))
@@ -549,9 +543,6 @@ public class UserController {
             throw ApiException.badRequest(MessageKey.COMMON_BAD_REQUEST);
         }
         String current = principal.sessionId();
-        if (current == null) {
-            throw ApiException.conflict(MessageKey.AUTH_CURRENT_SESSION_UNKNOWN);
-        }
         refreshTokenService.revokeSessions(principal.userId(), sessionId -> !sessionId.equals(current));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }

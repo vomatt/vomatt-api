@@ -73,7 +73,6 @@ public enum MessageKey {
     AUTH_PASSKEY_INVALID("auth.passkey.invalid"),
     AUTH_SESSION_REVOKED("auth.session_revoked"),
     AUTH_SESSION_NOT_FOUND("auth.session_not_found"),
-    AUTH_CURRENT_SESSION_UNKNOWN("auth.current_session_unknown"),
 
     // === User / Profile ===
     USER_NOT_FOUND("user.not_found"),

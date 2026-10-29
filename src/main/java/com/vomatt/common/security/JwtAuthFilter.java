@@ -108,13 +108,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     /**
      * A session kicked from another device (or revoked by suspension, reuse detection, role change) cuts its access
-     * tokens at once instead of when they expire. Tokens issued before the sid claim carry none and pass. A Redis
-     * failure fails open, like the rate limiter: the token is still signed and short-lived.
+     * tokens at once instead of when they expire. A Redis failure fails open, like the rate limiter: the token is
+     * still signed and short-lived.
      */
     private boolean sessionRevoked(UserPrincipal principal) {
-        if (principal.sessionId() == null) {
-            return false;
-        }
         try {
             return refreshTokenService.isSessionRevoked(principal.sessionId());
         } catch (RedisOperationException ex) {

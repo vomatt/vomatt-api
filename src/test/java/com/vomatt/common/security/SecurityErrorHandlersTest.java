@@ -115,7 +115,7 @@ class SecurityErrorHandlersTest {
 
     @Test
     void shouldNotSetErrorAttributeWhenTokenValid() throws Exception {
-        String token = jwtUtil.generateToken("u1", List.of("user"), false, null);
+        String token = jwtUtil.generateToken("u1", List.of("user"), false, "s1");
 
         assertThat(requestWithBearer(token).getAttribute(JwtAuthFilter.AUTH_ERROR_ATTR)).isNull();
     }
@@ -157,9 +157,10 @@ class SecurityErrorHandlersTest {
     }
 
     @Test
-    void shouldAuthenticateWithoutRevocationCheckWhenTokenHasNoSessionId() throws Exception {
-        assertThat(authSeenBy("GET", "/api/users/me", jwtUtil.generateToken("u1", List.of("user"), false, null)))
-                .isNotNull();
+    void shouldAnswerTokenExpiredWhenTokenHasNoSessionId() throws Exception {
+        String token = jwtUtil.generateToken("u1", List.of("user"), false, null);
+        assertThatThrownBy(() -> jwtUtil.parseToken(token)).isInstanceOf(io.jsonwebtoken.ExpiredJwtException.class);
+        assertThat(authSeenBy("GET", "/api/users/me", token)).isNull();
         verifyNoInteractions(refreshTokenService);
     }
 
@@ -175,7 +176,7 @@ class SecurityErrorHandlersTest {
     private MockHttpServletResponse filterAs(UUID userId, String method, String uri, FilterChain chain)
             throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest(method, uri);
-        request.addHeader("Authorization", "Bearer " + jwtUtil.generateToken(userId.toString(), List.of("user"), false, null));
+        request.addHeader("Authorization", "Bearer " + jwtUtil.generateToken(userId.toString(), List.of("user"), false, "s1"));
         MockHttpServletResponse response = new MockHttpServletResponse();
         jwtAuthFilter.doFilter(request, response, chain);
         SecurityContextHolder.clearContext();
@@ -237,8 +238,8 @@ class SecurityErrorHandlersTest {
 
     @Test
     void shouldDropAdminRoleWhenTokenLacksAdminScope() {
-        String userToken = jwtUtil.generateToken("u1", List.of("user", "admin"), false, null);
-        String adminToken = jwtUtil.generateToken("u1", List.of("user", "admin"), true, null);
+        String userToken = jwtUtil.generateToken("u1", List.of("user", "admin"), false, "s1");
+        String adminToken = jwtUtil.generateToken("u1", List.of("user", "admin"), true, "s1");
 
         assertThat(jwtUtil.parseToken(userToken).roles()).containsExactly("user");
         assertThat(jwtUtil.parseToken(adminToken).roles()).containsExactly("user", "admin");
@@ -246,7 +247,7 @@ class SecurityErrorHandlersTest {
 
     private MockHttpServletResponse filterAsAdmin(UUID userId, String method, String uri, FilterChain chain) throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest(method, uri);
-        request.addHeader("Authorization", "Bearer " + jwtUtil.generateToken(userId.toString(), List.of("user", "admin"), true, null));
+        request.addHeader("Authorization", "Bearer " + jwtUtil.generateToken(userId.toString(), List.of("user", "admin"), true, "s1"));
         MockHttpServletResponse response = new MockHttpServletResponse();
         jwtAuthFilter.doFilter(request, response, chain);
         SecurityContextHolder.clearContext();
@@ -333,7 +334,7 @@ class SecurityErrorHandlersTest {
         when(userRepository.findActiveById(userId)).thenReturn(Optional.of(true));
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/admin/users");
         // "ADMIN" still maps to ROLE_ADMIN, so it must go through the database check too
-        request.addHeader("Authorization", "Bearer " + jwtUtil.generateToken(userId.toString(), List.of("ADMIN"), true, null));
+        request.addHeader("Authorization", "Bearer " + jwtUtil.generateToken(userId.toString(), List.of("ADMIN"), true, "s1"));
         MockHttpServletResponse response = new MockHttpServletResponse();
         FilterChain chain = mock(FilterChain.class);
 
@@ -427,7 +428,7 @@ class SecurityErrorHandlersTest {
 
     @Test
     void shouldSetUserPrincipalWhenValidTokenOnPublicPath() throws Exception {
-        String token = Jwts.builder().subject("u1").claim("roles", List.of("user"))
+        String token = Jwts.builder().subject("u1").claim("roles", List.of("user")).claim("sid", "s1")
                 .expiration(new Date(System.currentTimeMillis() + 60_000))
                 .signWith(Keys.hmacShaKeyFor(SECRET.getBytes())).compact();
 

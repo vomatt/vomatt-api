@@ -2,6 +2,8 @@ package com.vomatt.common.security;
 
 import com.vomatt.common.constant.UserRole;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.JwtParser;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -84,13 +86,20 @@ public class JwtUtil {
 
     @SuppressWarnings("unchecked")
     public UserPrincipal parseToken(String token) {
-        Claims claims = parser.parseSignedClaims(token).getPayload();
+        Jws<Claims> jws = parser.parseSignedClaims(token);
+        Claims claims = jws.getPayload();
+        String sessionId = claims.get(SESSION_CLAIM, String.class);
+        // Tokens signed before the sid claim shipped are at most one access lifetime old: answering "expired" sends the
+        // client through its normal refresh, which signs one with a sid, so nothing downstream handles a missing session
+        if (sessionId == null) {
+            throw new ExpiredJwtException(jws.getHeader(), claims, "Access token predates session ids");
+        }
         List<String> roles = (List<String>) claims.get("roles");
         // Fails closed: a token without the admin scope (including ones issued before the claim existed) drops the
         // admin role here, so nothing downstream can grant it
         if (roles != null && !SCOPE_ADMIN.equals(claims.get(SCOPE_CLAIM, String.class))) {
             roles = roles.stream().filter(r -> !UserRole.isAdmin(r)).toList();
         }
-        return new UserPrincipal(claims.getSubject(), roles, claims.get(SESSION_CLAIM, String.class));
+        return new UserPrincipal(claims.getSubject(), roles, sessionId);
     }
 }

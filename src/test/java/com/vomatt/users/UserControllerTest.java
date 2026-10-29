@@ -489,17 +489,6 @@ class UserControllerTest {
     }
 
     @Test
-    @DisplayName("should respond 409 when the access token names no session and scope is others")
-    void shouldReturnConflictWhenRevokingOthersWithoutSessionId() throws Exception {
-        signIn("u1");
-
-        mockMvc.perform(delete("/api/users/me/sessions").param("scope", "others"))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.errorCode").value("auth.current_session_unknown"));
-        verifyNoInteractions(refreshTokenService);
-    }
-
-    @Test
     @DisplayName("should respond 400 without signing anything out when scope is not others")
     void shouldReturnBadRequestWhenScopeUnknown() throws Exception {
         signIn("u1", "s-here");

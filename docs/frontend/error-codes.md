@@ -63,7 +63,6 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.passkey.invalid` | 400 / 401 | Passkey 驗證失敗，請重新操作一次 | Passkey verification failed. Please try again | Show message so the user can fix the input; See [auth-flow.md](auth-flow.md) | PasskeyService |
 | `auth.session_revoked` | 401 | 此裝置已被登出，請重新登入 | This device has been signed out. Please sign in again | See [auth-flow.md](auth-flow.md) | JwtAuthFilter |
 | `auth.session_not_found` | 404 | 找不到此登入裝置 | Signed-in device not found | Show resource not found | UserController |
-| `auth.current_session_unknown` | 409 | 無法辨識目前的裝置，請重新整理登入狀態後再試 | This device could not be identified. Refresh the session and try again | Show message (resource state conflict) | UserController |
 | `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | AdminUserService, FeedbackService, InviteListService, JwtAuthFilter, NotificationService, PasskeyService, UserGuard, UserService, VoteCommentService, VoteService |
 | `user.username.taken` | 409 | 使用者名稱已被使用 | Username already taken | Show message (resource state conflict) | UserService |
 | `user.delete.forbidden` | 403 | 只能刪除自己的帳號 | You can only delete your own account | Show a permission-denied notice | UserService |

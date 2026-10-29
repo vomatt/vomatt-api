@@ -76,7 +76,7 @@ class AuditAspectTest {
     }
 
     private static com.vomatt.common.security.UserPrincipal principal(java.util.UUID id) {
-        return new com.vomatt.common.security.UserPrincipal(id.toString(), java.util.List.of("user"));
+        return new com.vomatt.common.security.UserPrincipal(id.toString(), java.util.List.of("user"), null);
     }
 
     private void signIn(java.util.UUID id, String username) {

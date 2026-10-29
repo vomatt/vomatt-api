@@ -60,7 +60,7 @@ class RedisServiceImplTest {
     @Test
     void shouldSerializeValuesAndPassBytesAsIsWhenRunningScript() {
         RefreshTokenService.RefreshTokenData data =
-                new RefreshTokenService.RefreshTokenData("user-1", List.of("user"), "session-1", false);
+                new RefreshTokenService.RefreshTokenData("user-1", List.of("user"), "session-1", false, null, null, null);
 
         long result = redisService.execScript(SET_AND_HSET, List.of("ns:k", "idx:u"),
                 List.of(data, "field".getBytes(java.nio.charset.StandardCharsets.UTF_8)));

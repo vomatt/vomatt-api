@@ -36,7 +36,7 @@ final class AdminControllerTestSupport {
 
     /** JwtAuthFilter maps the roles claim to ROLE_<UPPER> authorities */
     static void authenticateAs(String role) {
-        UserPrincipal principal = new UserPrincipal(ADMIN_ID, List.of(role));
+        UserPrincipal principal = new UserPrincipal(ADMIN_ID, List.of(role), null);
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(principal, null,
                 AuthorityUtils.createAuthorityList("ROLE_" + role.toUpperCase())));
     }

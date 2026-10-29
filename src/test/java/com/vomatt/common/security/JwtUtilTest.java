@@ -18,7 +18,7 @@ class JwtUtilTest {
 
     @Test
     void shouldCarryOnlySubjectRolesScopeAndJtiWhenTokenIsIssued() {
-        String token = jwtUtil.generateToken("user-1", List.of("user", "admin"), false);
+        String token = jwtUtil.generateToken("user-1", List.of("user", "admin"), false, null);
 
         Claims claims = Jwts.parser().verifyWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8))).build()
                 .parseSignedClaims(token).getPayload();
@@ -31,7 +31,7 @@ class JwtUtilTest {
         assertThat(principal.userId()).isEqualTo("user-1");
         // Without the admin scope the admin role is dropped
         assertThat(principal.roles()).containsExactly("user");
-        assertThat(jwtUtil.parseToken(jwtUtil.generateToken("user-1", List.of("admin"), true)).grantsAdmin()).isTrue();
+        assertThat(jwtUtil.parseToken(jwtUtil.generateToken("user-1", List.of("admin"), true, null)).grantsAdmin()).isTrue();
     }
 
     @Test
@@ -39,8 +39,8 @@ class JwtUtilTest {
         String oldSecret = "jwt-util-test-old-secret-0123456789-0123456789";
         JwtUtil before = new JwtUtil(oldSecret, 900);
         JwtUtil rotated = new JwtUtil(SECRET + ", " + oldSecret, 900);
-        String signedByOld = before.generateToken("user-2", List.of("user"), false);
-        String signedByNew = rotated.generateToken("user-2", List.of("user"), false);
+        String signedByOld = before.generateToken("user-2", List.of("user"), false, null);
+        String signedByNew = rotated.generateToken("user-2", List.of("user"), false, null);
 
         assertThat(rotated.parseToken(signedByOld).userId()).isEqualTo("user-2");
         assertThat(rotated.parseToken(signedByNew).userId()).isEqualTo("user-2");

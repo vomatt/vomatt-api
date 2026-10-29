@@ -11,9 +11,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -50,6 +53,7 @@ public class RefreshTokenService {
     // while its session stands (see sessionStands), so the window cannot outlive a logout or a session revocation
     private static final String GRACE_NS = "refresh:grace";
     private static final int SHA_PREFIX_LEN = 8;
+    private static final int USER_AGENT_MAX_LEN = 512;
 
     // Step 5 of rotate. KEYS: 1 old token, 2 revoked-session flag, 3 consumed marker, 4 new token, 5 user index, 6 grace.
     // ARGV: 1 session id, 2 new token data, 3 grace pair, 4 new index field, 5 old index field, 6 refresh TTL ms,
@@ -96,8 +100,11 @@ public class RefreshTokenService {
      * {@code sessionId} names one sign-in and is kept across rotations; null on tokens issued before it existed.
      * {@code adminScope} is fixed at sign-in (admin console login only) and kept across rotations, so refreshing a
      * consumer-app session never yields an admin token; null on tokens issued before it existed (read as false).
+     * {@code userAgent} and {@code lastSeenAt} are those of the latest sign-in or rotation, {@code createdAt} the
+     * sign-in's; all three are null on tokens issued before they existed, and {@code createdAt} stays null for them.
      */
-    public record RefreshTokenData(String userId, List<String> roles, String sessionId, Boolean adminScope) {
+    public record RefreshTokenData(String userId, List<String> roles, String sessionId, Boolean adminScope,
+                                   String userAgent, Instant createdAt, Instant lastSeenAt) {
         public boolean grantsAdmin() {
             return Boolean.TRUE.equals(adminScope);
         }
@@ -105,13 +112,18 @@ public class RefreshTokenService {
 
     public record RotateResult(String newAccessToken, String newRefreshToken, RefreshTokenData data) {}
 
+    public record IssuedTokens(String accessToken, String refreshToken) {}
+
     /**
-     * Generates a refresh token, stores it in Redis and indexes it under the user
+     * Signs in: starts a session, stores its refresh token in Redis indexed under the user, and signs an access token
+     * naming the same session, so revoking the session cuts both.
      */
-    public String generate(String userId, List<String> roles, boolean adminScope) {
+    public IssuedTokens issue(String userId, List<String> roles, boolean adminScope) {
         String token = UUID.randomUUID().toString();
         String key = keyOf(token);
-        RefreshTokenData data = new RefreshTokenData(userId, roles, UUID.randomUUID().toString(), adminScope);
+        Instant now = Instant.now();
+        RefreshTokenData data = new RefreshTokenData(userId, roles, UUID.randomUUID().toString(), adminScope,
+                currentUserAgent(), now, now);
         Duration ttl = Duration.ofDays(refreshExpirationDays);
         // Renew the index TTL on every issue (as rotate does), so the index never expires before a token it lists
         redisService.execInTransaction(List.of(
@@ -120,7 +132,16 @@ public class RefreshTokenService {
                 RedisService.RedisWrite.expire(USER_IDX_NS, userId, ttl)
         ));
         log.debug("Refresh token generated for userId={}", userId);
-        return token;
+        return new IssuedTokens(jwtUtil.generateToken(userId, roles, adminScope, data.sessionId()), token);
+    }
+
+    /** The current request's User-Agent, cut to {@link #USER_AGENT_MAX_LEN}; null outside a request or when absent. */
+    private static String currentUserAgent() {
+        if (!(RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attrs)) {
+            return null;
+        }
+        String ua = attrs.getRequest().getHeader("User-Agent");
+        return ua == null || ua.length() <= USER_AGENT_MAX_LEN ? ua : ua.substring(0, USER_AGENT_MAX_LEN);
     }
 
     /**
@@ -207,11 +228,12 @@ public class RefreshTokenService {
         // Tokens issued before session ids existed start a session named after their key, the one revokeAllForUser
         // flags for them, so a rotation racing that revocation is refused too
         String sessionId = sessionIdOf(data, oldKey);
-        RefreshTokenData freshData = new RefreshTokenData(data.userId(), freshRoles, sessionId, data.grantsAdmin());
+        RefreshTokenData freshData = new RefreshTokenData(data.userId(), freshRoles, sessionId, data.grantsAdmin(),
+                currentUserAgent(), data.createdAt(), Instant.now());
 
         String newRefreshToken = UUID.randomUUID().toString();
         String newKey = keyOf(newRefreshToken);
-        String newAccessToken = jwtUtil.generateToken(freshData.userId(), freshRoles, freshData.grantsAdmin());
+        String newAccessToken = jwtUtil.generateToken(freshData.userId(), freshRoles, freshData.grantsAdmin(), sessionId);
         RotateResult result = new RotateResult(newAccessToken, newRefreshToken, freshData);
 
         Duration refreshTtl = Duration.ofDays(refreshExpirationDays);

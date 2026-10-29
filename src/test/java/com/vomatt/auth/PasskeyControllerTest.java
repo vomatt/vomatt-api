@@ -56,7 +56,7 @@ class PasskeyControllerTest {
                 .setControllerAdvice(new GlobalExceptionHandler(messageService))
                 .build();
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                new UserPrincipal(USER_ID, List.of("user")), null, AuthorityUtils.createAuthorityList("ROLE_USER")));
+                new UserPrincipal(USER_ID, List.of("user"), null), null, AuthorityUtils.createAuthorityList("ROLE_USER")));
     }
 
     @AfterEach

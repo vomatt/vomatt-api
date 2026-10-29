@@ -5,13 +5,11 @@ import java.util.EnumSet;
 import java.util.Map;
 import java.util.Set;
 
-import com.vomatt.entity.NotificationCategory;
 import com.vomatt.entity.NotificationKind;
 
 /**
  * The switches of {@code /api/users/me/notification-preferences}, each turning a set of kinds on or off. A kind switched
- * off is left out of the feed and the unread count. FOLLOWED has no switch, but a category filter can still leave no
- * kind (CONVERSATION with comments off), which callers must check.
+ * off is left out of the feed and the unread count. FOLLOWED has no switch, so the feed is never empty of kinds.
  * Stored in {@code user_preferences} under {@link #preferenceKey()}; unset means {@link #onByDefault}.
  */
 public enum NotificationPreference {
@@ -46,13 +44,9 @@ public enum NotificationPreference {
         return settings;
     }
 
-    /** Every kind except those whose switch is off; only those of {@code category} when it is not null. */
-    public static Set<NotificationKind> enabledKinds(Map<NotificationPreference, Boolean> settings,
-                                                     NotificationCategory category) {
+    /** Every kind except those whose switch is off. */
+    public static Set<NotificationKind> enabledKinds(Map<NotificationPreference, Boolean> settings) {
         Set<NotificationKind> enabled = EnumSet.allOf(NotificationKind.class);
-        if (category != null) {
-            enabled.removeIf(kind -> kind.category() != category);
-        }
         settings.forEach((preference, on) -> {
             if (!on) {
                 enabled.removeAll(preference.kinds);

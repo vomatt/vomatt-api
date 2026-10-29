@@ -122,14 +122,16 @@ class NotificationServiceTest {
     }
 
     @Test
-    @DisplayName("should not query the feed when the requested category's kinds are all switched off")
-    void shouldReturnNothingWhenCategoryKindsSwitchedOff() {
+    @DisplayName("should list only the requested category's kinds, and none when they are all switched off")
+    void shouldFilterKindsByCategoryWhenGiven() {
         stored(NotificationPreference.COMMENTS, false);
 
-        assertThat(notificationService.list(USER, NotificationCategory.CONVERSATION, null, 20).items()).isEmpty();
-        assertThat(notificationService.countUnread(USER, NotificationCategory.CONVERSATION).count()).isZero();
-        verify(notificationRepository, never()).findPage(any(), any(), any(), any(), anyInt());
-        verify(notificationRepository, never()).countUnread(any(), any(), any());
+        notificationService.list(USER, NotificationCategory.POLL_END, null, 20);
+        notificationService.countUnread(USER, NotificationCategory.CONVERSATION);
+
+        verify(notificationRepository).findPage(eq(USER_ID),
+                eq(EnumSet.of(NotificationKind.RESULT, NotificationKind.CANCELLED)), any(), any(), anyInt());
+        verify(notificationRepository).countUnread(eq(USER_ID), eq(EnumSet.noneOf(NotificationKind.class)), any());
     }
 
     @Test

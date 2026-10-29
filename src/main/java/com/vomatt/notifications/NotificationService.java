@@ -74,9 +74,8 @@ public class NotificationService {
         UUID userUuid = UUID.fromString(userId);
         int size = CursorResponse.limit(limit);
         Cursor after = Cursor.decode(cursor, Cursor.Scope.NOTIFICATIONS);
-        Set<NotificationKind> kinds = NotificationPreference.enabledKinds(preferences(userUuid), category);
-        List<NotificationRow> rows = kinds.isEmpty() ? List.of()
-                : notificationRepository.findPage(userUuid, kinds, after, OffsetDateTime.now(), size + 1);
+        List<NotificationRow> rows = notificationRepository.findPage(userUuid, kinds(userUuid, category), after,
+                OffsetDateTime.now(), size + 1);
         return CursorResponse.of(rows, size, Cursor.Scope.NOTIFICATIONS, row -> Cursor.of(row.createdAt(), row.sourceId()),
                 page -> toResponses(userUuid, page));
     }
@@ -84,9 +83,17 @@ public class NotificationService {
     @Transactional(readOnly = true)
     public UnreadCountResponse countUnread(String userId, NotificationCategory category) {
         UUID userUuid = UUID.fromString(userId);
-        Set<NotificationKind> kinds = NotificationPreference.enabledKinds(preferences(userUuid), category);
-        return new UnreadCountResponse(kinds.isEmpty() ? 0
-                : notificationRepository.countUnread(userUuid, kinds, OffsetDateTime.now()));
+        return new UnreadCountResponse(notificationRepository.countUnread(userUuid, kinds(userUuid, category),
+                OffsetDateTime.now()));
+    }
+
+    /** The kinds the user's preferences leave on, only {@code category}'s when given; may be empty. */
+    private Set<NotificationKind> kinds(UUID userId, NotificationCategory category) {
+        Set<NotificationKind> kinds = NotificationPreference.enabledKinds(preferences(userId));
+        if (category != null) {
+            kinds.removeIf(kind -> kind.category() != category);
+        }
+        return kinds;
     }
 
     /**

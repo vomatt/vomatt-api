@@ -48,6 +48,16 @@ public class NotificationRepository {
                 .formatted(kind.name(), sourceId, createdAt, actorId, voteId, commentId);
     }
 
+    // Appended to the COMMENT and LIKE branches, whose c is the Comment and v its Poll: not in a thread started by a user
+    // the user blocked (the lists hide those threads, VoteCommentRepository.isHiddenFrom), on a Poll the user can still see
+    private static final String COMMENT_VISIBLE = """
+
+              AND NOT EXISTS (SELECT 1 FROM vomatt.vote_comments tp
+                              JOIN vomatt.user_blocks x ON x.blocker_id = :userId AND x.blocked_id = tp.user_id
+                              WHERE tp.id = c.parent_id)
+              AND (v.audience <> 'INVITE_ONLY' OR v.creator_id = :userId
+                   OR EXISTS (SELECT 1 FROM vomatt.vote_invitees vi WHERE vi.vote_id = v.id AND vi.user_id = :userId))""";
+
     // Branches bind :userId, and :now and :soon where they use them. A row's created_at does not change while it is
     // listed and is at most :now when it joins the feed, which keeps the (created_at, source_id) keyset sound
     private static final Map<NotificationKind, String> BRANCHES = new EnumMap<>(Map.of(
@@ -77,12 +87,7 @@ public class NotificationRepository {
                                    UNION
                                    SELECT r.id FROM vomatt.vote_comments p JOIN vomatt.vote_comments r ON r.parent_id = p.id
                                    WHERE p.user_id = :userId AND p.is_deleted = FALSE)
-                      AND c.is_deleted = FALSE AND c.user_id <> :userId AND v.deleted_at IS NULL
-                      AND NOT EXISTS (SELECT 1 FROM vomatt.vote_comments tp
-                                      JOIN vomatt.user_blocks x ON x.blocker_id = :userId AND x.blocked_id = tp.user_id
-                                      WHERE tp.id = c.parent_id)
-                      AND (v.audience <> 'INVITE_ONLY' OR v.creator_id = :userId
-                           OR EXISTS (SELECT 1 FROM vomatt.vote_invitees vi WHERE vi.vote_id = v.id AND vi.user_id = :userId))""",
+                      AND c.is_deleted = FALSE AND c.user_id <> :userId AND v.deleted_at IS NULL""" + COMMENT_VISIBLE,
             // Open Polls ending within the window that the user can cast a Ballot in and has not: Invite-only ones they
             // are invited to, Public ones of users they follow. Listed from when the window opened (or the Poll did)
             NotificationKind.CLOSING_SOON, select(NotificationKind.CLOSING_SOON, "v.id",
@@ -97,18 +102,13 @@ public class NotificationRepository {
                       AND v.deleted_at IS NULL AND v.start_time <= :now AND v.end_time > :now AND v.end_time <= :soon
                       AND v.creator_id <> :userId
                       AND NOT EXISTS (SELECT 1 FROM vomatt.user_votes uv WHERE uv.vote_id = v.id AND uv.user_id = :userId)""",
-            // Others' likes on the user's Comments and Replies, visible as COMMENT is: not in a thread started by a user
-            // the user blocked, on Polls the user can still see. An unlike deletes the row, so a re-like is a new one
+            // Others' likes on the user's Comments and Replies, visible as COMMENT is. An unlike deletes the row, so a
+            // re-like is a new one
             NotificationKind.LIKE, select(NotificationKind.LIKE, "l.id", "l.created_at", "l.user_id", "v.id", "c.id") + """
                     FROM vomatt.vote_comments c
                     JOIN vomatt.comment_likes l ON l.comment_id = c.id
                     JOIN vomatt.votes v ON v.id = c.vote_id
-                    WHERE c.user_id = :userId AND c.is_deleted = FALSE AND l.user_id <> :userId AND v.deleted_at IS NULL
-                      AND NOT EXISTS (SELECT 1 FROM vomatt.vote_comments tp
-                                      JOIN vomatt.user_blocks x ON x.blocker_id = :userId AND x.blocked_id = tp.user_id
-                                      WHERE tp.id = c.parent_id)
-                      AND (v.audience <> 'INVITE_ONLY' OR v.creator_id = :userId
-                           OR EXISTS (SELECT 1 FROM vomatt.vote_invitees vi WHERE vi.vote_id = v.id AND vi.user_id = :userId))"""));
+                    WHERE c.user_id = :userId AND c.is_deleted = FALSE AND l.user_id <> :userId AND v.deleted_at IS NULL""" + COMMENT_VISIBLE));
 
     // Inside each branch, before its LIMIT: nothing from a suspended user, nor from someone the user blocked or who
     // blocked the user
@@ -146,6 +146,9 @@ public class NotificationRepository {
     @SuppressWarnings("unchecked")
     public List<NotificationRow> findPage(UUID userId, Set<NotificationKind> kinds, Cursor after, OffsetDateTime now,
                                           int limit) {
+        if (kinds.isEmpty()) {
+            return List.of();
+        }
         String keyset = after == null ? "" : " AND (b.created_at, b.source_id) < (:afterTime, :afterId)";
         String sql = ROW + union(kinds, keyset + " ORDER BY b.created_at DESC, b.source_id DESC LIMIT :limit")
                 + ") n ORDER BY n.created_at DESC, n.source_id DESC LIMIT :limit";
@@ -158,6 +161,9 @@ public class NotificationRepository {
 
     /** Unread notifications of the given kinds, at most {@link #UNREAD_COUNT_CAP}. */
     public long countUnread(UUID userId, Set<NotificationKind> kinds, OffsetDateTime now) {
+        if (kinds.isEmpty()) {
+            return 0;
+        }
         // ponytail: RESULT materializes every Poll the user ever took part in; add a time window or a stored counter
         // if this shows up in slow queries
         String sql = "SELECT COUNT(*) FROM (SELECT 1 FROM (" + union(kinds, "") + ") n WHERE NOT " + READ

@@ -83,6 +83,8 @@ class VoteServiceTest {
     @Mock TransactionTemplate transactionTemplate;
     @Mock com.vomatt.lookups.LookupService lookupService;
     @Mock VoteViewRecorder viewRecorder;
+    @Mock com.vomatt.repository.VoteReportRepository voteReportRepository;
+    @Mock com.vomatt.repository.VoteBookmarkRepository bookmarkRepository;
     // Real helper over a stubbed EntityManager, so lockVote still runs the Poll-row lock it wraps
     @Spy com.vomatt.repository.LockTimeout lockTimeout = new com.vomatt.repository.LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @Spy VoteMapper voteMapper = new VoteMapper();
@@ -469,6 +471,98 @@ class VoteServiceTest {
             when(voteRepository.findById(voteId)).thenReturn(Optional.empty());
             assertThatThrownBy(() -> voteService.getInviteOnlyCreator(id))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
+        }
+    }
+
+    // ─── bookmark / unbookmark ────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("bookmark / unbookmark")
+    class BookmarkTests {
+
+        @Test
+        @DisplayName("should insert the caller's bookmark when the Poll is reachable")
+        void shouldInsertBookmarkWhenPollIsReachable() {
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(bookmarkRepository.insertIfAbsent(any(UUID.class), eq(userId), eq(voteId))).thenReturn(1);
+
+            voteService.bookmark(voteId.toString(), userId.toString());
+
+            verify(bookmarkRepository).insertIfAbsent(any(UUID.class), eq(userId), eq(voteId));
+        }
+
+        @Test
+        @DisplayName("should succeed on a repeat bookmark without looking the user up")
+        void shouldSkipUserLookupWhenAlreadyBookmarked() {
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(bookmarkRepository.insertIfAbsent(any(UUID.class), eq(userId), eq(voteId))).thenReturn(0);
+            when(bookmarkRepository.existsByUserIdAndVoteIdAndVoteDeletedAtIsNull(userId, voteId)).thenReturn(true);
+
+            voteService.bookmark(voteId.toString(), userId.toString());
+
+            verify(userRepository, never()).existsById(any());
+            verify(voteRepository, never()).existsByIdAndDeletedAtIsNull(any());
+        }
+
+        @Test
+        @DisplayName("should return vote.not_found when the Poll is Deleted after its lookup, even on a repeat bookmark")
+        void shouldThrowVoteNotFoundWhenPollDeletedBeforeBookmarkInsert() {
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(bookmarkRepository.insertIfAbsent(any(UUID.class), eq(userId), eq(voteId))).thenReturn(0);
+            // The existing bookmark of a Deleted Poll is no repeat on a live Poll
+            when(bookmarkRepository.existsByUserIdAndVoteIdAndVoteDeletedAtIsNull(userId, voteId)).thenReturn(false);
+            when(voteRepository.existsByIdAndDeletedAtIsNull(voteId)).thenReturn(false);
+
+            assertThatThrownBy(() -> voteService.bookmark(voteId.toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
+            verify(userRepository, never()).existsById(any());
+        }
+
+        @Test
+        @DisplayName("should return user.not_found when the Poll is live but the account is gone")
+        void shouldThrowUserNotFoundWhenUserDeletedBeforeBookmarkInsert() {
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(bookmarkRepository.insertIfAbsent(any(UUID.class), eq(userId), eq(voteId))).thenReturn(0);
+            when(voteRepository.existsByIdAndDeletedAtIsNull(voteId)).thenReturn(true);
+
+            assertThatThrownBy(() -> voteService.bookmark(voteId.toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.USER_NOT_FOUND));
+        }
+
+        @Test
+        @DisplayName("should delete the caller's bookmark without reading the Poll")
+        void shouldDeleteBookmarkWhenUnbookmarking() {
+            voteService.unbookmark(voteId.toString(), userId.toString());
+
+            verify(bookmarkRepository).deleteByUserIdAndVoteId(userId, voteId);
+            verifyNoInteractions(voteRepository);
+        }
+
+        @Test
+        @DisplayName("should throw 404 VOTE_NOT_FOUND and write nothing when bookmarking an Invite-only Poll the caller is not invited to")
+        void shouldThrowWhenBookmarkingHiddenPoll() {
+            vote.setAudience(Audience.INVITE_ONLY);
+            vote.setCreator(User.builder().id(UUID.randomUUID()).build());
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            String id = voteId.toString();
+            String caller = userId.toString();
+
+            assertThatThrownBy(() -> voteService.bookmark(id, caller))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
+            verifyNoInteractions(bookmarkRepository);
+        }
+
+        @Test
+        @DisplayName("should flag listed Polls bookmarked")
+        void shouldFlagBookmarkedWhenListingBookmarks() {
+            com.vomatt.entity.VoteBookmark row = new com.vomatt.entity.VoteBookmark(user, vote);
+            when(bookmarkRepository.findPage(eq(userId), isNull(), isNull(), any())).thenReturn(List.of(row));
+
+            var page = voteService.listBookmarkedVotes(userId.toString(), null, null);
+
+            assertThat(page.items()).singleElement().satisfies(r -> assertThat(r.getBookmarked()).isTrue());
+            // Every listed Poll is bookmarked, so no lookup
+            verify(bookmarkRepository, never()).findVoteIds(any(), any());
         }
     }
 
@@ -1856,6 +1950,56 @@ class VoteServiceTest {
 
             verify(tagRepository, never()).findAllById(any());
             verify(tagRepository, never()).incrementUsageCount(argThat(ids -> !ids.isEmpty()));
+        }
+    }
+
+    @Nested
+    @DisplayName("reportVote")
+    class ReportVoteTests {
+
+        private final UUID reporterId = UUID.randomUUID();
+        private final com.vomatt.common.dto.ReportRequest request =
+                new com.vomatt.common.dto.ReportRequest(com.vomatt.entity.ReportReason.SPAM, "  spam  ");
+
+        @Test
+        @DisplayName("should reject reporting one's own Poll before writing anything")
+        void shouldThrowVoteReportSelfWhenOwnerReports() {
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+
+            assertThatThrownBy(() -> voteService.reportVote(voteId.toString(), userId.toString(), request))
+                    .isInstanceOfSatisfying(ApiException.class,
+                            ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_REPORT_SELF));
+            verifyNoInteractions(voteReportRepository);
+        }
+
+        @Test
+        @DisplayName("should store a stripped note and succeed again without a second row when already reported")
+        void shouldSucceedWhenAlreadyReported() {
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteReportRepository.insertIfAbsent(any(), eq(voteId), eq(reporterId), eq("SPAM"), eq("spam")))
+                    .thenReturn(0);
+            when(voteReportRepository.existsByVoteIdAndReporterIdAndVoteDeletedAtIsNull(voteId, reporterId)).thenReturn(true);
+
+            voteService.reportVote(voteId.toString(), reporterId.toString(), request);
+
+            verify(userRepository, never()).existsById(any());
+            verify(voteRepository, never()).existsByIdAndDeletedAtIsNull(any());
+        }
+
+        @Test
+        @DisplayName("should return vote.not_found when the Poll is Deleted after its lookup, even on a repeat report")
+        void shouldThrowVoteNotFoundWhenPollDeletedBeforeReportInsert() {
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteReportRepository.insertIfAbsent(any(), eq(voteId), eq(reporterId), any(), any())).thenReturn(0);
+            // The existing report of a Deleted Poll is no repeat on a live Poll
+            when(voteReportRepository.existsByVoteIdAndReporterIdAndVoteDeletedAtIsNull(voteId, reporterId))
+                    .thenReturn(false);
+            when(voteRepository.existsByIdAndDeletedAtIsNull(voteId)).thenReturn(false);
+
+            assertThatThrownBy(() -> voteService.reportVote(voteId.toString(), reporterId.toString(), request))
+                    .isInstanceOfSatisfying(ApiException.class,
+                            ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_NOT_FOUND));
+            verify(userRepository, never()).existsById(any());
         }
     }
 }

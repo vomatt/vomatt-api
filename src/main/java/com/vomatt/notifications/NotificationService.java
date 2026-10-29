@@ -5,6 +5,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -17,6 +18,7 @@ import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.Cursor;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.util.UUIDv7Generator;
+import com.vomatt.entity.NotificationKind;
 import com.vomatt.entity.UserPreference;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
@@ -69,9 +71,8 @@ public class NotificationService {
     public CursorResponse<NotificationResponse> list(String userId, String cursor, Integer limit) {
         UUID userUuid = UUID.fromString(userId);
         int size = CursorResponse.limit(limit);
-        List<NotificationRow> rows = notificationRepository.findPage(userUuid,
-                NotificationPreference.enabledKinds(preferences(userUuid)), Cursor.decode(cursor, Cursor.Scope.NOTIFICATIONS),
-                OffsetDateTime.now(), size + 1);
+        List<NotificationRow> rows = notificationRepository.findPage(userUuid, enabledKinds(userUuid),
+                Cursor.decode(cursor, Cursor.Scope.NOTIFICATIONS), OffsetDateTime.now(), size + 1);
         return CursorResponse.of(rows, size, Cursor.Scope.NOTIFICATIONS, row -> Cursor.of(row.createdAt(), row.sourceId()),
                 page -> toResponses(userUuid, page));
     }
@@ -79,8 +80,7 @@ public class NotificationService {
     @Transactional(readOnly = true)
     public UnreadCountResponse countUnread(String userId) {
         UUID userUuid = UUID.fromString(userId);
-        return new UnreadCountResponse(notificationRepository.countUnread(userUuid,
-                NotificationPreference.enabledKinds(preferences(userUuid)), OffsetDateTime.now()));
+        return new UnreadCountResponse(notificationRepository.countUnread(userUuid, enabledKinds(userUuid), OffsetDateTime.now()));
     }
 
     /**
@@ -91,7 +91,9 @@ public class NotificationService {
         UUID userUuid = UUID.fromString(userId);
         OffsetDateTime now = OffsetDateTime.now();
         NotificationId notification = isUuid(id) ? currentForPoll(userId, id, now) : NotificationId.parse(id);
-        if (!notificationRepository.exists(userUuid, notification.kind(), notification.sourceId(), now)) {
+        // Preferences only matter to MENTION, which COMMENT can take over
+        Set<NotificationKind> enabled = notification.kind() == NotificationKind.MENTION ? enabledKinds(userUuid) : Set.of();
+        if (!notificationRepository.exists(userUuid, notification.kind(), notification.sourceId(), enabled, now)) {
             throw ApiException.notFound(MessageKey.NOTIFICATION_NOT_FOUND);
         }
         notificationRepository.markRead(userUuid, notification.kind(), notification.sourceId(), now);
@@ -120,6 +122,7 @@ public class NotificationService {
         changes.put(NotificationPreference.INVITATIONS, request.invitations());
         changes.put(NotificationPreference.COMMENTS, request.comments());
         changes.put(NotificationPreference.CLOSING_SOON, request.closingSoon());
+        changes.put(NotificationPreference.MENTIONS, request.mentions());
         changes.forEach((preference, on) -> {
             if (on != null) {
                 preferenceRepository.upsert(UUIDv7Generator.generateId(), userUuid, preference.preferenceKey(), on.toString());
@@ -127,6 +130,10 @@ public class NotificationService {
         });
         log.info("User {} updated notification preferences", userId);
         return toResponse(preferences(userUuid));
+    }
+
+    private Set<NotificationKind> enabledKinds(UUID userId) {
+        return NotificationPreference.enabledKinds(preferences(userId));
     }
 
     /** Every switch, the stored value or its default. */
@@ -145,7 +152,7 @@ public class NotificationService {
     private static NotificationPreferencesResponse toResponse(Map<NotificationPreference, Boolean> settings) {
         return new NotificationPreferencesResponse(settings.get(NotificationPreference.RESULTS_IN),
                 settings.get(NotificationPreference.INVITATIONS), settings.get(NotificationPreference.COMMENTS),
-                settings.get(NotificationPreference.CLOSING_SOON));
+                settings.get(NotificationPreference.CLOSING_SOON), settings.get(NotificationPreference.MENTIONS));
     }
 
     private NotificationId currentForPoll(String userId, String voteId, OffsetDateTime now) {

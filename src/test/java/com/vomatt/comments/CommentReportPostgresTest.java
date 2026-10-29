@@ -16,11 +16,11 @@ import org.springframework.context.annotation.Import;
 import com.vomatt.admin.AdminCommentReportService;
 import com.vomatt.admin.AdminMapper;
 import com.vomatt.admin.dto.AdminCommentReportResponse;
-import com.vomatt.comments.dto.ReportCommentRequest;
+import com.vomatt.common.dto.ReportRequest;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.util.UUIDv7Generator;
-import com.vomatt.entity.CommentReportReason;
+import com.vomatt.entity.ReportReason;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
@@ -53,8 +53,8 @@ class CommentReportPostgresTest extends PostgresRepositoryTest {
         em.flush();
     }
 
-    private void report(User user, VoteComment target, CommentReportReason reason, String note) {
-        commentService.reportComment(target.getId(), user.getId().toString(), new ReportCommentRequest(reason, note));
+    private void report(User user, VoteComment target, ReportReason reason, String note) {
+        commentService.reportComment(target.getId(), user.getId().toString(), new ReportRequest(reason, note));
         em.flush();
         em.clear();
     }
@@ -67,7 +67,7 @@ class CommentReportPostgresTest extends PostgresRepositoryTest {
     @Test
     @DisplayName("should list a report with the Comment, its author, the reporter, the reason and the note")
     void shouldListReportWhenCommentReported() {
-        report(reporter, comment, CommentReportReason.HARASSMENT, "  Insults everyone.  ");
+        report(reporter, comment, ReportReason.HARASSMENT, "  Insults everyone.  ");
 
         assertThat(reports()).singleElement().satisfies(r -> {
             assertThat(r.commentId()).isEqualTo(comment.getId().toString());
@@ -76,7 +76,7 @@ class CommentReportPostgresTest extends PostgresRepositoryTest {
             assertThat(r.commentDeleted()).isFalse();
             assertThat(r.authorUsername()).isEqualTo(author.getUsername());
             assertThat(r.reporterUsername()).isEqualTo(reporter.getUsername());
-            assertThat(r.reason()).isEqualTo(CommentReportReason.HARASSMENT);
+            assertThat(r.reason()).isEqualTo(ReportReason.HARASSMENT);
             assertThat(r.note()).isEqualTo("Insults everyone.");
             assertThat(r.createdAt()).isNotNull();
         });
@@ -85,11 +85,11 @@ class CommentReportPostgresTest extends PostgresRepositoryTest {
     @Test
     @DisplayName("should keep the first report when the same user reports the same Comment again")
     void shouldKeepFirstReportWhenReportedTwice() {
-        report(reporter, comment, CommentReportReason.SPAM, null);
-        report(reporter, comment, CommentReportReason.HATE, "changed my mind");
+        report(reporter, comment, ReportReason.SPAM, null);
+        report(reporter, comment, ReportReason.HATE, "changed my mind");
 
         assertThat(reports()).singleElement().satisfies(r -> {
-            assertThat(r.reason()).isEqualTo(CommentReportReason.SPAM);
+            assertThat(r.reason()).isEqualTo(ReportReason.SPAM);
             assertThat(r.note()).isNull();
         });
     }
@@ -98,8 +98,8 @@ class CommentReportPostgresTest extends PostgresRepositoryTest {
     @DisplayName("should list reports newest first and store a blank note as none")
     void shouldListNewestFirstWhenSeveralUsersReport() {
         User second = persistUser("cr-second-" + UUID.randomUUID());
-        report(reporter, comment, CommentReportReason.SPAM, null);
-        report(second, comment, CommentReportReason.OTHER, "   ");
+        report(reporter, comment, ReportReason.SPAM, null);
+        report(second, comment, ReportReason.OTHER, "   ");
 
         assertThat(reports()).extracting(AdminCommentReportResponse::reporterUsername)
                 .containsExactly(second.getUsername(), reporter.getUsername());
@@ -109,7 +109,7 @@ class CommentReportPostgresTest extends PostgresRepositoryTest {
     @Test
     @DisplayName("should reject reporting one's own Comment")
     void shouldRejectReportWhenOwnComment() {
-        assertThatThrownBy(() -> report(author, comment, CommentReportReason.SPAM, null))
+        assertThatThrownBy(() -> report(author, comment, ReportReason.SPAM, null))
                 .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMENT_REPORT_SELF));
         assertThat(reports()).isEmpty();
     }
@@ -122,13 +122,13 @@ class CommentReportPostgresTest extends PostgresRepositoryTest {
         em.persist(deleted);
         em.flush();
 
-        assertThatThrownBy(() -> report(reporter, deleted, CommentReportReason.SPAM, null))
+        assertThatThrownBy(() -> report(reporter, deleted, ReportReason.SPAM, null))
                 .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMENT_NOT_FOUND));
 
         poll.setDeletedAt(OffsetDateTime.now());
         em.flush();
 
-        assertThatThrownBy(() -> report(reporter, comment, CommentReportReason.SPAM, null))
+        assertThatThrownBy(() -> report(reporter, comment, ReportReason.SPAM, null))
                 .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_NOT_FOUND));
     }
 
@@ -138,14 +138,14 @@ class CommentReportPostgresTest extends PostgresRepositoryTest {
         String gone = UUID.randomUUID().toString();
 
         assertThatThrownBy(() -> commentService.reportComment(comment.getId(), gone,
-                new ReportCommentRequest(CommentReportReason.SPAM, null)))
+                new ReportRequest(ReportReason.SPAM, null)))
                 .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND));
     }
 
     // The insert alone, as the service runs it once the Comment lookup has passed
     private int insertReport() {
         return reportRepository.insertIfAbsent(UUIDv7Generator.generateId(), comment.getId(), reporter.getId(),
-                CommentReportReason.SPAM.name(), null);
+                ReportReason.SPAM.name(), null);
     }
 
     @Test
@@ -169,7 +169,7 @@ class CommentReportPostgresTest extends PostgresRepositoryTest {
     @Test
     @DisplayName("should drop a user's reports when the account is deleted")
     void shouldDropReportsWhenReporterDeleted() {
-        report(reporter, comment, CommentReportReason.SPAM, null);
+        report(reporter, comment, ReportReason.SPAM, null);
 
         em.createNativeQuery("DELETE FROM vomatt.users WHERE id = :id").setParameter("id", reporter.getId()).executeUpdate();
 

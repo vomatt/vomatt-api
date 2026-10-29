@@ -3,7 +3,10 @@ package com.vomatt.comments;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -87,5 +90,45 @@ class CommentEditedPostgresTest extends PostgresRepositoryTest {
 
         assertThat(edited.isLikedByCurrentUser()).isTrue();
         assertThat(edited.getLikeCount()).isEqualTo(1);
+    }
+
+    private UUID[] storedMentions(UUID id) {
+        em.flush();
+        em.clear();
+        return commentRepository.findById(id).orElseThrow().getMentionedUserIds();
+    }
+
+    @Test
+    @DisplayName("should only drop mentions when editing: no new handle, nor a renamed user's old handle, is mentioned")
+    void shouldOnlyRemoveMentionsWhenEditing() {
+        String suffix = Long.toString(System.nanoTime());
+        User alice = persistUser("alice_" + suffix);
+        User bob = persistUser("bob_" + suffix);
+        User carol = persistUser("carol_" + suffix);
+        UUID id = post("@" + alice.getUsername() + " @" + bob.getUsername());
+        User renamed = em.find(User.class, bob.getId());
+        renamed.setUsername("bob2_" + suffix);
+        em.flush();
+        User taker = User.builder().username("bob_" + suffix).email("taker_" + suffix + "@test.local").build();
+        em.persist(taker);
+
+        UpdateCommentRequest request = new UpdateCommentRequest();
+        request.setText("@" + alice.getUsername() + " @" + taker.getUsername() + " @" + carol.getUsername());
+        commentService.updateComment(id, user.getId().toString(), request);
+
+        assertThat(storedMentions(id)).containsExactly(alice.getId());
+    }
+
+    @Test
+    @DisplayName("should store at most comment_max_mentions (default 10) users, the first handles in the text")
+    void shouldCapMentionsWhenTextMentionsTooMany() {
+        String suffix = Long.toString(System.nanoTime());
+        List<User> users = IntStream.range(0, VoteCommentService.MAX_MENTIONS + 1)
+            .mapToObj(i -> persistUser("m" + i + "_" + suffix)).toList();
+
+        UUID id = post(users.stream().map(u -> "@" + u.getUsername()).collect(Collectors.joining(" ")));
+
+        assertThat(storedMentions(id)).containsExactlyInAnyOrderElementsOf(
+            users.subList(0, VoteCommentService.MAX_MENTIONS).stream().map(User::getId).toList());
     }
 }

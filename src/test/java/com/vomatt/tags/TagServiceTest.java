@@ -4,6 +4,7 @@ import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.entity.Tag;
 import com.vomatt.repository.TagRepository;
+import com.vomatt.repository.UserRepository;
 import com.vomatt.tags.dto.CreateTagRequest;
 import com.vomatt.common.response.Cursor;
 import com.vomatt.common.response.CursorResponse;
@@ -38,6 +39,9 @@ class TagServiceTest {
 
     @Mock
     TagRepository tagRepository;
+
+    @Mock
+    UserRepository userRepository;
 
     @InjectMocks
     TagService tagService;
@@ -319,6 +323,83 @@ class TagServiceTest {
             Cursor next = Cursor.decode(result.nextCursor(), Cursor.Scope.POPULAR_TAGS);
             assertThat(next.longKey()).isEqualTo(50);
             assertThat(next.id()).isEqualTo(tag2.getId());
+        }
+    }
+
+    // ─── followTag / unfollowTag ──────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("followTag / unfollowTag")
+    class FollowTagTests {
+
+        final UUID userId = UUID.randomUUID();
+
+        @Test
+        @DisplayName("should follow an existing tag")
+        void shouldFollowWhenTagExists() {
+            UUID tagId = UUID.randomUUID();
+            when(tagRepository.follow(userId, tagId)).thenReturn(1);
+
+            tagService.followTag(userId.toString(), tagId.toString());
+
+            verify(tagRepository, never()).existsById(any());
+        }
+
+        @Test
+        @DisplayName("should succeed when the tag is already followed")
+        void shouldSucceedWhenTagAlreadyFollowed() {
+            UUID tagId = UUID.randomUUID();
+            when(tagRepository.follow(userId, tagId)).thenReturn(0);
+            when(tagRepository.isFollowing(userId, tagId)).thenReturn(true);
+
+            tagService.followTag(userId.toString(), tagId.toString());
+
+            verify(userRepository, never()).existsById(any());
+            verify(tagRepository, never()).existsById(any());
+        }
+
+        @Test
+        @DisplayName("should throw 404 user.not_found when the signed-in user no longer exists")
+        void shouldThrowUserNotFoundWhenFollowerIsGone() {
+            UUID tagId = UUID.randomUUID();
+            when(tagRepository.follow(userId, tagId)).thenReturn(0);
+            when(tagRepository.existsById(tagId)).thenReturn(true);
+            when(userRepository.existsById(userId)).thenReturn(false);
+
+            assertThatThrownBy(() -> tagService.followTag(userId.toString(), tagId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.USER_NOT_FOUND));
+        }
+
+        @Test
+        @DisplayName("should throw 404 when following an unknown tag")
+        void shouldThrowNotFoundWhenFollowingUnknownTag() {
+            UUID tagId = UUID.randomUUID();
+            when(tagRepository.follow(userId, tagId)).thenReturn(0);
+            when(tagRepository.existsById(tagId)).thenReturn(false);
+
+            assertThatThrownBy(() -> tagService.followTag(userId.toString(), tagId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.TAG_NOT_FOUND));
+            verify(userRepository, never()).existsById(any());
+        }
+
+        @Test
+        @DisplayName("should unfollow without looking the tag up")
+        void shouldUnfollowWhenTagUnknown() {
+            UUID tagId = UUID.randomUUID();
+
+            tagService.unfollowTag(userId.toString(), tagId.toString());
+
+            verify(tagRepository).unfollow(userId, tagId);
+            verify(tagRepository, never()).findById(any());
+        }
+
+        @Test
+        @DisplayName("should list the followed tags")
+        void shouldListFollowedTagsWhenUserFollowsTags() {
+            Tag tag = createTagWithId("Tech", "tech", null, 1);
+            when(tagRepository.findFollowedBy(userId)).thenReturn(List.of(tag));
+
+            assertThat(tagService.getFollowedTags(userId.toString())).extracting(TagDto::getSlug).containsExactly("tech");
         }
     }
 }

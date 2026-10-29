@@ -9,11 +9,15 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
+
+import java.util.UUID;
 
 @Entity
 @Table(name = "vote_comments")
@@ -45,6 +49,11 @@ public class VoteComment extends AuditableEntity {
 
     @Column(name = "is_deleted")
     private boolean isDeleted = false;
+
+    /** Users the text @mentions, resolved when it is written or edited; read by the MENTION notification. */
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(name = "mentioned_user_ids", nullable = false, columnDefinition = "uuid[]")
+    private UUID[] mentionedUserIds = new UUID[0];
 
     public VoteComment(Vote vote, User user, String content) {
         this.vote = vote;

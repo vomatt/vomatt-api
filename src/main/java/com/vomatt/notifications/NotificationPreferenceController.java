@@ -34,12 +34,12 @@ public class NotificationPreferenceController {
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"resultsIn":true,"invitations":true,"comments":true,"closingSoon":false},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"resultsIn":true,"invitations":true,"comments":true,"closingSoon":false,"mentions":true},"message":null,"errorCode":null,"error":null}""")))
     @Operation(summary = "Get notification preferences", description = """
             **Auth**: required
             **Precondition**: none
             **Behavior**: which notification kinds the feed and the unread count include. Defaults: `resultsIn`, `invitations` and \
-            `comments` on, `closingSoon` off. FOLLOWED has no switch. There is no push or email channel; these switches only \
+            `comments` and `mentions` on, `closingSoon` off. FOLLOWED has no switch. There is no push or email channel; these switches only \
             filter the in-app feed.
             **Side effects**: none
             **Errors**: none specific to this endpoint""")
@@ -51,7 +51,7 @@ public class NotificationPreferenceController {
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"resultsIn":true,"invitations":true,"comments":false,"closingSoon":true},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"resultsIn":true,"invitations":true,"comments":false,"closingSoon":true,"mentions":true},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
@@ -67,7 +67,7 @@ public class NotificationPreferenceController {
             - 404 `user.not_found`: the account no longer exists""")
     public ResponseEntity<ApiResponse<NotificationPreferencesResponse>> update(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
-                    {"comments":false,"closingSoon":true}"""))) @RequestBody UpdateNotificationPreferencesRequest request,
+                    {"comments":false,"closingSoon":true,"mentions":true}"""))) @RequestBody UpdateNotificationPreferencesRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(notificationService.updatePreferences(principal.userId(), request)));
     }

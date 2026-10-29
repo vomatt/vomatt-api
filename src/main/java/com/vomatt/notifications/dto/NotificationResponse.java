@@ -12,7 +12,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 @Schema(description = "One notification of the feed. Which of `actor`, `poll` and `comment` are set depends on `kind`: "
         + "RESULT has `poll`; CANCELLED, INVITATION and CLOSING_SOON have `actor` (the Poll's owner) and `poll`; "
-        + "FOLLOWED has `actor` (the new follower); COMMENT has `actor` (the author), `poll` and `comment`")
+        + "FOLLOWED has `actor` (the new follower); COMMENT and MENTION have `actor` (the author), `poll` and `comment`")
 public record NotificationResponse(
         @Schema(description = "Notification id, opaque; pass it to `POST /api/notifications/{id}/read`",
                 example = "comment_0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b")
@@ -22,10 +22,11 @@ public record NotificationResponse(
                 + "INVITATION: you are invited to a Scheduled or Open Invite-only Poll (replaced by RESULT once it Ends). "
                 + "FOLLOWED: someone followed you. "
                 + "COMMENT: someone commented on your Poll or replied to your Comment. "
+                + "MENTION: someone @mentioned you in a Comment or Reply that is not already your COMMENT. "
                 + "CLOSING_SOON: a Poll you are invited to, or a Public Poll of someone you follow, ends within 24 hours "
                 + "and you hold no Ballot in it", example = "COMMENT")
         NotificationKind kind,
-        @Schema(description = "When it happened: the Poll's end (RESULT, CANCELLED), the Invitation, the follow, the Comment, "
+        @Schema(description = "When it happened: the Poll's end (RESULT, CANCELLED), the Invitation, the follow, the Comment (COMMENT, MENTION), "
                 + "or 24 hours before the Poll's end (CLOSING_SOON; the Poll's start if later). The feed is ordered by it, newest first",
                 example = "2026-10-26T09:30:00+08:00")
         OffsetDateTime createdAt,
@@ -36,7 +37,7 @@ public record NotificationResponse(
         FollowUserDto actor,
         @Schema(description = "The Poll it is about; null for FOLLOWED", nullable = true)
         PollSummary poll,
-        @Schema(description = "The Comment or Reply; set only for COMMENT", nullable = true)
+        @Schema(description = "The Comment or Reply; set only for COMMENT and MENTION", nullable = true)
         CommentSummary comment
 ) {
 

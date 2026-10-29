@@ -24,11 +24,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.vomatt.comments.dto.CommentDto;
-import com.vomatt.comments.dto.ReportCommentRequest;
+import com.vomatt.common.dto.ReportRequest;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.CursorResponse;
-import com.vomatt.entity.CommentReportReason;
+import com.vomatt.entity.ReportReason;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
@@ -37,6 +37,7 @@ import com.vomatt.repository.CommentReportRepository;
 import com.vomatt.repository.IdCount;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.VoteCommentRepository;
+import com.vomatt.lookups.LookupService;
 import com.vomatt.votes.VoteService;
 
 @ExtendWith(MockitoExtension.class)
@@ -48,6 +49,7 @@ class VoteCommentServiceTest {
     @Mock UserRepository userRepository;
     @Mock CommentLikeRepository commentLikeRepository;
     @Mock CommentReportRepository commentReportRepository;
+    @Mock LookupService lookupService;
     @Spy CommentMapper commentMapper = new CommentMapper();
     @InjectMocks VoteCommentService commentService;
 
@@ -157,7 +159,6 @@ class VoteCommentServiceTest {
         VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "hi");
         when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(Optional.of(target), Optional.empty());
         when(commentLikeRepository.insertIfAbsent(any(), eq(target.getId()), eq(viewerId))).thenReturn(0);
-        when(userRepository.existsById(viewerId)).thenReturn(true);
 
         assertThatThrownBy(() -> commentService.likeComment(target.getId(), viewerId.toString()))
                 .isInstanceOfSatisfying(ApiException.class,
@@ -172,12 +173,43 @@ class VoteCommentServiceTest {
         VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "hi");
         when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(Optional.of(target), Optional.empty());
         when(commentReportRepository.insertIfAbsent(any(), eq(target.getId()), eq(viewerId), any(), any())).thenReturn(0);
-        when(userRepository.existsById(viewerId)).thenReturn(true);
 
         assertThatThrownBy(() -> commentService.reportComment(target.getId(), viewerId.toString(),
-                new ReportCommentRequest(CommentReportReason.SPAM, null)))
+                new ReportRequest(ReportReason.SPAM, null)))
                 .isInstanceOfSatisfying(ApiException.class,
                         ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMENT_NOT_FOUND));
+        org.mockito.Mockito.verify(userRepository, org.mockito.Mockito.never()).existsById(any());
+    }
+
+    @Test
+    @DisplayName("should return comment.not_found on a repeat like when the Comment goes after its lookup")
+    void shouldThrowCommentNotFoundWhenRepeatLikeOnDeletedComment() {
+        Vote vote = new Vote();
+        ReflectionTestUtils.setField(vote, "id", voteId);
+        VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "hi");
+        when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(Optional.of(target), Optional.empty());
+        when(commentLikeRepository.insertIfAbsent(any(), eq(target.getId()), eq(viewerId))).thenReturn(0);
+        // The existing like of a deleted Comment is no repeat on a live Comment
+        when(commentLikeRepository.existsByCommentIdAndUserIdAndCommentIsDeletedFalse(target.getId(), viewerId))
+                .thenReturn(false);
+
+        assertThatThrownBy(() -> commentService.likeComment(target.getId(), viewerId.toString()))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMENT_NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("should return user.not_found when the Comment is live but the account is gone")
+    void shouldThrowUserNotFoundWhenLikerDeletedBeforeLikeInsert() {
+        Vote vote = new Vote();
+        ReflectionTestUtils.setField(vote, "id", voteId);
+        VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "hi");
+        when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(Optional.of(target));
+        when(commentLikeRepository.insertIfAbsent(any(), eq(target.getId()), eq(viewerId))).thenReturn(0);
+
+        assertThatThrownBy(() -> commentService.likeComment(target.getId(), viewerId.toString()))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND));
     }
 
     @Test
@@ -188,11 +220,47 @@ class VoteCommentServiceTest {
         VoteComment target = comment(vote, User.builder().id(UUID.randomUUID()).username("author").build(), "hi");
         when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(Optional.of(target));
         when(commentLikeRepository.insertIfAbsent(any(), eq(target.getId()), eq(viewerId))).thenReturn(0);
-        when(commentLikeRepository.existsByCommentIdAndUserId(target.getId(), viewerId)).thenReturn(true);
+        when(commentLikeRepository.existsByCommentIdAndUserIdAndCommentIsDeletedFalse(target.getId(), viewerId)).thenReturn(true);
 
         commentService.likeComment(target.getId(), viewerId.toString());
 
         org.mockito.Mockito.verify(userRepository, org.mockito.Mockito.never()).existsById(any());
         org.mockito.Mockito.verify(commentRepository, org.mockito.Mockito.times(1)).findByIdAndNotDeleted(target.getId());
+    }
+
+    @Test
+    @DisplayName("should parse @username handles lowercased in text order, skipping emails, handles glued to a word of any script and over-long tokens")
+    void shouldParseMentionsWhenTextHasHandles() {
+        assertThat(VoteCommentService.mentionedUsernames(
+                "@Alice 嗨 @bob_1你好 (@carol), mail a@dave.com, foo@erin, 測試@frank, café@gina, ٣@hank, @ab, @"
+                        + "x".repeat(51) + " @alice"))
+                .containsExactly("alice", "bob_1", "carol");
+        assertThat(VoteCommentService.mentionedUsernames("no handles here")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("should store the ids of mentioned users that exist when creating a Comment")
+    void shouldStoreMentionedUserIdsWhenCreatingComment() {
+        Vote vote = new Vote();
+        ReflectionTestUtils.setField(vote, "id", voteId);
+        User author = User.builder().id(viewerId).username("author").build();
+        User alice = User.builder().id(UUID.randomUUID()).username("alice").build();
+        when(voteService.findAccessibleVote(voteId, viewerId.toString())).thenReturn(vote);
+        when(userRepository.findById(viewerId)).thenReturn(java.util.Optional.of(author));
+        when(lookupService.configInt(VoteCommentService.MAX_MENTIONS_KEY, VoteCommentService.MAX_MENTIONS)).thenReturn(10);
+        when(userRepository.findIdsByUsernameIn(List.of("alice", "ghost"))).thenReturn(List.of(alice.getId()));
+        when(commentRepository.saveAndFlush(any())).thenAnswer(invocation -> {
+            VoteComment saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            return saved;
+        });
+        com.vomatt.comments.dto.CreateCommentRequest request = new com.vomatt.comments.dto.CreateCommentRequest();
+        request.setText("@alice and @ghost, look");
+
+        commentService.createComment(voteId.toString(), viewerId.toString(), request);
+
+        org.mockito.ArgumentCaptor<VoteComment> saved = org.mockito.ArgumentCaptor.forClass(VoteComment.class);
+        org.mockito.Mockito.verify(commentRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getMentionedUserIds()).containsExactly(alice.getId());
     }
 }

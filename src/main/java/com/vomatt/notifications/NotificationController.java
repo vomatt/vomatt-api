@@ -29,7 +29,7 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/notifications")
 @RequiredArgsConstructor
-@Tag(name = "Notification", description = "The notification feed: Poll results, Invitations, follows, Comments and closing-soon "
+@Tag(name = "Notification", description = "The notification feed: Poll results, Invitations, follows, Comments, mentions and closing-soon "
         + "reminders, derived when read (no push, no email). Kinds can be switched off with `/api/users/me/notification-preferences`")
 public class NotificationController {
 
@@ -67,8 +67,8 @@ public class NotificationController {
             **Behavior**: the caller's notifications, newest `createdAt` first, cursor-paged. They are not stored but derived \
             from Polls, Invitations, follows and Comments when read, so an item disappears when what it is about goes away \
             (a Comment deleted, a follow undone, a Poll Deleted). Kinds:
-            - RESULT: a Poll the caller owns, holds a Ballot in or is an Invitee of has Ended (end time passed, Closed, or every Invitee voted). \
-            A Participant who made a Retraction and is not an Invitee gets none
+            - RESULT: a Poll the caller owns, holds a Ballot in, is an Invitee of or bookmarked has Ended (end time passed, Closed, or every Invitee voted); \
+            one item per Poll whatever the reasons. A Participant who made a Retraction and is neither an Invitee nor bookmarked it gets none
             - CANCELLED: an Invite-only Poll the caller is an Invitee of was Cancelled before it opened (only Polls Cancelled before 2026-10-14; \
             a Scheduled Poll is now Deleted, which notifies nobody)
             - INVITATION: the caller is an Invitee of a Scheduled or Open Invite-only Poll; listed until the Poll Ends, when its RESULT takes over. \
@@ -76,6 +76,9 @@ public class NotificationController {
             - FOLLOWED: someone followed the caller (one item per follower; group them in the UI)
             - COMMENT: someone else commented on or replied under the caller's Poll, or replied to the caller's Comment, on a Poll the caller can see; \
             not a Reply in a thread started by a user the caller blocked (the Comment lists hide that thread)
+            - MENTION: someone else @mentioned the caller (`@<username>`) in a Comment or Reply on a Poll the caller can see, \
+            unless that Comment is the caller's COMMENT (one Comment, one notification) and COMMENT is switched on; \
+            same thread-starter block rule as COMMENT
             - CLOSING_SOON: an Open Poll ends within 24 hours and the caller holds no Ballot in it, if the caller is its Invitee, \
             or it is a Public Poll of a user the caller follows. Gone once the caller casts a Ballot or the Poll Ends. Off by default
             Kinds switched off in the caller's preferences are left out (FOLLOWED cannot be switched off). Nothing from a suspended user, \
@@ -131,9 +134,9 @@ public class NotificationController {
             notification: its INVITATION while the Poll has not Ended, its RESULT after. Use the notification `id`.
             **Side effects**: the unread count drops by 1 (first call only); `read` becomes true in the feed. For a Poll's RESULT \
             or INVITATION, `unread` becomes false on that Poll in `GET /api/votes/my`. A Poll's later RESULT is a separate \
-            notification, unread until read itself.
+            notification, unread until read itself. A Comment read as COMMENT is also read as MENTION, and the other way round, when switching `comments` moves it between the two.
             **Errors**:
-            - 404 `notification.not_found`: no such notification for the caller now (unknown or malformed id, a Comment deleted, a follow undone...)
+            - 404 `notification.not_found`: no such notification for the caller now (unknown or malformed id, a Comment deleted, a follow undone, a `mention_` id the feed lists as `comment_`...)
             - 404 `vote.not_found`: deprecated Poll id only; the Poll does not exist or is Deleted""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> markRead(
             @Parameter(description = "Notification id from the feed (deprecated: a Poll id)", required = true,

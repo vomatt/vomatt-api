@@ -66,6 +66,8 @@ class UserServiceTest {
     @Mock com.vomatt.repository.FeedbackRepository feedbackRepository;
     @Mock com.vomatt.common.redis.RedisService redisService;
     @Mock com.vomatt.votes.VoteViewRecorder voteViewRecorder;
+    @Mock com.vomatt.repository.VoteBookmarkRepository bookmarkRepository;
+    @Mock com.vomatt.repository.TagRepository tagRepository;
     @Spy com.vomatt.repository.LockTimeout lockTimeout = new com.vomatt.repository.LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @InjectMocks UserService userService;
 
@@ -140,6 +142,7 @@ class UserServiceTest {
         when(feedback.getId()).thenReturn(UUID.randomUUID());
         when(feedback.getContent()).thenReturn("Please add dark mode.");
         when(feedbackRepository.findByUserIdOrderByCreatedAt(id)).thenReturn(List.of(feedback));
+        when(bookmarkRepository.findByUserIdOrderByCreatedAt(id)).thenReturn(List.of(new com.vomatt.entity.VoteBookmark(user, poll)));
 
         com.vomatt.users.dto.UserDataExportResponse export = userService.exportMyData(id.toString());
 
@@ -152,6 +155,7 @@ class UserServiceTest {
             assertThat(b.anonymous()).isTrue();
         });
         assertThat(export.feedback()).extracting(f -> f.content()).containsExactly("Please add dark mode.");
+        assertThat(export.bookmarks()).extracting(b -> b.voteId()).containsExactly(poll.getId().toString());
         assertThatThrownBy(() -> userService.exportMyData(id.toString()))
                 .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getStatus()).isEqualTo(org.springframework.http.HttpStatus.TOO_MANY_REQUESTS));
     }
@@ -166,6 +170,7 @@ class UserServiceTest {
         userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), List.of("user")));
 
         InOrder order = inOrder(voteOptionRepository, voteRepository, auditLogRepository, userRepository);
+        order.verify(userRepository).lockForDelete(id);
         order.verify(voteRepository).decrementTurnoutForUserBallots(id);
         order.verify(voteOptionRepository).decrementForUserBallots(id);
         order.verify(auditLogRepository).anonymizeByUserId(id.toString());

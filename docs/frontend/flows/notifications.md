@@ -34,11 +34,12 @@ Notifications are **not stored**; they are derived from Polls, Invitations, foll
 
 | `kind` | When | `actor` | `poll` | `comment` | Switch |
 |--------|------|---------|--------|-----------|--------|
-| `RESULT` | A Poll you own, hold a Ballot in or are an Invitee of has Ended (Deadline passed, Closed, or every Invitee voted). Not after a Retraction unless you are an Invitee | null | yes | null | `resultsIn` |
+| `RESULT` | A Poll you own, hold a Ballot in, are an Invitee of or bookmarked before it Ended has Ended (Deadline passed, Closed, or every Invitee voted); bookmarking an already Ended Poll gives none. Not after a Retraction unless you are an Invitee or bookmarked it. One item per Poll whatever the reasons | null | yes | null | `resultsIn` |
 | `CANCELLED` | An Invite-only Poll you are invited to was Cancelled before it opened (only Polls Cancelled before 2026-10-14) | owner | yes | null | `resultsIn` |
 | `INVITATION` | You are an Invitee of a Scheduled or Open Invite-only Poll. Replaced by `RESULT` once the Poll Ends. Removed and invited again: a new, unread one | owner | yes | null | `invitations` |
 | `FOLLOWED` | Someone followed you. One item per follower: group them ("@bkim and 3 others followed you") | follower | null | null | none |
 | `COMMENT` | Someone else commented on or replied under your Poll, or replied to your Comment | author | yes | `{ id, parentId, excerpt }` | `comments` |
+| `MENTION` | Someone else wrote `@<your username>` in a Comment or Reply on a Poll you can see. Not listed when the same Comment gives you a `COMMENT` (on your Poll, or a Reply to your live Comment), unless `comments` is off; nor for a Reply in a thread started by a user you blocked | author | yes | `{ id, parentId, excerpt }` | `mentions` |
 | `CLOSING_SOON` | An Open Poll ends within 24 hours, you hold no Ballot, and you are its Invitee or it is a Public Poll of someone you follow. Gone once you vote or it Ends | owner | yes | null | `closingSoon` (off by default) |
 
 - `createdAt` is when it happened: the Poll's end, the Invitation, the follow, the Comment, or 24 hours before the Poll's end for `CLOSING_SOON` (its start if later). Group by day with it.
@@ -46,6 +47,7 @@ Notifications are **not stored**; they are derived from Polls, Invitations, foll
 - `actor` carries `isFollowing` (you follow them) and `followsYou` (they follow you), so a `FOLLOWED` row can offer "Follow back" without fetching the profile.
 - `comment.parentId` is the Comment a Reply is under, null for a top-level Comment. A link to a Reply needs both ids.
 - Nothing from a suspended user, a user you blocked or a user who blocked you is listed or counted, and nothing about a Poll whose owner blocked you (`RESULT` and `COMMENT` included). A `COMMENT` for a Reply in a thread started by a user you blocked is left out too, as in the Comment lists.
+- `CLOSING_SOON` follows users only, by design: a followed tag (`PUT /api/tags/{tagId}/follow`) adds Polls to `GET /api/votes/following` but never raises `CLOSING_SOON`.
 - An item can vanish (Comment deleted, follow undone, Poll Deleted, block) or appear behind the cursor (you follow someone); de-duplicate by `id`.
 
 ## Read state

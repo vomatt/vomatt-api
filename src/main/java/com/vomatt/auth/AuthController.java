@@ -560,7 +560,7 @@ public class AuthController {
                     **Auth**: public (identified by the refresh token in the body)
                     **Precondition**: none; an unknown or already-revoked token is not an error
                     **Behavior**: revokes the given refresh token. A token that was already refreshed signs out the sign-in it belongs to: the refresh token that replaced it can no longer be refreshed. Other devices' refresh tokens stay valid
-                    **Side effects**: the refresh token can no longer be refreshed. The access token is stateless and stays valid until it expires (default 15 minutes), so the client must discard it
+                    **Side effects**: the refresh token can no longer be refreshed, and the sign-in's access tokens get 401 `auth.session_revoked` from the next request on. A logout with an already refreshed token cuts the access tokens of the refresh token that replaced it
                     **Errors**:
                     - 400 `common.validation_failed`: `refreshToken` is blank""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> logout(@Valid @RequestBody RefreshRequest req) {

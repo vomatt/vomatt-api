@@ -240,8 +240,10 @@ public class RefreshTokenService {
         // Tokens issued before session ids existed start a session named after their key, the one revokeAllForUser
         // flags for them, so a rotation racing that revocation is refused too
         String sessionId = sessionIdOf(data, oldKey);
+        // A refresh without a User-Agent keeps the device the session already showed
+        String userAgent = currentUserAgent();
         RefreshTokenData freshData = new RefreshTokenData(data.userId(), freshRoles, sessionId, data.grantsAdmin(),
-                currentUserAgent(), data.createdAt(), Instant.now());
+                userAgent != null ? userAgent : data.userAgent(), data.createdAt(), Instant.now());
 
         String newRefreshToken = UUID.randomUUID().toString();
         String newKey = keyOf(newRefreshToken);
@@ -341,14 +343,12 @@ public class RefreshTokenService {
         RefreshTokenData data = redisService.getOrThrow(NAMESPACE, key, RefreshTokenData.class);
         if (data != null) {
             String sessionId = sessionIdOf(data, key);
-            // Ended and unlisted before the token goes: a grace replay in between cannot get a pair of this session,
-            // and a failure part way leaves the token for a retried logout
-            endSessions(List.of(sessionId), false);
+            // Revoked and unlisted before the token goes: its access tokens stop at once (as when signed out from
+            // another device), a rotation racing this logout cannot hand out a successor, and a failure part way
+            // leaves the token for a retried logout
+            endSessions(List.of(sessionId), true);
             redisService.hDelete(USER_IDX_NS, data.userId(), key);
-            if (!redisService.delete(NAMESPACE, key)) {
-                // A rotation consumed it in between: stop the successor
-                endSessions(List.of(sessionId), true);
-            }
+            redisService.delete(NAMESPACE, key);
         } else if (redisService.delete(NAMESPACE, key)) {
             // Undecodable: its user, so its index field, is unknown; the next revokeAllForUser drops the field
             log.warn("Undecodable refresh token deleted on logout");
@@ -374,16 +374,25 @@ public class RefreshTokenService {
 
     /**
      * A user's live sessions, most recently active first (never-seen legacy ones last), each named by
-     * {@link #sessionIdOf}. Index fields whose token has expired or does not decode are left out.
+     * {@link #sessionIdOf}. Index fields whose token has expired or does not decode are left out, and so are revoked
+     * sessions (reuse detection leaves their live token behind, but it can no longer refresh).
      */
     public List<RefreshTokenData> listSessions(String userId) {
         List<String> keys = List.copyOf(redisService.hGetAllOrThrow(USER_IDX_NS, userId).keySet());
         List<RefreshTokenData> tokens = redisService.multiGetOrThrow(NAMESPACE, keys, RefreshTokenData.class);
-        List<RefreshTokenData> sessions = new ArrayList<>();
+        List<RefreshTokenData> live = new ArrayList<>();
         for (int i = 0; i < keys.size(); i++) {
             RefreshTokenData t = tokens.get(i);
             if (t != null) {
-                sessions.add(t.withSessionId(sessionIdOf(t, keys.get(i))));
+                live.add(t.withSessionId(sessionIdOf(t, keys.get(i))));
+            }
+        }
+        List<String> revoked = redisService.multiGetOrThrow(REVOKED_SESSION_NS,
+                live.stream().map(RefreshTokenData::sessionId).toList(), String.class);
+        List<RefreshTokenData> sessions = new ArrayList<>();
+        for (int i = 0; i < live.size(); i++) {
+            if (revoked.get(i) == null) {
+                sessions.add(live.get(i));
             }
         }
         sessions.sort(Comparator.comparing(RefreshTokenData::lastSeenAt, Comparator.nullsLast(Comparator.reverseOrder())));

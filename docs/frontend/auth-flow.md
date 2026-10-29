@@ -111,7 +111,7 @@ sequenceDiagram
 
 - Only the refresh token passed in is revoked; other devices are unaffected. A token that was already refreshed signs out the sign-in it belongs to: the token that replaced it can no longer be refreshed.
 - An unknown or already-revoked token also returns 200, so the frontend has no failure to handle; always clear the local tokens unconditionally.
-- The access token is stateless and technically remains valid after logout until it expires; the frontend must discard it.
+- Logout also cuts the sign-in's access tokens: any request still carrying one gets 401 `auth.session_revoked` from then on. Discard both tokens anyway.
 
 ## 6. Refresh and rotation
 

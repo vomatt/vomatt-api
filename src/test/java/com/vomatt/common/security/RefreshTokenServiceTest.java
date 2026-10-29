@@ -595,6 +595,23 @@ class RefreshTokenServiceTest {
     }
 
     @Test
+    void shouldKeepTheKnownDeviceWhenRotatingWithoutUserAgent() {
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));
+        String oldToken = "no-ua-token";
+        String userId = UUID.randomUUID().toString();
+        Instant signedIn = Instant.parse("2026-10-20T08:12:00Z");
+        when(redisService.getOrThrow(GRACE_NS, k(oldToken), RefreshTokenService.RotateResult.class)).thenReturn(null);
+        when(redisService.getOrThrow(NAMESPACE, k(oldToken), RefreshTokenService.RefreshTokenData.class)).thenReturn(
+                new RefreshTokenService.RefreshTokenData(userId, List.of("user"), "session-1", false,
+                        "OldBrowser/1.0", signedIn, signedIn));
+        when(userRepository.findById(UUID.fromString(userId))).thenReturn(Optional.of(userWithRoles(userId, false, "user")));
+        when(redisService.execScript(any(), anyList(), anyList())).thenReturn(1L);
+        when(jwtUtil.generateToken(userId, List.of("user"), false, "session-1")).thenReturn("access");
+
+        assertThat(service.rotate(oldToken).data().userAgent()).isEqualTo("OldBrowser/1.0");
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void shouldRenewUserIndexTtlWhenGeneratingToken() {
         String token = service.issue("user-5", List.of("user"), false).refreshToken();
@@ -652,9 +669,10 @@ class RefreshTokenServiceTest {
 
         service.revoke(token);
 
-        // Session ended and index field removed before the token goes, so a grace replay in between gets nothing
+        // Session revoked and index field removed before the token goes: its access tokens stop at once, and a grace
+        // replay or racing rotation in between gets nothing
         InOrder order = inOrder(redisService);
-        order.verify(redisService).execInTransaction(ending("session-1", false));
+        order.verify(redisService).execInTransaction(ending("session-1", true));
         order.verify(redisService).hDelete(USER_IDX_NS, "user-6", k(token));
         order.verify(redisService).delete(NAMESPACE, k(token));
         verify(redisService, never()).getOrThrow(eq(CONSUMED_NS), anyString(), any());
@@ -794,20 +812,25 @@ class RefreshTokenServiceTest {
     // ── sessions ──────────────────────────────────────────────────────
 
     @Test
-    void shouldSkipExpiredTokensAndSortByLastSeenWhenListingSessions() {
+    void shouldSkipExpiredAndRevokedTokensAndSortByLastSeenWhenListingSessions() {
         Instant t = Instant.parse("2026-10-29T00:00:00Z");
         Map<String, Object> index = new java.util.LinkedHashMap<>();
         index.put("k-old", "s-old");
         index.put("k-gone", "s-gone");
         index.put("k-legacy", "1");
         index.put("k-new", "s-new");
+        index.put("k-reused", "s-reused");
         when(redisService.hGetAllOrThrow(USER_IDX_NS, "u1")).thenReturn(index);
-        when(redisService.multiGetOrThrow(NAMESPACE, List.of("k-old", "k-gone", "k-legacy", "k-new"),
+        when(redisService.multiGetOrThrow(NAMESPACE, List.of("k-old", "k-gone", "k-legacy", "k-new", "k-reused"),
                 RefreshTokenService.RefreshTokenData.class)).thenReturn(java.util.Arrays.asList(
                 new RefreshTokenService.RefreshTokenData("u1", List.of("user"), "s-old", false, "A", t, t),
                 null,
                 new RefreshTokenService.RefreshTokenData("u1", List.of("user"), null, null, null, null, null),
-                new RefreshTokenService.RefreshTokenData("u1", List.of("user"), "s-new", true, "B", t, t.plusSeconds(60))));
+                new RefreshTokenService.RefreshTokenData("u1", List.of("user"), "s-new", true, "B", t, t.plusSeconds(60)),
+                new RefreshTokenService.RefreshTokenData("u1", List.of("user"), "s-reused", false, "C", t, t.plusSeconds(120))));
+        // Reuse detection revoked s-reused but left its live token: it can no longer refresh, so it is not listed
+        when(redisService.multiGetOrThrow(REVOKED_SESSION_NS, List.of("s-old", "k-legacy", "s-new", "s-reused"), String.class))
+                .thenReturn(java.util.Arrays.asList(null, null, null, "1"));
 
         // The legacy token has no session id or lastSeenAt: named after its key, listed last
         assertThat(service.listSessions("u1")).extracting(RefreshTokenService.RefreshTokenData::sessionId)

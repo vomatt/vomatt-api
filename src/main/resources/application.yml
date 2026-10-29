@@ -155,6 +155,8 @@ app:
 otp:
   ttl-seconds: ${OTP_TTL_SECONDS:180}
   resend-cooldown-seconds: ${OTP_RESEND_COOLDOWN_SECONDS:180}
+  # Fixed 6-digit code @vomatt.test (load-test) accounts sign in with, emailed nowhere; unset in normal operation
+  test-code: ${OTP_TEST_CODE:}
   # OTPs one identifier may be sent per UTC day; SMS costs money, so phone is tighter
   daily-limit:
     email: ${OTP_DAILY_LIMIT_EMAIL:20}

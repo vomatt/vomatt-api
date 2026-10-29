@@ -154,6 +154,16 @@ public class AuthService {
     @Value("${otp.daily-limit.phone:5}")
     private long otpDailyLimitPhone;
 
+    /**
+     * Fixed consumer OTP for {@value #TEST_EMAIL_DOMAIN} accounts (load-test accounts), sent nowhere; blank turns it off.
+     * Lockouts, cooldown and daily quota still apply.
+     */
+    @Value("${otp.test-code:}")
+    private String otpTestCode;
+
+    /** Reserved TLD (RFC 2606), so no real person can own an address in it. */
+    static final String TEST_EMAIL_DOMAIN = "@vomatt.test";
+
     public void sendOtp(String email, String phone, String type, String clientIp) {
         String otpType = (type != null) ? type : "login";
         String code = generateOtpCode();
@@ -195,7 +205,15 @@ public class AuthService {
         // Computed once: the refund on failure must hit the same day's key even across UTC midnight
         String quotaKey = redisKey + ":" + TextUtil.utcDay();
         takeDailyQuota(namespace, quotaKey, otpDailyLimitEmail);
+        boolean testAccount = OTP_EMAIL_NS.equals(namespace) && StringUtils.hasText(otpTestCode)
+                && normalizedEmail.endsWith(TEST_EMAIL_DOMAIN);
+        if (testAccount) {
+            code = otpTestCode;
+        }
         storeOtp(namespace, redisKey, quotaKey, attemptKey, new OtpRecord(otpHash(normalizedEmail, code), otpType, Instant.now(), 0));
+        if (testAccount) {
+            return;
+        }
 
         try {
             if (OTP_ADMIN_EMAIL_NS.equals(namespace)) {

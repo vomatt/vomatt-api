@@ -40,6 +40,7 @@ Swagger UI: <http://localhost:8080/swagger-ui.html>. `*PostgresTest` and `OpenAp
 
 - DDL is managed by Flyway in `src/main/resources/db/migration/` (`ddl-auto: none`), run at app startup in every environment, tests included. `V1__baseline.sql` is the full schema; databases created before Flyway are baselined at V1 (`baseline-on-migrate`), and `V2__catch_up.sql` (the last schema.sql, idempotent) brings them up to date. All time columns are `TIMESTAMPTZ` <-> `OffsetDateTime`; primary keys use UUID v7 (`UUIDv7Generator`).
 - Every schema or data change is a new `V<n>__<topic>.sql`; never edit an applied one (Flyway checksums fail startup). Data migrations need a `*MigrationPostgresTest`.
+- `beforeMigrate__notification_reads_by_kind.sql` is a Flyway callback that runs before every migrate: it converts a pre-2026-10-26 `notification_reads` (keyed by `vote_id`) to the `(user_id, kind, source_id)` key, which `V2__catch_up.sql`'s `CREATE TABLE IF NOT EXISTS` skips. It must stay idempotent.
 - `db/migrations/` (plural, date-named) holds pre-Flyway one-off scripts that Flyway never runs; do not add to it. Their tests recreate the old shape on top of the baseline. `2026-10-02-sachmis-arch.sql` and `2026-10-14-canonical-gmail.sql` cannot run against the current schema, so they have no test.
 
 ## API contract and frontend docs

@@ -1,0 +1,14 @@
+# Profile for LoadTestAccountSeeder, which may point at a shared database: never migrate it, never send mail
+spring:
+  flyway:
+    enabled: false
+  data:
+    redis:
+      # A fresh container's first connection over Railway's private network can take over the default 1 s
+      timeout: 10s
+server:
+  # Random port, so it can run beside a local API
+  port: 0
+app:
+  email:
+    enabled: false

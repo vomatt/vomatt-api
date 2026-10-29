@@ -10,7 +10,7 @@ public record PollNotifications(NotificationRepository repository) {
 
     /** Unread notifications with every preference at its default. */
     public long countUnread(UUID userId, OffsetDateTime now) {
-        return repository.countUnread(userId, NotificationPreference.enabledKinds(NotificationPreference.defaults()), now);
+        return repository.countUnread(userId, NotificationPreference.enabledKinds(NotificationPreference.defaults(), null), now);
     }
 
     public boolean isNotified(UUID userId, UUID voteId, OffsetDateTime now) {

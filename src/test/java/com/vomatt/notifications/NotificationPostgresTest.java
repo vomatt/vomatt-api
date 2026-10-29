@@ -82,7 +82,7 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
 
     private long unread(User user) {
         em.flush();
-        return notificationService.countUnread(user.getId().toString()).count();
+        return notificationService.countUnread(user.getId().toString(), null).count();
     }
 
     @Test

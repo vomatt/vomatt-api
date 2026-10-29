@@ -23,14 +23,24 @@ sequenceDiagram
 ## Call order
 | Step | API | Notes |
 |------|-----|-------|
-| 1 | `GET /api/notifications/unread-count` | Red dot / badge count, at most 100 ("99+") |
-| 2 | `GET /api/notifications` | The feed, newest first; pass `nextCursor` back as `cursor` for more |
+| 1 | `GET /api/notifications/unread-count` | Red dot / badge count, at most 100 ("99+"). Add `?category=` for a tab's badge |
+| 2 | `GET /api/notifications` | The feed, newest first; pass `nextCursor` back as `cursor` for more. Add `?category=` for one tab (keep it on every page) |
 | 3 | `POST /api/notifications/{id}/read` | When the user opens an item; idempotent. `id` is the item's `id` |
 | 4 | `POST /api/notifications/read-all` | "Mark all read" |
 | - | `GET` / `PATCH /api/users/me/notification-preferences` | Settings page switches |
 
 ## Kinds and UI mapping
-Notifications are **not stored**; they are derived from Polls, Invitations, follows and Comments when read (ADR 0003, ADR 0005). Only read state is stored.
+Notifications are **not stored**; they are derived from Polls, Invitations, follows, Comments and likes when read (ADR 0003, ADR 0005). Only read state is stored.
+
+Each item's `category` is fixed by its `kind` and maps to a tab:
+
+| `category` | Kinds |
+|------------|-------|
+| `CONVERSATION` | `COMMENT` |
+| `LIKE` | `LIKE` |
+| `POLL_END` | `RESULT`, `CANCELLED`, `CLOSING_SOON` |
+| `INVITATION` | `INVITATION` |
+| `FOLLOW` | `FOLLOWED` |
 
 | `kind` | When | `actor` | `poll` | `comment` | Switch |
 |--------|------|---------|--------|-----------|--------|
@@ -40,8 +50,9 @@ Notifications are **not stored**; they are derived from Polls, Invitations, foll
 | `FOLLOWED` | Someone followed you. One item per follower: group them ("@bkim and 3 others followed you") | follower | null | null | none |
 | `COMMENT` | Someone else commented on or replied under your Poll, or replied to your Comment | author | yes | `{ id, parentId, excerpt }` | `comments` |
 | `CLOSING_SOON` | An Open Poll ends within 24 hours, you hold no Ballot, and you are its Invitee or it is a Public Poll of someone you follow. Gone once you vote or it Ends | owner | yes | null | `closingSoon` (off by default) |
+| `LIKE` | Someone else liked your Comment or Reply (Poll and thread visibility as for `COMMENT`). Gone if they unlike; liking again is a new, unread one. Likes given before this release (Flyway V6) start read | who liked | yes | your liked Comment, `{ id, parentId, excerpt }` | `likes` |
 
-- `createdAt` is when it happened: the Poll's end, the Invitation, the follow, the Comment, or 24 hours before the Poll's end for `CLOSING_SOON` (its start if later). Group by day with it.
+- `createdAt` is when it happened: the Poll's end, the Invitation, the follow, the Comment, the like, or 24 hours before the Poll's end for `CLOSING_SOON` (its start if later). Group by day with it.
 - `poll` is `{ id, title, startTime, endTime, status, turnout, myOptionId, winningOptionIds, winningOptionLabels, tie }`. It never carries per-option counts, so a Sealed Poll shows only Turnout ("342 voted so far"). `myOptionId` is your Ballot's option (null without one, or once your Anonymous Ballot of an Ended Poll is sealed). The outcome fields are null until the Poll has Ended; then `winningOptionIds` / `winningOptionLabels` name the option(s) with the most Ballots in display order (`[]` when none named an option, as in a Cancelled Poll) and `tie` says whether there are several. Your Ballot won when `myOptionId` is in `winningOptionIds` (tied when `tie` too). Link to `/poll/{poll.id}`; for `RESULT`, the results page.
 - `actor` carries `isFollowing` (you follow them) and `followsYou` (they follow you), so a `FOLLOWED` row can offer "Follow back" without fetching the profile.
 - `comment.parentId` is the Comment a Reply is under, null for a top-level Comment. A link to a Reply needs both ids.
@@ -49,7 +60,7 @@ Notifications are **not stored**; they are derived from Polls, Invitations, foll
 - An item can vanish (Comment deleted, follow undone, Poll Deleted, block) or appear behind the cursor (you follow someone); de-duplicate by `id`.
 
 ## Read state
-- `read` is per item. `POST /api/notifications/{id}/read` reads one; `POST /api/notifications/read-all` reads everything whose `createdAt` is at or before now, switched-off kinds included. Later items arrive unread.
+- `read` is per item. `POST /api/notifications/{id}/read` reads one; `POST /api/notifications/read-all` reads everything whose `createdAt` is at or before now, switched-off kinds included. Later items arrive unread. It has no `category`: "Mark all read" on a tab clears every tab.
 - **Unread count** = feed items with `read` false, of the kinds switched on. It updates on the next call; no event is needed (a Poll Ending raises it by itself). A kind switched back on returns with its items' read state as it was.
 - **No push or email**: the frontend must poll. Recommended: check once after login and whenever the app / tab returns to the foreground, every 60 seconds while in the foreground, and pause in background tabs. Poll only `unread-count`; fetch the feed when the user opens the page.
 - Deprecated: `POST /api/notifications/{voteId}/read` with a Poll id reads that Poll's Invitation while it is not Ended, its `RESULT` after. `GET /api/votes/my` items still carry `unread` for the same two. Both keep working until the web moves to the feed.
@@ -60,4 +71,5 @@ Notifications are **not stored**; they are derived from Polls, Invitations, foll
 | `notification.not_found` | The id is unknown or malformed, or the item is gone (see above) | Ignore and refresh the list |
 | `vote.not_found` | Deprecated Poll id only: the Poll does not exist or is Deleted | Ignore and refresh the list |
 | `common.cursor_invalid` | `cursor` came from another list | Reload the first page |
+| `common.type_mismatch` | `category` is not one of the categories | Fix the client; omit `category` for all |
 | `auth.token.expired` / `auth.token.invalid` / `common.unauthorized` | See [conventions](../conventions.md) | Refresh or redirect to login per convention |

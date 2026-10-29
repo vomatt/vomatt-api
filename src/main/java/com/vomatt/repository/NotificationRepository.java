@@ -96,7 +96,19 @@ public class NotificationRepository {
                                      AND fv.end_time > :now AND fv.end_time <= :soon)
                       AND v.deleted_at IS NULL AND v.start_time <= :now AND v.end_time > :now AND v.end_time <= :soon
                       AND v.creator_id <> :userId
-                      AND NOT EXISTS (SELECT 1 FROM vomatt.user_votes uv WHERE uv.vote_id = v.id AND uv.user_id = :userId)"""));
+                      AND NOT EXISTS (SELECT 1 FROM vomatt.user_votes uv WHERE uv.vote_id = v.id AND uv.user_id = :userId)""",
+            // Others' likes on the user's Comments and Replies, visible as COMMENT is: not in a thread started by a user
+            // the user blocked, on Polls the user can still see. An unlike deletes the row, so a re-like is a new one
+            NotificationKind.LIKE, select(NotificationKind.LIKE, "l.id", "l.created_at", "l.user_id", "v.id", "c.id") + """
+                    FROM vomatt.vote_comments c
+                    JOIN vomatt.comment_likes l ON l.comment_id = c.id
+                    JOIN vomatt.votes v ON v.id = c.vote_id
+                    WHERE c.user_id = :userId AND c.is_deleted = FALSE AND l.user_id <> :userId AND v.deleted_at IS NULL
+                      AND NOT EXISTS (SELECT 1 FROM vomatt.vote_comments tp
+                                      JOIN vomatt.user_blocks x ON x.blocker_id = :userId AND x.blocked_id = tp.user_id
+                                      WHERE tp.id = c.parent_id)
+                      AND (v.audience <> 'INVITE_ONLY' OR v.creator_id = :userId
+                           OR EXISTS (SELECT 1 FROM vomatt.vote_invitees vi WHERE vi.vote_id = v.id AND vi.user_id = :userId))"""));
 
     // Inside each branch, before its LIMIT: nothing from a suspended user, nor from someone the user blocked or who
     // blocked the user

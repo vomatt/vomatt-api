@@ -7,5 +7,6 @@ public record UpdateNotificationPreferencesRequest(
         @Schema(description = "RESULT and CANCELLED", example = "true", nullable = true) Boolean resultsIn,
         @Schema(description = "INVITATION", example = "true", nullable = true) Boolean invitations,
         @Schema(description = "COMMENT", example = "false", nullable = true) Boolean comments,
-        @Schema(description = "CLOSING_SOON", example = "true", nullable = true) Boolean closingSoon
+        @Schema(description = "CLOSING_SOON", example = "true", nullable = true) Boolean closingSoon,
+        @Schema(description = "LIKE", example = "true", nullable = true) Boolean likes
 ) {}

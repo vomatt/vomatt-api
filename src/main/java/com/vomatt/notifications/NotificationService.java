@@ -5,6 +5,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -17,6 +18,8 @@ import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.Cursor;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.util.UUIDv7Generator;
+import com.vomatt.entity.NotificationCategory;
+import com.vomatt.entity.NotificationKind;
 import com.vomatt.entity.UserPreference;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
@@ -64,23 +67,26 @@ public class NotificationService {
     private final VoteService voteService;
     private final VoteMapper voteMapper;
 
-    /** The caller's feed, newest first, of the kinds their preferences leave on. */
+    /** The caller's feed, newest first, of the kinds their preferences leave on, only {@code category}'s when given. */
     @Transactional(readOnly = true)
-    public CursorResponse<NotificationResponse> list(String userId, String cursor, Integer limit) {
+    public CursorResponse<NotificationResponse> list(String userId, NotificationCategory category, String cursor,
+                                                     Integer limit) {
         UUID userUuid = UUID.fromString(userId);
         int size = CursorResponse.limit(limit);
-        List<NotificationRow> rows = notificationRepository.findPage(userUuid,
-                NotificationPreference.enabledKinds(preferences(userUuid)), Cursor.decode(cursor, Cursor.Scope.NOTIFICATIONS),
-                OffsetDateTime.now(), size + 1);
+        Cursor after = Cursor.decode(cursor, Cursor.Scope.NOTIFICATIONS);
+        Set<NotificationKind> kinds = NotificationPreference.enabledKinds(preferences(userUuid), category);
+        List<NotificationRow> rows = kinds.isEmpty() ? List.of()
+                : notificationRepository.findPage(userUuid, kinds, after, OffsetDateTime.now(), size + 1);
         return CursorResponse.of(rows, size, Cursor.Scope.NOTIFICATIONS, row -> Cursor.of(row.createdAt(), row.sourceId()),
                 page -> toResponses(userUuid, page));
     }
 
     @Transactional(readOnly = true)
-    public UnreadCountResponse countUnread(String userId) {
+    public UnreadCountResponse countUnread(String userId, NotificationCategory category) {
         UUID userUuid = UUID.fromString(userId);
-        return new UnreadCountResponse(notificationRepository.countUnread(userUuid,
-                NotificationPreference.enabledKinds(preferences(userUuid)), OffsetDateTime.now()));
+        Set<NotificationKind> kinds = NotificationPreference.enabledKinds(preferences(userUuid), category);
+        return new UnreadCountResponse(kinds.isEmpty() ? 0
+                : notificationRepository.countUnread(userUuid, kinds, OffsetDateTime.now()));
     }
 
     /**
@@ -120,6 +126,7 @@ public class NotificationService {
         changes.put(NotificationPreference.INVITATIONS, request.invitations());
         changes.put(NotificationPreference.COMMENTS, request.comments());
         changes.put(NotificationPreference.CLOSING_SOON, request.closingSoon());
+        changes.put(NotificationPreference.LIKES, request.likes());
         changes.forEach((preference, on) -> {
             if (on != null) {
                 preferenceRepository.upsert(UUIDv7Generator.generateId(), userUuid, preference.preferenceKey(), on.toString());
@@ -145,7 +152,7 @@ public class NotificationService {
     private static NotificationPreferencesResponse toResponse(Map<NotificationPreference, Boolean> settings) {
         return new NotificationPreferencesResponse(settings.get(NotificationPreference.RESULTS_IN),
                 settings.get(NotificationPreference.INVITATIONS), settings.get(NotificationPreference.COMMENTS),
-                settings.get(NotificationPreference.CLOSING_SOON));
+                settings.get(NotificationPreference.CLOSING_SOON), settings.get(NotificationPreference.LIKES));
     }
 
     private NotificationId currentForPoll(String userId, String voteId, OffsetDateTime now) {
@@ -185,6 +192,7 @@ public class NotificationService {
         return rows.stream().map(row -> new NotificationResponse(
                 new NotificationId(row.kind(), row.sourceId()).toString(),
                 row.kind(),
+                row.kind().category(),
                 row.createdAt(),
                 row.read(),
                 row.actorId() == null ? null : actors.get(row.actorId()),

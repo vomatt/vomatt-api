@@ -15,6 +15,7 @@ import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.response.SimpleResultResponse;
 import com.vomatt.common.security.UserPrincipal;
+import com.vomatt.entity.NotificationCategory;
 import com.vomatt.notifications.dto.NotificationResponse;
 import com.vomatt.notifications.dto.UnreadCountResponse;
 
@@ -29,8 +30,9 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/notifications")
 @RequiredArgsConstructor
-@Tag(name = "Notification", description = "The notification feed: Poll results, Invitations, follows, Comments and closing-soon "
-        + "reminders, derived when read (no push, no email). Kinds can be switched off with `/api/users/me/notification-preferences`")
+@Tag(name = "Notification", description = "The notification feed: Poll results, Invitations, follows, Comments, likes and closing-soon "
+        + "reminders, derived when read (no push, no email). Each falls in one category (tab) the feed and the unread count "
+        + "can be filtered by. Kinds can be switched off with `/api/users/me/notification-preferences`")
 public class NotificationController {
 
     private final NotificationService notificationService;
@@ -40,24 +42,30 @@ public class NotificationController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"items":[\
-                    {"id":"closing_soon_0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","kind":"CLOSING_SOON","createdAt":"2026-10-26T12:00:00+08:00","read":false,\
+                    {"id":"like_0199f2a7-3e4f-7a51-8c6d-7e8f9a0b1c2d","kind":"LIKE","category":"LIKE","createdAt":"2026-10-26T12:30:00+08:00","read":false,\
+                    "actor":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"rosa","displayName":"Rosa","avatarUrl":"bot:mochi","isFollowing":false,"followsYou":false},\
+                    "poll":{"id":"0199f2a3-8c1d-7e2f-9a3b-4c5d6e7f8a9b","title":"Tabs or spaces?","startTime":"2026-10-23T12:00:00+08:00","endTime":"2026-10-30T12:00:00+08:00","status":"OPEN","turnout":57,\
+                    "myOptionId":"0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813","winningOptionIds":null,"winningOptionLabels":null,"tie":null},\
+                    "comment":{"id":"0199f2a4-ff01-7a2b-9c3d-4e5f6a7b8c9d","parentId":null,"excerpt":"Spaces, so it looks the same everywhere"}},\
+                    {"id":"closing_soon_0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","kind":"CLOSING_SOON","category":"POLL_END","createdAt":"2026-10-26T12:00:00+08:00","read":false,\
                     "actor":{"id":"0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f","username":"jtan","displayName":"J. Tan","avatarUrl":"bot:boba","isFollowing":true,"followsYou":false},\
                     "poll":{"id":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","title":"Best ramen in Taipei?","startTime":"2026-10-20T12:00:00+08:00","endTime":"2026-10-27T12:00:00+08:00","status":"OPEN","turnout":342,\
                     "myOptionId":null,"winningOptionIds":null,"winningOptionLabels":null,"tie":null},"comment":null},\
-                    {"id":"comment_0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b","kind":"COMMENT","createdAt":"2026-10-26T09:30:00+08:00","read":false,\
+                    {"id":"comment_0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b","kind":"COMMENT","category":"CONVERSATION","createdAt":"2026-10-26T09:30:00+08:00","read":false,\
                     "actor":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"rosa","displayName":"Rosa","avatarUrl":"bot:mochi","isFollowing":false,"followsYou":false},\
                     "poll":{"id":"0199f2a3-8c1d-7e2f-9a3b-4c5d6e7f8a9b","title":"Tabs or spaces?","startTime":"2026-10-23T12:00:00+08:00","endTime":"2026-10-30T12:00:00+08:00","status":"OPEN","turnout":57,\
                     "myOptionId":"0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813","winningOptionIds":null,"winningOptionLabels":null,"tie":null},\
                     "comment":{"id":"0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b","parentId":"0199f2a4-ff01-7a2b-9c3d-4e5f6a7b8c9d","excerpt":"Tabs, because the reader picks the width"}},\
-                    {"id":"followed_0199f2a6-2d3e-7f40-9b5c-6d7e8f9a0b1c","kind":"FOLLOWED","createdAt":"2026-10-25T20:00:00+08:00","read":true,\
+                    {"id":"followed_0199f2a6-2d3e-7f40-9b5c-6d7e8f9a0b1c","kind":"FOLLOWED","category":"FOLLOW","createdAt":"2026-10-25T20:00:00+08:00","read":true,\
                     "actor":{"id":"0199c1a2-1a2b-7c3d-8e4f-5a6b7c8d9e0f","username":"bkim","displayName":null,"avatarUrl":"bot:boba","isFollowing":true,"followsYou":true},"poll":null,"comment":null},\
-                    {"id":"result_0199f2a3-1a2b-7c3d-8e4f-9a0b1c2d3e4f","kind":"RESULT","createdAt":"2026-10-25T18:00:00+08:00","read":true,"actor":null,\
+                    {"id":"result_0199f2a3-1a2b-7c3d-8e4f-9a0b1c2d3e4f","kind":"RESULT","category":"POLL_END","createdAt":"2026-10-25T18:00:00+08:00","read":true,"actor":null,\
                     "poll":{"id":"0199f2a3-1a2b-7c3d-8e4f-9a0b1c2d3e4f","title":"Lunch?","startTime":"2026-10-25T09:00:00+08:00","endTime":"2026-10-25T18:00:00+08:00","status":"ENDED","turnout":12,\
                     "myOptionId":"0199f2a4-2b3c-7d4e-8f5a-6b7c8d9e0f1a","winningOptionIds":["0199f2a4-2b3c-7d4e-8f5a-6b7c8d9e0f1a","0199f2a4-3c4d-7e5f-9a6b-7c8d9e0f1a2b"],\
                     "winningOptionLabels":["Dumplings","Noodles"],"tie":true},"comment":null}],\
                     "nextCursor":"Tk9USUZJQ0FUSU9OU3wwMTk5ZjJhMy0xYTJiLTdjM2QtOGU0Zi05YTBiMWMyZDNlNGZ8MjAyNi0xMC0yNVQxMDowMDowMFo"},\
                     "message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "`cursor` was not issued by this list (errorCode `common.cursor_invalid`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "`cursor` was not issued by this list "
+            + "(errorCode `common.cursor_invalid`), or `category` is not a category (`common.type_mismatch`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"Invalid cursor","errorCode":"common.cursor_invalid","error":"Invalid cursor"}""")))
@@ -78,6 +86,11 @@ public class NotificationController {
             not a Reply in a thread started by a user the caller blocked (the Comment lists hide that thread)
             - CLOSING_SOON: an Open Poll ends within 24 hours and the caller holds no Ballot in it, if the caller is its Invitee, \
             or it is a Public Poll of a user the caller follows. Gone once the caller casts a Ballot or the Poll Ends. Off by default
+            - LIKE: someone else liked the caller's Comment or Reply, on a Poll the caller can see and not in a thread started by a user \
+            the caller blocked (as COMMENT). Gone if the like is taken back; liking again is a new, unread LIKE
+            Each kind falls in one `category`: CONVERSATION (COMMENT), LIKE (LIKE), POLL_END (RESULT, CANCELLED, CLOSING_SOON), \
+            INVITATION (INVITATION), FOLLOW (FOLLOWED). With `category`, only that category is listed; pass the same `category` with \
+            every page.
             Kinds switched off in the caller's preferences are left out (FOLLOWED cannot be switched off). Nothing from a suspended user, \
             a user the caller blocked or a user who blocked the caller is listed, nor anything about a Poll whose owner blocked the caller. `poll` never carries per-option counts, its \
             outcome (`winningOptionIds`, `winningOptionLabels`, `tie`) stays null until the Poll has Ended, and `actor` is never \
@@ -87,12 +100,15 @@ public class NotificationController {
             An item can appear or vanish behind a cursor (a follow, a block); de-duplicate by `id`.
             **Side effects**: none
             **Errors**:
-            - 400 `common.cursor_invalid`: `cursor` came from another list""")
+            - 400 `common.cursor_invalid`: `cursor` came from another list
+            - 400 `common.type_mismatch`: `category` is not one of the categories""")
     public ResponseEntity<ApiResponse<CursorResponse<NotificationResponse>>> list(
+            @Parameter(description = "Only this category's notifications; omit for all", example = "CONVERSATION")
+            @RequestParam(required = false) NotificationCategory category,
             @Parameter(description = "`nextCursor` of the previous page; omit for the first page") @RequestParam(required = false) String cursor,
             @Parameter(description = "Page size, default 20, clamped to 1..50", example = "20") @RequestParam(required = false) Integer limit,
             @AuthenticationPrincipal UserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.ok(notificationService.list(principal.userId(), cursor, limit)));
+        return ResponseEntity.ok(ApiResponse.ok(notificationService.list(principal.userId(), category, cursor, limit)));
     }
 
     @GetMapping("/unread-count")
@@ -100,17 +116,25 @@ public class NotificationController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"count":3},"message":null,"errorCode":null,"error":null}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "`category` is not a category (errorCode `common.type_mismatch`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(value = """
+                            {"success":false,"data":null,"message":"Invalid parameter format: category","errorCode":"common.type_mismatch","error":"Invalid parameter format: category"}""")))
     @Operation(summary = "Unread notification count", description = """
             **Auth**: required
             **Precondition**: none
             **Behavior**: counts the notifications `GET /api/notifications` lists with `read` false: every kind the caller's \
-            preferences leave on. The count stops at 100: `100` means 100 or more (show it as "99+"). \
+            preferences leave on, or with `category` only that category's (one call per tab badge). The count stops at 100: \
+            `100` means 100 or more (show it as "99+"). \
             Poll this endpoint (for example on app focus and about once a minute) to drive a badge; there is no push.
             **Side effects**: none
-            **Errors**: none specific to this endpoint""")
+            **Errors**:
+            - 400 `common.type_mismatch`: `category` is not one of the categories""")
     public ResponseEntity<ApiResponse<UnreadCountResponse>> unreadCount(
+            @Parameter(description = "Only this category's notifications; omit for all", example = "LIKE")
+            @RequestParam(required = false) NotificationCategory category,
             @AuthenticationPrincipal UserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.ok(notificationService.countUnread(principal.userId())));
+        return ResponseEntity.ok(ApiResponse.ok(notificationService.countUnread(principal.userId(), category)));
     }
 
     @PostMapping("/{id}/read")

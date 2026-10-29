@@ -33,6 +33,7 @@ import com.vomatt.common.i18n.LocalizedMessageService;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.security.UserPrincipal;
 import com.vomatt.common.response.CursorResponse;
+import com.vomatt.entity.NotificationCategory;
 import com.vomatt.entity.NotificationKind;
 import com.vomatt.notifications.dto.NotificationResponse;
 import com.vomatt.notifications.dto.UnreadCountResponse;
@@ -69,7 +70,7 @@ class NotificationControllerTest {
     @Test
     @DisplayName("should return the unread count")
     void shouldReturnUnreadCount() throws Exception {
-        when(notificationService.countUnread(USER_ID)).thenReturn(new UnreadCountResponse(3));
+        when(notificationService.countUnread(USER_ID, null)).thenReturn(new UnreadCountResponse(3));
 
         mockMvc.perform(get("/api/notifications/unread-count"))
                 .andExpect(status().isOk())
@@ -80,15 +81,26 @@ class NotificationControllerTest {
     @DisplayName("should list the feed with the cursor and limit given")
     void shouldListNotificationsWhenRequested() throws Exception {
         NotificationResponse followed = new NotificationResponse("followed_" + UUID.randomUUID(), NotificationKind.FOLLOWED,
-                OffsetDateTime.now(), false, new FollowUserDto(UUID.randomUUID().toString(), "jtan", null, null, false, true), null, null);
-        when(notificationService.list(USER_ID, "abc", 5)).thenReturn(new CursorResponse<>(List.of(followed), "next"));
+                NotificationCategory.FOLLOW, OffsetDateTime.now(), false,
+                new FollowUserDto(UUID.randomUUID().toString(), "jtan", null, null, false, true), null, null);
+        when(notificationService.list(USER_ID, NotificationCategory.FOLLOW, "abc", 5))
+                .thenReturn(new CursorResponse<>(List.of(followed), "next"));
 
-        mockMvc.perform(get("/api/notifications").param("cursor", "abc").param("limit", "5"))
+        mockMvc.perform(get("/api/notifications").param("category", "FOLLOW").param("cursor", "abc").param("limit", "5"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].kind").value("FOLLOWED"))
+                .andExpect(jsonPath("$.data.items[0].category").value("FOLLOW"))
                 .andExpect(jsonPath("$.data.items[0].actor.username").value("jtan"))
                 .andExpect(jsonPath("$.data.items[0].actor.followsYou").value(true))
                 .andExpect(jsonPath("$.data.nextCursor").value("next"));
+    }
+
+    @Test
+    @DisplayName("should return 400 when the category is unknown")
+    void shouldReturn400WhenCategoryUnknown() throws Exception {
+        mockMvc.perform(get("/api/notifications/unread-count").param("category", "NOPE"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value(MessageKey.COMMON_TYPE_MISMATCH.code()));
     }
 
     @Test

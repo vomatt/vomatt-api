@@ -24,7 +24,7 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * The notification feed, derived on read from the tables the events already live in (ADR 0003, ADR 0005). Each kind is
- * one SQL branch yielding {@code (kind, source_id, created_at, actor_id, vote_id, comment_id)}; the feed, the unread
+ * one SQL branch yielding {@code (kind, read_kind, source_id, created_at, actor_id, vote_id, comment_id)}; the feed, the unread
  * count, the existence check and My Polls' {@code unread} all run these branches, so they agree on what a notification
  * is. Only read state is stored: a row per read notification in {@code notification_reads}, and a per-user moment up to
  * which everything is read in {@code notification_read_all}. SQL is assembled from constant fragments only; every value
@@ -42,30 +42,57 @@ public class NotificationRepository {
 
     private static final String NONE = "CAST(NULL AS uuid)";
 
+    // Not a Reply in a thread started by a user the user blocked; for a branch over vote_comments c
+    private static final String NOT_IN_BLOCKED_THREAD = " AND NOT EXISTS (SELECT 1 FROM vomatt.vote_comments tp"
+            + " JOIN vomatt.user_blocks x ON x.blocker_id = :userId AND x.blocked_id = tp.user_id WHERE tp.id = c.parent_id)";
+
+    // On a Poll the user can still see, outside threads started by a user the user blocked (the lists hide those
+    // threads, VoteCommentRepository.isHiddenFrom); for a branch over vote_comments c and votes v
+    private static final String IN_VISIBLE_THREAD = " AND v.deleted_at IS NULL" + NOT_IN_BLOCKED_THREAD
+            + " AND (v.audience <> 'INVITE_ONLY' OR v.creator_id = :userId"
+            + " OR EXISTS (SELECT 1 FROM vomatt.vote_invitees vi WHERE vi.vote_id = v.id AND vi.user_id = :userId))";
+
+    // Live Comment of someone else, in a visible thread; for a branch over vote_comments c and votes v
+    private static final String COMMENT_VISIBLE = " AND c.is_deleted = FALSE AND c.user_id <> :userId" + IN_VISIBLE_THREAD;
+
+    // Ids of Comments on the user's Polls and Replies to the user's live Comments
+    private static final String COMMENT_IDS = """
+            SELECT oc.id FROM vomatt.votes o JOIN vomatt.vote_comments oc ON oc.vote_id = o.id
+            WHERE o.creator_id = :userId
+            UNION
+            SELECT r.id FROM vomatt.vote_comments p JOIN vomatt.vote_comments r ON r.parent_id = p.id
+            WHERE p.user_id = :userId AND p.is_deleted = FALSE""";
+
     private static String select(NotificationKind kind, String sourceId, String createdAt, String actorId, String voteId,
                                  String commentId) {
-        return "SELECT CAST('%s' AS text) AS kind, %s AS source_id, %s AS created_at, %s AS actor_id, %s AS vote_id, %s AS comment_id "
-                .formatted(kind.name(), sourceId, createdAt, actorId, voteId, commentId);
+        return ("SELECT CAST('%s' AS text) AS kind, CAST('%s' AS text) AS read_kind, %s AS source_id, %s AS created_at,"
+                + " %s AS actor_id, %s AS vote_id, %s AS comment_id ")
+                .formatted(kind.name(), readKind(kind), sourceId, createdAt, actorId, voteId, commentId);
     }
 
-    // Appended to the COMMENT and LIKE branches, whose c is the Comment and v its Poll: not in a thread started by a user
-    // the user blocked (the lists hide those threads, VoteCommentRepository.isHiddenFrom), on a Poll the user can still see
-    private static final String COMMENT_VISIBLE = """
-
-              AND NOT EXISTS (SELECT 1 FROM vomatt.vote_comments tp
-                              JOIN vomatt.user_blocks x ON x.blocker_id = :userId AND x.blocked_id = tp.user_id
-                              WHERE tp.id = c.parent_id)
-              AND (v.audience <> 'INVITE_ONLY' OR v.creator_id = :userId
-                   OR EXISTS (SELECT 1 FROM vomatt.vote_invitees vi WHERE vi.vote_id = v.id AND vi.user_id = :userId))""";
+    /**
+     * The kind a notification's read state is stored under. A Comment is listed as COMMENT or MENTION depending on the
+     * COMMENT switch, so both share COMMENT's read state.
+     */
+    private static String readKind(NotificationKind kind) {
+        return (kind == NotificationKind.MENTION ? NotificationKind.COMMENT : kind).name();
+    }
 
     // Branches bind :userId, and :now and :soon where they use them. A row's created_at does not change while it is
     // listed and is at most :now when it joins the feed, which keeps the (created_at, source_id) keyset sound
     private static final Map<NotificationKind, String> BRANCHES = new EnumMap<>(Map.of(
-            // Ended Polls the user owns, holds a Ballot in or is invited to; Polls Cancelled before they opened are CANCELLED
+            // Ended Polls the user owns, holds a Ballot in, is invited to or bookmarked before they Ended, once each (the
+            // arms' rows are equal, so UNION merges them); Polls Cancelled before they opened are CANCELLED. A bookmarked
+            // Invite-only Poll counts only through ownership or invitation, so a removed Invitee's bookmark gives nothing
             NotificationKind.RESULT, select(NotificationKind.RESULT, "v.id", "v.end_time", NONE, "v.id", NONE) + """
                     FROM vomatt.votes v
-                    WHERE v.deleted_at IS NULL AND v.id IN %s AND v.end_time <= :now AND v.end_time > v.start_time"""
-                    .formatted(VoteListRepository.MY_POLL_IDS),
+                    WHERE v.deleted_at IS NULL AND v.end_time <= :now AND v.end_time > v.start_time AND v.id IN %s
+                    UNION
+                    """.formatted(VoteListRepository.MY_POLL_IDS)
+                    + select(NotificationKind.RESULT, "v.id", "v.end_time", NONE, "v.id", NONE) + """
+                    FROM vomatt.vote_bookmarks bm JOIN vomatt.votes v ON v.id = bm.vote_id
+                    WHERE bm.user_id = :userId AND bm.created_at < v.end_time AND v.audience <> 'INVITE_ONLY'
+                      AND v.deleted_at IS NULL AND v.end_time <= :now AND v.end_time > v.start_time""",
             NotificationKind.CANCELLED, select(NotificationKind.CANCELLED, "v.id", "v.end_time", "v.creator_id", "v.id", NONE) + """
                     FROM vomatt.vote_invitees i JOIN vomatt.votes v ON v.id = i.vote_id
                     WHERE i.user_id = :userId AND v.deleted_at IS NULL AND v.audience = 'INVITE_ONLY'
@@ -77,17 +104,15 @@ public class NotificationRepository {
                     WHERE i.user_id = :userId AND v.deleted_at IS NULL AND v.audience = 'INVITE_ONLY' AND v.end_time > :now""",
             NotificationKind.FOLLOWED, select(NotificationKind.FOLLOWED, "f.id", "f.created_at", "f.follower_id", NONE, NONE) + """
                     FROM vomatt.user_follows f WHERE f.followed_id = :userId""",
-            // Others' Comments and Replies on the user's Polls, and others' Replies to the user's Comments, on Polls the
-            // user can still see, minus Replies in threads started by a user the user blocked (the lists hide those
-            // threads, VoteCommentRepository.isHiddenFrom). A UNION of ids lets each half use its own index
-            NotificationKind.COMMENT, select(NotificationKind.COMMENT, "c.id", "c.created_at", "c.user_id", "v.id", "c.id") + """
-                    FROM vomatt.vote_comments c JOIN vomatt.votes v ON v.id = c.vote_id
-                    WHERE c.id IN (SELECT oc.id FROM vomatt.votes o JOIN vomatt.vote_comments oc ON oc.vote_id = o.id
-                                   WHERE o.creator_id = :userId
-                                   UNION
-                                   SELECT r.id FROM vomatt.vote_comments p JOIN vomatt.vote_comments r ON r.parent_id = p.id
-                                   WHERE p.user_id = :userId AND p.is_deleted = FALSE)
-                      AND c.is_deleted = FALSE AND c.user_id <> :userId AND v.deleted_at IS NULL""" + COMMENT_VISIBLE,
+            // Others' Comments and Replies on the user's Polls, and others' Replies to the user's live Comments
+            NotificationKind.COMMENT, select(NotificationKind.COMMENT, "c.id", "c.created_at", "c.user_id", "v.id", "c.id")
+                    + "FROM vomatt.vote_comments c JOIN vomatt.votes v ON v.id = c.vote_id WHERE c.id IN ("
+                    + COMMENT_IDS + ")" + COMMENT_VISIBLE,
+            // Others' Comments and Replies that @mention the user. With COMMENT on, branch() also drops the user's
+            // COMMENTs (MENTION_NOT_COMMENT)
+            NotificationKind.MENTION, select(NotificationKind.MENTION, "c.id", "c.created_at", "c.user_id", "v.id", "c.id")
+                    + "FROM vomatt.vote_comments c JOIN vomatt.votes v ON v.id = c.vote_id"
+                    + " WHERE c.mentioned_user_ids @> ARRAY[CAST(:userId AS uuid)]" + COMMENT_VISIBLE,
             // Open Polls ending within the window that the user can cast a Ballot in and has not: Invite-only ones they
             // are invited to, Public ones of users they follow. Listed from when the window opened (or the Poll did)
             NotificationKind.CLOSING_SOON, select(NotificationKind.CLOSING_SOON, "v.id",
@@ -108,15 +133,12 @@ public class NotificationRepository {
                     FROM vomatt.vote_comments c
                     JOIN vomatt.comment_likes l ON l.comment_id = c.id
                     JOIN vomatt.votes v ON v.id = c.vote_id
-                    WHERE c.user_id = :userId AND c.is_deleted = FALSE AND l.user_id <> :userId AND v.deleted_at IS NULL""" + COMMENT_VISIBLE));
+                    WHERE c.user_id = :userId AND c.is_deleted = FALSE AND l.user_id <> :userId""" + IN_VISIBLE_THREAD));
 
     // Inside each branch, before its LIMIT: nothing from a suspended user, nor from someone the user blocked or who
     // blocked the user
-    private static final String ACTOR_ALLOWED = """
-             (b.actor_id IS NULL
-              OR EXISTS (SELECT 1 FROM vomatt.users a WHERE a.id = b.actor_id AND a.active)
-                 AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks x WHERE x.blocker_id = :userId AND x.blocked_id = b.actor_id)
-                 AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks x WHERE x.blocker_id = b.actor_id AND x.blocked_id = :userId))""";
+    private static final String ACTOR_ALLOWED = " (b.actor_id IS NULL OR " + UserFilters.active("b.actor_id")
+            + " AND " + UserFilters.notBlockedEitherWay("b.actor_id", ":userId") + ")";
 
     // Inside each branch, next to ACTOR_ALLOWED: nothing about a Poll whose owner blocked the user, who cannot reach it
     private static final String POLL_ALLOWED = """
@@ -125,11 +147,16 @@ public class NotificationRepository {
                                  JOIN vomatt.user_blocks x ON x.blocker_id = pv.creator_id AND x.blocked_id = :userId
                                  WHERE pv.id = b.vote_id))""";
 
+    // Appended to MENTION when COMMENT is on too: a Comment that is the user's COMMENT is not also their MENTION, so one
+    // Comment gives one notification
+    private static final String MENTION_NOT_COMMENT =
+            " AND NOT EXISTS (SELECT 1 FROM (" + COMMENT_IDS + ") cm WHERE cm.id = c.id)";
+
     private static final String READ = """
             (n.created_at <= COALESCE((SELECT ra.read_at FROM vomatt.notification_read_all ra WHERE ra.user_id = :userId),
                                       TIMESTAMPTZ 'epoch')
              OR EXISTS (SELECT 1 FROM vomatt.notification_reads r
-                        WHERE r.user_id = :userId AND r.kind = n.kind AND r.source_id = n.source_id))""";
+                        WHERE r.user_id = :userId AND r.kind = n.read_kind AND r.source_id = n.source_id))""";
 
     private static final String ROW = "SELECT n.kind, n.source_id, n.created_at, n.actor_id, n.vote_id, n.comment_id, "
             + READ + " AS is_read FROM (";
@@ -150,7 +177,7 @@ public class NotificationRepository {
             return List.of();
         }
         String keyset = after == null ? "" : " AND (b.created_at, b.source_id) < (:afterTime, :afterId)";
-        String sql = ROW + union(kinds, keyset + " ORDER BY b.created_at DESC, b.source_id DESC LIMIT :limit")
+        String sql = ROW + union(kinds, kinds, keyset + " ORDER BY b.created_at DESC, b.source_id DESC LIMIT :limit")
                 + ") n ORDER BY n.created_at DESC, n.source_id DESC LIMIT :limit";
         Query query = bind(sql, userId, now).setParameter("limit", limit);
         if (after != null) {
@@ -166,14 +193,18 @@ public class NotificationRepository {
         }
         // ponytail: RESULT materializes every Poll the user ever took part in; add a time window or a stored counter
         // if this shows up in slow queries
-        String sql = "SELECT COUNT(*) FROM (SELECT 1 FROM (" + union(kinds, "") + ") n WHERE NOT " + READ
+        String sql = "SELECT COUNT(*) FROM (SELECT 1 FROM (" + union(kinds, kinds, "") + ") n WHERE NOT " + READ
                 + " LIMIT " + UNREAD_COUNT_CAP + ") capped";
         return ((Number) bind(sql, userId, now).getSingleResult()).longValue();
     }
 
-    /** Whether the user has this notification now, whatever their preferences. */
-    public boolean exists(UUID userId, NotificationKind kind, UUID sourceId, OffsetDateTime now) {
-        String sql = "SELECT 1 FROM (" + union(Set.of(kind), " AND b.source_id = :sourceId") + ") n";
+    /**
+     * Whether the user has this notification now, of a kind on or off; {@code enabled} are the kinds their preferences
+     * leave on, for the MENTION-or-COMMENT choice the feed makes.
+     */
+    public boolean exists(UUID userId, NotificationKind kind, UUID sourceId, Set<NotificationKind> enabled,
+                          OffsetDateTime now) {
+        String sql = "SELECT 1 FROM (" + union(Set.of(kind), enabled, " AND b.source_id = :sourceId") + ") n";
         return !bind(sql, userId, now).setParameter("sourceId", sourceId).getResultList().isEmpty();
     }
 
@@ -183,7 +214,7 @@ public class NotificationRepository {
      */
     @SuppressWarnings("unchecked")
     public Optional<NotificationRow> findCurrentForPoll(UUID userId, UUID voteId, OffsetDateTime now) {
-        String sql = ROW + union(POLL_KINDS, " AND b.vote_id = :voteId") + ") n";
+        String sql = ROW + union(POLL_KINDS, POLL_KINDS, " AND b.vote_id = :voteId") + ") n";
         List<Object[]> rows = bind(sql, userId, now).setParameter("voteId", voteId).getResultList();
         return rows.stream().map(NotificationRow::of).findFirst();
     }
@@ -194,18 +225,18 @@ public class NotificationRepository {
         if (voteIds.isEmpty()) {
             return Set.of();
         }
-        String sql = "SELECT n.vote_id FROM (" + union(POLL_KINDS, " AND b.vote_id IN (:voteIds)") + ") n WHERE NOT " + READ;
+        String sql = "SELECT n.vote_id FROM (" + union(POLL_KINDS, POLL_KINDS, " AND b.vote_id IN (:voteIds)") + ") n WHERE NOT " + READ;
         List<UUID> ids = bind(sql, userId, now).setParameter("voteIds", voteIds).getResultList();
         return Set.copyOf(ids);
     }
 
-    /** Marks one notification read; idempotent. */
+    /** Marks one notification read, under its {@link #readKind}; idempotent. */
     public void markRead(UUID userId, NotificationKind kind, UUID sourceId, OffsetDateTime now) {
         em.createNativeQuery("""
                 INSERT INTO vomatt.notification_reads (user_id, kind, source_id, read_at) VALUES (:userId, :kind, :sourceId, :now)
                 ON CONFLICT (user_id, kind, source_id) DO NOTHING""")
                 .setParameter("userId", userId)
-                .setParameter("kind", kind.name())
+                .setParameter("kind", readKind(kind))
                 .setParameter("sourceId", sourceId)
                 .setParameter("now", now)
                 .executeUpdate();
@@ -221,11 +252,19 @@ public class NotificationRepository {
                 .executeUpdate();
     }
 
-    /** The given kinds' branches, each filtered by actor and Poll owner and then by {@code tail}, as one UNION ALL. */
-    private static String union(Set<NotificationKind> kinds, String tail) {
+    /**
+     * The given kinds' branches, each filtered by actor and Poll owner and then by {@code tail}, as one UNION ALL;
+     * {@code enabled} picks between MENTION and COMMENT as a feed of those kinds does.
+     */
+    private static String union(Set<NotificationKind> kinds, Set<NotificationKind> enabled, String tail) {
         return kinds.stream()
-                .map(kind -> "(SELECT * FROM (" + BRANCHES.get(kind) + ") b WHERE" + ACTOR_ALLOWED + POLL_ALLOWED + tail + ")")
+                .map(kind -> "(SELECT * FROM (" + branch(kind, enabled) + ") b WHERE" + ACTOR_ALLOWED + POLL_ALLOWED + tail + ")")
                 .collect(Collectors.joining(" UNION ALL "));
+    }
+
+    private static String branch(NotificationKind kind, Set<NotificationKind> enabled) {
+        return kind == NotificationKind.MENTION && enabled.contains(NotificationKind.COMMENT)
+                ? BRANCHES.get(kind) + MENTION_NOT_COMMENT : BRANCHES.get(kind);
     }
 
     // Branches bind only the times they use (FOLLOWED alone uses none)

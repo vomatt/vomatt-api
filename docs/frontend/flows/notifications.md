@@ -36,7 +36,7 @@ Each item's `category` is fixed by its `kind` and maps to a tab:
 
 | `category` | Kinds |
 |------------|-------|
-| `CONVERSATION` | `COMMENT` |
+| `CONVERSATION` | `COMMENT`, `MENTION` |
 | `LIKE` | `LIKE` |
 | `POLL_END` | `RESULT`, `CANCELLED`, `CLOSING_SOON` |
 | `INVITATION` | `INVITATION` |
@@ -44,19 +44,21 @@ Each item's `category` is fixed by its `kind` and maps to a tab:
 
 | `kind` | When | `actor` | `poll` | `comment` | Switch |
 |--------|------|---------|--------|-----------|--------|
-| `RESULT` | A Poll you own, hold a Ballot in or are an Invitee of has Ended (Deadline passed, Closed, or every Invitee voted). Not after a Retraction unless you are an Invitee | null | yes | null | `resultsIn` |
+| `RESULT` | A Poll you own, hold a Ballot in, are an Invitee of or bookmarked before it Ended has Ended (Deadline passed, Closed, or every Invitee voted); bookmarking an already Ended Poll gives none. Not after a Retraction unless you are an Invitee or bookmarked it. One item per Poll whatever the reasons | null | yes | null | `resultsIn` |
 | `CANCELLED` | An Invite-only Poll you are invited to was Cancelled before it opened (only Polls Cancelled before 2026-10-14) | owner | yes | null | `resultsIn` |
 | `INVITATION` | You are an Invitee of a Scheduled or Open Invite-only Poll. Replaced by `RESULT` once the Poll Ends. Removed and invited again: a new, unread one | owner | yes | null | `invitations` |
 | `FOLLOWED` | Someone followed you. One item per follower: group them ("@bkim and 3 others followed you") | follower | null | null | none |
 | `COMMENT` | Someone else commented on or replied under your Poll, or replied to your Comment | author | yes | `{ id, parentId, excerpt }` | `comments` |
+| `MENTION` | Someone else wrote `@<your username>` in a Comment or Reply on a Poll you can see. Not listed when the same Comment gives you a `COMMENT` (on your Poll, or a Reply to your live Comment), unless `comments` is off; nor for a Reply in a thread started by a user you blocked | author | yes | `{ id, parentId, excerpt }` | `mentions` |
 | `CLOSING_SOON` | An Open Poll ends within 24 hours, you hold no Ballot, and you are its Invitee or it is a Public Poll of someone you follow. Gone once you vote or it Ends | owner | yes | null | `closingSoon` (off by default) |
-| `LIKE` | Someone else liked your Comment or Reply (Poll and thread visibility as for `COMMENT`). Gone if they unlike; liking again is a new, unread one. Likes given before this release (Flyway V6) start read | who liked | yes | your liked Comment, `{ id, parentId, excerpt }` | `likes` |
+| `LIKE` | Someone else liked your Comment or Reply (Poll and thread visibility as for `COMMENT`). Gone if they unlike; liking again is a new, unread one. Likes given before this release (Flyway V10) start read | who liked | yes | your liked Comment, `{ id, parentId, excerpt }` | `likes` |
 
 - `createdAt` is when it happened: the Poll's end, the Invitation, the follow, the Comment, the like, or 24 hours before the Poll's end for `CLOSING_SOON` (its start if later). Group by day with it.
 - `poll` is `{ id, title, startTime, endTime, status, turnout, myOptionId, winningOptionIds, winningOptionLabels, tie }`. It never carries per-option counts, so a Sealed Poll shows only Turnout ("342 voted so far"). `myOptionId` is your Ballot's option (null without one, or once your Anonymous Ballot of an Ended Poll is sealed). The outcome fields are null until the Poll has Ended; then `winningOptionIds` / `winningOptionLabels` name the option(s) with the most Ballots in display order (`[]` when none named an option, as in a Cancelled Poll) and `tie` says whether there are several. Your Ballot won when `myOptionId` is in `winningOptionIds` (tied when `tie` too). Link to `/poll/{poll.id}`; for `RESULT`, the results page.
 - `actor` carries `isFollowing` (you follow them) and `followsYou` (they follow you), so a `FOLLOWED` row can offer "Follow back" without fetching the profile.
 - `comment.parentId` is the Comment a Reply is under, null for a top-level Comment. A link to a Reply needs both ids.
 - Nothing from a suspended user, a user you blocked or a user who blocked you is listed or counted, and nothing about a Poll whose owner blocked you (`RESULT` and `COMMENT` included). A `COMMENT` for a Reply in a thread started by a user you blocked is left out too, as in the Comment lists.
+- `CLOSING_SOON` follows users only, by design: a followed tag (`PUT /api/tags/{tagId}/follow`) adds Polls to `GET /api/votes/following` but never raises `CLOSING_SOON`.
 - An item can vanish (Comment deleted, follow undone, Poll Deleted, block) or appear behind the cursor (you follow someone); de-duplicate by `id`.
 
 ## Read state

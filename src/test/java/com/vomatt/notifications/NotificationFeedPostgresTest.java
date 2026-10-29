@@ -14,6 +14,8 @@ import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.ParameterizedTest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -79,7 +81,7 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
 
     private void preferences(User user, Boolean resultsIn, Boolean invitations, Boolean comments, Boolean closingSoon) {
         notificationService.updatePreferences(user.getId().toString(),
-                new UpdateNotificationPreferencesRequest(resultsIn, invitations, comments, closingSoon, null));
+                new UpdateNotificationPreferencesRequest(resultsIn, invitations, comments, closingSoon, null, null));
     }
 
     private Vote poll(User owner, Audience audience, OffsetDateTime start, OffsetDateTime end) {
@@ -109,6 +111,12 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
         CommentLike like = new CommentLike(comment, user);
         em.persist(like);
         return like;
+    }
+
+    private VoteComment mention(User author, Vote poll, VoteComment parent, User... mentioned) {
+        VoteComment comment = comment(author, poll, parent, "hey");
+        comment.setMentionedUserIds(java.util.Arrays.stream(mentioned).map(User::getId).toArray(java.util.UUID[]::new));
+        return comment;
     }
 
     private UserFollow follow(User follower, User followed) {
@@ -262,6 +270,162 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should list MENTION with the author and Comment when someone else mentions the user, and mark it read")
+    void shouldListMentionWhenOthersMentionUser() {
+        Vote alices = poll(alice, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        VoteComment mentioned = mention(bob, alices, null, me, alice);
+
+        assertThat(feed(me)).singleElement().satisfies(n -> {
+            assertThat(n.kind()).isEqualTo(NotificationKind.MENTION);
+            assertThat(n.id()).isEqualTo("mention_" + mentioned.getId());
+            assertThat(n.actor().username()).isEqualTo(bob.getUsername());
+            assertThat(n.poll().id()).isEqualTo(alices.getId().toString());
+            assertThat(n.comment().id()).isEqualTo(mentioned.getId().toString());
+        });
+        notificationService.markRead(me.getId().toString(), "mention_" + mentioned.getId());
+        assertThat(feed(me)).singleElement().satisfies(n -> assertThat(n.read()).isTrue());
+    }
+
+    @Test
+    @DisplayName("should not list MENTION for a self-mention, a deleted Comment, a blocked author or when switched off")
+    void shouldNotListMentionWhenSelfDeletedBlockedOrSwitchedOff() {
+        User carol = persistUser("f-carol-" + System.nanoTime());
+        Vote alices = poll(alice, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        mention(me, alices, null, me);
+        mention(bob, alices, null, me).softDelete();
+        mention(carol, alices, null, me);
+        em.persist(new UserBlock(me, carol));
+        assertThat(feed(me)).isEmpty();
+
+        mention(bob, alices, null, me);
+        assertThat(kinds(me)).containsExactly(NotificationKind.MENTION);
+        notificationService.updatePreferences(me.getId().toString(),
+                new UpdateNotificationPreferencesRequest(null, null, null, null, false, null));
+        assertThat(feed(me)).isEmpty();
+        assertThat(unread(me)).isZero();
+    }
+
+    @Test
+    @DisplayName("should list only COMMENT when the mentioning Comment is on the user's Poll or replies to the user's Comment")
+    void shouldNotDuplicateCommentWithMentionWhenBothApply() {
+        Vote mine = poll(me, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        Vote alices = poll(alice, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        VoteComment onMine = mention(alice, mine, null, me);
+        VoteComment myComment = comment(me, alices, null, "mine");
+        VoteComment reply = mention(bob, alices, myComment, me);
+
+        assertThat(feed(me)).extracting(NotificationResponse::id).containsExactlyInAnyOrder(
+                "comment_" + onMine.getId(), "comment_" + reply.getId());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = { true, false })
+    @DisplayName("should list MENTION for a Reply that mentions the user under their deleted Comment, whether COMMENT is on or off")
+    void shouldListMentionWhenReplyUnderDeletedComment(boolean commentsOn) {
+        Vote alices = poll(alice, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        VoteComment myDeleted = comment(me, alices, null, "gone");
+        myDeleted.softDelete();
+        VoteComment reply = mention(bob, alices, myDeleted, me);
+        preferences(me, null, null, commentsOn, null);
+
+        assertThat(feed(me)).extracting(NotificationResponse::id).containsExactly("mention_" + reply.getId());
+        assertThat(unread(me)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("should return notification.not_found when reading a MENTION the feed lists as COMMENT, and read it once COMMENT is off")
+    void shouldNotReadMentionWhenFeedListsItAsComment() {
+        Vote mine = poll(me, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        VoteComment onMine = mention(alice, mine, null, me);
+        em.flush();
+
+        assertThatThrownBy(() -> notificationService.markRead(me.getId().toString(), "mention_" + onMine.getId()))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.NOTIFICATION_NOT_FOUND));
+
+        preferences(me, null, null, false, null);
+        notificationService.markRead(me.getId().toString(), "mention_" + onMine.getId());
+        assertThat(unread(me)).isZero();
+    }
+
+    @Test
+    @DisplayName("should keep a Comment read as COMMENT read when switching COMMENT off lists it as MENTION")
+    void shouldKeepReadWhenCommentReadThenSwitchedOff() {
+        Vote mine = poll(me, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        VoteComment onMine = mention(alice, mine, null, me);
+        em.flush();
+        notificationService.markRead(me.getId().toString(), "comment_" + onMine.getId());
+
+        preferences(me, null, null, false, null);
+
+        assertThat(feed(me)).singleElement().satisfies(n -> {
+            assertThat(n.id()).isEqualTo("mention_" + onMine.getId());
+            assertThat(n.read()).isTrue();
+        });
+        assertThat(unread(me)).isZero();
+    }
+
+    @Test
+    @DisplayName("should keep a Comment read as MENTION read when switching COMMENT on lists it as COMMENT")
+    void shouldKeepReadWhenMentionReadThenCommentSwitchedOn() {
+        Vote mine = poll(me, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        VoteComment onMine = mention(alice, mine, null, me);
+        preferences(me, null, null, false, null);
+        em.flush();
+        notificationService.markRead(me.getId().toString(), "mention_" + onMine.getId());
+
+        preferences(me, null, null, true, null);
+        // The upsert is native SQL; drop the preference rows the first read cached
+        em.clear();
+
+        assertThat(feed(me)).singleElement().satisfies(n -> {
+            assertThat(n.id()).isEqualTo("comment_" + onMine.getId());
+            assertThat(n.read()).isTrue();
+        });
+        assertThat(unread(me)).isZero();
+    }
+
+    @Test
+    @DisplayName("should list MENTION for what would be COMMENT when COMMENT is switched off")
+    void shouldListMentionWhenCommentSwitchedOff() {
+        Vote mine = poll(me, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        Vote alices = poll(alice, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        VoteComment onMine = mention(alice, mine, null, me);
+        VoteComment reply = mention(bob, alices, comment(me, alices, null, "mine"), me);
+        preferences(me, null, null, false, null);
+
+        assertThat(feed(me)).extracting(NotificationResponse::id).containsExactlyInAnyOrder(
+                "mention_" + onMine.getId(), "mention_" + reply.getId());
+        assertThat(unread(me)).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("should not list MENTION for a Reply in a thread started by a user the user blocked")
+    void shouldNotListMentionWhenThreadStarterBlocked() {
+        User carol = persistUser("f-carol-" + System.nanoTime());
+        Vote alices = poll(alice, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        mention(bob, alices, comment(carol, alices, null, "thread"), me);
+        assertThat(kinds(me)).containsExactly(NotificationKind.MENTION);
+
+        em.persist(new UserBlock(me, carol));
+
+        assertThat(feed(me)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("should list MENTION on an Invite-only Poll only while the user is invited")
+    void shouldNotListMentionWhenInviteOnlyPollNotVisible() {
+        Vote hidden = poll(alice, Audience.INVITE_ONLY, now.minusHours(2), now.plusDays(1));
+        mention(bob, hidden, null, me);
+        assertThat(feed(me)).isEmpty();
+
+        Vote invited = invitePoll(alice, now.minusHours(2), now.plusDays(1), me);
+        VoteComment visible = mention(bob, invited, null, me);
+        assertThat(feed(me)).filteredOn(n -> n.kind() == NotificationKind.MENTION)
+                .extracting(NotificationResponse::id).containsExactly("mention_" + visible.getId());
+    }
+
+    @Test
     @DisplayName("should list CLOSING_SOON, once switched on, for an invited or followed user's Poll ending within a day that the user has not voted in")
     void shouldListClosingSoonWhenSwitchedOn() {
         Vote invited = invitePoll(alice, now.minusDays(2), now.plusHours(6), me);
@@ -351,7 +515,7 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
         assertThat(kinds(me)).containsExactly(NotificationKind.FOLLOWED);
         assertThat(unread(me)).isEqualTo(1);
         assertThat(notificationService.getPreferences(me.getId().toString()))
-                .extracting("resultsIn", "invitations", "comments", "closingSoon").containsExactly(false, false, false, false);
+                .extracting("resultsIn", "invitations", "comments", "closingSoon", "mentions").containsExactly(false, false, false, false, true);
     }
 
     @Test

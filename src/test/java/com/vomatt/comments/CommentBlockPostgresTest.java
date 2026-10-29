@@ -15,10 +15,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 
 import com.vomatt.comments.dto.CreateCommentRequest;
-import com.vomatt.comments.dto.ReportCommentRequest;
+import com.vomatt.common.dto.ReportRequest;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
-import com.vomatt.entity.CommentReportReason;
+import com.vomatt.entity.ReportReason;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserBlock;
 import com.vomatt.entity.Vote;
@@ -59,8 +59,8 @@ class CommentBlockPostgresTest extends PostgresRepositoryTest {
                 ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMENT_NOT_FOUND));
     }
 
-    private ReportCommentRequest spam() {
-        return new ReportCommentRequest(CommentReportReason.SPAM, null);
+    private ReportRequest spam() {
+        return new ReportRequest(ReportReason.SPAM, null);
     }
 
     private void reply(VoteComment parent) {

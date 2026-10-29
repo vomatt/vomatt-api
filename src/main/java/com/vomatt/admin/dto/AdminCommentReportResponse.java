@@ -2,7 +2,7 @@ package com.vomatt.admin.dto;
 
 import java.time.OffsetDateTime;
 
-import com.vomatt.entity.CommentReportReason;
+import com.vomatt.entity.ReportReason;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -19,7 +19,7 @@ public record AdminCommentReportResponse(
         @Schema(description = "Comment author's username", example = "troll") String authorUsername,
         @Schema(description = "Reporter's user ID", example = "0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f") String reporterId,
         @Schema(description = "Reporter's username", example = "alice") String reporterUsername,
-        @Schema(description = "Reason given", example = "HARASSMENT") CommentReportReason reason,
+        @Schema(description = "Reason given", example = "HARASSMENT") ReportReason reason,
         @Schema(description = "Reporter's note; null when none was given", example = "Insults me in every thread.", nullable = true)
         String note,
         @Schema(description = "When it was reported", example = "2026-10-26T10:00:00+08:00") OffsetDateTime createdAt

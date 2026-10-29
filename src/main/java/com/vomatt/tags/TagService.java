@@ -8,7 +8,9 @@ import com.vomatt.tags.dto.TagDto;
 import com.vomatt.entity.Tag;
 import com.vomatt.common.response.Cursor;
 import com.vomatt.common.response.CursorResponse;
+import com.vomatt.common.util.UserGuard;
 import com.vomatt.repository.TagRepository;
+import com.vomatt.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Limit;
@@ -25,6 +27,7 @@ import java.util.stream.Collectors;
 public class TagService {
 
     private final TagRepository tagRepository;
+    private final UserRepository userRepository;
 
     @Transactional
     public TagDto createTag(CreateTagRequest request) {
@@ -100,6 +103,35 @@ public class TagService {
                 after == null ? null : after.id(), Limit.of(size + 1));
         return CursorResponse.of(rows, size, Cursor.Scope.POPULAR_TAGS, t -> Cursor.of(t.getUsageCount(), t.getId()),
                 page -> page.stream().map(TagDto::from).toList());
+    }
+
+    /** Follows a tag, so its Open Public Polls join the caller's Following list; idempotent. */
+    @Transactional
+    public void followTag(String userId, String tagId) {
+        UUID id = UUID.fromString(tagId);
+        UUID userUuid = UUID.fromString(userId);
+        if (tagRepository.follow(userUuid, id) > 0) {
+            log.info("User {} followed tag {}", userId, tagId);
+        } else if (!tagRepository.isFollowing(userUuid, id)) {
+            // Not a repeat (a follow is deleted with its tag): the tag or the user is gone
+            if (!tagRepository.existsById(id)) {
+                throw ApiException.notFound(MessageKey.TAG_NOT_FOUND);
+            }
+            UserGuard.requireExists(userRepository, userUuid);
+        }
+    }
+
+    /** Unfollows a tag; idempotent, whether or not the tag exists. */
+    @Transactional
+    public void unfollowTag(String userId, String tagId) {
+        if (tagRepository.unfollow(UUID.fromString(userId), UUID.fromString(tagId)) > 0) {
+            log.info("User {} unfollowed tag {}", userId, tagId);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<TagDto> getFollowedTags(String userId) {
+        return tagRepository.findFollowedBy(UUID.fromString(userId)).stream().map(TagDto::from).toList();
     }
 
     private Tag findTag(UUID id) {

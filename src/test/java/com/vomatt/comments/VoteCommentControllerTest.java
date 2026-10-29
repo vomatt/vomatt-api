@@ -30,13 +30,13 @@ import org.springframework.security.web.method.annotation.AuthenticationPrincipa
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
-import com.vomatt.comments.dto.ReportCommentRequest;
+import com.vomatt.common.dto.ReportRequest;
 import com.vomatt.common.exception.GlobalExceptionHandler;
 import com.vomatt.common.i18n.LocalizedMessageService;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.security.UserPrincipal;
-import com.vomatt.entity.CommentReportReason;
+import com.vomatt.entity.ReportReason;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("VoteCommentController")
@@ -102,7 +102,7 @@ class VoteCommentControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.success").value(true));
 
-        verify(commentService).reportComment(commentId, userId, new ReportCommentRequest(CommentReportReason.HATE, "slurs"));
+        verify(commentService).reportComment(commentId, userId, new ReportRequest(ReportReason.HATE, "slurs"));
     }
 
     @Test

@@ -89,7 +89,7 @@ public class NotificationService {
 
     /** The kinds the user's preferences leave on, only {@code category}'s when given; may be empty. */
     private Set<NotificationKind> kinds(UUID userId, NotificationCategory category) {
-        Set<NotificationKind> kinds = NotificationPreference.enabledKinds(preferences(userId));
+        Set<NotificationKind> kinds = enabledKinds(userId);
         if (category != null) {
             kinds.removeIf(kind -> kind.category() != category);
         }
@@ -104,7 +104,9 @@ public class NotificationService {
         UUID userUuid = UUID.fromString(userId);
         OffsetDateTime now = OffsetDateTime.now();
         NotificationId notification = isUuid(id) ? currentForPoll(userId, id, now) : NotificationId.parse(id);
-        if (!notificationRepository.exists(userUuid, notification.kind(), notification.sourceId(), now)) {
+        // Preferences only matter to MENTION, which COMMENT can take over
+        Set<NotificationKind> enabled = notification.kind() == NotificationKind.MENTION ? enabledKinds(userUuid) : Set.of();
+        if (!notificationRepository.exists(userUuid, notification.kind(), notification.sourceId(), enabled, now)) {
             throw ApiException.notFound(MessageKey.NOTIFICATION_NOT_FOUND);
         }
         notificationRepository.markRead(userUuid, notification.kind(), notification.sourceId(), now);
@@ -133,6 +135,7 @@ public class NotificationService {
         changes.put(NotificationPreference.INVITATIONS, request.invitations());
         changes.put(NotificationPreference.COMMENTS, request.comments());
         changes.put(NotificationPreference.CLOSING_SOON, request.closingSoon());
+        changes.put(NotificationPreference.MENTIONS, request.mentions());
         changes.put(NotificationPreference.LIKES, request.likes());
         changes.forEach((preference, on) -> {
             if (on != null) {
@@ -141,6 +144,10 @@ public class NotificationService {
         });
         log.info("User {} updated notification preferences", userId);
         return toResponse(preferences(userUuid));
+    }
+
+    private Set<NotificationKind> enabledKinds(UUID userId) {
+        return NotificationPreference.enabledKinds(preferences(userId));
     }
 
     /** Every switch, the stored value or its default. */
@@ -159,7 +166,8 @@ public class NotificationService {
     private static NotificationPreferencesResponse toResponse(Map<NotificationPreference, Boolean> settings) {
         return new NotificationPreferencesResponse(settings.get(NotificationPreference.RESULTS_IN),
                 settings.get(NotificationPreference.INVITATIONS), settings.get(NotificationPreference.COMMENTS),
-                settings.get(NotificationPreference.CLOSING_SOON), settings.get(NotificationPreference.LIKES));
+                settings.get(NotificationPreference.CLOSING_SOON), settings.get(NotificationPreference.MENTIONS),
+                settings.get(NotificationPreference.LIKES));
     }
 
     private NotificationId currentForPoll(String userId, String voteId, OffsetDateTime now) {

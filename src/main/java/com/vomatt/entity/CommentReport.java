@@ -32,7 +32,7 @@ public class CommentReport extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "reason")
-    private CommentReportReason reason;
+    private ReportReason reason;
 
     @Column(name = "note")
     private String note;

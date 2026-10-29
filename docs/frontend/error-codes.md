@@ -61,7 +61,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.email_not_verified` | 401 | 此 OAuth 帳號的 email 尚未驗證，無法登入或合併既有帳號 | This OAuth account's email is not verified; cannot sign in or merge an existing account | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.account_banned` | 403 | 此帳號已被停權，無法登入 | This account has been banned and cannot sign in | Show a permission-denied notice | AuthService, JwtAuthFilter |
 | `auth.passkey.invalid` | 400 / 401 | Passkey 驗證失敗，請重新操作一次 | Passkey verification failed. Please try again | Show message so the user can fix the input; See [auth-flow.md](auth-flow.md) | PasskeyService |
-| `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | AdminUserService, FeedbackService, InviteListService, NotificationService, PasskeyService, UserService, VoteCommentService, VoteService |
+| `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | AdminUserService, FeedbackService, InviteListService, JwtAuthFilter, NotificationService, PasskeyService, UserGuard, UserService, VoteCommentService, VoteService |
 | `user.username.taken` | 409 | 使用者名稱已被使用 | Username already taken | Show message (resource state conflict) | UserService |
 | `user.delete.forbidden` | 403 | 只能刪除自己的帳號 | You can only delete your own account | Show a permission-denied notice | UserService |
 | `user.follow.blocked` | 400 | 不能追蹤已封鎖的使用者，請先解除封鎖 | You cannot follow a user you blocked; unblock them first | Show message so the user can fix the input | UserService |
@@ -88,6 +88,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `vote.options.min` | 400 | 至少需要 {0} 個選項 | Minimum {0} options required | Show message so the user can fix the input | VoteService |
 | `vote.options.max` | 400 | 最多只能有 {0} 個選項 | Maximum {0} options allowed | Show message so the user can fix the input | VoteService |
 | `vote.duration.exceeded` | 400 | 投票期間不可超過 {0} 天 | Vote duration cannot exceed {0} days | Show message so the user can fix the input | VoteService |
+| `vote.report.self` | 400 | 不能檢舉自己的投票 | You cannot report your own poll | Show message so the user can fix the input | VoteService |
 | `comment.not_found` | 404 | 找不到留言 | Comment not found | Show resource not found | AdminCommentService, VoteCommentService |
 | `comment.forbidden` | 403 | 只能修改或刪除自己的留言 | You can only modify your own comments | Show a permission-denied notice | VoteCommentService |
 | `comment.parent.invalid` | 400 | 要回覆的留言不存在或不屬於此投票 | The comment being replied to does not exist in this poll | Show message so the user can fix the input | VoteCommentService |

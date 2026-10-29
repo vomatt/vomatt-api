@@ -47,6 +47,7 @@ sequenceDiagram
 | 8. End early (optional) | `PUT /api/votes/{voteId}/deactivate` | Owner only, Unlisted and Invite-only Polls only: a Public Poll runs to its `deadline` (400 `vote.close.public_not_allowed`). Open -> Ended immediately (`endTime` moves, `deadline` stays); no change if already Ended. The response is only a `SimpleResultResponse`, so `GET` the Poll again for the new state |
 | 9. View results | `GET /api/votes/{voteId}/results` | Public, Ended only; before that returns 403 `vote.results.sealed`. `percentage` is Support (0-100, not rounded) |
 | 10. See who voted for what | `GET /api/votes/{voteId}/voters?cursor=&limit=` | Requires sign-in and an Ended Poll, then decided by Voter Visibility; cursor pagination, oldest Ballot first |
+| 11. Report (optional) | `POST /api/votes/{voteId}/report` | Login required. Body `{ reason, note? }`, `reason` one of `SPAM`, `HARASSMENT`, `HATE`, `MISINFORMATION`, `OTHER`, `note` up to 500 characters. Any state. Idempotent: a repeat keeps the first report. Not on your own Polls (hide the action there). The owner is not told and the Poll stays until a moderator acts. 404 `vote.not_found` when the Poll is unreachable, including when its owner blocked you |
 
 ## Status and UI mapping
 
@@ -124,5 +125,6 @@ After the user shares the Poll's link with the share button, call `POST /api/vot
 | `vote.end_time.before_start` | 400 | `endTime` is not later than `startTime` | Form hint |
 | `vote.duration.exceeded` | 400 | Start to end exceeds the limit (default 365 days) | Form hint (the message states the limit) |
 | `vote.invitee.not_invite_only` / `vote.invitee.ids_invalid` | 400 | Invitees sent for a Poll that is not Invite-only / an unknown or suspended `inviteeIds` user | Form hint |
+| `vote.report.self` | 400 | Reporting your own Poll | Hide the report action on your own Polls |
 | `tag.ids.invalid` | 400 | `tagIds` contains a nonexistent tag | Reload the tag list |
 | `common.validation_failed` | 400 | Field length / required, including each option's `text` (only the first field error is returned) | Highlight that field |

@@ -116,6 +116,10 @@ public class VoteResponse {
             example = "true", nullable = true)
     private Boolean deletable;
 
+    @Schema(description = "Whether the caller bookmarked the Poll (`PUT /api/votes/{voteId}/bookmark`). Null when the caller is not signed in "
+            + "and in admin views", example = "false", nullable = true)
+    private Boolean bookmarked;
+
     @Data
     @Schema(description = "One option of a Poll")
     public static class VoteOptionResponse {

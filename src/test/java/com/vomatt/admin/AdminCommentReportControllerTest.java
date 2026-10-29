@@ -26,7 +26,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.vomatt.admin.dto.AdminCommentReportResponse;
 import com.vomatt.common.i18n.LocalizedMessageService;
 import com.vomatt.common.response.PageResponse;
-import com.vomatt.entity.CommentReportReason;
+import com.vomatt.entity.ReportReason;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AdminCommentReportController")
@@ -57,7 +57,7 @@ class AdminCommentReportControllerTest {
     void shouldReturnReportsWhenAdminLists() throws Exception {
         authenticateAs("admin");
         when(reportService.listReports(2, 10)).thenReturn(PageResponse.of(List.of(new AdminCommentReportResponse(
-                "r1", "c1", "v1", null, "rude", false, "u1", "troll", "u2", "alice", CommentReportReason.HARASSMENT,
+                "r1", "c1", "v1", null, "rude", false, "u1", "troll", "u2", "alice", ReportReason.HARASSMENT,
                 null, null)), 11, 2, 10));
 
         mockMvc.perform(get("/api/admin/comment-reports").param("page", "2").param("limit", "10"))

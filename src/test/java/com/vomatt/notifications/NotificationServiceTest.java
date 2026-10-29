@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.OffsetDateTime;
@@ -93,11 +94,11 @@ class NotificationServiceTest {
         assertThat(kindsListed()).isEqualTo(defaults);
         assertThat(kindsCounted()).isEqualTo(defaults);
         assertThat(notificationService.getPreferences(USER))
-                .isEqualTo(new NotificationPreferencesResponse(true, true, true, false, true));
+                .isEqualTo(new NotificationPreferencesResponse(true, true, true, false, true, true));
     }
 
     @ParameterizedTest
-    @EnumSource(value = NotificationPreference.class, names = { "RESULTS_IN", "INVITATIONS", "COMMENTS", "LIKES" })
+    @EnumSource(value = NotificationPreference.class, names = { "RESULTS_IN", "INVITATIONS", "COMMENTS", "MENTIONS", "LIKES" })
     @DisplayName("should leave a switched-off kind out of the feed and the count, keeping FOLLOWED")
     void shouldLeaveKindOutWhenSwitchedOff(NotificationPreference preference) {
         stored(preference, false);
@@ -106,6 +107,7 @@ class NotificationServiceTest {
             case INVITATIONS -> EnumSet.of(NotificationKind.INVITATION);
             case COMMENTS -> EnumSet.of(NotificationKind.COMMENT);
             case CLOSING_SOON -> EnumSet.of(NotificationKind.CLOSING_SOON);
+            case MENTIONS -> EnumSet.of(NotificationKind.MENTION);
             case LIKES -> EnumSet.of(NotificationKind.LIKE);
         };
 
@@ -124,10 +126,10 @@ class NotificationServiceTest {
     @Test
     @DisplayName("should list only the requested category's kinds, and none when they are all switched off")
     void shouldFilterKindsByCategoryWhenGiven() {
-        stored(NotificationPreference.COMMENTS, false);
+        stored(NotificationPreference.LIKES, false);
 
         notificationService.list(USER, NotificationCategory.POLL_END, null, 20);
-        notificationService.countUnread(USER, NotificationCategory.CONVERSATION);
+        notificationService.countUnread(USER, NotificationCategory.LIKE);
 
         verify(notificationRepository).findPage(eq(USER_ID),
                 eq(EnumSet.of(NotificationKind.RESULT, NotificationKind.CANCELLED)), any(), any(), anyInt());
@@ -139,7 +141,7 @@ class NotificationServiceTest {
     void shouldUpsertOnlySentSwitchesWhenUpdating() {
         when(userRepository.existsById(USER_ID)).thenReturn(true);
 
-        notificationService.updatePreferences(USER, new UpdateNotificationPreferencesRequest(null, null, false, null, null));
+        notificationService.updatePreferences(USER, new UpdateNotificationPreferencesRequest(null, null, false, null, null, null));
 
         verify(preferenceRepository).upsert(any(), eq(USER_ID), eq("notifications.comments"), eq("false"));
         verify(preferenceRepository, never()).upsert(any(), any(), eq("notifications.resultsIn"), any());
@@ -151,7 +153,7 @@ class NotificationServiceTest {
     @DisplayName("should return 404 when the account updating its preferences no longer exists")
     void shouldRejectUpdateWhenUserMissing() {
         assertThatThrownBy(() -> notificationService.updatePreferences(USER,
-                new UpdateNotificationPreferencesRequest(true, null, null, null, null)))
+                new UpdateNotificationPreferencesRequest(true, null, null, null, null, null)))
                 .isInstanceOfSatisfying(ApiException.class,
                         ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND));
     }
@@ -160,11 +162,13 @@ class NotificationServiceTest {
     @DisplayName("should mark a notification read by its id when the user has it")
     void shouldMarkReadWhenNotificationExists() {
         UUID commentId = UUID.randomUUID();
-        when(notificationRepository.exists(eq(USER_ID), eq(NotificationKind.COMMENT), eq(commentId), any())).thenReturn(true);
+        when(notificationRepository.exists(eq(USER_ID), eq(NotificationKind.COMMENT), eq(commentId), any(), any())).thenReturn(true);
 
         notificationService.markRead(USER, "comment_" + commentId);
 
         verify(notificationRepository).markRead(eq(USER_ID), eq(NotificationKind.COMMENT), eq(commentId), any());
+        // Only MENTION depends on preferences
+        verifyNoInteractions(preferenceRepository);
     }
 
     @Test
@@ -188,7 +192,7 @@ class NotificationServiceTest {
         when(voteService.findAccessibleVote(voteId, USER)).thenReturn(vote);
         when(notificationRepository.findCurrentForPoll(eq(USER_ID), eq(voteId), any())).thenReturn(Optional.of(
                 new NotificationRow(NotificationKind.RESULT, voteId, OffsetDateTime.now(), null, voteId, null, false)));
-        when(notificationRepository.exists(eq(USER_ID), eq(NotificationKind.RESULT), eq(voteId), any())).thenReturn(true);
+        when(notificationRepository.exists(eq(USER_ID), eq(NotificationKind.RESULT), eq(voteId), any(), any())).thenReturn(true);
 
         notificationService.markRead(USER, voteId.toString());
 

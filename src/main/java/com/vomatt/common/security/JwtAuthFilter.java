@@ -23,6 +23,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -34,8 +35,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     public static final String AUTH_ERROR_ATTR = JwtAuthFilter.class.getName() + ".authError";
 
     private static final Set<String> READ_METHODS = Set.of("GET", "HEAD", "OPTIONS");
-    private static final RequestMatcher ADMIN_PATHS = new OrRequestMatcher(Arrays.stream(SecurityEndpoints.AUTHENTICATED_ADMIN)
-            .map(PathPatternRequestMatcher.withDefaults()::matcher).map(RequestMatcher.class::cast).toList());
+    private static final RequestMatcher ADMIN_PATHS = anyOf(SecurityEndpoints.AUTHENTICATED_ADMIN);
+    private static final RequestMatcher PUBLIC_AUTH_PATHS = anyOf(SecurityEndpoints.PUBLIC_AUTH);
 
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
@@ -61,27 +62,43 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 log.debug("Invalid JWT token: {}", ex.getMessage());
             }
         }
-        // Admin roles outlive a demotion or suspension in the token, so every /api/admin/** call (reads included) with a
-        // token granting ROLE_ADMIN (same upper-casing as the authorities above) re-checks the account in one query;
-        // other tokens are refused by the security rule. Matched on the decoded path like the security rules, so an
-        // encoded /api/%61dmin/... cannot skip the check
-        boolean adminCall = principal != null && ADMIN_PATHS.matches(request) && principal.grantsAdmin();
-        if (adminCall && !userRepository.isActiveAdmin(UUID.fromString(principal.userId()))) {
-            // Second query only on refusal: suspended gets the same code as other writes, demoted the plain 403
+        // Roles outlive a demotion, and access tokens a suspension or deletion. On /api/admin/** (matched on the decoded
+        // path like the security rules, so an encoded /api/%61dmin/... cannot skip it) a token granting the admin role
+        // re-checks the account on every call, reads included; other tokens are left to the role rule, no DB hit.
+        // Elsewhere only writes re-check; the public auth endpoints keep their own handling (login and refresh
+        // already reject suspended users)
+        boolean adminPath = principal != null && ADMIN_PATHS.matches(request);
+        // grantsAdmin uses the same upper-casing as the authorities above
+        boolean recheck = adminPath ? principal.grantsAdmin()
+                : principal != null && !READ_METHODS.contains(request.getMethod()) && !PUBLIC_AUTH_PATHS.matches(request);
+        if (recheck) {
             UUID userId = UUID.fromString(principal.userId());
-            errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN,
-                    userRepository.existsByIdAndActiveFalse(userId) ? MessageKey.AUTH_ACCOUNT_BANNED : MessageKey.COMMON_FORBIDDEN);
-            return;
-        }
-        // Access tokens outlive a suspension, so writes re-check users.active; reads skip the DB hit.
-        // /api/auth/** keeps its own handling (login and refresh already reject suspended users).
-        if (!adminCall && principal != null && !READ_METHODS.contains(request.getMethod())
-                && !request.getRequestURI().startsWith("/api/auth/")
-                && userRepository.existsByIdAndActiveFalse(UUID.fromString(principal.userId()))) {
-            errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN, MessageKey.AUTH_ACCOUNT_BANNED);
-            return;
+            if (adminPath && userRepository.isActiveAdmin(userId)) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+            // Empty is a deleted account, false a suspended one
+            Optional<Boolean> active = userRepository.findActiveById(userId);
+            if (active.isEmpty()) {
+                errorWriter.write(request, response, HttpServletResponse.SC_NOT_FOUND, MessageKey.USER_NOT_FOUND);
+                return;
+            }
+            if (!active.get()) {
+                errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN, MessageKey.AUTH_ACCOUNT_BANNED);
+                return;
+            }
+            if (adminPath) {
+                // Token still claims admin, database says demoted
+                errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN, MessageKey.COMMON_FORBIDDEN);
+                return;
+            }
         }
         filterChain.doFilter(request, response);
+    }
+
+    private static RequestMatcher anyOf(String[] patterns) {
+        return new OrRequestMatcher(Arrays.stream(patterns)
+                .map(PathPatternRequestMatcher.withDefaults()::matcher).map(RequestMatcher.class::cast).toList());
     }
 
     private String extractToken(HttpServletRequest request) {

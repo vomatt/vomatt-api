@@ -4,9 +4,12 @@ import com.vomatt.lookups.LookupService;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.util.AfterCommit;
 import com.vomatt.common.util.TextUtil;
+import com.vomatt.common.util.UUIDv7Generator;
+import com.vomatt.common.util.UserGuard;
 import com.vomatt.common.email.EmailService;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.common.dto.ReportRequest;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.time.OffsetDateTime;
@@ -52,6 +55,7 @@ import com.vomatt.repository.UserRepository;
 import com.vomatt.entity.Tag;
 import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
+import com.vomatt.entity.VoteBookmark;
 import com.vomatt.entity.VoteOption;
 import com.vomatt.entity.VoteStatus;
 import com.vomatt.entity.VoterVisibility;
@@ -65,8 +69,10 @@ import com.vomatt.repository.IdCount;
 import com.vomatt.repository.InviteeRepository;
 import com.vomatt.repository.LockTimeout;
 import com.vomatt.repository.NotificationRepository;
+import com.vomatt.repository.VoteBookmarkRepository;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.repository.VoteListRepository;
+import com.vomatt.repository.VoteReportRepository;
 import com.vomatt.repository.VoteRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -99,6 +105,8 @@ public class VoteService {
     private final LockTimeout lockTimeout;
     private final LookupService lookupService;
     private final VoteViewRecorder viewRecorder;
+    private final VoteReportRepository voteReportRepository;
+    private final VoteBookmarkRepository bookmarkRepository;
 
     private static final String INVITATION_COUNTER_NS = "email:invitation";
     private static final String BALLOT_RATE_LIMIT_NS = "rate:limit:ballot";
@@ -138,7 +146,8 @@ public class VoteService {
 
         tagRepository.incrementUsageCount(countedTagIds(vote));
 
-        return toResponse(vote, creatorId);
+        // A new Poll has no bookmark yet
+        return toResponses(List.of(vote), creatorId, Set.of()).getFirst();
     }
 
     /**
@@ -218,6 +227,66 @@ public class VoteService {
         return new VoteShareResponse(vote.getShareCount() + 1L);
     }
 
+    /** Reports a Poll of someone else that the caller can reach; idempotent, a repeat report keeps the first one. */
+    public void reportVote(String voteId, String userId, ReportRequest request) {
+        Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
+        if (vote.isOwnedBy(userId)) {
+            throw ApiException.badRequest(MessageKey.VOTE_REPORT_SELF);
+        }
+        UUID reporterId = UUID.fromString(userId);
+        if (voteReportRepository.insertIfAbsent(UUIDv7Generator.generateId(), vote.getId(), reporterId,
+                request.reason().name(), request.note()) > 0) {
+            log.info("User {} reported vote {} as {}", userId, voteId, request.reason());
+        } else if (!voteReportRepository.existsByVoteIdAndReporterIdAndVoteDeletedAtIsNull(vote.getId(), reporterId)) {
+            // Not a repeat on a live Poll (the common no-op): the Poll or the user is gone
+            requireLiveVote(vote.getId(), reporterId);
+        }
+    }
+
+    /** Bookmarks a Poll the caller can reach, in any state; idempotent, a repeat keeps the first bookmark time. */
+    public void bookmark(String voteId, String userId) {
+        Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
+        UUID userUuid = UUID.fromString(userId);
+        if (bookmarkRepository.insertIfAbsent(UUIDv7Generator.generateId(), userUuid, vote.getId()) > 0) {
+            log.info("User {} bookmarked vote {}", userId, voteId);
+        } else if (!bookmarkRepository.existsByUserIdAndVoteIdAndVoteDeletedAtIsNull(userUuid, vote.getId())) {
+            requireLiveVote(vote.getId(), userUuid);
+        }
+    }
+
+    /**
+     * For a guarded insert that wrote nothing and was no repeat: the Poll was Deleted since the lookup, or the user is
+     * gone.
+     */
+    private void requireLiveVote(UUID voteId, UUID userId) {
+        // A query, as findById would return the stale managed entity
+        if (!voteRepository.existsByIdAndDeletedAtIsNull(voteId)) {
+            throw ApiException.notFound(MessageKey.VOTE_NOT_FOUND);
+        }
+        UserGuard.requireExists(userRepository, userId);
+    }
+
+    /** Removes the caller's bookmark; idempotent, and also for a Poll they can no longer reach. */
+    public void unbookmark(String voteId, String userId) {
+        if (bookmarkRepository.deleteByUserIdAndVoteId(UUID.fromString(userId), UUID.fromString(voteId)) > 0) {
+            log.info("User {} removed bookmark on vote {}", userId, voteId);
+        }
+    }
+
+    /** The caller's bookmarked Polls, most recently bookmarked first; Deleted and no longer reachable ones are left out. */
+    @Transactional(readOnly = true)
+    public CursorResponse<VoteResponse> listBookmarkedVotes(String userId, String cursor, Integer limit) {
+        int size = CursorResponse.limit(limit);
+        Cursor after = Cursor.decode(cursor, Cursor.Scope.BOOKMARKS);
+        List<VoteBookmark> rows = bookmarkRepository.findPage(UUID.fromString(userId),
+            after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
+        return CursorResponse.of(rows, size, Cursor.Scope.BOOKMARKS, b -> Cursor.of(b.getCreatedAt(), b.getId()),
+            page -> {
+                List<Vote> votes = page.stream().map(VoteBookmark::getVote).toList();
+                return toResponses(votes, userId, votes.stream().map(Vote::getId).collect(Collectors.toSet()));
+            });
+    }
+
     /**
      * Also counts a View (asynchronously, never failing the read) when a signed-in non-owner opens an Open Public Poll,
      * the only Polls Trending can list.
@@ -275,7 +344,7 @@ public class VoteService {
             page -> toResponses(page, userId));
     }
 
-    /** Following list: Open PUBLIC Polls created by users the caller follows, most recently opened first. */
+    /** Following list: Open PUBLIC Polls created by users the caller follows or carrying tags the caller follows, most recently opened first. */
     @Transactional(readOnly = true)
     public CursorResponse<VoteResponse> listFollowingVotes(String userId, String cursor, Integer limit) {
         int size = CursorResponse.limit(limit);
@@ -840,6 +909,13 @@ public class VoteService {
      * @param userId viewer, or null for none (no Selection, no {@code deletable}), as for admin views
      */
     public List<VoteResponse> toResponses(List<Vote> votes, String userId) {
+        Set<UUID> bookmarked = userId == null || votes.isEmpty() ? Set.of()
+            : Set.copyOf(bookmarkRepository.findVoteIds(UUID.fromString(userId), votes.stream().map(Vote::getId).toList()));
+        return toResponses(votes, userId, bookmarked);
+    }
+
+    /** For callers that already know the bookmarks (a new Poll, the bookmarked list); {@code bookmarked} is ignored without a viewer. */
+    private List<VoteResponse> toResponses(List<Vote> votes, String userId, Set<UUID> bookmarked) {
         if (votes.isEmpty()) {
             return List.of();
         }
@@ -863,6 +939,9 @@ public class VoteService {
             response.setMyOptionId(mine == null || mine.getOptionId() == null ? null : mine.getOptionId().toString());
             response.setMyBallotAnonymous(mine == null ? null : mine.isAnonymous());
             response.setCommentCount(commentCounts.getOrDefault(vote.getId(), 0L));
+            if (userId != null) {
+                response.setBookmarked(bookmarked.contains(vote.getId()));
+            }
             if (vote.getAudience() == Audience.INVITE_ONLY) {
                 response.setInviteeCount(inviteeCounts.getOrDefault(vote.getId(), 0L));
             }

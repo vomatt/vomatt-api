@@ -109,6 +109,7 @@ public enum MessageKey {
     VOTE_OPTIONS_MIN("vote.options.min"),
     VOTE_OPTIONS_MAX("vote.options.max"),
     VOTE_DURATION_EXCEEDED("vote.duration.exceeded"),
+    VOTE_REPORT_SELF("vote.report.self"),
 
     // === Comment ===
     COMMENT_NOT_FOUND("comment.not_found"),

@@ -2,7 +2,7 @@ package com.vomatt.entity;
 
 /** The tab a notification is filed under; each {@link NotificationKind} belongs to exactly one. */
 public enum NotificationCategory {
-    /** Comments and Replies: COMMENT. */
+    /** Comments, Replies and @mentions: COMMENT, MENTION. */
     CONVERSATION,
     /** Likes on the user's Comments: LIKE. */
     LIKE,

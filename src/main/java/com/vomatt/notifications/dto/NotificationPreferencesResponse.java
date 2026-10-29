@@ -8,5 +8,6 @@ public record NotificationPreferencesResponse(
         @Schema(description = "INVITATION; default true", example = "true") boolean invitations,
         @Schema(description = "COMMENT; default true", example = "true") boolean comments,
         @Schema(description = "CLOSING_SOON; default false", example = "false") boolean closingSoon,
+        @Schema(description = "MENTION; default true", example = "true") boolean mentions,
         @Schema(description = "LIKE; default true", example = "true") boolean likes
 ) {}

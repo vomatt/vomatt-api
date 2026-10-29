@@ -15,11 +15,11 @@ import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
 
-/** Runs the real db/migration/V6__mark_existing_likes_read.sql again inside the rolled-back test transaction. */
-@DisplayName("V6__mark_existing_likes_read.sql (Postgres)")
+/** Runs the real db/migration/V10__mark_existing_likes_read.sql again inside the rolled-back test transaction. */
+@DisplayName("V10__mark_existing_likes_read.sql (Postgres)")
 class MarkExistingLikesReadMigrationPostgresTest extends PostgresRepositoryTest {
 
-    private static final String SCRIPT = "db/migration/V6__mark_existing_likes_read.sql";
+    private static final String SCRIPT = "db/migration/V10__mark_existing_likes_read.sql";
 
     @Test
     @DisplayName("should mark every like by someone else on a Comment read for its author, not self-likes, also on rerun")

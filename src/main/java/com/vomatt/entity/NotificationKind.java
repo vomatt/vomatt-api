@@ -15,6 +15,11 @@ public enum NotificationKind {
     FOLLOWED(NotificationCategory.FOLLOW),
     /** Someone commented on the user's Poll or replied to the user's Comment. Source: the Comment or Reply. */
     COMMENT(NotificationCategory.CONVERSATION),
+    /**
+     * Someone @mentioned the user in a Comment or Reply that is not already the user's COMMENT. Source: the Comment or
+     * Reply.
+     */
+    MENTION(NotificationCategory.CONVERSATION),
     /** A Poll the user can cast a Ballot in and has not ends within a day. Source: the Poll. */
     CLOSING_SOON(NotificationCategory.POLL_END),
     /** Someone liked the user's Comment or Reply. Source: the like row. */

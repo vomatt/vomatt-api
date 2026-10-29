@@ -1,11 +1,12 @@
 package com.vomatt.comments;
 
 import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.constant.ReservedUsernames;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.comments.dto.CreateCommentRequest;
 import com.vomatt.comments.dto.UpdateCommentRequest;
 import com.vomatt.comments.dto.CommentDto;
-import com.vomatt.comments.dto.ReportCommentRequest;
+import com.vomatt.common.dto.ReportRequest;
 import com.vomatt.entity.User;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.entity.Vote;
@@ -13,10 +14,12 @@ import com.vomatt.entity.VoteComment;
 import com.vomatt.common.response.Cursor;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.util.UUIDv7Generator;
+import com.vomatt.common.util.UserGuard;
 import com.vomatt.repository.CommentLikeRepository;
 import com.vomatt.repository.CommentReportRepository;
 import com.vomatt.repository.IdCount;
 import com.vomatt.repository.VoteCommentRepository;
+import com.vomatt.lookups.LookupService;
 import com.vomatt.votes.VoteService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,10 +27,14 @@ import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -43,9 +50,49 @@ public class VoteCommentService {
     private final CommentLikeRepository commentLikeRepository;
     private final CommentMapper commentMapper;
     private final CommentReportRepository commentReportRepository;
+    private final LookupService lookupService;
 
     /** Replies shown under each top-level Comment in a Poll's Comment list. */
     static final int REPLY_PREVIEW_SIZE = 2;
+
+    /** Distinct users one Comment can @mention; later handles are plain text. Admin-tunable via {@link #MAX_MENTIONS_KEY}. */
+    static final int MAX_MENTIONS = 10;
+    static final String MAX_MENTIONS_KEY = "comment_max_mentions";
+
+    // @<username>, case-insensitive, not glued to a preceding letter, digit or _ of any script (so neither a@b.com nor
+    // 測試@alice is a mention) nor followed by another username character
+    private static final Pattern MENTION = Pattern.compile("(?<![\\p{L}\\p{N}_])@(" + ReservedUsernames.USERNAME + ")(?!"
+        + ReservedUsernames.USERNAME_CHAR + ")", Pattern.CASE_INSENSITIVE);
+
+    /** The usernames the text @mentions, lowercased (usernames are lowercase), in order of first appearance. */
+    static Set<String> mentionedUsernames(String text) {
+        return MENTION.matcher(text).results()
+            .map(match -> match.group(1).toLowerCase(Locale.ROOT))
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /** Ids of the existing users among the text's first {@link #MAX_MENTIONS} handles; unknown handles are plain text. */
+    private UUID[] resolveMentions(String text) {
+        Set<String> usernames = mentionedUsernames(text);
+        if (usernames.isEmpty()) {
+            return new UUID[0];
+        }
+        List<String> capped = usernames.stream().limit(lookupService.configInt(MAX_MENTIONS_KEY, MAX_MENTIONS)).toList();
+        return userRepository.findIdsByUsernameIn(capped).toArray(UUID[]::new);
+    }
+
+    /**
+     * An edit can drop mentions but never add or retarget one (no notifying people after the fact): the stored users
+     * whose current username the new text still @mentions.
+     */
+    private UUID[] keptMentions(VoteComment comment, String text) {
+        Set<String> usernames = mentionedUsernames(text);
+        if (usernames.isEmpty() || comment.getMentionedUserIds().length == 0) {
+            return new UUID[0];
+        }
+        return userRepository.findIdsByIdInAndUsernameIn(Arrays.asList(comment.getMentionedUserIds()), usernames)
+            .toArray(UUID[]::new);
+    }
 
     public CommentDto createComment(String voteId, String userId, CreateCommentRequest request) {
         Vote vote = voteService.findAccessibleVote(UUID.fromString(voteId), userId);
@@ -54,6 +101,7 @@ public class VoteCommentService {
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
 
         VoteComment comment = new VoteComment(vote, user, request.getText());
+        comment.setMentionedUserIds(resolveMentions(request.getText()));
         if (request.getParentId() != null) {
             comment.setParent(findReplyRoot(request.getParentId(), vote.getId(), userId));
         }
@@ -168,6 +216,7 @@ public class VoteCommentService {
             throw ApiException.forbidden(MessageKey.COMMENT_FORBIDDEN);
         }
 
+        comment.setMentionedUserIds(keptMentions(comment, request.getText()));
         comment.updateContent(request.getText());
         comment = commentRepository.saveAndFlush(comment);
 
@@ -194,35 +243,24 @@ public class VoteCommentService {
         UUID userUuid = UUID.fromString(userId);
         if (commentLikeRepository.insertIfAbsent(UUIDv7Generator.generateId(), commentId, userUuid) > 0) {
             log.info("User {} liked comment {}", userId, commentId);
-        } else if (commentLikeRepository.existsByCommentIdAndUserId(commentId, userUuid)) {
-            // Already liked: the common no-op
-            return;
-        } else if (!userRepository.existsById(userUuid)) {
-            // An access token outlives account deletion, so the signed-in user may be gone
-            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
-        } else if (commentRepository.findByIdAndNotDeleted(commentId).isEmpty()) {
-            // Deleted since the lookup above
-            throw ApiException.notFound(MessageKey.COMMENT_NOT_FOUND);
+        } else if (!commentLikeRepository.existsByCommentIdAndUserIdAndCommentIsDeletedFalse(commentId, userUuid)) {
+            // Not a repeat on a live Comment (the common no-op): the Comment or the user is gone
+            requireLiveComment(commentId, userUuid);
         }
     }
 
     /** Reports a live Comment or Reply of someone else; idempotent, a repeat report keeps the first one. */
-    public void reportComment(UUID commentId, String userId, ReportCommentRequest request) {
+    public void reportComment(UUID commentId, String userId, ReportRequest request) {
         VoteComment comment = findVisibleComment(commentId, userId);
         UUID reporterId = UUID.fromString(userId);
         if (comment.getUser().getId().equals(reporterId)) {
             throw ApiException.badRequest(MessageKey.COMMENT_REPORT_SELF);
         }
-        String note = request.note() == null || request.note().isBlank() ? null : request.note().strip();
         if (commentReportRepository.insertIfAbsent(UUIDv7Generator.generateId(), commentId, reporterId,
-                request.reason().name(), note) > 0) {
+                request.reason().name(), request.note()) > 0) {
             log.info("User {} reported comment {} as {}", userId, commentId, request.reason());
-        } else if (!userRepository.existsById(reporterId)) {
-            // An access token outlives account deletion, so the signed-in user may be gone
-            throw ApiException.notFound(MessageKey.USER_NOT_FOUND);
-        } else if (commentRepository.findByIdAndNotDeleted(commentId).isEmpty()) {
-            // Deleted since the lookup above
-            throw ApiException.notFound(MessageKey.COMMENT_NOT_FOUND);
+        } else if (!commentReportRepository.existsByCommentIdAndReporterIdAndCommentIsDeletedFalse(commentId, reporterId)) {
+            requireLiveComment(commentId, reporterId);
         }
     }
 
@@ -233,6 +271,17 @@ public class VoteCommentService {
         if (commentLikeRepository.deleteByCommentIdAndUserId(commentId, UUID.fromString(userId)) > 0) {
             log.info("User {} unliked comment {}", userId, commentId);
         }
+    }
+
+    /**
+     * For a guarded insert that wrote nothing and was no repeat: the Comment was deleted since the lookup, or the user is
+     * gone.
+     */
+    private void requireLiveComment(UUID commentId, UUID userId) {
+        if (commentRepository.findByIdAndNotDeleted(commentId).isEmpty()) {
+            throw ApiException.notFound(MessageKey.COMMENT_NOT_FOUND);
+        }
+        UserGuard.requireExists(userRepository, userId);
     }
 
     private List<CommentDto> toDtos(List<VoteComment> comments, String currentUserId) {

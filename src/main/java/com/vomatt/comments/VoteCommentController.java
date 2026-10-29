@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.vomatt.comments.dto.CreateCommentRequest;
 import com.vomatt.comments.dto.UpdateCommentRequest;
-import com.vomatt.comments.dto.ReportCommentRequest;
+import com.vomatt.common.dto.ReportRequest;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.response.SimpleResultResponse;
@@ -92,8 +92,8 @@ public class VoteCommentController {
             description = """
                     **Auth**: required
                     **Precondition**: the Poll exists (any Poll state is accepted). When `parentId` is sent it must be a non-deleted Comment or Reply of the same Poll
-                    **Behavior**: without `parentId` creates a top-level Comment. With `parentId` creates a Reply; Replies are one level deep, so replying to a Reply attaches the new Reply to that Reply's top-level Comment (the response `parentId` is the top-level Comment, not the id you sent). Responds 201
-                    **Side effects**: the top-level Comment's `replyCount` grows by 1 in later list reads
+                    **Behavior**: without `parentId` creates a top-level Comment. With `parentId` creates a Reply; Replies are one level deep, so replying to a Reply attaches the new Reply to that Reply's top-level Comment (the response `parentId` is the top-level Comment, not the id you sent). Mentions: `@<username>` in the text (a username, 3-50 characters of `[a-z0-9_]`, matched case-insensitively, not preceded by a letter or digit of any script or `_`, so `a@b.com` and `測試@alice` are no mentions) names that user; a handle with no account is plain text. At most 10 distinct users per Comment (admin-tunable), the first handles in the text; later ones are plain text, not an error. Responds 201
+                    **Side effects**: the top-level Comment's `replyCount` grows by 1 in later list reads. Each mentioned user other than the author gets a MENTION notification while they can see the Poll, unless the Comment already gives them a COMMENT (it is on their Poll or replies to their Comment)
                     **Errors**:
                     - 400 `comment.parent.invalid`: `parentId` does not exist, is deleted, or belongs to another Poll
                     - 404 `comment.not_found`: `parentId` is hidden from the caller as in the lists (written by a user the caller blocked, or a Reply in a thread such a user started)
@@ -342,7 +342,7 @@ public class VoteCommentController {
                     **Auth**: required
                     **Precondition**: the caller is the author and the Comment is not deleted. Works on both Comments and Replies, in any Poll state
                     **Behavior**: replaces the text. The Poll in the path is not checked; the Comment is looked up by `commentId` only
-                    **Side effects**: `updatedAt` moves forward, so `edited` becomes true (it is derived: `updatedAt` after `createdAt`, and never true for a deleted placeholder). Likes are kept
+                    **Side effects**: `updatedAt` moves forward, so `edited` becomes true (it is derived: `updatedAt` after `createdAt`, and never true for a deleted placeholder). Likes are kept. An edit can only remove mentions: a mentioned user whose current `@<username>` the new text no longer holds loses their MENTION, and a handle the edit adds mentions nobody (no notifying people after the fact, nor retargeting a mention to whoever took a renamed user's handle)
                     **Errors**:
                     - 403 `comment.forbidden`: the caller is not the author
                     - 404 `comment.not_found`: Comment does not exist or is deleted
@@ -510,7 +510,7 @@ public class VoteCommentController {
     public ResponseEntity<ApiResponse<SimpleResultResponse>> reportComment(
             @Parameter(description = "Poll ID", required = true) @PathVariable String voteId,
             @Parameter(description = "Comment ID", required = true) @PathVariable UUID commentId,
-            @Valid @RequestBody ReportCommentRequest request,
+            @Valid @RequestBody ReportRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
         commentService.reportComment(commentId, principal.userId(), request);
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));

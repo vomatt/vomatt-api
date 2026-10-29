@@ -26,7 +26,7 @@ public class VoteListRepository {
     /**
      * Ids of Polls the user owns, holds a Ballot in or is invited to. A UNION lets each branch use its own index; an
      * {@code creator_id = :userId OR EXISTS (...)} predicate cannot, and scans every Poll.
-     * Shared by the "my Polls" list and Ended Notifications; changing it changes both.
+     * Shared by the "my Polls" list and Ended Notifications (which add bookmarked Polls); changing it changes both.
      */
     static final String MY_POLL_IDS = """
             (SELECT uv.vote_id FROM vomatt.user_votes uv WHERE uv.user_id = :userId
@@ -42,6 +42,8 @@ public class VoteListRepository {
      */
     static final String SEARCH_CONDITION = " AND v.search_bigrams @> vomatt.text_bigrams(:q)"
             + " AND lower(COALESCE(v.title, '') || ' ' || COALESCE(v.description, '')) LIKE :pattern ESCAPE '\\'";
+
+    private static final String NOT_BLOCKED_BY_VIEWER = " AND " + UserFilters.notBlockedEitherWay("v.creator_id", ":viewerId");
 
     private final EntityManager em;
 
@@ -73,10 +75,7 @@ public class VoteListRepository {
             sql.append(SEARCH_CONDITION);
         }
         if (viewerId != null) {
-            sql.append(" AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b")
-               .append(" WHERE b.blocker_id = :viewerId AND b.blocked_id = v.creator_id)")
-               .append(" AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b")
-               .append(" WHERE b.blocker_id = v.creator_id AND b.blocked_id = :viewerId)");
+            sql.append(NOT_BLOCKED_BY_VIEWER);
         }
         if (after != null) {
             sql.append(" AND (").append(String.join(", ", sortColumns)).append(", v.id) ").append(descending ? "<" : ">")
@@ -110,30 +109,42 @@ public class VoteListRepository {
     }
 
     /**
-     * Following list: Open Public Polls created by users the follower follows (with no block either way), most recently
-     * opened first. Starts from the follower's follows and reads each followed user's newest Polls through
-     * idx_votes_creator_start_id, so the cost grows with the follows, not with every Open Poll.
+     * Following list: Open Public Polls of followed users or followed tags, newest opened first, each once; each arm keeps
+     * at most a page per follow, so the cost grows with the follows, not with every Open Poll.
      */
     @SuppressWarnings("unchecked")
     public List<Vote> findFollowing(UUID followerId, Cursor after, OffsetDateTime now, int limit) {
-        // ponytail: walks each followed user's Polls past Ended ones; add an Open-only partial index if creators pile up history
-        String keyset = after == null ? "" : " AND (v.start_time, v.id) < (:afterKey, :afterId)";
+        // ponytail: both arms walk past Ended Polls; add Open-only partial indexes if creators or tags pile up history
+        String open = """
+                v.deleted_at IS NULL AND v.audience = 'PUBLIC' AND v.start_time <= :now AND v.end_time > :now"""
+                + (after == null ? "" : " AND (v.start_time, v.id) < (:afterKey, :afterId)");
         String sql = """
-                SELECT v.* FROM vomatt.user_follows f
-                CROSS JOIN LATERAL (
-                    SELECT * FROM vomatt.votes v
-                    WHERE v.creator_id = f.followed_id AND v.deleted_at IS NULL AND v.audience = 'PUBLIC'
-                      AND v.start_time <= :now AND v.end_time > :now""" + keyset + """
+                SELECT v.* FROM vomatt.votes v WHERE v.id IN (
+                    SELECT fv.id FROM vomatt.user_follows f
+                    CROSS JOIN LATERAL (
+                        SELECT v.id FROM vomatt.votes v
+                        WHERE v.creator_id = f.followed_id AND\s""" + open + """
 
-                    ORDER BY v.start_time DESC, v.id DESC LIMIT :limit) v
-                WHERE f.follower_id = :followerId
-                  AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b
-                                  WHERE b.blocker_id = :followerId AND b.blocked_id = f.followed_id)
-                  AND NOT EXISTS (SELECT 1 FROM vomatt.user_blocks b
-                                  WHERE b.blocker_id = f.followed_id AND b.blocked_id = :followerId)
+                        ORDER BY v.start_time DESC, v.id DESC LIMIT :limit) fv
+                    WHERE f.follower_id = :viewerId AND\s""" + UserFilters.active("f.followed_id")
+                + " AND " + UserFilters.notBlockedEitherWay("f.followed_id", ":viewerId") + """
+
+                    UNION ALL
+                    SELECT tv.id FROM vomatt.tag_follows tf
+                    CROSS JOIN LATERAL (
+                        SELECT v.id FROM\s"""
+                // OFFSET 0 keeps the planner on idx_vote_tags_tag_id instead of walking idx_votes_start_id over every live Poll
+                + "(SELECT vt.vote_id FROM vomatt.vote_tags vt WHERE vt.tag_id = tf.tag_id OFFSET 0) vt" + """
+
+                        JOIN vomatt.votes v ON v.id = vt.vote_id
+                        WHERE v.creator_id <> :viewerId AND\s""" + open
+                + " AND " + UserFilters.active("v.creator_id") + NOT_BLOCKED_BY_VIEWER + """
+
+                        ORDER BY v.start_time DESC, v.id DESC LIMIT :limit) tv
+                    WHERE tf.user_id = :viewerId)
                 ORDER BY v.start_time DESC, v.id DESC LIMIT :limit""";
         Query nativeQuery = em.createNativeQuery(sql, Vote.class)
-                .setParameter("followerId", followerId)
+                .setParameter("viewerId", followerId)
                 .setParameter("now", now)
                 .setParameter("limit", limit);
         if (after != null) {

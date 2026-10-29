@@ -52,7 +52,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if (StringUtils.hasText(token)) {
             try {
                 principal = jwtUtil.parseToken(token);
-                if (sessionRevoked(principal)) {
+                // Sign-in, refresh and logout never read the principal; refresh re-checks the session itself
+                if (!PUBLIC_AUTH_PATHS.matches(request) && sessionRevoked(principal)) {
                     // Like an invalid token: public paths go on anonymous, the entry point answers 401 elsewhere
                     request.setAttribute(AUTH_ERROR_ATTR, MessageKey.AUTH_SESSION_REVOKED);
                     principal = null;

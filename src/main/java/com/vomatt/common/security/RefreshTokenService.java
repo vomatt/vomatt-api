@@ -111,6 +111,10 @@ public class RefreshTokenService {
         public boolean grantsAdmin() {
             return Boolean.TRUE.equals(adminScope);
         }
+
+        RefreshTokenData withSessionId(String id) {
+            return new RefreshTokenData(userId, roles, id, adminScope, userAgent, createdAt, lastSeenAt);
+        }
     }
 
     public record RotateResult(String newAccessToken, String newRefreshToken, RefreshTokenData data) {}
@@ -135,7 +139,12 @@ public class RefreshTokenService {
                 RedisService.RedisWrite.expire(USER_IDX_NS, userId, ttl)
         ));
         log.debug("Refresh token generated for userId={}", userId);
-        return new IssuedTokens(jwtUtil.generateToken(userId, roles, adminScope, data.sessionId()), token);
+        return new IssuedTokens(accessTokenFor(data), token);
+    }
+
+    /** The access token of a session: same user, roles, scope and session as its refresh token. */
+    private String accessTokenFor(RefreshTokenData data) {
+        return jwtUtil.generateToken(data.userId(), data.roles(), data.grantsAdmin(), data.sessionId());
     }
 
     /** The current request's User-Agent, cut to {@link #USER_AGENT_MAX_LEN}; null outside a request or when absent. */
@@ -236,7 +245,7 @@ public class RefreshTokenService {
 
         String newRefreshToken = UUID.randomUUID().toString();
         String newKey = keyOf(newRefreshToken);
-        String newAccessToken = jwtUtil.generateToken(freshData.userId(), freshRoles, freshData.grantsAdmin(), sessionId);
+        String newAccessToken = accessTokenFor(freshData);
         RotateResult result = new RotateResult(newAccessToken, newRefreshToken, freshData);
 
         Duration refreshTtl = Duration.ofDays(refreshExpirationDays);
@@ -374,8 +383,7 @@ public class RefreshTokenService {
         for (int i = 0; i < keys.size(); i++) {
             RefreshTokenData t = tokens.get(i);
             if (t != null) {
-                sessions.add(new RefreshTokenData(t.userId(), t.roles(), sessionIdOf(t, keys.get(i)), t.adminScope(),
-                        t.userAgent(), t.createdAt(), t.lastSeenAt()));
+                sessions.add(t.withSessionId(sessionIdOf(t, keys.get(i))));
             }
         }
         sessions.sort(Comparator.comparing(RefreshTokenData::lastSeenAt, Comparator.nullsLast(Comparator.reverseOrder())));
@@ -411,11 +419,11 @@ public class RefreshTokenService {
         Set<String> sessionIds = new HashSet<>();
         Set<String> fields = new HashSet<>();
         sessionOfField.forEach((field, sessionId) -> {
-            if (sessionId == null || sessionFilter.test(sessionId)) {
+            if (sessionId == null) {
                 fields.add(field);
-                if (sessionId != null) {
-                    sessionIds.add(sessionId);
-                }
+            } else if (sessionFilter.test(sessionId)) {
+                fields.add(field);
+                sessionIds.add(sessionId);
             }
         });
         if (fields.isEmpty()) {

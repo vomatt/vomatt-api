@@ -50,7 +50,7 @@ class AuditAspectTest {
     void shouldPassActorAndResourceThroughControllerWhenDeletingAccounts() {
         com.vomatt.users.UserService userService = mock(com.vomatt.users.UserService.class);
         com.vomatt.users.UserController proxied = proxied(new com.vomatt.users.UserController(userService, mock(com.vomatt.votes.VoteService.class),
-                mock(com.vomatt.auth.PasskeyService.class)));
+                mock(com.vomatt.auth.PasskeyService.class), mock(com.vomatt.common.security.RefreshTokenService.class)));
         java.util.UUID self = java.util.UUID.randomUUID();
         java.util.UUID other = java.util.UUID.randomUUID();
         signIn(self, "alice");
@@ -76,7 +76,7 @@ class AuditAspectTest {
     }
 
     private static com.vomatt.common.security.UserPrincipal principal(java.util.UUID id) {
-        return new com.vomatt.common.security.UserPrincipal(id.toString(), java.util.List.of("user"));
+        return new com.vomatt.common.security.UserPrincipal(id.toString(), java.util.List.of("user"), null);
     }
 
     private void signIn(java.util.UUID id, String username) {

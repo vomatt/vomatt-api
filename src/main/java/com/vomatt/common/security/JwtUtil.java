@@ -2,6 +2,8 @@ package com.vomatt.common.security;
 
 import com.vomatt.common.constant.UserRole;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.JwtParser;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -33,6 +35,7 @@ public class JwtUtil {
     private static final String SCOPE_CLAIM = "scope";
     private static final String SCOPE_ADMIN = "admin";
     private static final String SCOPE_USER = "user";
+    private static final String SESSION_CLAIM = "sid";
 
     /**
      * @param secret one or more HS256 secrets, comma-separated. The first one signs new tokens and all of them verify,
@@ -68,26 +71,35 @@ public class JwtUtil {
     /**
      * @param adminScope true only for tokens issued by the admin console login; other tokens never grant the admin
      *                   role, even when the account holds it
+     * @param sessionId  the refresh session the token belongs to (see {@link RefreshTokenService}), checked against
+     *                   its revocation on every request
      */
-    public String generateToken(String userId, List<String> roles, boolean adminScope) {
+    public String generateToken(String userId, List<String> roles, boolean adminScope, String sessionId) {
         long nowMs = System.currentTimeMillis();
-        // Payload is sub / roles / scope / jti only: no email, since the token transits proxies, APM and browser
-        // storage that no PII should reach; jti gives a future revocation list something to key on
+        // Payload is sub / roles / scope / sid / jti only: no email, since the token transits proxies, APM and browser
+        // storage that no PII should reach
         return Jwts.builder().header().keyId(signingKid).and()
                 .subject(userId).id(java.util.UUID.randomUUID().toString()).claim("roles", roles)
-                .claim(SCOPE_CLAIM, adminScope ? SCOPE_ADMIN : SCOPE_USER).issuedAt(new Date(nowMs))
+                .claim(SCOPE_CLAIM, adminScope ? SCOPE_ADMIN : SCOPE_USER).claim(SESSION_CLAIM, sessionId).issuedAt(new Date(nowMs))
                 .expiration(new Date(nowMs + expirationSeconds * 1000)).signWith(signingKey).compact();
     }
 
     @SuppressWarnings("unchecked")
     public UserPrincipal parseToken(String token) {
-        Claims claims = parser.parseSignedClaims(token).getPayload();
+        Jws<Claims> jws = parser.parseSignedClaims(token);
+        Claims claims = jws.getPayload();
+        String sessionId = claims.get(SESSION_CLAIM, String.class);
+        // Tokens signed before the sid claim shipped are at most one access lifetime old: answering "expired" sends the
+        // client through its normal refresh, which signs one with a sid, so nothing downstream handles a missing session
+        if (sessionId == null) {
+            throw new ExpiredJwtException(jws.getHeader(), claims, "Access token predates session ids");
+        }
         List<String> roles = (List<String>) claims.get("roles");
         // Fails closed: a token without the admin scope (including ones issued before the claim existed) drops the
         // admin role here, so nothing downstream can grant it
         if (roles != null && !SCOPE_ADMIN.equals(claims.get(SCOPE_CLAIM, String.class))) {
             roles = roles.stream().filter(r -> !UserRole.isAdmin(r)).toList();
         }
-        return new UserPrincipal(claims.getSubject(), roles);
+        return new UserPrincipal(claims.getSubject(), roles, sessionId);
     }
 }

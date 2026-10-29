@@ -111,7 +111,7 @@ sequenceDiagram
 
 - Only the refresh token passed in is revoked; other devices are unaffected. A token that was already refreshed signs out the sign-in it belongs to: the token that replaced it can no longer be refreshed.
 - An unknown or already-revoked token also returns 200, so the frontend has no failure to handle; always clear the local tokens unconditionally.
-- The access token is stateless and technically remains valid after logout until it expires; the frontend must discard it.
+- Logout also cuts the sign-in's access tokens: any request still carrying one gets 401 `auth.session_revoked` from then on. Discard both tokens anyway.
 
 ## 6. Refresh and rotation
 
@@ -144,6 +144,7 @@ The `errorCode` decides the action (do not look at the status alone):
 |-----------|------|------|
 | `auth.token.expired` | Protected endpoint | Refresh once, then retry the original request on success |
 | `auth.token.invalid` | Protected endpoint | Clear tokens, redirect to the login page |
+| `auth.session_revoked` | Protected endpoint | This sign-in was ended (signed out from another device, account suspended, or reuse detected). Do **not** refresh: clear tokens, redirect to the login page, and say "You were signed out on this device" |
 | `common.unauthorized` | Protected endpoint (no token sent) | Clear tokens, redirect to the login page |
 | `auth.refresh_token.invalid` | `/api/auth/refresh` | Refresh token is invalid or expired; clear tokens and redirect to the login page |
 | `auth.suspicious_login` | `/api/auth/refresh` | Same as above, plus show a security notice |
@@ -211,4 +212,5 @@ The admin console signs in with its own endpoints, `POST /api/auth/admin/send-ot
 | `common.service_unavailable` | 503 | Google / Apple key endpoint or LINE is down (§4), or Redis is unavailable (on `/api/auth/refresh` the token was not spent) | Retry (exponential backoff); on refresh, keep the tokens |
 | `auth.refresh_token.invalid` | 401 | Refresh token is invalid, expired, or the user is suspended | Clear tokens, redirect to login |
 | `auth.suspicious_login` | 401 | Refresh token reuse detected; that session has been signed out (other devices are unaffected) | Clear tokens, redirect to login and show a security notice |
+| `auth.session_revoked` | 401 | The access token's session was ended: signed out from another device (`DELETE /api/users/me/sessions...`), suspension, role change or reuse detection. Takes effect on the next request, not when the access token expires | Do not refresh; clear tokens, redirect to login |
 | `common.rate_limited` | 429 | Rate limit exceeded | Count down using `Retry-After` |

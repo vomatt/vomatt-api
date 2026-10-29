@@ -48,6 +48,7 @@ import com.vomatt.common.exception.GlobalExceptionHandler;
 import com.vomatt.common.i18n.LocalizedMessageService;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.CursorResponse;
+import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.security.SecurityEndpoints;
 import com.vomatt.common.security.UserPrincipal;
 import com.vomatt.users.dto.FollowUserDto;
@@ -63,6 +64,7 @@ class UserControllerTest {
     @Mock UserService userService;
     @Mock VoteService voteService;
     @Mock PasskeyService passkeyService;
+    @Mock RefreshTokenService refreshTokenService;
     @Mock LocalizedMessageService messageService;
     @InjectMocks UserController userController;
 
@@ -82,8 +84,12 @@ class UserControllerTest {
     }
 
     private void signIn(String userId) {
+        signIn(userId, null);
+    }
+
+    private void signIn(String userId, String sessionId) {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                new UserPrincipal(userId, List.of("user")), null,
+                new UserPrincipal(userId, List.of("user"), sessionId), null,
                 AuthorityUtils.createAuthorityList("ROLE_USER")));
     }
 
@@ -417,6 +423,81 @@ class UserControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.success").value(true));
         verify(passkeyService).delete("u1", id);
+    }
+
+    /** Answers revokeSessions as if the caller held exactly these sessions. */
+    private void holdSessions(String userId, String... sessionIds) {
+        when(refreshTokenService.revokeSessions(eq(userId), any())).thenAnswer(inv -> (int) Arrays.stream(sessionIds)
+                .filter(inv.<java.util.function.Predicate<String>>getArgument(1)).count());
+    }
+
+    @Test
+    @DisplayName("should list sessions and mark the caller's own when listing sessions")
+    void shouldMarkCurrentSessionWhenListingSessions() throws Exception {
+        signIn("u1", "s-here");
+        java.time.Instant seen = java.time.Instant.parse("2026-10-29T03:40:00Z");
+        when(refreshTokenService.listSessions("u1")).thenReturn(List.of(
+                new RefreshTokenService.RefreshTokenData("u1", List.of("user"), "s-here", false, "Chrome/131", seen, seen),
+                new RefreshTokenService.RefreshTokenData("u1", List.of("admin"), "s-admin", true, null, null, null)));
+
+        mockMvc.perform(get("/api/users/me/sessions"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(2)))
+                .andExpect(jsonPath("$.data[0].sessionId").value("s-here"))
+                .andExpect(jsonPath("$.data[0].userAgent").value("Chrome/131"))
+                .andExpect(jsonPath("$.data[0].current").value(true))
+                .andExpect(jsonPath("$.data[0].adminScope").value(false))
+                .andExpect(jsonPath("$.data[1].current").value(false))
+                .andExpect(jsonPath("$.data[1].adminScope").value(true))
+                .andExpect(jsonPath("$.data[1].userAgent").doesNotExist())
+                .andExpect(jsonPath("$.data[0].roles").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("should sign out the session when it is the caller's")
+    void shouldRevokeSessionWhenItIsTheCallers() throws Exception {
+        signIn("u1", "s-here");
+        holdSessions("u1", "s-here", "s-phone");
+
+        mockMvc.perform(delete("/api/users/me/sessions/s-phone"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.success").value(true));
+    }
+
+    @Test
+    @DisplayName("should respond 404 when the session is not the caller's")
+    void shouldReturnNotFoundWhenRevokingForeignSession() throws Exception {
+        signIn("u1", "s-here");
+        holdSessions("u1", "s-here");
+
+        mockMvc.perform(delete("/api/users/me/sessions/someone-elses"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("auth.session_not_found"));
+    }
+
+    @Test
+    @DisplayName("should sign out every session but the caller's when scope is others")
+    void shouldKeepCurrentSessionWhenRevokingOthers() throws Exception {
+        signIn("u1", "s-here");
+        var filter = org.mockito.ArgumentCaptor.<java.util.function.Predicate<String>>captor();
+        when(refreshTokenService.revokeSessions(eq("u1"), filter.capture())).thenReturn(2);
+
+        mockMvc.perform(delete("/api/users/me/sessions").param("scope", "others"))
+                .andExpect(status().isOk());
+        assertThat(filter.getValue().test("s-here")).isFalse();
+        assertThat(filter.getValue().test("s-phone")).isTrue();
+    }
+
+    @Test
+    @DisplayName("should respond 400 without signing anything out when scope is not others")
+    void shouldReturnBadRequestWhenScopeUnknown() throws Exception {
+        signIn("u1", "s-here");
+
+        mockMvc.perform(delete("/api/users/me/sessions").param("scope", "all"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(delete("/api/users/me/sessions"))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(refreshTokenService);
     }
 
     @Test

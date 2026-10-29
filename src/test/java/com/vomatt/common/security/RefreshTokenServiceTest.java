@@ -19,7 +19,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -90,7 +94,7 @@ class RefreshTokenServiceTest {
     /** A grace pair of a live session. */
     private RefreshTokenService.RotateResult standingPair(String access, String refresh) {
         return new RefreshTokenService.RotateResult(access, refresh,
-                new RefreshTokenService.RefreshTokenData(UUID.randomUUID().toString(), List.of("user"), "session-1", false));
+                new RefreshTokenService.RefreshTokenData(UUID.randomUUID().toString(), List.of("user"), "session-1", false, null, null, null));
     }
 
     /** The writes that end a session: the grace-only marker, plus the long-lived revoked flag when revoked. */
@@ -122,6 +126,7 @@ class RefreshTokenServiceTest {
 
     @AfterEach
     void tearDown() {
+        RequestContextHolder.resetRequestAttributes();
         serviceLogger.detachAppender(logAppender);
     }
 
@@ -138,7 +143,7 @@ class RefreshTokenServiceTest {
 
         assertThat(result).isNull();
         verify(redisService, never()).execScript(any(), anyList(), anyList());
-        verify(jwtUtil, never()).generateToken(anyString(), any(), anyBoolean());
+        verify(jwtUtil, never()).generateToken(anyString(), any(), anyBoolean(), any());
     }
 
     // ── rotate: happy path ────────────────────────────────────────────
@@ -149,10 +154,10 @@ class RefreshTokenServiceTest {
         String userId = UUID.randomUUID().toString();
         when(redisService.getOrThrow(GRACE_NS, k(oldToken), RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getOrThrow(NAMESPACE, k(oldToken), RefreshTokenService.RefreshTokenData.class))
-                .thenReturn(new RefreshTokenService.RefreshTokenData(userId, List.of("admin"), "session-1", true));
+                .thenReturn(new RefreshTokenService.RefreshTokenData(userId, List.of("admin"), "session-1", true, null, null, null));
         when(userRepository.findById(UUID.fromString(userId))).thenReturn(Optional.of(userWithRoles(userId, false, "admin")));
         when(redisService.execScript(any(), anyList(), anyList())).thenReturn(1L);
-        when(jwtUtil.generateToken(eq(userId), eq(List.of("admin")), eq(true))).thenReturn("admin-access");
+        when(jwtUtil.generateToken(eq(userId), eq(List.of("admin")), eq(true), any())).thenReturn("admin-access");
 
         RefreshTokenService.RotateResult result = service.rotate(oldToken);
 
@@ -165,7 +170,7 @@ class RefreshTokenServiceTest {
         String oldToken = "old-refresh-token";
         String userId = UUID.randomUUID().toString();
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
-                userId, List.of("user"), "session-1", false);
+                userId, List.of("user"), "session-1", false, null, null, null);
 
         when(redisService.getOrThrow(GRACE_NS, k(oldToken), RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getOrThrow(NAMESPACE, k(oldToken), RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
@@ -173,7 +178,7 @@ class RefreshTokenServiceTest {
         when(userRepository.findById(UUID.fromString(userId)))
                 .thenReturn(Optional.of(userWithRoles(userId, false, "user")));
         when(redisService.execScript(any(), anyList(), anyList())).thenReturn(1L);
-        when(jwtUtil.generateToken(eq(userId), eq(List.of("user")), eq(false))).thenReturn("new-access-token");
+        when(jwtUtil.generateToken(eq(userId), eq(List.of("user")), eq(false), any())).thenReturn("new-access-token");
 
         RefreshTokenService.RotateResult result = service.rotate(oldToken);
 
@@ -212,7 +217,7 @@ class RefreshTokenServiceTest {
         verify(redisService, never()).set(eq(GRACE_NS), anyString(), any(), any());
         verify(redisService, never()).setOrThrow(eq(CONSUMED_NS), anyString(), any(), any());
         verify(redisService, never()).setOrThrow(eq(NAMESPACE), anyString(), any(), any());
-        verify(jwtUtil, never()).generateToken(anyString(), any(), anyBoolean());
+        verify(jwtUtil, never()).generateToken(anyString(), any(), anyBoolean(), any());
     }
 
     @Test
@@ -242,10 +247,10 @@ class RefreshTokenServiceTest {
         String oldToken = "lost-race-then-logout";
         String userId = UUID.randomUUID().toString();
         RefreshTokenService.RotateResult winner = new RefreshTokenService.RotateResult("access", "logged-out",
-                new RefreshTokenService.RefreshTokenData(userId, List.of("user"), "session-1", false));
+                new RefreshTokenService.RefreshTokenData(userId, List.of("user"), "session-1", false, null, null, null));
         when(redisService.getOrThrow(GRACE_NS, k(oldToken), RefreshTokenService.RotateResult.class)).thenReturn(null, winner);
         when(redisService.getOrThrow(NAMESPACE, k(oldToken), RefreshTokenService.RefreshTokenData.class))
-                .thenReturn(new RefreshTokenService.RefreshTokenData(userId, List.of("user"), "session-1", false));
+                .thenReturn(new RefreshTokenService.RefreshTokenData(userId, List.of("user"), "session-1", false, null, null, null));
         when(userRepository.findById(UUID.fromString(userId))).thenReturn(Optional.of(userWithRoles(userId, false)));
         when(redisService.execScript(any(), anyList(), anyList())).thenReturn(0L);
         when(redisService.hasKeyOrThrow(ENDED_SESSION_NS, "session-1")).thenReturn(true);
@@ -275,7 +280,7 @@ class RefreshTokenServiceTest {
         String oldToken = "mid-rotation-token";
         String userId = UUID.randomUUID().toString();
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
-                userId, List.of("user"), "session-1", false);
+                userId, List.of("user"), "session-1", false, null, null, null);
 
         // Redis as one shared store: the token stays readable until a commit consumes it, which writes grace in the same step
         AtomicBoolean consumed = new AtomicBoolean(false);
@@ -290,7 +295,7 @@ class RefreshTokenServiceTest {
             graceStore.set((RefreshTokenService.RotateResult) args.get(2));
             return 1L;
         });
-        when(jwtUtil.generateToken(eq(userId), eq(List.of("user")), eq(false))).thenReturn("access");
+        when(jwtUtil.generateToken(eq(userId), eq(List.of("user")), eq(false), any())).thenReturn("access");
 
         // Both callers are in the user lookup (a slow DB round trip after idle) before either commits
         CyclicBarrier bothRead = new CyclicBarrier(2);
@@ -334,7 +339,7 @@ class RefreshTokenServiceTest {
                 .thenReturn(null)
                 .thenThrow(new RedisOperationException("redis timeout", null));
         when(redisService.getOrThrow(NAMESPACE, k(oldToken), RefreshTokenService.RefreshTokenData.class))
-                .thenReturn(new RefreshTokenService.RefreshTokenData(userId, List.of("user"), "session-1", false));
+                .thenReturn(new RefreshTokenService.RefreshTokenData(userId, List.of("user"), "session-1", false, null, null, null));
         when(userRepository.findById(UUID.fromString(userId))).thenReturn(Optional.of(userWithRoles(userId, false, "user")));
         when(redisService.execScript(any(), anyList(), anyList())).thenReturn(0L);
 
@@ -389,7 +394,7 @@ class RefreshTokenServiceTest {
         String userId = UUID.randomUUID().toString();
         when(redisService.getOrThrow(GRACE_NS, k(liveToken), RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getOrThrow(NAMESPACE, k(liveToken), RefreshTokenService.RefreshTokenData.class))
-                .thenReturn(new RefreshTokenService.RefreshTokenData(userId, List.of("user"), "session-1", false));
+                .thenReturn(new RefreshTokenService.RefreshTokenData(userId, List.of("user"), "session-1", false, null, null, null));
         when(userRepository.findById(UUID.fromString(userId))).thenReturn(Optional.of(userWithRoles(userId, false)));
         // The script finds the flag, also when reuse detection set it after this caller read the token
         ArgumentCaptor<List<Object>> captor = rotation(2L);
@@ -407,7 +412,7 @@ class RefreshTokenServiceTest {
         String userId = UUID.randomUUID().toString();
         when(redisService.getOrThrow(GRACE_NS, k(oldToken), RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getOrThrow(NAMESPACE, k(oldToken), RefreshTokenService.RefreshTokenData.class))
-                .thenReturn(new RefreshTokenService.RefreshTokenData(userId, List.of("user"), null, false));
+                .thenReturn(new RefreshTokenService.RefreshTokenData(userId, List.of("user"), null, false, null, null, null));
         when(userRepository.findById(UUID.fromString(userId))).thenReturn(Optional.of(userWithRoles(userId, false, "user")));
 
         when(redisService.execScript(any(), anyList(), anyList())).thenReturn(1L);
@@ -441,7 +446,7 @@ class RefreshTokenServiceTest {
         String oldToken = "banned-rotate-token";
         String userId = UUID.randomUUID().toString();
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
-                userId, List.of("admin"), "session-1", false);
+                userId, List.of("admin"), "session-1", false, null, null, null);
 
         when(redisService.getOrThrow(GRACE_NS, k(oldToken), RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getOrThrow(NAMESPACE, k(oldToken), RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
@@ -459,7 +464,7 @@ class RefreshTokenServiceTest {
         verify(redisService).execInTransaction(ending("session-1", true));
         verify(redisService).deleteAll(NAMESPACE, Set.of("t1"));
         // Must not issue a new access token
-        verify(jwtUtil, never()).generateToken(anyString(), any(), anyBoolean());
+        verify(jwtUtil, never()).generateToken(anyString(), any(), anyBoolean(), any());
     }
 
     @Test
@@ -467,7 +472,7 @@ class RefreshTokenServiceTest {
         String oldToken = "ghost-rotate-token";
         String userId = UUID.randomUUID().toString();
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
-                userId, List.of("user"), "session-1", false);
+                userId, List.of("user"), "session-1", false, null, null, null);
 
         when(redisService.getOrThrow(GRACE_NS, k(oldToken), RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getOrThrow(NAMESPACE, k(oldToken), RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
@@ -480,7 +485,7 @@ class RefreshTokenServiceTest {
         verify(redisService).delete(NAMESPACE, k(oldToken));
         // Nothing listed, nothing more to delete (an HDEL of no fields is a Redis error)
         verify(redisService, never()).hDelete(eq(USER_IDX_NS), anyString(), any(String[].class));
-        verify(jwtUtil, never()).generateToken(anyString(), any(), anyBoolean());
+        verify(jwtUtil, never()).generateToken(anyString(), any(), anyBoolean(), any());
     }
 
     // ── rotate: Step 4 reload User -- latest roles win ────────────────
@@ -491,7 +496,7 @@ class RefreshTokenServiceTest {
         String userId = UUID.randomUUID().toString();
         // Old roles in the token are admin (issued before the role was revoked)
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
-                userId, List.of("admin"), "session-1", false);
+                userId, List.of("admin"), "session-1", false, null, null, null);
 
         when(redisService.getOrThrow(GRACE_NS, k(oldToken), RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getOrThrow(NAMESPACE, k(oldToken), RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
@@ -499,7 +504,7 @@ class RefreshTokenServiceTest {
         when(userRepository.findById(UUID.fromString(userId)))
                 .thenReturn(Optional.of(userWithRoles(userId, false, "user")));
         when(redisService.execScript(any(), anyList(), anyList())).thenReturn(1L);
-        when(jwtUtil.generateToken(eq(userId), any(), eq(false))).thenReturn("fresh-access");
+        when(jwtUtil.generateToken(eq(userId), any(), eq(false), any())).thenReturn("fresh-access");
 
         RefreshTokenService.RotateResult result = service.rotate(oldToken);
 
@@ -509,7 +514,7 @@ class RefreshTokenServiceTest {
         // Access token must be issued with fresh roles (user), not old roles (admin)
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<String>> rolesCaptor = ArgumentCaptor.forClass(List.class);
-        verify(jwtUtil).generateToken(eq(userId), rolesCaptor.capture(), eq(false));
+        verify(jwtUtil).generateToken(eq(userId), rolesCaptor.capture(), eq(false), any());
         assertThat(rolesCaptor.getValue()).containsExactly("user");
 
         // The new RefreshTokenData written to NAMESPACE must also use fresh roles
@@ -544,12 +549,72 @@ class RefreshTokenServiceTest {
         assertThat(msg).doesNotContain("log-refresh");
     }
 
-    // ── generate / revoke / revokeAllForUser unchanged ────────────────
+    // ── issue / revoke / revokeAllForUser ─────────────────────────────
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldNameTheSameSessionInBothTokensWhenIssuing() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("User-Agent", "x".repeat(600));
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+        JwtUtil realJwt = new JwtUtil("unit-test-secret-unit-test-secret-1234", 3600);
+        RefreshTokenService issuing = new RefreshTokenService(redisService, realJwt, userRepository);
+        ReflectionTestUtils.setField(issuing, "refreshExpirationDays", 30L);
+
+        RefreshTokenService.IssuedTokens tokens = issuing.issue("user-5", List.of("user"), false);
+
+        ArgumentCaptor<List<RedisService.RedisWrite>> writes = ArgumentCaptor.forClass(List.class);
+        verify(redisService).execInTransaction(writes.capture());
+        RefreshTokenService.RefreshTokenData stored = (RefreshTokenService.RefreshTokenData) writes.getValue().get(0).value();
+        assertThat(realJwt.parseToken(tokens.accessToken()).sessionId()).isEqualTo(stored.sessionId()).isNotBlank();
+        assertThat(stored.userAgent()).hasSize(512);
+        assertThat(stored.createdAt()).isNotNull().isEqualTo(stored.lastSeenAt());
+    }
+
+    @Test
+    void shouldKeepCreatedAtAndTakeCurrentDeviceWhenRotating() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("User-Agent", "NewBrowser/2.0");
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+        String oldToken = "device-token";
+        String userId = UUID.randomUUID().toString();
+        Instant signedIn = Instant.parse("2026-10-20T08:12:00Z");
+        when(redisService.getOrThrow(GRACE_NS, k(oldToken), RefreshTokenService.RotateResult.class)).thenReturn(null);
+        when(redisService.getOrThrow(NAMESPACE, k(oldToken), RefreshTokenService.RefreshTokenData.class)).thenReturn(
+                new RefreshTokenService.RefreshTokenData(userId, List.of("user"), "session-1", false,
+                        "OldBrowser/1.0", signedIn, signedIn));
+        when(userRepository.findById(UUID.fromString(userId))).thenReturn(Optional.of(userWithRoles(userId, false, "user")));
+        when(redisService.execScript(any(), anyList(), anyList())).thenReturn(1L);
+        when(jwtUtil.generateToken(userId, List.of("user"), false, "session-1")).thenReturn("access");
+
+        RefreshTokenService.RefreshTokenData rotated = service.rotate(oldToken).data();
+
+        assertThat(rotated.userAgent()).isEqualTo("NewBrowser/2.0");
+        assertThat(rotated.createdAt()).isEqualTo(signedIn);
+        assertThat(rotated.lastSeenAt()).isAfter(signedIn);
+    }
+
+    @Test
+    void shouldKeepTheKnownDeviceWhenRotatingWithoutUserAgent() {
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));
+        String oldToken = "no-ua-token";
+        String userId = UUID.randomUUID().toString();
+        Instant signedIn = Instant.parse("2026-10-20T08:12:00Z");
+        when(redisService.getOrThrow(GRACE_NS, k(oldToken), RefreshTokenService.RotateResult.class)).thenReturn(null);
+        when(redisService.getOrThrow(NAMESPACE, k(oldToken), RefreshTokenService.RefreshTokenData.class)).thenReturn(
+                new RefreshTokenService.RefreshTokenData(userId, List.of("user"), "session-1", false,
+                        "OldBrowser/1.0", signedIn, signedIn));
+        when(userRepository.findById(UUID.fromString(userId))).thenReturn(Optional.of(userWithRoles(userId, false, "user")));
+        when(redisService.execScript(any(), anyList(), anyList())).thenReturn(1L);
+        when(jwtUtil.generateToken(userId, List.of("user"), false, "session-1")).thenReturn("access");
+
+        assertThat(service.rotate(oldToken).data().userAgent()).isEqualTo("OldBrowser/1.0");
+    }
 
     @Test
     @SuppressWarnings("unchecked")
     void shouldRenewUserIndexTtlWhenGeneratingToken() {
-        String token = service.generate("user-5", List.of("user"), false);
+        String token = service.issue("user-5", List.of("user"), false).refreshToken();
 
         assertThat(token).isNotBlank();
         ArgumentCaptor<List<RedisService.RedisWrite>> writes = ArgumentCaptor.forClass(List.class);
@@ -558,7 +623,7 @@ class RefreshTokenServiceTest {
         assertThat(stored.sessionId()).isNotBlank();
         assertThat(writes.getValue()).containsExactly(
                 RedisService.RedisWrite.set(NAMESPACE, k(token),
-                        new RefreshTokenService.RefreshTokenData("user-5", List.of("user"), stored.sessionId(), false), Duration.ofDays(30)),
+                        stored, Duration.ofDays(30)),
                 RedisService.RedisWrite.hput(USER_IDX_NS, "user-5", k(token), stored.sessionId()),
                 // The index TTL is renewed on every issue, not only when the index is first created
                 RedisService.RedisWrite.expire(USER_IDX_NS, "user-5", Duration.ofDays(30)));
@@ -571,7 +636,7 @@ class RefreshTokenServiceTest {
         doThrow(new RedisOperationException("redis down", null))
                 .when(redisService).execInTransaction(any());
 
-        assertThatThrownBy(() -> service.generate("user-9", List.of("user"), false))
+        assertThatThrownBy(() -> service.issue("user-9", List.of("user"), false).refreshToken())
                 .isInstanceOf(RedisOperationException.class);
     }
 
@@ -581,12 +646,12 @@ class RefreshTokenServiceTest {
         String oldToken = "old-token";
         String userId = UUID.randomUUID().toString();
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
-                userId, List.of("user"), "session-1", false);
+                userId, List.of("user"), "session-1", false, null, null, null);
         when(redisService.getOrThrow(GRACE_NS, k(oldToken), RefreshTokenService.RotateResult.class)).thenReturn(null);
         when(redisService.getOrThrow(NAMESPACE, k(oldToken), RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
         when(userRepository.findById(UUID.fromString(userId)))
                 .thenReturn(Optional.of(userWithRoles(userId, false, "user")));
-        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("new-access");
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean(), any())).thenReturn("new-access");
         doThrow(new RedisOperationException("redis down", null))
                 .when(redisService).execScript(any(), anyList(), anyList());
 
@@ -598,15 +663,16 @@ class RefreshTokenServiceTest {
     void revoke_existingToken_deletesNamespaceAndUserIndex() {
         String token = "revoke-token";
         RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
-                "user-6", List.of("user"), "session-1", false);
+                "user-6", List.of("user"), "session-1", false, null, null, null);
         when(redisService.getOrThrow(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
         when(redisService.delete(NAMESPACE, k(token))).thenReturn(true);
 
         service.revoke(token);
 
-        // Session ended and index field removed before the token goes, so a grace replay in between gets nothing
+        // Session revoked and index field removed before the token goes: its access tokens stop at once, and a grace
+        // replay or racing rotation in between gets nothing
         InOrder order = inOrder(redisService);
-        order.verify(redisService).execInTransaction(ending("session-1", false));
+        order.verify(redisService).execInTransaction(ending("session-1", true));
         order.verify(redisService).hDelete(USER_IDX_NS, "user-6", k(token));
         order.verify(redisService).delete(NAMESPACE, k(token));
         verify(redisService, never()).getOrThrow(eq(CONSUMED_NS), anyString(), any());
@@ -616,7 +682,7 @@ class RefreshTokenServiceTest {
     void shouldKeepTokenForRetryWhenLogoutFailsBeforeDelete() {
         String token = "revoke-fails";
         when(redisService.getOrThrow(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class)).thenReturn(
-                new RefreshTokenService.RefreshTokenData("user-6", List.of("user"), "session-1", false));
+                new RefreshTokenService.RefreshTokenData("user-6", List.of("user"), "session-1", false, null, null, null));
         doThrow(new RedisOperationException("redis down", null)).when(redisService).execInTransaction(anyList());
 
         assertThatThrownBy(() -> service.revoke(token)).isInstanceOf(RedisOperationException.class);
@@ -627,7 +693,7 @@ class RefreshTokenServiceTest {
     void shouldRevokeSessionWhenRotationConsumesTokenDuringLogout() {
         String token = "revoke-races-rotation";
         when(redisService.getOrThrow(NAMESPACE, k(token), RefreshTokenService.RefreshTokenData.class)).thenReturn(
-                new RefreshTokenService.RefreshTokenData("user-6", List.of("user"), "session-1", false));
+                new RefreshTokenService.RefreshTokenData("user-6", List.of("user"), "session-1", false, null, null, null));
 
         service.revoke(token);
 
@@ -677,7 +743,7 @@ class RefreshTokenServiceTest {
         // "1": an entry written before index values named the session; its token names it
         when(redisService.hGetAllOrThrow(USER_IDX_NS, "user-7")).thenReturn(Map.of("ta", "session-a", "tb", "1"));
         when(redisService.multiGetOrThrow(NAMESPACE, List.of("tb"), RefreshTokenService.RefreshTokenData.class))
-                .thenReturn(List.of(new RefreshTokenService.RefreshTokenData("user-7", List.of("user"), "session-b", false)));
+                .thenReturn(List.of(new RefreshTokenService.RefreshTokenData("user-7", List.of("user"), "session-b", false, null, null, null)));
         when(redisService.multiGetOrThrow(CONSUMED_NS, List.of("tb"), String.class)).thenReturn(java.util.Arrays.asList((String) null));
 
         service.revokeAllForUser("user-7");
@@ -702,7 +768,7 @@ class RefreshTokenServiceTest {
         when(redisService.hGetAllOrThrow(USER_IDX_NS, "user-9")).thenReturn(index);
         when(redisService.multiGetOrThrow(eq(NAMESPACE), anyList(), eq(RefreshTokenService.RefreshTokenData.class)))
                 .thenAnswer(inv -> ((List<String>) inv.getArgument(1)).stream().map(key -> "tc".equals(key)
-                        ? new RefreshTokenService.RefreshTokenData("user-9", List.of("user"), null, false) : null).toList());
+                        ? new RefreshTokenService.RefreshTokenData("user-9", List.of("user"), null, false, null, null, null) : null).toList());
         when(redisService.multiGetOrThrow(eq(CONSUMED_NS), anyList(), eq(String.class)))
                 .thenAnswer(inv -> ((List<String>) inv.getArgument(1)).stream().map(key -> "td".equals(key) ? "session-d" : null).toList());
 
@@ -741,6 +807,57 @@ class RefreshTokenServiceTest {
 
         verify(redisService, never()).execInTransaction(any());
         verify(redisService).hDelete(USER_IDX_NS, "user-10", "te");
+    }
+
+    // ── sessions ──────────────────────────────────────────────────────
+
+    @Test
+    void shouldSkipExpiredAndRevokedTokensAndSortByLastSeenWhenListingSessions() {
+        Instant t = Instant.parse("2026-10-29T00:00:00Z");
+        Map<String, Object> index = new java.util.LinkedHashMap<>();
+        index.put("k-old", "s-old");
+        index.put("k-gone", "s-gone");
+        index.put("k-legacy", "1");
+        index.put("k-new", "s-new");
+        index.put("k-reused", "s-reused");
+        when(redisService.hGetAllOrThrow(USER_IDX_NS, "u1")).thenReturn(index);
+        when(redisService.multiGetOrThrow(NAMESPACE, List.of("k-old", "k-gone", "k-legacy", "k-new", "k-reused"),
+                RefreshTokenService.RefreshTokenData.class)).thenReturn(java.util.Arrays.asList(
+                new RefreshTokenService.RefreshTokenData("u1", List.of("user"), "s-old", false, "A", t, t),
+                null,
+                new RefreshTokenService.RefreshTokenData("u1", List.of("user"), null, null, null, null, null),
+                new RefreshTokenService.RefreshTokenData("u1", List.of("user"), "s-new", true, "B", t, t.plusSeconds(60)),
+                new RefreshTokenService.RefreshTokenData("u1", List.of("user"), "s-reused", false, "C", t, t.plusSeconds(120))));
+        // Reuse detection revoked s-reused but left its live token: it can no longer refresh, so it is not listed
+        when(redisService.multiGetOrThrow(REVOKED_SESSION_NS, List.of("s-old", "k-legacy", "s-new", "s-reused"), String.class))
+                .thenReturn(java.util.Arrays.asList(null, null, null, "1"));
+
+        // The legacy token has no session id or lastSeenAt: named after its key, listed last
+        assertThat(service.listSessions("u1")).extracting(RefreshTokenService.RefreshTokenData::sessionId)
+                .containsExactly("s-new", "s-old", "k-legacy");
+    }
+
+    @Test
+    void shouldRevokeNothingWhenSessionIsNotTheUsers() {
+        when(redisService.hGetAllOrThrow(USER_IDX_NS, "u1")).thenReturn(Map.of("k1", "s1"));
+
+        assertThat(service.revokeSessions("u1", "someone-elses"::equals)).isZero();
+        verify(redisService, never()).execInTransaction(any());
+        verify(redisService, never()).deleteAll(anyString(), any());
+    }
+
+    @Test
+    void shouldKeepTheCurrentSessionWhenRevokingOthers() {
+        when(redisService.hGetAllOrThrow(USER_IDX_NS, "u1")).thenReturn(Map.of("k-here", "s-here", "k-a", "s-a", "k-b", "s-b"));
+
+        assertThat(service.revokeSessions("u1", id -> !id.equals("s-here"))).isEqualTo(2);
+
+        ArgumentCaptor<List<RedisService.RedisWrite>> writes = ArgumentCaptor.captor();
+        InOrder order = inOrder(redisService);
+        order.verify(redisService).execInTransaction(writes.capture());
+        order.verify(redisService).deleteAll(NAMESPACE, Set.of("k-a", "k-b"));
+        assertThat(writes.getValue()).containsExactlyInAnyOrderElementsOf(
+                java.util.stream.Stream.concat(ending("s-a", true).stream(), ending("s-b", true).stream()).toList());
     }
 
     @Test

@@ -59,6 +59,7 @@ class ErrorCodesDocTest {
             Map.entry("COMMON_UNAUTHORIZED", Set.of(401)),
             Map.entry("AUTH_TOKEN_EXPIRED", Set.of(401)),
             Map.entry("AUTH_TOKEN_INVALID", Set.of(401)),
+            Map.entry("AUTH_SESSION_REVOKED", Set.of(401)),
             Map.entry("COMMON_FORBIDDEN", Set.of(403)),
             Map.entry("COMMON_RATE_LIMITED", Set.of(429)),
             Map.entry("COMMON_CONFLICT", Set.of(409)),

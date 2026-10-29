@@ -89,7 +89,7 @@ class VoteControllerTest {
     }
 
     private static void authenticate() {
-        UserPrincipal principal = new UserPrincipal(USER_ID, List.of("user"));
+        UserPrincipal principal = new UserPrincipal(USER_ID, List.of("user"), null);
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 principal, null, AuthorityUtils.createAuthorityList("ROLE_USER")));
     }

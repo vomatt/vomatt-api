@@ -70,7 +70,7 @@ class RefreshTokenServiceRedisTest {
         });
         redisService = new RedisServiceImpl(template, JsonMapper.builder().build());
         JwtUtil jwtUtil = mock(JwtUtil.class);
-        when(jwtUtil.generateToken(anyString(), any(), anyBoolean())).thenReturn("access");
+        when(jwtUtil.generateToken(anyString(), any(), anyBoolean(), any())).thenReturn("access");
         UserRepository userRepository = mock(UserRepository.class);
         when(userRepository.findById(UUID.fromString(userId))).thenReturn(Optional.of(User.builder()
                 .id(UUID.fromString(userId)).username("u").email("u@example.com").roles(new String[] { "user" })
@@ -86,7 +86,7 @@ class RefreshTokenServiceRedisTest {
 
     @Test
     void shouldConsumeTokenAndWriteRotationWhenTokenIsLive() {
-        String t0 = service.generate(userId, List.of("user"), false);
+        String t0 = service.issue(userId, List.of("user"), false).refreshToken();
         String session = sessionOf(t0);
 
         RefreshTokenService.RotateResult r = service.rotate(t0);
@@ -104,8 +104,32 @@ class RefreshTokenServiceRedisTest {
     }
 
     @Test
+    void shouldListLiveSessionsAndStopKickedOneFromRotating() {
+        String laptop = service.issue(userId, List.of("user"), false).refreshToken();
+        java.time.Instant laptopSignIn = redisService.get("refresh", keyOf(laptop), RefreshTokenService.RefreshTokenData.class).createdAt();
+        String phone = service.issue(userId, List.of("user"), false).refreshToken();
+        String phoneSession = sessionOf(phone);
+        String laptopNow = service.rotate(laptop).newRefreshToken();
+
+        List<RefreshTokenService.RefreshTokenData> sessions = service.listSessions(userId);
+
+        // The rotated laptop session was active last, and kept its sign-in time across the rotation
+        assertThat(sessions).extracting(RefreshTokenService.RefreshTokenData::sessionId)
+                .containsExactly(sessionOf(laptopNow), phoneSession);
+        assertThat(sessions.get(0).createdAt()).isEqualTo(laptopSignIn);
+
+        assertThat(service.revokeSessions(userId, phoneSession::equals)).isEqualTo(1);
+
+        assertThat(service.isSessionRevoked(phoneSession)).isTrue();
+        assertThat(service.rotate(phone)).isNull();
+        assertThat(service.listSessions(userId)).extracting(RefreshTokenService.RefreshTokenData::sessionId)
+                .containsExactly(sessionOf(laptopNow));
+        assertThat(service.rotate(laptopNow)).isNotNull();
+    }
+
+    @Test
     void shouldReturnSamePairWhenTokenIsSentAgainWithinGrace() {
-        String t0 = service.generate(userId, List.of("user"), false);
+        String t0 = service.issue(userId, List.of("user"), false).refreshToken();
 
         RefreshTokenService.RotateResult first = service.rotate(t0);
 
@@ -114,7 +138,7 @@ class RefreshTokenServiceRedisTest {
 
     @Test
     void shouldRejectGraceReplayWhenSessionIsLoggedOutAfterRotatingAgain() {
-        String t0 = service.generate(userId, List.of("user"), false);
+        String t0 = service.issue(userId, List.of("user"), false).refreshToken();
         String t1 = service.rotate(t0).newRefreshToken();
         String t2 = service.rotate(t1).newRefreshToken();
         assertThat(service.rotate(t0)).isNotNull();
@@ -127,7 +151,7 @@ class RefreshTokenServiceRedisTest {
 
     @Test
     void shouldRejectGraceReplayWhenAllSessionsAreRevokedAfterRotatingAgain() {
-        String t0 = service.generate(userId, List.of("user"), false);
+        String t0 = service.issue(userId, List.of("user"), false).refreshToken();
         String t1 = service.rotate(t0).newRefreshToken();
         service.rotate(t1);
 
@@ -138,7 +162,7 @@ class RefreshTokenServiceRedisTest {
 
     @Test
     void shouldDropTokenWhenSessionIsRevoked() {
-        String t0 = service.generate(userId, List.of("user"), false);
+        String t0 = service.issue(userId, List.of("user"), false).refreshToken();
         redisService.set("refresh:revoked-session", sessionOf(t0), "1", Duration.ofMinutes(5));
 
         assertThat(service.rotate(t0)).isNull();
@@ -151,7 +175,7 @@ class RefreshTokenServiceRedisTest {
 
     @Test
     void shouldDropTokenWhenSessionIsRevokedAndUserIndexHasWrongType() {
-        String t0 = service.generate(userId, List.of("user"), false);
+        String t0 = service.issue(userId, List.of("user"), false).refreshToken();
         redisService.set("refresh:revoked-session", sessionOf(t0), "1", Duration.ofMinutes(5));
         template.delete("refresh:idx:" + userId);
         redisService.set("refresh:idx", userId, "not-a-hash", Duration.ofMinutes(5));
@@ -162,7 +186,7 @@ class RefreshTokenServiceRedisTest {
 
     @Test
     void shouldWriteNothingWhenGraceTtlIsInvalid() {
-        String t0 = service.generate(userId, List.of("user"), false);
+        String t0 = service.issue(userId, List.of("user"), false).refreshToken();
         ReflectionTestUtils.setField(service, "refreshGraceSeconds", 0L);
 
         assertThatThrownBy(() -> service.rotate(t0)).isInstanceOf(RedisOperationException.class);
@@ -174,7 +198,7 @@ class RefreshTokenServiceRedisTest {
 
     @Test
     void shouldWriteNothingWhenUserIndexHasWrongType() {
-        String t0 = service.generate(userId, List.of("user"), false);
+        String t0 = service.issue(userId, List.of("user"), false).refreshToken();
         template.delete("refresh:idx:" + userId);
         redisService.set("refresh:idx", userId, "not-a-hash", Duration.ofMinutes(5));
 
@@ -185,7 +209,7 @@ class RefreshTokenServiceRedisTest {
 
     @Test
     void shouldStopSuccessorWhenLoggingOutWithAlreadyRotatedToken() {
-        String t0 = service.generate(userId, List.of("user"), false);
+        String t0 = service.issue(userId, List.of("user"), false).refreshToken();
         String t1 = service.rotate(t0).newRefreshToken();
 
         service.revoke(t0);
@@ -197,7 +221,7 @@ class RefreshTokenServiceRedisTest {
 
     @Test
     void shouldStopSuccessorWrittenAfterSnapshotWhenRevokingAll() {
-        String t0 = service.generate(userId, List.of("user"), false);
+        String t0 = service.issue(userId, List.of("user"), false).refreshToken();
         String t1 = service.rotate(t0).newRefreshToken();
         // As seen by a revokeAll that read the index just before that rotation: T0 listed, T1 not yet
         template.opsForHash().delete("refresh:idx:" + userId, keyOf(t1));
@@ -211,7 +235,7 @@ class RefreshTokenServiceRedisTest {
 
     @Test
     void shouldRevokeSessionOfLegacyIndexEntryWhenRevokingAll() {
-        String t0 = service.generate(userId, List.of("user"), false);
+        String t0 = service.issue(userId, List.of("user"), false).refreshToken();
         String session = sessionOf(t0);
         // Written before index values named the session
         redisService.execInTransaction(List.of(RedisService.RedisWrite.hput("refresh:idx", userId, keyOf(t0), "1")));
@@ -225,16 +249,16 @@ class RefreshTokenServiceRedisTest {
 
     @Test
     void shouldRevokeSessionNamedAfterKeyWhenLegacyTokenIsRevokedOrRotated() {
-        String t0 = service.generate(userId, List.of("user"), false);
+        String t0 = service.issue(userId, List.of("user"), false).refreshToken();
         // Issued before session ids existed
-        redisService.set("refresh", keyOf(t0), new RefreshTokenService.RefreshTokenData(userId, List.of("user"), null, false),
+        redisService.set("refresh", keyOf(t0), new RefreshTokenService.RefreshTokenData(userId, List.of("user"), null, false, null, null, null),
                 Duration.ofDays(30));
 
         // Its next rotation names the session after the key...
         assertThat(service.rotate(t0).data().sessionId()).isEqualTo(keyOf(t0));
         // ...the session revokeAllForUser flags for a legacy token it finds live, so a rotation racing it is refused
-        String t2 = service.generate(userId, List.of("user"), false);
-        redisService.set("refresh", keyOf(t2), new RefreshTokenService.RefreshTokenData(userId, List.of("user"), null, false),
+        String t2 = service.issue(userId, List.of("user"), false).refreshToken();
+        redisService.set("refresh", keyOf(t2), new RefreshTokenService.RefreshTokenData(userId, List.of("user"), null, false, null, null, null),
                 Duration.ofDays(30));
         template.opsForHash().put("refresh:idx:" + userId, keyOf(t2), "1");
         service.revokeAllForUser(userId);
@@ -243,7 +267,7 @@ class RefreshTokenServiceRedisTest {
 
     @Test
     void shouldLogOutWhenStoredTokenIsUndecodable() {
-        String t0 = service.generate(userId, List.of("user"), false);
+        String t0 = service.issue(userId, List.of("user"), false).refreshToken();
         template.execute((RedisCallback<Object>) c -> c.stringCommands().set(
                 ("refresh:" + keyOf(t0)).getBytes(java.nio.charset.StandardCharsets.UTF_8),
                 "not json".getBytes(java.nio.charset.StandardCharsets.UTF_8)));

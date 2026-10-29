@@ -11,16 +11,22 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 @Slf4j
 @Service
@@ -50,6 +56,7 @@ public class RefreshTokenService {
     // while its session stands (see sessionStands), so the window cannot outlive a logout or a session revocation
     private static final String GRACE_NS = "refresh:grace";
     private static final int SHA_PREFIX_LEN = 8;
+    private static final int USER_AGENT_MAX_LEN = 512;
 
     // Step 5 of rotate. KEYS: 1 old token, 2 revoked-session flag, 3 consumed marker, 4 new token, 5 user index, 6 grace.
     // ARGV: 1 session id, 2 new token data, 3 grace pair, 4 new index field, 5 old index field, 6 refresh TTL ms,
@@ -96,22 +103,34 @@ public class RefreshTokenService {
      * {@code sessionId} names one sign-in and is kept across rotations; null on tokens issued before it existed.
      * {@code adminScope} is fixed at sign-in (admin console login only) and kept across rotations, so refreshing a
      * consumer-app session never yields an admin token; null on tokens issued before it existed (read as false).
+     * {@code userAgent} and {@code lastSeenAt} are those of the latest sign-in or rotation, {@code createdAt} the
+     * sign-in's; all three are null on tokens issued before they existed, and {@code createdAt} stays null for them.
      */
-    public record RefreshTokenData(String userId, List<String> roles, String sessionId, Boolean adminScope) {
+    public record RefreshTokenData(String userId, List<String> roles, String sessionId, Boolean adminScope,
+                                   String userAgent, Instant createdAt, Instant lastSeenAt) {
         public boolean grantsAdmin() {
             return Boolean.TRUE.equals(adminScope);
+        }
+
+        RefreshTokenData withSessionId(String id) {
+            return new RefreshTokenData(userId, roles, id, adminScope, userAgent, createdAt, lastSeenAt);
         }
     }
 
     public record RotateResult(String newAccessToken, String newRefreshToken, RefreshTokenData data) {}
 
+    public record IssuedTokens(String accessToken, String refreshToken) {}
+
     /**
-     * Generates a refresh token, stores it in Redis and indexes it under the user
+     * Signs in: starts a session, stores its refresh token in Redis indexed under the user, and signs an access token
+     * naming the same session, so revoking the session cuts both.
      */
-    public String generate(String userId, List<String> roles, boolean adminScope) {
+    public IssuedTokens issue(String userId, List<String> roles, boolean adminScope) {
         String token = UUID.randomUUID().toString();
         String key = keyOf(token);
-        RefreshTokenData data = new RefreshTokenData(userId, roles, UUID.randomUUID().toString(), adminScope);
+        Instant now = Instant.now();
+        RefreshTokenData data = new RefreshTokenData(userId, roles, UUID.randomUUID().toString(), adminScope,
+                currentUserAgent(), now, now);
         Duration ttl = Duration.ofDays(refreshExpirationDays);
         // Renew the index TTL on every issue (as rotate does), so the index never expires before a token it lists
         redisService.execInTransaction(List.of(
@@ -120,7 +139,21 @@ public class RefreshTokenService {
                 RedisService.RedisWrite.expire(USER_IDX_NS, userId, ttl)
         ));
         log.debug("Refresh token generated for userId={}", userId);
-        return token;
+        return new IssuedTokens(accessTokenFor(data), token);
+    }
+
+    /** The access token of a session: same user, roles, scope and session as its refresh token. */
+    private String accessTokenFor(RefreshTokenData data) {
+        return jwtUtil.generateToken(data.userId(), data.roles(), data.grantsAdmin(), data.sessionId());
+    }
+
+    /** The current request's User-Agent, cut to {@link #USER_AGENT_MAX_LEN}; null outside a request or when absent. */
+    private static String currentUserAgent() {
+        if (!(RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attrs)) {
+            return null;
+        }
+        String ua = attrs.getRequest().getHeader("User-Agent");
+        return ua == null || ua.length() <= USER_AGENT_MAX_LEN ? ua : ua.substring(0, USER_AGENT_MAX_LEN);
     }
 
     /**
@@ -207,11 +240,14 @@ public class RefreshTokenService {
         // Tokens issued before session ids existed start a session named after their key, the one revokeAllForUser
         // flags for them, so a rotation racing that revocation is refused too
         String sessionId = sessionIdOf(data, oldKey);
-        RefreshTokenData freshData = new RefreshTokenData(data.userId(), freshRoles, sessionId, data.grantsAdmin());
+        // A refresh without a User-Agent keeps the device the session already showed
+        String userAgent = currentUserAgent();
+        RefreshTokenData freshData = new RefreshTokenData(data.userId(), freshRoles, sessionId, data.grantsAdmin(),
+                userAgent != null ? userAgent : data.userAgent(), data.createdAt(), Instant.now());
 
         String newRefreshToken = UUID.randomUUID().toString();
         String newKey = keyOf(newRefreshToken);
-        String newAccessToken = jwtUtil.generateToken(freshData.userId(), freshRoles, freshData.grantsAdmin());
+        String newAccessToken = accessTokenFor(freshData);
         RotateResult result = new RotateResult(newAccessToken, newRefreshToken, freshData);
 
         Duration refreshTtl = Duration.ofDays(refreshExpirationDays);
@@ -307,14 +343,12 @@ public class RefreshTokenService {
         RefreshTokenData data = redisService.getOrThrow(NAMESPACE, key, RefreshTokenData.class);
         if (data != null) {
             String sessionId = sessionIdOf(data, key);
-            // Ended and unlisted before the token goes: a grace replay in between cannot get a pair of this session,
-            // and a failure part way leaves the token for a retried logout
-            endSessions(List.of(sessionId), false);
+            // Revoked and unlisted before the token goes: its access tokens stop at once (as when signed out from
+            // another device), a rotation racing this logout cannot hand out a successor, and a failure part way
+            // leaves the token for a retried logout
+            endSessions(List.of(sessionId), true);
             redisService.hDelete(USER_IDX_NS, data.userId(), key);
-            if (!redisService.delete(NAMESPACE, key)) {
-                // A rotation consumed it in between: stop the successor
-                endSessions(List.of(sessionId), true);
-            }
+            redisService.delete(NAMESPACE, key);
         } else if (redisService.delete(NAMESPACE, key)) {
             // Undecodable: its user, so its index field, is unknown; the next revokeAllForUser drops the field
             log.warn("Undecodable refresh token deleted on logout");
@@ -335,18 +369,50 @@ public class RefreshTokenService {
      * Revokes all of a user's refresh tokens (security incident handling)
      */
     public void revokeAllForUser(String userId) {
+        revokeSessions(userId, sessionId -> true);
+    }
+
+    /**
+     * A user's live sessions, most recently active first (never-seen legacy ones last), each named by
+     * {@link #sessionIdOf}. Index fields whose token has expired or does not decode are left out, and so are revoked
+     * sessions (reuse detection leaves their live token behind, but it can no longer refresh).
+     */
+    public List<RefreshTokenData> listSessions(String userId) {
+        List<String> keys = List.copyOf(redisService.hGetAllOrThrow(USER_IDX_NS, userId).keySet());
+        List<RefreshTokenData> tokens = redisService.multiGetOrThrow(NAMESPACE, keys, RefreshTokenData.class);
+        List<RefreshTokenData> live = new ArrayList<>();
+        for (int i = 0; i < keys.size(); i++) {
+            RefreshTokenData t = tokens.get(i);
+            if (t != null) {
+                live.add(t.withSessionId(sessionIdOf(t, keys.get(i))));
+            }
+        }
+        List<String> revoked = redisService.multiGetOrThrow(REVOKED_SESSION_NS,
+                live.stream().map(RefreshTokenData::sessionId).toList(), String.class);
+        List<RefreshTokenData> sessions = new ArrayList<>();
+        for (int i = 0; i < live.size(); i++) {
+            if (revoked.get(i) == null) {
+                sessions.add(live.get(i));
+            }
+        }
+        sessions.sort(Comparator.comparing(RefreshTokenData::lastSeenAt, Comparator.nullsLast(Comparator.reverseOrder())));
+        return sessions;
+    }
+
+    /**
+     * Revokes the user's sessions whose id passes {@code sessionFilter} and returns how many it revoked. Index fields
+     * that name no session (token and consumed marker both gone or undecodable) are dropped too, whatever the filter.
+     */
+    public int revokeSessions(String userId, Predicate<String> sessionFilter) {
         // Throws on Redis failure: an empty answer would revoke nothing, silently
         Map<String, Object> index = redisService.hGetAllOrThrow(USER_IDX_NS, userId);
-        if (index.isEmpty()) {
-            return;
-        }
         // Values are session ids, except "1" on entries written before they were stored there (or null if undecodable):
         // read those from the token, or from its consumed marker if it has rotated since
-        Set<String> sessionIds = new HashSet<>();
+        Map<String, String> sessionOfField = new HashMap<>();
         List<String> unnamed = new ArrayList<>();
         index.forEach((key, value) -> {
             if (value instanceof String v && !"1".equals(v)) {
-                sessionIds.add(v);
+                sessionOfField.put(key, v);
             } else {
                 unnamed.add(key);
             }
@@ -355,20 +421,37 @@ public class RefreshTokenService {
             List<RefreshTokenData> tokens = redisService.multiGetOrThrow(NAMESPACE, unnamed, RefreshTokenData.class);
             List<String> consumed = redisService.multiGetOrThrow(CONSUMED_NS, unnamed, String.class);
             for (int i = 0; i < unnamed.size(); i++) {
-                String sessionId = tokens.get(i) != null ? sessionIdOf(tokens.get(i), unnamed.get(i)) : consumed.get(i);
-                if (sessionId != null) {
-                    sessionIds.add(sessionId);
-                }
+                sessionOfField.put(unnamed.get(i),
+                        tokens.get(i) != null ? sessionIdOf(tokens.get(i), unnamed.get(i)) : consumed.get(i));
             }
+        }
+        Set<String> sessionIds = new HashSet<>();
+        Set<String> fields = new HashSet<>();
+        sessionOfField.forEach((field, sessionId) -> {
+            if (sessionId == null) {
+                fields.add(field);
+            } else if (sessionFilter.test(sessionId)) {
+                fields.add(field);
+                sessionIds.add(sessionId);
+            }
+        });
+        if (fields.isEmpty()) {
+            return 0;
         }
         // Revoked before the tokens go, so a rotation of one of them running now is refused by the script, and a
         // successor it already wrote (not in this snapshot) belongs to a revoked session
         endSessions(sessionIds, true);
         // Index fields are already keyOf(token). Only the snapshot's fields go: a whole-key DEL would also drop an entry
         // written after the snapshot
-        redisService.deleteAll(NAMESPACE, index.keySet());
-        redisService.hDelete(USER_IDX_NS, userId, index.keySet().toArray(String[]::new));
-        log.warn("Revoked {} refresh tokens for userId={}", index.size(), userId);
+        redisService.deleteAll(NAMESPACE, fields);
+        redisService.hDelete(USER_IDX_NS, userId, fields.toArray(String[]::new));
+        log.warn("Revoked {} refresh tokens for userId={}", fields.size(), userId);
+        return sessionIds.size();
+    }
+
+    /** Whether a session was revoked (see {@link #endSessions}); throws on Redis failure, the caller picks the fallback. */
+    public boolean isSessionRevoked(String sessionId) {
+        return redisService.hasKeyOrThrow(REVOKED_SESSION_NS, sessionId);
     }
 
     /** Redis key of a token: its SHA-256 hex. The same digest is what db/redis-hash-refresh-keys.sh wrote on migration. */

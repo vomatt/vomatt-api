@@ -9,7 +9,6 @@ import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.security.AppKey;
-import com.vomatt.common.security.JwtUtil;
 import com.vomatt.common.security.RefreshTokenReuseException;
 import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.sms.SmsService;
@@ -101,7 +100,6 @@ public class AuthService {
     private final RedisService redisService;
     private final EmailService emailService;
     private final SmsService smsService;
-    private final JwtUtil jwtUtil;
     private final RestClient restClient;
     private final RefreshTokenService refreshTokenService;
     private final AppKey appKey;
@@ -1064,9 +1062,8 @@ public class AuthService {
         user.setLastLoginAt(OffsetDateTime.now());
         userRepository.save(user);
         List<String> roles = List.of(user.getRoles());
-        String token = jwtUtil.generateToken(user.getId().toString(), roles, adminScope);
-        String refreshToken = refreshTokenService.generate(user.getId().toString(), roles, adminScope);
-        return new AuthResponse(token, refreshToken,
+        RefreshTokenService.IssuedTokens tokens = refreshTokenService.issue(user.getId().toString(), roles, adminScope);
+        return new AuthResponse(tokens.accessToken(), tokens.refreshToken(),
                 new AuthResponse.UserInfo(user.getId().toString(), user.getEmail(), user.getUsername(),
                         user.getDisplayName(), roles, user.getAvatarUrl(), user.getPhoneNumber()), isNewUser);
     }

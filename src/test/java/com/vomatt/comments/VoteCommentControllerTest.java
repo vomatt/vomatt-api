@@ -82,7 +82,7 @@ class VoteCommentControllerTest {
 
     private void signIn(String userId) {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                new UserPrincipal(userId, List.of("user")), null, AuthorityUtils.createAuthorityList("ROLE_USER")));
+                new UserPrincipal(userId, List.of("user"), null), null, AuthorityUtils.createAuthorityList("ROLE_USER")));
     }
 
     @AfterEach

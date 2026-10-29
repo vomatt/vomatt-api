@@ -25,7 +25,9 @@ import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.entity.Audience;
+import com.vomatt.entity.CommentLike;
 import com.vomatt.entity.Invitee;
+import com.vomatt.entity.NotificationCategory;
 import com.vomatt.entity.NotificationKind;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserBlock;
@@ -65,7 +67,7 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
 
     private List<NotificationResponse> feed(User user) {
         em.flush();
-        return notificationService.list(user.getId().toString(), null, 50).items();
+        return notificationService.list(user.getId().toString(), null, null, 50).items();
     }
 
     private List<NotificationKind> kinds(User user) {
@@ -74,12 +76,12 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
 
     private long unread(User user) {
         em.flush();
-        return notificationService.countUnread(user.getId().toString()).count();
+        return notificationService.countUnread(user.getId().toString(), null).count();
     }
 
     private void preferences(User user, Boolean resultsIn, Boolean invitations, Boolean comments, Boolean closingSoon) {
         notificationService.updatePreferences(user.getId().toString(),
-                new UpdateNotificationPreferencesRequest(resultsIn, invitations, comments, closingSoon, null));
+                new UpdateNotificationPreferencesRequest(resultsIn, invitations, comments, closingSoon, null, null));
     }
 
     private Vote poll(User owner, Audience audience, OffsetDateTime start, OffsetDateTime end) {
@@ -103,6 +105,12 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
         comment.setParent(parent);
         em.persist(comment);
         return comment;
+    }
+
+    private CommentLike like(User user, VoteComment comment) {
+        CommentLike like = new CommentLike(comment, user);
+        em.persist(like);
+        return like;
     }
 
     private VoteComment mention(User author, Vote poll, VoteComment parent, User... mentioned) {
@@ -204,6 +212,54 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should list LIKE for others' likes on the user's Comments, not the user's own like or a like on a deleted Comment")
+    void shouldListLikeWhenOthersLikeUsersComment() {
+        Vote alices = poll(alice, Audience.PUBLIC, now.minusHours(2), now.plusDays(1));
+        VoteComment myComment = comment(me, alices, null, "Spaces");
+        VoteComment deleted = comment(me, alices, null, "gone");
+        VoteComment alicesComment = comment(alice, alices, null, "Tabs");
+        CommentLike like = like(bob, myComment);
+        like(me, myComment);
+        like(bob, deleted);
+        like(bob, alicesComment);
+        deleted.softDelete();
+
+        assertThat(feed(me)).singleElement().satisfies(n -> {
+            assertThat(n.id()).isEqualTo("like_" + like.getId());
+            assertThat(n.kind()).isEqualTo(NotificationKind.LIKE);
+            assertThat(n.category()).isEqualTo(NotificationCategory.LIKE);
+            assertThat(n.actor().username()).isEqualTo(bob.getUsername());
+            assertThat(n.poll().id()).isEqualTo(alices.getId().toString());
+            assertThat(n.comment().id()).isEqualTo(myComment.getId().toString());
+        });
+        assertThat(unread(me)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("should list and count only the requested category, and nothing when its kinds are switched off")
+    void shouldFilterByCategoryWhenRequested() {
+        Vote mine = poll(me, Audience.PUBLIC, now.minusDays(2), now.minusHours(1));
+        VoteComment onMine = comment(alice, mine, null, "hi");
+        VoteComment myComment = comment(me, mine, null, "thanks");
+        like(bob, myComment);
+        follow(alice, me);
+        String userId = me.getId().toString();
+        em.flush();
+
+        assertThat(notificationService.list(userId, NotificationCategory.CONVERSATION, null, 50).items())
+                .extracting(NotificationResponse::id).containsExactly("comment_" + onMine.getId());
+        assertThat(notificationService.list(userId, NotificationCategory.POLL_END, null, 50).items())
+                .extracting(NotificationResponse::kind).containsExactly(NotificationKind.RESULT);
+        assertThat(notificationService.countUnread(userId, NotificationCategory.LIKE).count()).isEqualTo(1);
+        assertThat(notificationService.countUnread(userId, NotificationCategory.INVITATION).count()).isZero();
+
+        preferences(me, null, null, false, null);
+
+        assertThat(notificationService.list(userId, NotificationCategory.CONVERSATION, null, 50).items()).isEmpty();
+        assertThat(notificationService.countUnread(userId, NotificationCategory.CONVERSATION).count()).isZero();
+    }
+
+    @Test
     @DisplayName("should not list a Reply on an Invite-only Poll the user is no longer invited to")
     void shouldNotListCommentWhenPollNoLongerVisible() {
         Vote inviteOnly = poll(alice, Audience.INVITE_ONLY, now.minusHours(2), now.plusDays(1));
@@ -244,7 +300,7 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
         mention(bob, alices, null, me);
         assertThat(kinds(me)).containsExactly(NotificationKind.MENTION);
         notificationService.updatePreferences(me.getId().toString(),
-                new UpdateNotificationPreferencesRequest(null, null, null, null, false));
+                new UpdateNotificationPreferencesRequest(null, null, null, null, false, null));
         assertThat(feed(me)).isEmpty();
         assertThat(unread(me)).isZero();
     }
@@ -531,7 +587,7 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
         String cursor = null;
         int pages = 0;
         do {
-            CursorResponse<NotificationResponse> page = notificationService.list(me.getId().toString(), cursor, 2);
+            CursorResponse<NotificationResponse> page = notificationService.list(me.getId().toString(), null, cursor, 2);
             paged.addAll(page.items());
             cursor = page.nextCursor();
             pages++;
@@ -548,7 +604,7 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
         String foreign = new com.vomatt.common.response.Cursor(now.toInstant().toString(), me.getId())
                 .encode(com.vomatt.common.response.Cursor.Scope.FOLLOWS);
 
-        assertThatThrownBy(() -> notificationService.list(me.getId().toString(), foreign, 2))
+        assertThatThrownBy(() -> notificationService.list(me.getId().toString(), null, foreign, 2))
                 .isInstanceOfSatisfying(ApiException.class,
                         ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMON_CURSOR_INVALID));
     }
@@ -571,7 +627,7 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
     private NotificationResponse.PollSummary reloadedPoll(User user) {
         em.flush();
         em.clear();
-        return notificationService.list(user.getId().toString(), null, 50).items().getFirst().poll();
+        return notificationService.list(user.getId().toString(), null, null, 50).items().getFirst().poll();
     }
 
     @Test
@@ -708,11 +764,11 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
         stats.setStatisticsEnabled(true);
 
         stats.clear();
-        assertThat(notificationService.list(me.getId().toString(), null, 50).items()).hasSize(4);
+        assertThat(notificationService.list(me.getId().toString(), null, null, 50).items()).hasSize(4);
         long smallPage = stats.getPrepareStatementCount();
         em.clear();
         stats.clear();
-        assertThat(notificationService.list(bob.getId().toString(), null, 50).items()).hasSize(20);
+        assertThat(notificationService.list(bob.getId().toString(), null, null, 50).items()).hasSize(20);
         long largePage = stats.getPrepareStatementCount();
 
         assertThat(largePage).isEqualTo(smallPage);

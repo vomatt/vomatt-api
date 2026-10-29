@@ -64,7 +64,7 @@ class VoteBookmarkPostgresTest extends PostgresRepositoryTest {
 
     private List<NotificationResponse> results(User user) {
         em.flush();
-        return notificationService.list(user.getId().toString(), null, 50).items().stream()
+        return notificationService.list(user.getId().toString(), null, null, 50).items().stream()
                 .filter(n -> n.kind() == NotificationKind.RESULT).toList();
     }
 
@@ -163,7 +163,7 @@ class VoteBookmarkPostgresTest extends PostgresRepositoryTest {
         bookmark(poll);
 
         assertThat(results(me)).singleElement().satisfies(n -> assertThat(n.id()).isEqualTo("result_" + poll.getId()));
-        assertThat(notificationService.countUnread(me.getId().toString()).count()).isEqualTo(1);
+        assertThat(notificationService.countUnread(me.getId().toString(), null).count()).isEqualTo(1);
 
         voteService.unbookmark(poll.getId().toString(), me.getId().toString());
         assertThat(results(me)).hasSize(1);

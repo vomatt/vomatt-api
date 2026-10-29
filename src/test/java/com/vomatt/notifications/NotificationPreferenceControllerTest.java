@@ -61,7 +61,7 @@ class NotificationPreferenceControllerTest {
     @Test
     @DisplayName("should return the caller's switches")
     void shouldReturnPreferencesWhenRequested() throws Exception {
-        when(notificationService.getPreferences(USER_ID)).thenReturn(new NotificationPreferencesResponse(true, true, true, false, true));
+        when(notificationService.getPreferences(USER_ID)).thenReturn(new NotificationPreferencesResponse(true, true, true, false, true, true));
 
         mockMvc.perform(get("/api/users/me/notification-preferences"))
                 .andExpect(status().isOk())
@@ -72,8 +72,8 @@ class NotificationPreferenceControllerTest {
     @Test
     @DisplayName("should pass omitted switches as null when patching")
     void shouldPassOmittedSwitchesAsNullWhenPatching() throws Exception {
-        when(notificationService.updatePreferences(USER_ID, new UpdateNotificationPreferencesRequest(null, null, false, true, null)))
-                .thenReturn(new NotificationPreferencesResponse(true, true, false, true, true));
+        when(notificationService.updatePreferences(USER_ID, new UpdateNotificationPreferencesRequest(null, null, false, true, null, null)))
+                .thenReturn(new NotificationPreferencesResponse(true, true, false, true, true, true));
 
         mockMvc.perform(patch("/api/users/me/notification-preferences")
                         .contentType(MediaType.APPLICATION_JSON).content("{\"comments\":false,\"closingSoon\":true}"))

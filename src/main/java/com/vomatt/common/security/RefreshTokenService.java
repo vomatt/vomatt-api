@@ -19,11 +19,14 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 @Slf4j
 @Service
@@ -357,18 +360,42 @@ public class RefreshTokenService {
      * Revokes all of a user's refresh tokens (security incident handling)
      */
     public void revokeAllForUser(String userId) {
+        revokeSessions(userId, sessionId -> true);
+    }
+
+    /**
+     * A user's live sessions, most recently active first (never-seen legacy ones last), each named by
+     * {@link #sessionIdOf}. Index fields whose token has expired or does not decode are left out.
+     */
+    public List<RefreshTokenData> listSessions(String userId) {
+        List<String> keys = List.copyOf(redisService.hGetAllOrThrow(USER_IDX_NS, userId).keySet());
+        List<RefreshTokenData> tokens = redisService.multiGetOrThrow(NAMESPACE, keys, RefreshTokenData.class);
+        List<RefreshTokenData> sessions = new ArrayList<>();
+        for (int i = 0; i < keys.size(); i++) {
+            RefreshTokenData t = tokens.get(i);
+            if (t != null) {
+                sessions.add(new RefreshTokenData(t.userId(), t.roles(), sessionIdOf(t, keys.get(i)), t.adminScope(),
+                        t.userAgent(), t.createdAt(), t.lastSeenAt()));
+            }
+        }
+        sessions.sort(Comparator.comparing(RefreshTokenData::lastSeenAt, Comparator.nullsLast(Comparator.reverseOrder())));
+        return sessions;
+    }
+
+    /**
+     * Revokes the user's sessions whose id passes {@code sessionFilter} and returns how many it revoked. Index fields
+     * that name no session (token and consumed marker both gone or undecodable) are dropped too, whatever the filter.
+     */
+    public int revokeSessions(String userId, Predicate<String> sessionFilter) {
         // Throws on Redis failure: an empty answer would revoke nothing, silently
         Map<String, Object> index = redisService.hGetAllOrThrow(USER_IDX_NS, userId);
-        if (index.isEmpty()) {
-            return;
-        }
         // Values are session ids, except "1" on entries written before they were stored there (or null if undecodable):
         // read those from the token, or from its consumed marker if it has rotated since
-        Set<String> sessionIds = new HashSet<>();
+        Map<String, String> sessionOfField = new HashMap<>();
         List<String> unnamed = new ArrayList<>();
         index.forEach((key, value) -> {
             if (value instanceof String v && !"1".equals(v)) {
-                sessionIds.add(v);
+                sessionOfField.put(key, v);
             } else {
                 unnamed.add(key);
             }
@@ -377,20 +404,32 @@ public class RefreshTokenService {
             List<RefreshTokenData> tokens = redisService.multiGetOrThrow(NAMESPACE, unnamed, RefreshTokenData.class);
             List<String> consumed = redisService.multiGetOrThrow(CONSUMED_NS, unnamed, String.class);
             for (int i = 0; i < unnamed.size(); i++) {
-                String sessionId = tokens.get(i) != null ? sessionIdOf(tokens.get(i), unnamed.get(i)) : consumed.get(i);
+                sessionOfField.put(unnamed.get(i),
+                        tokens.get(i) != null ? sessionIdOf(tokens.get(i), unnamed.get(i)) : consumed.get(i));
+            }
+        }
+        Set<String> sessionIds = new HashSet<>();
+        Set<String> fields = new HashSet<>();
+        sessionOfField.forEach((field, sessionId) -> {
+            if (sessionId == null || sessionFilter.test(sessionId)) {
+                fields.add(field);
                 if (sessionId != null) {
                     sessionIds.add(sessionId);
                 }
             }
+        });
+        if (fields.isEmpty()) {
+            return 0;
         }
         // Revoked before the tokens go, so a rotation of one of them running now is refused by the script, and a
         // successor it already wrote (not in this snapshot) belongs to a revoked session
         endSessions(sessionIds, true);
         // Index fields are already keyOf(token). Only the snapshot's fields go: a whole-key DEL would also drop an entry
         // written after the snapshot
-        redisService.deleteAll(NAMESPACE, index.keySet());
-        redisService.hDelete(USER_IDX_NS, userId, index.keySet().toArray(String[]::new));
-        log.warn("Revoked {} refresh tokens for userId={}", index.size(), userId);
+        redisService.deleteAll(NAMESPACE, fields);
+        redisService.hDelete(USER_IDX_NS, userId, fields.toArray(String[]::new));
+        log.warn("Revoked {} refresh tokens for userId={}", fields.size(), userId);
+        return sessionIds.size();
     }
 
     /** Whether a session was revoked (see {@link #endSessions}); throws on Redis failure, the caller picks the fallback. */

@@ -104,6 +104,30 @@ class RefreshTokenServiceRedisTest {
     }
 
     @Test
+    void shouldListLiveSessionsAndStopKickedOneFromRotating() {
+        String laptop = service.issue(userId, List.of("user"), false).refreshToken();
+        java.time.Instant laptopSignIn = redisService.get("refresh", keyOf(laptop), RefreshTokenService.RefreshTokenData.class).createdAt();
+        String phone = service.issue(userId, List.of("user"), false).refreshToken();
+        String phoneSession = sessionOf(phone);
+        String laptopNow = service.rotate(laptop).newRefreshToken();
+
+        List<RefreshTokenService.RefreshTokenData> sessions = service.listSessions(userId);
+
+        // The rotated laptop session was active last, and kept its sign-in time across the rotation
+        assertThat(sessions).extracting(RefreshTokenService.RefreshTokenData::sessionId)
+                .containsExactly(sessionOf(laptopNow), phoneSession);
+        assertThat(sessions.get(0).createdAt()).isEqualTo(laptopSignIn);
+
+        assertThat(service.revokeSessions(userId, phoneSession::equals)).isEqualTo(1);
+
+        assertThat(service.isSessionRevoked(phoneSession)).isTrue();
+        assertThat(service.rotate(phone)).isNull();
+        assertThat(service.listSessions(userId)).extracting(RefreshTokenService.RefreshTokenData::sessionId)
+                .containsExactly(sessionOf(laptopNow));
+        assertThat(service.rotate(laptopNow)).isNotNull();
+    }
+
+    @Test
     void shouldReturnSamePairWhenTokenIsSentAgainWithinGrace() {
         String t0 = service.issue(userId, List.of("user"), false).refreshToken();
 

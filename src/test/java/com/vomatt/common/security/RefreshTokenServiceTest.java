@@ -791,6 +791,52 @@ class RefreshTokenServiceTest {
         verify(redisService).hDelete(USER_IDX_NS, "user-10", "te");
     }
 
+    // ── sessions ──────────────────────────────────────────────────────
+
+    @Test
+    void shouldSkipExpiredTokensAndSortByLastSeenWhenListingSessions() {
+        Instant t = Instant.parse("2026-10-29T00:00:00Z");
+        Map<String, Object> index = new java.util.LinkedHashMap<>();
+        index.put("k-old", "s-old");
+        index.put("k-gone", "s-gone");
+        index.put("k-legacy", "1");
+        index.put("k-new", "s-new");
+        when(redisService.hGetAllOrThrow(USER_IDX_NS, "u1")).thenReturn(index);
+        when(redisService.multiGetOrThrow(NAMESPACE, List.of("k-old", "k-gone", "k-legacy", "k-new"),
+                RefreshTokenService.RefreshTokenData.class)).thenReturn(java.util.Arrays.asList(
+                new RefreshTokenService.RefreshTokenData("u1", List.of("user"), "s-old", false, "A", t, t),
+                null,
+                new RefreshTokenService.RefreshTokenData("u1", List.of("user"), null, null, null, null, null),
+                new RefreshTokenService.RefreshTokenData("u1", List.of("user"), "s-new", true, "B", t, t.plusSeconds(60))));
+
+        // The legacy token has no session id or lastSeenAt: named after its key, listed last
+        assertThat(service.listSessions("u1")).extracting(RefreshTokenService.RefreshTokenData::sessionId)
+                .containsExactly("s-new", "s-old", "k-legacy");
+    }
+
+    @Test
+    void shouldRevokeNothingWhenSessionIsNotTheUsers() {
+        when(redisService.hGetAllOrThrow(USER_IDX_NS, "u1")).thenReturn(Map.of("k1", "s1"));
+
+        assertThat(service.revokeSessions("u1", "someone-elses"::equals)).isZero();
+        verify(redisService, never()).execInTransaction(any());
+        verify(redisService, never()).deleteAll(anyString(), any());
+    }
+
+    @Test
+    void shouldKeepTheCurrentSessionWhenRevokingOthers() {
+        when(redisService.hGetAllOrThrow(USER_IDX_NS, "u1")).thenReturn(Map.of("k-here", "s-here", "k-a", "s-a", "k-b", "s-b"));
+
+        assertThat(service.revokeSessions("u1", id -> !id.equals("s-here"))).isEqualTo(2);
+
+        ArgumentCaptor<List<RedisService.RedisWrite>> writes = ArgumentCaptor.captor();
+        InOrder order = inOrder(redisService);
+        order.verify(redisService).execInTransaction(writes.capture());
+        order.verify(redisService).deleteAll(NAMESPACE, Set.of("k-a", "k-b"));
+        assertThat(writes.getValue()).containsExactlyInAnyOrderElementsOf(
+                java.util.stream.Stream.concat(ending("s-a", true).stream(), ending("s-b", true).stream()).toList());
+    }
+
     @Test
     void shouldPropagateExceptionWhenRevokeAllCannotReadIndex() {
         when(redisService.hGetAllOrThrow(USER_IDX_NS, "user-8")).thenThrow(new RedisOperationException("redis timeout", null));

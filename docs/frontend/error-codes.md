@@ -11,7 +11,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 
 | errorCode | HTTP status | zh-TW message | en message | Suggested UI behavior | Used in |
 |-----------|-------------|-----------|---------|--------------|----------|
-| `common.bad_request` | 400 | 請求格式錯誤 | Bad request format | Show message so the user can fix the input | GlobalExceptionHandler |
+| `common.bad_request` | 400 | 請求格式錯誤 | Bad request format | Show message so the user can fix the input | GlobalExceptionHandler, UserController |
 | `common.internal_error` | 500 | 伺服器錯誤，請稍後再試 | Internal server error, please try again later | Show a generic error notice | GlobalExceptionHandler |
 | `common.service_unavailable` | 503 | 服務暫時無法使用，請稍後再試 | Service temporarily unavailable, please try again later | Show service temporarily unavailable, retry later | AuthService, GlobalExceptionHandler |
 | `common.unauthorized` | 401 | 未授權的請求 | Unauthorized request | See [auth-flow.md](auth-flow.md) | JwtAuthenticationEntryPoint |
@@ -62,6 +62,8 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.account_banned` | 403 | 此帳號已被停權，無法登入 | This account has been banned and cannot sign in | Show a permission-denied notice | AuthService, JwtAuthFilter |
 | `auth.passkey.invalid` | 400 / 401 | Passkey 驗證失敗，請重新操作一次 | Passkey verification failed. Please try again | Show message so the user can fix the input; See [auth-flow.md](auth-flow.md) | PasskeyService |
 | `auth.session_revoked` | 401 | 此裝置已被登出，請重新登入 | This device has been signed out. Please sign in again | See [auth-flow.md](auth-flow.md) | JwtAuthFilter |
+| `auth.session_not_found` | 404 | 找不到此登入裝置 | Signed-in device not found | Show resource not found | UserController |
+| `auth.current_session_unknown` | 409 | 無法辨識目前的裝置，請重新整理登入狀態後再試 | This device could not be identified. Refresh the session and try again | Show message (resource state conflict) | UserController |
 | `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | AdminUserService, FeedbackService, InviteListService, JwtAuthFilter, NotificationService, PasskeyService, UserGuard, UserService, VoteCommentService, VoteService |
 | `user.username.taken` | 409 | 使用者名稱已被使用 | Username already taken | Show message (resource state conflict) | UserService |
 | `user.delete.forbidden` | 403 | 只能刪除自己的帳號 | You can only delete your own account | Show a permission-denied notice | UserService |

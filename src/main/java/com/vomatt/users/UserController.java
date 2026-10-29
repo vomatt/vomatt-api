@@ -15,7 +15,9 @@ import com.vomatt.common.annotation.CommonApiResponses;
 import com.vomatt.common.annotation.PublicApiResponse;
 import com.vomatt.users.dto.UserDto;
 import com.vomatt.users.dto.UserProfileResponse;
+import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.security.UserPrincipal;
+import com.vomatt.users.dto.SessionResponse;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import com.vomatt.votes.VoteService;
 import com.vomatt.votes.dto.VoteResponse;
@@ -49,6 +51,7 @@ public class UserController {
     private final UserService userService;
     private final VoteService voteService;
     private final PasskeyService passkeyService;
+    private final RefreshTokenService refreshTokenService;
 
     @GetMapping("/me")
     @CommonApiResponses
@@ -462,6 +465,94 @@ public class UserController {
             @PathVariable UUID passkeyId,
             @AuthenticationPrincipal UserPrincipal principal) {
         passkeyService.delete(principal.userId(), passkeyId);
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
+    @GetMapping("/me/sessions")
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
+            content = @Content(examples = @ExampleObject(value = """
+                    {"success":true,"data":[{"sessionId":"0192f3c4-5d6e-7f80-9a1b-2c3d4e5f6a7b","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36","createdAt":"2026-10-20T08:12:00Z","lastSeenAt":"2026-10-29T03:40:00Z","current":true,"adminScope":false},{"sessionId":"9f2c4b7e1a3d5f60718293a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4","userAgent":null,"createdAt":null,"lastSeenAt":null,"current":false,"adminScope":false}],"message":null,"errorCode":null,"error":null}""")))
+    @Operation(summary = "List my signed-in devices", description = """
+            **Auth**: required
+            **Precondition**: none
+            **Behavior**: every session that can still refresh (signed in within the refresh lifetime, 30 days by \
+            default, and not signed out), most recently active first; sessions with no `lastSeenAt` come last. \
+            `current` marks the session of the calling access token (false on all items when the token predates session \
+            ids). `userAgent` is raw: parse it on the client for display. `userAgent`, `createdAt` and `lastSeenAt` are null \
+            for sessions signed in before devices were recorded; `userAgent` and `lastSeenAt` fill in on their next refresh. \
+            Admin console sign-ins are listed too, with `adminScope` true
+            **Side effects**: none
+            **Errors**: none beyond 401""")
+    public ResponseEntity<ApiResponse<List<SessionResponse>>> listMySessions(@AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(refreshTokenService.listSessions(principal.userId()).stream()
+                .map(session -> SessionResponse.from(session, principal.sessionId())).toList()));
+    }
+
+    @DeleteMapping("/me/sessions/{sessionId}")
+    // In details, not resource_id (VARCHAR(36)): legacy session ids are 64-char key hashes
+    @Auditable(action = "REVOKE", resourceType = "SESSION", detailsIndex = 0)
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
+            content = @Content(examples = @ExampleObject(value = """
+                    {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No live session with this ID belongs to the caller (errorCode `auth.session_not_found`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(value = """
+                            {"success":false,"data":null,"message":"Signed-in device not found","errorCode":"auth.session_not_found","error":"Signed-in device not found"}""")))
+    @Operation(summary = "Sign out one of my devices", description = """
+            **Auth**: required
+            **Precondition**: the session belongs to the caller and can still refresh
+            **Behavior**: ends the session at once: its refresh token stops working, and its access tokens get 401 \
+            `auth.session_revoked` from the next request on instead of when they expire. Signing out the calling session \
+            is allowed and works like logout
+            **Side effects**: the sign-out is written to the audit log
+            **Errors**:
+            - 404 `auth.session_not_found`: no live session with this ID, or it belongs to another user""")
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> revokeMySession(
+            @Parameter(description = "Id of the session to sign out, from `GET /api/users/me/sessions`", required = true,
+                    example = "0192f3c4-5d6e-7f80-9a1b-2c3d4e5f6a7b")
+            @PathVariable String sessionId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        if (refreshTokenService.revokeSessions(principal.userId(), sessionId::equals) == 0) {
+            throw ApiException.notFound(MessageKey.AUTH_SESSION_NOT_FOUND);
+        }
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
+    @DeleteMapping("/me/sessions")
+    @Auditable(action = "REVOKE_OTHERS", resourceType = "SESSION")
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
+            content = @Content(examples = @ExampleObject(value = """
+                    {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "The calling access token predates session ids, so the current device is unknown (errorCode `auth.current_session_unknown`); refresh and retry",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(value = """
+                            {"success":false,"data":null,"message":"This device could not be identified. Refresh the session and try again","errorCode":"auth.current_session_unknown","error":"This device could not be identified. Refresh the session and try again"}""")))
+    @Operation(summary = "Sign out all my other devices", description = """
+            **Auth**: required
+            **Precondition**: the calling access token names its session (every token issued after session ids shipped)
+            **Behavior**: ends every session of the caller except the calling one, at once, like \
+            `DELETE /api/users/me/sessions/{sessionId}` on each. Succeeds when there is nothing else to sign out
+            **Side effects**: the sign-out is written to the audit log
+            **Errors**:
+            - 400 `common.bad_request`: `scope` is not `others`
+            - 400 `common.missing_param`: `scope` is missing
+            - 409 `auth.current_session_unknown`: the access token predates session ids; refresh, then retry with the new access token""")
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> revokeMyOtherSessions(
+            @Parameter(description = "Which sessions to sign out; only `others` is supported", required = true,
+                    schema = @Schema(allowableValues = "others"))
+            @RequestParam String scope,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        if (!"others".equals(scope)) {
+            throw ApiException.badRequest(MessageKey.COMMON_BAD_REQUEST);
+        }
+        String current = principal.sessionId();
+        if (current == null) {
+            throw ApiException.conflict(MessageKey.AUTH_CURRENT_SESSION_UNKNOWN);
+        }
+        refreshTokenService.revokeSessions(principal.userId(), sessionId -> !sessionId.equals(current));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 

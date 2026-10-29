@@ -71,6 +71,7 @@ public enum MessageKey {
     AUTH_EMAIL_NOT_VERIFIED("auth.email_not_verified"),
     AUTH_ACCOUNT_BANNED("auth.account_banned"),
     AUTH_PASSKEY_INVALID("auth.passkey.invalid"),
+    AUTH_SESSION_REVOKED("auth.session_revoked"),
 
     // === User / Profile ===
     USER_NOT_FOUND("user.not_found"),

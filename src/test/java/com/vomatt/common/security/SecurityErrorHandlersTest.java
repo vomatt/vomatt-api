@@ -41,7 +41,8 @@ class SecurityErrorHandlersTest {
     private final JwtAuthenticationEntryPoint entryPoint = new JwtAuthenticationEntryPoint(writer);
     private final JwtUtil jwtUtil = new JwtUtil(SECRET, 3600);
     private final UserRepository userRepository = mock(UserRepository.class);
-    private final JwtAuthFilter jwtAuthFilter = new JwtAuthFilter(jwtUtil, userRepository, writer);
+    private final RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
+    private final JwtAuthFilter jwtAuthFilter = new JwtAuthFilter(jwtUtil, userRepository, writer, refreshTokenService);
 
     private MockHttpServletResponse commence(MockHttpServletRequest request) throws Exception {
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -95,7 +96,7 @@ class SecurityErrorHandlersTest {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/users/me");
         request.addHeader("Authorization", "Bearer token");
 
-        assertThatThrownBy(() -> new JwtAuthFilter(brokenJwtUtil, userRepository, writer)
+        assertThatThrownBy(() -> new JwtAuthFilter(brokenJwtUtil, userRepository, writer, refreshTokenService)
                 .doFilter(request, new MockHttpServletResponse(), mock(FilterChain.class)))
                 .isInstanceOf(IllegalStateException.class);
         assertThat(request.getAttribute(JwtAuthFilter.AUTH_ERROR_ATTR)).isNull();
@@ -117,6 +118,58 @@ class SecurityErrorHandlersTest {
         String token = jwtUtil.generateToken("u1", List.of("user"), false, null);
 
         assertThat(requestWithBearer(token).getAttribute(JwtAuthFilter.AUTH_ERROR_ATTR)).isNull();
+    }
+
+    @Test
+    void shouldReturn401SessionRevokedWhenSessionWasKicked() throws Exception {
+        when(refreshTokenService.isSessionRevoked("kicked")).thenReturn(true);
+
+        MockHttpServletResponse response = commence(requestWithBearer(
+                jwtUtil.generateToken("u1", List.of("user"), false, "kicked")));
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("\"errorCode\":\"auth.session_revoked\"");
+    }
+
+    /** Runs the filter and returns the authentication the rest of the chain sees. */
+    private org.springframework.security.core.Authentication authSeenBy(String method, String uri, String token)
+            throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest(method, uri);
+        request.addHeader("Authorization", "Bearer " + token);
+        var seen = new java.util.concurrent.atomic.AtomicReference<org.springframework.security.core.Authentication>();
+        FilterChain chain = (req, res) -> seen.set(SecurityContextHolder.getContext().getAuthentication());
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        jwtAuthFilter.doFilter(request, response, chain);
+        SecurityContextHolder.clearContext();
+        assertThat(response.getStatus()).isEqualTo(200);
+        return seen.get();
+    }
+
+    @Test
+    void shouldContinueAnonymousWhenKickedSessionCallsPublicPath() throws Exception {
+        when(refreshTokenService.isSessionRevoked("kicked")).thenReturn(true);
+        String token = jwtUtil.generateToken(UUID.randomUUID().toString(), List.of("user"), false, "kicked");
+
+        assertThat(authSeenBy("GET", "/api/votes", token)).isNull();
+        // A write is not re-checked against the database either: there is no caller left to check
+        assertThat(authSeenBy("POST", "/api/votes/" + UUID.randomUUID() + "/vote", token)).isNull();
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void shouldAuthenticateWithoutRevocationCheckWhenTokenHasNoSessionId() throws Exception {
+        assertThat(authSeenBy("GET", "/api/users/me", jwtUtil.generateToken("u1", List.of("user"), false, null)))
+                .isNotNull();
+        verifyNoInteractions(refreshTokenService);
+    }
+
+    @Test
+    void shouldFailOpenWhenRevocationCheckHitsRedisFailure() throws Exception {
+        when(refreshTokenService.isSessionRevoked("s1"))
+                .thenThrow(new com.vomatt.common.redis.RedisOperationException("redis down", null));
+
+        assertThat(authSeenBy("GET", "/api/users/me", jwtUtil.generateToken("u1", List.of("user"), false, "s1")))
+                .isNotNull();
     }
 
     private MockHttpServletResponse filterAs(UUID userId, String method, String uri, FilterChain chain)

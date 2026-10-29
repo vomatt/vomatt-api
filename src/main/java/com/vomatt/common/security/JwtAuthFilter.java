@@ -1,6 +1,7 @@
 package com.vomatt.common.security;
 
 import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.common.redis.RedisOperationException;
 import com.vomatt.repository.UserRepository;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
@@ -41,6 +42,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
     private final SecurityErrorWriter errorWriter;
+    private final RefreshTokenService refreshTokenService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -50,16 +52,23 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if (StringUtils.hasText(token)) {
             try {
                 principal = jwtUtil.parseToken(token);
-                var authorities = principal.roles().stream()
-                        .map(r -> new SimpleGrantedAuthority("ROLE_" + r.toUpperCase(Locale.ROOT)))
-                        .collect(Collectors.toList());
-                var auth = new UsernamePasswordAuthenticationToken(principal, null, authorities);
-                SecurityContextHolder.getContext().setAuthentication(auth);
+                if (sessionRevoked(principal)) {
+                    // Like an invalid token: public paths go on anonymous, the entry point answers 401 elsewhere
+                    request.setAttribute(AUTH_ERROR_ATTR, MessageKey.AUTH_SESSION_REVOKED);
+                    principal = null;
+                }
             } catch (JwtException | IllegalArgumentException ex) {
                 // Reason is consumed by JwtAuthenticationEntryPoint only if the path requires auth
                 request.setAttribute(AUTH_ERROR_ATTR, ex instanceof ExpiredJwtException
                         ? MessageKey.AUTH_TOKEN_EXPIRED : MessageKey.AUTH_TOKEN_INVALID);
                 log.debug("Invalid JWT token: {}", ex.getMessage());
+            }
+            if (principal != null) {
+                var authorities = principal.roles().stream()
+                        .map(r -> new SimpleGrantedAuthority("ROLE_" + r.toUpperCase(Locale.ROOT)))
+                        .collect(Collectors.toList());
+                var auth = new UsernamePasswordAuthenticationToken(principal, null, authorities);
+                SecurityContextHolder.getContext().setAuthentication(auth);
             }
         }
         // Roles outlive a demotion, and access tokens a suspension or deletion. On /api/admin/** (matched on the decoded
@@ -94,6 +103,23 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             }
         }
         filterChain.doFilter(request, response);
+    }
+
+    /**
+     * A session kicked from another device (or revoked by suspension, reuse detection, role change) cuts its access
+     * tokens at once instead of when they expire. Tokens issued before the sid claim carry none and pass. A Redis
+     * failure fails open, like the rate limiter: the token is still signed and short-lived.
+     */
+    private boolean sessionRevoked(UserPrincipal principal) {
+        if (principal.sessionId() == null) {
+            return false;
+        }
+        try {
+            return refreshTokenService.isSessionRevoked(principal.sessionId());
+        } catch (RedisOperationException ex) {
+            log.warn("Session revocation check skipped (Redis unavailable): {}", ex.getMessage());
+            return false;
+        }
     }
 
     private static RequestMatcher anyOf(String[] patterns) {

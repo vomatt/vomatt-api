@@ -3357,6 +3357,12 @@
             "nullable" : true,
             "type" : "string"
           },
+          "createdPollCount" : {
+            "description" : "Number of Polls the caller created, as My Polls lists them: every Audience (Public, Unlisted, Invite-only) and status (Scheduled, Open, Ended, Cancelled); Deleted Polls excluded",
+            "example" : 6,
+            "format" : "int32",
+            "type" : "integer"
+          },
           "displayName" : {
             "description" : "Display name; null if not set",
             "example" : "Alice",
@@ -3465,6 +3471,12 @@
               "email" : false
             },
             "type" : "object"
+          },
+          "votedPollCount" : {
+            "description" : "Number of Polls the caller holds a Ballot in, as My Polls lists them: every Audience, the caller's own Polls and Anonymous Ballots included; Deleted Polls and Polls of users who blocked the caller excluded. Polls the caller is only invited to count in neither this nor createdPollCount",
+            "example" : 21,
+            "format" : "int32",
+            "type" : "integer"
           }
         },
         "type" : "object"

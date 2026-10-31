@@ -19,7 +19,7 @@ public record NotificationResponse(
         @Schema(description = "Notification id, opaque; pass it to `POST /api/notifications/{id}/read`",
                 example = "comment_0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b")
         String id,
-        @Schema(description = "RESULT: a Poll you own, hold a Ballot in or are invited to has Ended. "
+        @Schema(description = "RESULT: a Poll you own, hold a Ballot in, are invited to or bookmarked has Ended with at least one Ballot. "
                 + "CANCELLED: an Invite-only Poll you are invited to was Cancelled before it opened. "
                 + "INVITATION: you are invited to a Scheduled or Open Invite-only Poll (replaced by RESULT once it Ends). "
                 + "FOLLOWED: someone followed you. "

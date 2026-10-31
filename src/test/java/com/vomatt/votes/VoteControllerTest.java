@@ -215,9 +215,9 @@ class VoteControllerTest {
         }
 
         @Test
-        @DisplayName("should return 200 with the owner when the Poll is Invite-only")
-        void shouldReturn200WhenPollIsInviteOnly() throws Exception {
-            when(voteService.getInviteOnlyCreator(voteId)).thenReturn(new VoteCreatorResponse("alice", "bot:boba"));
+        @DisplayName("should return 200 with the owner when the caller is signed out")
+        void shouldReturn200WhenSignedOut() throws Exception {
+            when(voteService.getInviteOnlyCreator(voteId, null)).thenReturn(new VoteCreatorResponse("alice", "bot:boba"));
 
             mockMvc.perform(get("/api/votes/{voteId}/creator", voteId))
                     .andExpect(status().isOk())
@@ -226,9 +226,31 @@ class VoteControllerTest {
         }
 
         @Test
+        @DisplayName("should pass the signed-in caller so only the owner or an Invitee gets 200")
+        void shouldReturn200WhenSignedInCallerIsInvitee() throws Exception {
+            authenticate();
+            when(voteService.getInviteOnlyCreator(voteId, USER_ID)).thenReturn(new VoteCreatorResponse("alice", "bot:boba"));
+
+            mockMvc.perform(get("/api/votes/{voteId}/creator", voteId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.username").value("alice"));
+        }
+
+        @Test
+        @DisplayName("should return 404 when a signed-in caller is not invited")
+        void shouldReturn404WhenSignedInCallerIsNotInvitee() throws Exception {
+            authenticate();
+            when(voteService.getInviteOnlyCreator(voteId, USER_ID)).thenThrow(ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
+
+            mockMvc.perform(get("/api/votes/{voteId}/creator", voteId))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.errorCode").value(MessageKey.VOTE_NOT_FOUND.code()));
+        }
+
+        @Test
         @DisplayName("should return 404 when the Poll is not Invite-only")
         void shouldReturn404WhenPollIsNotInviteOnly() throws Exception {
-            when(voteService.getInviteOnlyCreator(voteId)).thenThrow(ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
+            when(voteService.getInviteOnlyCreator(voteId, null)).thenThrow(ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
 
             mockMvc.perform(get("/api/votes/{voteId}/creator", voteId))
                     .andExpect(status().isNotFound())

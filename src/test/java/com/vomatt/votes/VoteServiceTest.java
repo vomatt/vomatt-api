@@ -439,17 +439,51 @@ class VoteServiceTest {
     class GetInviteOnlyCreatorTests {
 
         @Test
-        @DisplayName("should return the owner without an access check when the Poll is Invite-only")
-        void shouldReturnOwnerWhenPollIsInviteOnly() {
+        @DisplayName("should return the owner without an access check when the caller is signed out")
+        void shouldReturnOwnerWhenSignedOut() {
             vote.setAudience(Audience.INVITE_ONLY);
             user.setAvatarUrl("bot:boba");
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
 
-            VoteCreatorResponse result = voteService.getInviteOnlyCreator(voteId.toString());
+            VoteCreatorResponse result = voteService.getInviteOnlyCreator(voteId.toString(), null);
 
             assertThat(result.username()).isEqualTo("testuser");
             assertThat(result.avatarUrl()).isEqualTo("bot:boba");
+            verifyNoInteractions(inviteeRepository, blockRepository);
+        }
+
+        @Test
+        @DisplayName("should return the owner when the caller is the owner")
+        void shouldReturnOwnerWhenCallerIsOwner() {
+            vote.setAudience(Audience.INVITE_ONLY);
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+
+            assertThat(voteService.getInviteOnlyCreator(voteId.toString(), userId.toString()).username()).isEqualTo("testuser");
             verifyNoInteractions(inviteeRepository);
+        }
+
+        @Test
+        @DisplayName("should return the owner to an Invitee, also one the owner blocked")
+        void shouldReturnOwnerWhenCallerIsInvitee() {
+            UUID inviteeId = UUID.randomUUID();
+            vote.setAudience(Audience.INVITE_ONLY);
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(inviteeRepository.existsByVoteIdAndUserId(voteId, inviteeId)).thenReturn(true);
+
+            assertThat(voteService.getInviteOnlyCreator(voteId.toString(), inviteeId.toString()).username()).isEqualTo("testuser");
+            verifyNoInteractions(blockRepository);
+        }
+
+        @Test
+        @DisplayName("should throw 404 VOTE_NOT_FOUND when a signed-in caller is neither owner nor Invitee")
+        void shouldThrowWhenSignedInCallerIsNotInvitee() {
+            UUID strangerId = UUID.randomUUID();
+            vote.setAudience(Audience.INVITE_ONLY);
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(inviteeRepository.existsByVoteIdAndUserId(voteId, strangerId)).thenReturn(false);
+
+            assertThatThrownBy(() -> voteService.getInviteOnlyCreator(voteId.toString(), strangerId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
         }
 
         @Test
@@ -459,17 +493,19 @@ class VoteServiceTest {
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             for (Audience audience : List.of(Audience.PUBLIC, Audience.UNLISTED)) {
                 vote.setAudience(audience);
-                assertThatThrownBy(() -> voteService.getInviteOnlyCreator(id))
+                assertThatThrownBy(() -> voteService.getInviteOnlyCreator(id, null))
+                        .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
+                assertThatThrownBy(() -> voteService.getInviteOnlyCreator(id, userId.toString()))
                         .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
             }
 
             vote.setAudience(Audience.INVITE_ONLY);
             vote.setDeletedAt(OffsetDateTime.now());
-            assertThatThrownBy(() -> voteService.getInviteOnlyCreator(id))
+            assertThatThrownBy(() -> voteService.getInviteOnlyCreator(id, null))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
 
             when(voteRepository.findById(voteId)).thenReturn(Optional.empty());
-            assertThatThrownBy(() -> voteService.getInviteOnlyCreator(id))
+            assertThatThrownBy(() -> voteService.getInviteOnlyCreator(id, null))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
         }
     }

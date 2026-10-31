@@ -111,7 +111,7 @@ public class VoteCommentService {
         log.info("Comment created: {} on vote: {} by user: {}", comment.getId(), voteId, userId);
 
         // A new Comment has no likes yet
-        return commentMapper.toDto(comment, 0, false);
+        return commentMapper.toDto(comment, 0, false, mentionedUsernamesById(List.of(comment)));
     }
 
     /** A Poll's comments, newest first, cursor-paged; likes are loaded per page, not per comment. */
@@ -293,9 +293,19 @@ public class VoteCommentService {
             .collect(Collectors.toMap(IdCount::getId, IdCount::getCount));
         Set<UUID> liked = currentUserId == null ? Set.of()
             : Set.copyOf(commentLikeRepository.findLikedCommentIds(UUID.fromString(currentUserId), ids));
+        Map<UUID, String> usernames = mentionedUsernamesById(comments);
         return comments.stream()
-            .map(c -> commentMapper.toDto(c, likeCounts.getOrDefault(c.getId(), 0L), liked.contains(c.getId())))
+            .map(c -> commentMapper.toDto(c, likeCounts.getOrDefault(c.getId(), 0L), liked.contains(c.getId()),
+                usernames))
             .toList();
+    }
+
+    /** Current usernames of every user the comments @mention, in one query (none when nobody is mentioned). */
+    private Map<UUID, String> mentionedUsernamesById(List<VoteComment> comments) {
+        Set<UUID> ids = comments.stream().filter(c -> !c.isDeleted())
+            .flatMap(c -> Arrays.stream(c.getMentionedUserIds())).collect(Collectors.toSet());
+        return ids.isEmpty() ? Map.of() : userRepository.findAllById(ids).stream()
+            .collect(Collectors.toMap(User::getId, User::getUsername));
     }
 
     private CommentDto toDto(VoteComment comment, String currentUserId) {

@@ -34,6 +34,7 @@ import com.vomatt.entity.UserBlock;
 import com.vomatt.entity.UserFollow;
 import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
+import com.vomatt.entity.VoteBookmark;
 import com.vomatt.entity.VoteComment;
 import com.vomatt.entity.VoteOption;
 import com.vomatt.entity.VoteStatus;
@@ -98,6 +99,7 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
 
     private void ballot(User user, Vote poll) {
         em.persist(new UserVote(user, poll, poll.getOptions().iterator().next()));
+        addTurnout(poll, 1);
     }
 
     private VoteComment comment(User author, Vote poll, VoteComment parent, String text) {
@@ -144,6 +146,27 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should give no RESULT to the owner, an Invitee or a bookmark when a Poll Ended with no Ballots, and one when it holds a Ballot")
+    void shouldNotListResultWhenPollEndedWithNoBallots() {
+        Vote emptyInviteOnly = invitePoll(me, now.minusHours(1), now.plusDays(2), alice);
+        Vote emptyPublic = poll(me, Audience.PUBLIC, now.minusHours(1), now.plusDays(2));
+        Vote voted = poll(me, Audience.PUBLIC, now.minusHours(1), now.plusDays(2));
+        ballot(alice, voted);
+        em.persist(new VoteBookmark(bob, emptyPublic));
+        em.persist(new VoteBookmark(bob, voted));
+        em.flush();
+        OffsetDateTime ended = OffsetDateTime.now();
+        for (Vote poll : List.of(emptyInviteOnly, emptyPublic, voted)) {
+            poll.setEndTime(ended);
+        }
+
+        for (User user : List.of(me, alice, bob)) {
+            assertThat(feed(user)).extracting(NotificationResponse::id).containsExactly("result_" + voted.getId());
+            assertThat(unread(user)).isEqualTo(1);
+        }
+    }
+
+    @Test
     @DisplayName("should list CANCELLED to an Invitee, not the owner, when an Invite-only Poll was Cancelled before it opened")
     void shouldListCancelledWhenInviteOnlyPollCancelled() {
         Vote cancelled = invitePoll(alice, now.plusDays(1), now.plusDays(2), me);
@@ -160,6 +183,7 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
     @DisplayName("should list an INVITATION from the owner while the Poll is Open, then the RESULT instead once it Ended")
     void shouldReplaceInvitationWithResultWhenPollEnded() {
         Vote open = invitePoll(alice, now.minusHours(1), now.plusDays(2), me);
+        addTurnout(open, 1);
         List<NotificationResponse> before = feed(me);
         assertThat(before).extracting(NotificationResponse::kind).containsExactly(NotificationKind.INVITATION);
         assertThat(before.getFirst().actor().username()).isEqualTo(alice.getUsername());
@@ -239,6 +263,7 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
     @DisplayName("should list and count only the requested category, and nothing when its kinds are switched off")
     void shouldFilterByCategoryWhenRequested() {
         Vote mine = poll(me, Audience.PUBLIC, now.minusDays(2), now.minusHours(1));
+        ballot(bob, mine);
         VoteComment onMine = comment(alice, mine, null, "hi");
         VoteComment myComment = comment(me, mine, null, "thanks");
         like(bob, myComment);
@@ -505,6 +530,7 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
     @DisplayName("should leave switched-off kinds out of the feed and the unread count, and keep FOLLOWED")
     void shouldFilterKindsWhenSwitchedOff() {
         Vote mine = poll(me, Audience.PUBLIC, now.minusDays(2), now.minusHours(1));
+        ballot(bob, mine);
         comment(alice, mine, null, "hi");
         follow(alice, me);
         invitePoll(bob, now.minusHours(1), now.plusDays(2), me);
@@ -635,6 +661,7 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
     void shouldGiveWinnerAndMyOptionWhenPollEnded() {
         Vote ended = persistPoll(alice, now.minusDays(2), now.minusHours(1), "A", "B", "C");
         em.persist(new UserVote(me, ended, option(ended, "B")));
+        addTurnout(ended, 1);
         counts(ended, 3, 1, 0);
 
         NotificationResponse.PollSummary poll = reloadedPoll(me);
@@ -663,6 +690,7 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
     @DisplayName("should give no winner and no tie when an Ended Poll holds no Ballot naming an option")
     void shouldGiveNoWinnerWhenEndedPollHasNoCounts() {
         Vote ended = persistPoll(me, now.minusDays(2), now.minusHours(1), "A", "B");
+        addTurnout(ended, 1); // a sealed Anonymous Ballot: counted in Turnout, names no option
 
         NotificationResponse.PollSummary poll = reloadedPoll(me);
 
@@ -696,6 +724,7 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
         UserVote sealed = new UserVote(me, ended, null);
         sealed.setAnonymous(true);
         em.persist(sealed);
+        addTurnout(ended, 1);
 
         assertThat(reloadedPoll(me).myOptionId()).isNull();
     }

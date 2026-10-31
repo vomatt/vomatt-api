@@ -106,6 +106,7 @@ class VoteBookmarkPostgresTest extends PostgresRepositoryTest {
     void shouldListResultWhenBookmarkedPollEnded() {
         Vote open = poll(Audience.PUBLIC, now.minusHours(1), now.plusDays(1));
         Vote ended = poll(Audience.PUBLIC, now.minusDays(2), now.minusHours(1));
+        addTurnout(ended, 1);
         Vote endedBeforeBookmark = poll(Audience.PUBLIC, now.minusDays(2), now.minusHours(1));
         bookmark(open);
         bookmark(ended);
@@ -159,6 +160,7 @@ class VoteBookmarkPostgresTest extends PostgresRepositoryTest {
     void shouldListOneResultWhenVoterAlsoBookmarked() {
         Vote poll = poll(Audience.PUBLIC, now.minusDays(2), now.minusHours(1));
         em.persist(new UserVote(me, poll, poll.getOptions().iterator().next()));
+        addTurnout(poll, 1);
         bookmark(poll);
         bookmark(poll);
 
@@ -188,7 +190,7 @@ class VoteBookmarkPostgresTest extends PostgresRepositoryTest {
     void shouldHideInviteOnlyPollWhenInviteeRemoved() {
         Vote poll = poll(Audience.INVITE_ONLY, now.minusDays(2), now.minusHours(1));
         em.persist(new Invitee(poll, me));
-        em.flush();
+        addTurnout(poll, 1);
         bookmark(poll);
         assertThat(results(me)).hasSize(1);
         assertThat(bookmarked(null, 10).items()).hasSize(1);

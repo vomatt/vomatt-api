@@ -63,6 +63,7 @@ class InviteOnlyPollPostgresTest extends PostgresRepositoryTest {
         Vote inviteEnded = poll("invite-ended", Audience.INVITE_ONLY, now.minusDays(2), now.minusHours(1));
         em.persist(new Invitee(inviteOpen, invitee));
         em.persist(new Invitee(inviteEnded, invitee));
+        addTurnout(inviteEnded, 1);
         em.flush();
         em.clear();
     }

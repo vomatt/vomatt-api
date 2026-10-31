@@ -304,13 +304,18 @@ public class VoteService {
     }
 
     /**
-     * The owner of an Invite-only Poll, for an Invitation link opened by someone who cannot reach the Poll yet.
-     * Deliberately skips the access lookup; any other Poll (Deleted, Public, Unlisted, unknown) is {@code vote.not_found}.
+     * The owner of an Invite-only Poll, for an Invitation link opened before signing in. Skips the block check of the
+     * access lookup, but a signed-in caller who is neither the owner nor an Invitee gets {@code vote.not_found}, as does
+     * any other Poll (Deleted, Public, Unlisted, unknown).
+     *
+     * @param viewerId caller, or null when signed out
      */
     @Transactional(readOnly = true)
-    public VoteCreatorResponse getInviteOnlyCreator(String voteId) {
+    public VoteCreatorResponse getInviteOnlyCreator(String voteId, String viewerId) {
         User creator = voteRepository.findById(UUID.fromString(voteId))
             .filter(v -> v.getDeletedAt() == null && v.getAudience() == Audience.INVITE_ONLY)
+            .filter(v -> viewerId == null || v.isOwnedBy(viewerId)
+                || inviteeRepository.existsByVoteIdAndUserId(v.getId(), UUID.fromString(viewerId)))
             .map(Vote::getCreator)
             .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
         return new VoteCreatorResponse(creator.getUsername(), creator.getAvatarUrl());
@@ -855,7 +860,7 @@ public class VoteService {
     /**
      * The single access lookup: every path that reads or acts on one Poll goes through here (or
      * {@link #requireAccessible}) and gets {@code vote.not_found} for a Poll the viewer may not reach.
-     * The one exception is {@link #getInviteOnlyCreator}, which reveals only an Invite-only Poll's owner.
+     * The one exception is {@link #getInviteOnlyCreator}, which reveals only an Invite-only Poll's owner and skips the block check.
      *
      * @param viewerId caller, or null when signed out
      */

@@ -62,6 +62,13 @@ public abstract class PostgresRepositoryTest {
         return poll;
     }
 
+    /** Adds to the stored Turnout, which in production only VoteRepository's atomic increments write. */
+    protected void addTurnout(Vote poll, int delta) {
+        em.flush();
+        em.createNativeQuery("UPDATE vomatt.votes SET turnout = turnout + :delta WHERE id = :id")
+                .setParameter("delta", delta).setParameter("id", poll.getId()).executeUpdate();
+    }
+
     protected Tag persistTag() {
         String name = "tag" + System.nanoTime();
         Tag tag = new Tag(name, name, null, 0);

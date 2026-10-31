@@ -1,13 +1,24 @@
 package com.vomatt.comments;
 
 import com.vomatt.comments.dto.CommentDto;
+import com.vomatt.comments.dto.MentionDto;
 import com.vomatt.entity.VoteComment;
 import org.springframework.stereotype.Component;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Component
 public class CommentMapper {
 
-    public CommentDto toDto(VoteComment comment, long likeCount, boolean isLikedByCurrentUser) {
+    /** {@code usernames} maps (at least) the comment's mentioned user ids to their current usernames. */
+    public CommentDto toDto(VoteComment comment, long likeCount, boolean isLikedByCurrentUser,
+                            Map<UUID, String> usernames) {
         CommentDto dto = new CommentDto();
         dto.setId(comment.getId().toString());
         dto.setVoteId(comment.getVote().getId().toString());
@@ -19,6 +30,7 @@ public class CommentMapper {
             dto.setAuthor(comment.getUser().getUsername());
             dto.setAuthorAvatarUrl(comment.getUser().getAvatarUrl());
             dto.setText(comment.getContent());
+            dto.setMentions(mentions(comment, usernames));
         }
         dto.setCreatedAt(comment.getCreatedAt());
         dto.setUpdatedAt(comment.getUpdatedAt());
@@ -28,5 +40,20 @@ public class CommentMapper {
         dto.setLikeCount(likeCount);
         dto.setLikedByCurrentUser(isLikedByCurrentUser);
         return dto;
+    }
+
+    // The stored mentions whose user still goes by a handle in the text (as an edit keeps them), in text order; a
+    // renamed user's old handle no longer points at them, so it stays plain text
+    private static List<MentionDto> mentions(VoteComment comment, Map<UUID, String> usernames) {
+        Map<String, UUID> byUsername = Arrays.stream(comment.getMentionedUserIds())
+            .filter(usernames::containsKey)
+            .collect(Collectors.toMap(usernames::get, Function.identity()));
+        return VoteCommentService.mentionedUsernames(comment.getContent()).stream()
+            .map(username -> {
+                UUID id = byUsername.get(username);
+                return id == null ? null : new MentionDto(id.toString(), username);
+            })
+            .filter(Objects::nonNull)
+            .toList();
     }
 }

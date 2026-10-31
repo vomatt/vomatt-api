@@ -83,16 +83,17 @@ public class NotificationRepository {
     private static final Map<NotificationKind, String> BRANCHES = new EnumMap<>(Map.of(
             // Ended Polls the user owns, holds a Ballot in, is invited to or bookmarked before they Ended, once each (the
             // arms' rows are equal, so UNION merges them); Polls Cancelled before they opened are CANCELLED. A bookmarked
-            // Invite-only Poll counts only through ownership or invitation, so a removed Invitee's bookmark gives nothing
+            // Invite-only Poll counts only through ownership or invitation, so a removed Invitee's bookmark gives nothing.
+            // A Poll that Ended with Turnout 0 has no result to announce, so it gives no RESULT
             NotificationKind.RESULT, select(NotificationKind.RESULT, "v.id", "v.end_time", NONE, "v.id", NONE) + """
                     FROM vomatt.votes v
-                    WHERE v.deleted_at IS NULL AND v.end_time <= :now AND v.end_time > v.start_time AND v.id IN %s
+                    WHERE v.deleted_at IS NULL AND v.end_time <= :now AND v.end_time > v.start_time AND v.turnout > 0 AND v.id IN %s
                     UNION
                     """.formatted(VoteListRepository.MY_POLL_IDS)
                     + select(NotificationKind.RESULT, "v.id", "v.end_time", NONE, "v.id", NONE) + """
                     FROM vomatt.vote_bookmarks bm JOIN vomatt.votes v ON v.id = bm.vote_id
                     WHERE bm.user_id = :userId AND bm.created_at < v.end_time AND v.audience <> 'INVITE_ONLY'
-                      AND v.deleted_at IS NULL AND v.end_time <= :now AND v.end_time > v.start_time""",
+                      AND v.deleted_at IS NULL AND v.end_time <= :now AND v.end_time > v.start_time AND v.turnout > 0""",
             NotificationKind.CANCELLED, select(NotificationKind.CANCELLED, "v.id", "v.end_time", "v.creator_id", "v.id", NONE) + """
                     FROM vomatt.vote_invitees i JOIN vomatt.votes v ON v.id = i.vote_id
                     WHERE i.user_id = :userId AND v.deleted_at IS NULL AND v.audience = 'INVITE_ONLY'

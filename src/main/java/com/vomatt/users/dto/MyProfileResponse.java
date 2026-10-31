@@ -48,6 +48,13 @@ public record MyProfileResponse(
         int totalPolls,
         @Schema(description = "Number of Polls the user holds a Ballot in", example = "17")
         int totalVotes,
+        @Schema(description = "Number of Polls the caller created, as My Polls lists them: every Audience (Public, Unlisted, "
+                + "Invite-only) and status (Scheduled, Open, Ended, Cancelled); Deleted Polls excluded", example = "6")
+        int createdPollCount,
+        @Schema(description = "Number of Polls the caller holds a Ballot in, as My Polls lists them: every Audience, the "
+                + "caller's own Polls and Anonymous Ballots included; Deleted Polls and Polls of users who blocked the caller "
+                + "excluded. Polls the caller is only invited to count in neither this nor createdPollCount", example = "21")
+        int votedPollCount,
         @Schema(description = "Number of users following the caller; suspended accounts are not counted", example = "12")
         int followersCount,
         @Schema(description = "Number of users the caller follows; suspended accounts are not counted", example = "8")

@@ -58,6 +58,7 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
 
     private void ballot(User user, Vote poll) {
         em.persist(new UserVote(user, poll, poll.getOptions().iterator().next()));
+        addTurnout(poll, 1);
     }
 
     private Vote invitePoll(OffsetDateTime start, OffsetDateTime end, User... invitees) {
@@ -140,7 +141,8 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
     @DisplayName("should mark as read idempotently and update the unread count")
     void shouldMarkNotificationReadIdempotently() {
         Vote ended = poll(now.minusDays(2), now.minusHours(1));
-        poll(now.minusDays(3), now.minusHours(2));
+        ballot(participant, ended);
+        ballot(participant, poll(now.minusDays(3), now.minusHours(2)));
         em.flush();
         assertThat(unread(owner)).isEqualTo(2);
 
@@ -166,6 +168,8 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
     void shouldFlagUnreadInEndedMyPolls() {
         Vote unreadPoll = poll(now.minusDays(2), now.minusHours(1));
         Vote readPoll = poll(now.minusDays(3), now.minusHours(2));
+        ballot(participant, unreadPoll);
+        ballot(participant, readPoll);
         Vote cancelled = poll(now.plusDays(1), now.plusDays(2));
         cancelled.setEndTime(now.minusMinutes(1)); // Cancelled before Close was limited
         em.flush();
@@ -199,6 +203,7 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
     @DisplayName("should keep the Ended Notification unread when the Invitation was read before the Poll Ended")
     void shouldNotifyEndedWhenInvitationReadBeforePollEnded() {
         Vote poll = invitePoll(now.minusHours(1), now.plusDays(1), participant);
+        addTurnout(poll, 1);
         markRead(participant, poll);
         markRead(participant, poll);
         assertThat(unread(participant)).isZero();
@@ -251,7 +256,7 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
     @Test
     @DisplayName("should send the Ended Notification to an Invitee who Retracted")
     void shouldNotifyInviteeWhenRetractedBeforePollEnded() {
-        // bystander holds no Ballot, so participant's Ballot does not End the Poll
+        // participant Retracts before bystander casts a Ballot, so the Poll does not auto-End and its Turnout stays 1
         Vote poll = invitePoll(now.minusHours(1), now.plusDays(1), participant, bystander);
         em.flush();
         String voteId = poll.getId().toString();
@@ -260,6 +265,7 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
         ballot.setOptionIds(List.of(voteService.getVote(voteId, userId).getOptions().getFirst().getId()));
         voteService.vote(voteId, ballot, userId);
         voteService.retract(voteId, userId);
+        voteService.vote(voteId, ballot, bystander.getId().toString());
 
         voteService.closeVote(voteId, owner.getId().toString());
 
@@ -272,6 +278,7 @@ class NotificationPostgresTest extends PostgresRepositoryTest {
     void shouldNotNotifyWhenPollDeleted() {
         Vote open = invitePoll(now.minusHours(1), now.plusDays(1), participant);
         Vote ended = invitePoll(now.minusDays(2), now.minusHours(1), participant);
+        addTurnout(ended, 1);
         assertThat(unread(participant)).isEqualTo(2);
 
         open.setDeletedAt(now);

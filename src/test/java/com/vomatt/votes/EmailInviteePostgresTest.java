@@ -136,7 +136,7 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
         em.flush();
         reads().markRead(carol.getId(), poll.getId(), now);
         em.remove(removed);
-        em.flush();
+        addTurnout(poll, 1);
         OffsetDateTime afterEnd = now.plusDays(2);
 
         // Pending row has user_id NULL: the notification branches, MY_POLL_IDS and Vote.isVisibleTo must not match it

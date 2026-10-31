@@ -42,6 +42,7 @@ public class UserMapper {
      * Convert User entity to profile response (including all fields); counts come from the profile projection
      */
     public MyProfileResponse toMyProfileResponse(User user, UserProfileProjection stats,
+                                                  long createdPollCount, long votedPollCount,
                                                   Map<String, Boolean> visibilitySettings, boolean anonymousBallotByDefault) {
         return new MyProfileResponse(
                 user.getId().toString(),
@@ -62,6 +63,8 @@ public class UserMapper {
                 user.getCreatedAt(),
                 stats.getTotalPolls().intValue(),
                 stats.getTotalVotes().intValue(),
+                (int) createdPollCount,
+                (int) votedPollCount,
                 stats.getFollowersCount().intValue(),
                 stats.getFollowingCount().intValue(),
                 visibilitySettings,

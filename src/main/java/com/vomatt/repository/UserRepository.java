@@ -125,4 +125,16 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     default Optional<UserProfileProjection> findProfileByUsername(String username) {
         return findProfileForViewer(username, null);
     }
+
+    /** Own-profile count matching My Polls: every non-Deleted Poll the user created, any Audience and status. */
+    @Query("SELECT COUNT(v) FROM Vote v WHERE v.creator.id = :userId AND v.deletedAt IS NULL")
+    long countCreatedPolls(@Param("userId") UUID userId);
+
+    /**
+     * Own-profile count matching My Polls: non-Deleted Polls the user holds a Ballot in (own Polls and Anonymous Ballots
+     * included, any Audience), minus those whose owner blocked the user, as {@code VoteListRepository.findMine} does.
+     */
+    @Query("SELECT COUNT(DISTINCT uv.vote.id) FROM UserVote uv WHERE uv.user.id = :userId AND uv.vote.deletedAt IS NULL " +
+           "AND NOT EXISTS (SELECT 1 FROM UserBlock b WHERE b.blocker.id = uv.vote.creator.id AND b.blocked.id = :userId)")
+    long countVotedPolls(@Param("userId") UUID userId);
 }

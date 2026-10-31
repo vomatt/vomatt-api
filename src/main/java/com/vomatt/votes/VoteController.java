@@ -258,24 +258,28 @@ public class VoteController {
     @GetMapping("/{voteId}/creator")
     @PublicApiResponse
     @Operation(summary = "Get the owner of an Invite-only Poll", description = """
-            **Auth**: public (login is ignored)
+            **Auth**: public (optional login changes the answer: a signed-in caller must be the owner or an Invitee; \
+            an invalid or expired token is treated as signed out)
             **Precondition**: the Poll is INVITE_ONLY and not Deleted
             **Behavior**: returns only the owner's `username` and `avatarUrl`, so an Invitation link can show "<username> invited you" \
-            to a caller who cannot open the Poll yet (signed out, or signed in but not yet an Invitee). Reveals nothing else about the Poll. \
-            Answers regardless of blocks, also to a user the owner blocked.
+            and prompt a signed-out caller to sign in. Reveals nothing else about the Poll. A signed-out caller, the owner and \
+            Invitees (an email Invitee once signed in with that address) get the owner; any other signed-in caller gets 404, \
+            as `GET /api/votes/{voteId}` does. Answers regardless of blocks, also to an Invitee the owner blocked.
             **Side effects**: none
             **Errors**:
-            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is PUBLIC / UNLISTED
+            - 404 `vote.not_found`: Poll does not exist, is Deleted, or is PUBLIC / UNLISTED, or the caller is signed in \
+            and neither its owner nor an Invitee
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Owner of the Invite-only Poll",
-            content = @Content(examples = @ExampleObject(name = "Invite-only Poll owner", value = """
+            content = @Content(examples = @ExampleObject(name = "Invite-only Poll owner (signed out or Invitee)", value = """
                     { "success": true, "data": { "username": "alice", "avatarUrl": "bot:boba" },
                       "message": null, "errorCode": null, "error": null }
                     """)))
     public ResponseEntity<ApiResponse<VoteCreatorResponse>> getInviteOnlyCreator(
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
-            @PathVariable String voteId) {
-        return ResponseEntity.ok(ApiResponse.ok(voteService.getInviteOnlyCreator(voteId)));
+            @PathVariable String voteId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(voteService.getInviteOnlyCreator(voteId, principal != null ? principal.userId() : null)));
     }
 
     @PostMapping("/{voteId}/share")

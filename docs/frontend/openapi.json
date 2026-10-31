@@ -4760,7 +4760,7 @@
             "description" : "New avatar, one of the bot cast as `bot:<kind>`, or `bot:none` for no character; any other value is rejected. null or omitted keeps the current value",
             "example" : "bot:boba",
             "nullable" : true,
-            "pattern" : "^bot:(boba|bao|oolong|su|egg|ice|youtiao|tofu|sausage|chip|tower|lumen|mazu|tudi|yuelao|qiye|baye|shi|long|denglong|ding|jiaobei|xiang|banyan|gray|nordic|reptile|mantis|anu|tallwhite|moth|blob|cyclops|probe|saucer|trio|bear|magpie|pangolin|shihu|macaque|deer|pheasant|firefly|crab|flyfish|turtle|dog|none)$",
+            "pattern" : "^bot:(boba|bao|oolong|su|egg|ice|youtiao|tofu|sausage|chip|tower|lumen|mazu|tudi|yuelao|qiye|baye|shi|long|denglong|ding|jiaobei|xiang|banyan|gray|nordic|reptile|mantis|anu|tallwhite|moth|blob|cyclops|probe|saucer|trio|bear|magpie|pangolin|shihu|macaque|deer|pheasant|firefly|crab|flyfish|turtle|dog|fold|munchkin|chinchilla|mainecoon|siamese|orange|tuxedo|calico|sphynx|ragdoll|british|bengal|shiba|corgi|golden|husky|pug|dachshund|poodle|frenchie|beagle|collie|dalmatian|labrador|none)$",
             "type" : "string"
           },
           "bio" : {

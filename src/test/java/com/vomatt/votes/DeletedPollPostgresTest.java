@@ -70,6 +70,7 @@ class DeletedPollPostgresTest extends PostgresRepositoryTest {
         vote.setTitle(title + " " + word);
         vote.addTag(tag);
         em.persist(new UserVote(voter, vote, vote.getOptions().iterator().next()));
+        addTurnout(vote, 1);
         return vote;
     }
 

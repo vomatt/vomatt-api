@@ -76,7 +76,7 @@ public class NotificationController {
             from Polls, Invitations, follows and Comments when read, so an item disappears when what it is about goes away \
             (a Comment deleted, a follow undone, a Poll Deleted). Kinds:
             - RESULT: a Poll the caller owns, holds a Ballot in, is an Invitee of or bookmarked has Ended (end time passed, Closed, or every Invitee voted); \
-            one item per Poll whatever the reasons. A Participant who made a Retraction and is neither an Invitee nor bookmarked it gets none
+            one item per Poll whatever the reasons. A Poll that Ended with no Ballots (Turnout 0) gives none. A Participant who made a Retraction and is neither an Invitee nor bookmarked it gets none
             - CANCELLED: an Invite-only Poll the caller is an Invitee of was Cancelled before it opened (only Polls Cancelled before 2026-10-14; \
             a Scheduled Poll is now Deleted, which notifies nobody)
             - INVITATION: the caller is an Invitee of a Scheduled or Open Invite-only Poll; listed until the Poll Ends, when its RESULT takes over. \

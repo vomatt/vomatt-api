@@ -5,7 +5,10 @@ package com.vomatt.entity;
  * it is derived from identify one, and its read state is stored under that pair.
  */
 public enum NotificationKind {
-    /** A Poll the user owns, holds a Ballot in or is invited to has Ended. Source: the Poll. */
+    /**
+     * A Poll the user owns, holds a Ballot in, is invited to or bookmarked has Ended with at least one Ballot (Turnout
+     * above 0). Source: the Poll.
+     */
     RESULT(NotificationCategory.POLL_END),
     /** An Invite-only Poll the user is invited to was Cancelled before it opened (legacy, ADR 0004). Source: the Poll. */
     CANCELLED(NotificationCategory.POLL_END),

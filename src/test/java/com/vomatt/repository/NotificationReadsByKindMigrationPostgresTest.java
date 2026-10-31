@@ -50,7 +50,7 @@ class NotificationReadsByKindMigrationPostgresTest extends PostgresRepositoryTes
         Invitee endedInvite = new Invitee(ended, invitee);
         em.persist(endedInvite);
         em.persist(new UserVote(voter, ended, ended.getOptions().iterator().next()));
-        em.flush();
+        addTurnout(ended, 1);
         List<String> schemaNames = names();
 
         TO_POLL_READS.forEach(sql -> em.createNativeQuery(sql).executeUpdate());

@@ -33,6 +33,12 @@ public class CommentDto {
             example = "I would pick option B, it is the cheaper one.", nullable = true)
     private String text;
 
+    @Schema(description = "Users the text @mentions, in order of first appearance: the handles the server resolved when the "
+            + "Comment was written (at most the first `comment_max_mentions` distinct handles, default 10), less any user renamed "
+            + "since. Link exactly these `@username` handles (case-insensitive); others, unknown or over the cap, are plain text. "
+            + "[] on a deleted placeholder")
+    private List<MentionDto> mentions = List.of();
+
     @Schema(description = "Creation time (ISO-8601 with offset)", example = "2026-10-09T12:34:56+08:00")
     private OffsetDateTime createdAt;
 

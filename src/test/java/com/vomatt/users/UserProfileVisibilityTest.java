@@ -126,7 +126,7 @@ class UserProfileVisibilityTest {
                     USER_ID, USERNAME, "test@example.com", "0912345678",
                     "Test", "User", BIRTHDAY, "TestDisplay", "Hello world", "bot:boba", "Taipei",
                     100, "SILVER", true, null,
-                    JOINED_AT, 5, 10, 3, 2,
+                    JOINED_AT, 5, 10, 7, 12, 3, 2,
                     Map.of("firstName", false, "lastName", false,
                            "location", false, "points", false, "membershipLevel", false),
                     false
@@ -136,7 +136,7 @@ class UserProfileVisibilityTest {
             when(userRepository.findProfileByUsername(USERNAME)).thenReturn(Optional.of(projection));
             when(preferenceRepository.findByUserIdAndKeyStartingWith(USER_UUID, "visibility."))
                     .thenReturn(Collections.emptyList());
-            when(userMapper.toMyProfileResponse(eq(user), eq(projection), anyMap(), eq(false)))
+            when(userMapper.toMyProfileResponse(eq(user), eq(projection), anyLong(), anyLong(), anyMap(), eq(false)))
                     .thenReturn(expectedResponse);
 
             // When
@@ -166,7 +166,7 @@ class UserProfileVisibilityTest {
             userService.getMyProfile(USER_ID);
 
             // Then
-            verify(userMapper).toMyProfileResponse(eq(user), any(UserProfileProjection.class), argThat(v ->
+            verify(userMapper).toMyProfileResponse(eq(user), any(UserProfileProjection.class), anyLong(), anyLong(), argThat(v ->
                     Boolean.TRUE.equals(v.get("displayName")) && Boolean.TRUE.equals(v.get("bio"))
                             && Boolean.FALSE.equals(v.get("firstName")) && Boolean.FALSE.equals(v.get("location"))
                             && !v.containsKey("email") && !v.containsKey("birthday")), eq(false));
@@ -186,7 +186,7 @@ class UserProfileVisibilityTest {
             userService.getMyProfile(USER_ID);
 
             // Then
-            verify(userMapper).toMyProfileResponse(eq(user), any(UserProfileProjection.class),
+            verify(userMapper).toMyProfileResponse(eq(user), any(UserProfileProjection.class), anyLong(), anyLong(),
                     argThat(v -> Boolean.FALSE.equals(v.get("displayName")) && Boolean.TRUE.equals(v.get("bio"))), eq(false));
         }
     }

@@ -2436,6 +2436,13 @@
             "example" : false,
             "type" : "boolean"
           },
+          "mentions" : {
+            "description" : "Users the text @mentions, in order of first appearance: the handles the server resolved when the Comment was written (at most the first `comment_max_mentions` distinct handles, default 10), less any user renamed since. Link exactly these `@username` handles (case-insensitive); others, unknown or over the cap, are plain text. [] on a deleted placeholder",
+            "items" : {
+              "$ref" : "#/components/schemas/MentionDto"
+            },
+            "type" : "array"
+          },
           "parentId" : {
             "description" : "ID of the top-level Comment this Reply belongs to. Null for a top-level Comment",
             "example" : "0199c3a2-7b1e-7c4d-9a10-3f5e8d2b6a41",
@@ -3321,6 +3328,22 @@
             "example" : 1,
             "format" : "int32",
             "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "MentionDto" : {
+        "description" : "A user a Comment @mentions: link `@username` in the text to this user; other handles are plain text",
+        "properties" : {
+          "userId" : {
+            "description" : "ID of the mentioned user",
+            "example" : "0199b8e4-1c2d-7f60-8a3b-6d4e2f1a9b05",
+            "type" : "string"
+          },
+          "username" : {
+            "description" : "The handle as written in the text, without `@` (the user's current username)",
+            "example" : "alice",
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -17875,7 +17898,7 @@
         "tags" : [ "Vote Comment" ]
       },
       "post" : {
-        "description" : "**Auth**: required\n**Precondition**: the Poll exists (any Poll state is accepted). When `parentId` is sent it must be a non-deleted Comment or Reply of the same Poll\n**Behavior**: without `parentId` creates a top-level Comment. With `parentId` creates a Reply; Replies are one level deep, so replying to a Reply attaches the new Reply to that Reply's top-level Comment (the response `parentId` is the top-level Comment, not the id you sent). Mentions: `@<username>` in the text (a username, 3-50 characters of `[a-z0-9_]`, matched case-insensitively, not preceded by a letter or digit of any script or `_`, so `a@b.com` and `測試@alice` are no mentions) names that user; a handle with no account is plain text. At most 10 distinct users per Comment (admin-tunable), the first handles in the text; later ones are plain text, not an error. Responds 201\n**Side effects**: the top-level Comment's `replyCount` grows by 1 in later list reads. Each mentioned user other than the author gets a MENTION notification while they can see the Poll, unless the Comment already gives them a COMMENT (it is on their Poll or replies to their Comment)\n**Errors**:\n- 400 `comment.parent.invalid`: `parentId` does not exist, is deleted, or belongs to another Poll\n- 404 `comment.not_found`: `parentId` is hidden from the caller as in the lists (written by a user the caller blocked, or a Reply in a thread such a user started)\n- 404 `vote.not_found`: Poll does not exist or is Deleted, or its owner blocked the caller\n- 404 `user.not_found`: the signed-in user no longer exists\n",
+        "description" : "**Auth**: required\n**Precondition**: the Poll exists (any Poll state is accepted). When `parentId` is sent it must be a non-deleted Comment or Reply of the same Poll\n**Behavior**: without `parentId` creates a top-level Comment. With `parentId` creates a Reply; Replies are one level deep, so replying to a Reply attaches the new Reply to that Reply's top-level Comment (the response `parentId` is the top-level Comment, not the id you sent). Mentions: `@<username>` in the text (a username, 3-50 characters of `[a-z0-9_]`, matched case-insensitively, not preceded by a letter or digit of any script or `_`, so `a@b.com` and `測試@alice` are no mentions) names that user; a handle with no account is plain text. At most 10 distinct users per Comment (admin-tunable), the first handles in the text; later ones are plain text, not an error. The response's `mentions` lists the resolved users; link only those handles. Responds 201\n**Side effects**: the top-level Comment's `replyCount` grows by 1 in later list reads. Each mentioned user other than the author gets a MENTION notification while they can see the Poll, unless the Comment already gives them a COMMENT (it is on their Poll or replies to their Comment)\n**Errors**:\n- 400 `comment.parent.invalid`: `parentId` does not exist, is deleted, or belongs to another Poll\n- 404 `comment.not_found`: `parentId` is hidden from the caller as in the lists (written by a user the caller blocked, or a Reply in a thread such a user started)\n- 404 `vote.not_found`: Poll does not exist or is Deleted, or its owner blocked the caller\n- 404 `user.not_found`: the signed-in user no longer exists\n",
         "operationId" : "createComment",
         "parameters" : [ {
           "description" : "Poll ID",

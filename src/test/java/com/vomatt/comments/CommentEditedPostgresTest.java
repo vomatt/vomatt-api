@@ -55,7 +55,7 @@ class CommentEditedPostgresTest extends PostgresRepositoryTest {
     private CommentDto reloadIgnoringLikes(UUID id) {
         em.flush();
         em.clear();
-        return commentMapper.toDto(commentRepository.findById(id).orElseThrow(), 0, false);
+        return commentMapper.toDto(commentRepository.findById(id).orElseThrow(), 0, false, java.util.Map.of());
     }
 
     @Test

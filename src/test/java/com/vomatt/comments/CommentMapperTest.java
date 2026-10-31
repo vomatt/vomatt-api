@@ -34,7 +34,7 @@ class CommentMapperTest {
     void shouldNotMarkNewCommentEdited() {
         OffsetDateTime at = OffsetDateTime.now();
 
-        assertThat(mapper.toDto(comment(at, at), 0, false).isEdited()).isFalse();
+        assertThat(mapper.toDto(comment(at, at), 0, false, java.util.Map.of()).isEdited()).isFalse();
     }
 
     @Test
@@ -42,7 +42,7 @@ class CommentMapperTest {
     void shouldMarkEditedWhenUpdatedWithinOneSecond() {
         OffsetDateTime at = OffsetDateTime.now();
 
-        assertThat(mapper.toDto(comment(at, at.plusNanos(500_000)), 0, false).isEdited()).isTrue();
+        assertThat(mapper.toDto(comment(at, at.plusNanos(500_000)), 0, false, java.util.Map.of()).isEdited()).isTrue();
     }
 
     @Test
@@ -52,12 +52,12 @@ class CommentMapperTest {
         VoteComment c = comment(at, at.plusMinutes(10));
         c.softDelete();
 
-        assertThat(mapper.toDto(c, 0, false).isEdited()).isFalse();
+        assertThat(mapper.toDto(c, 0, false, java.util.Map.of()).isEdited()).isFalse();
     }
 
     @Test
     @DisplayName("should not throw when timestamps are null")
     void shouldNotFailWhenTimestampsMissing() {
-        assertThat(mapper.toDto(comment(null, null), 0, false).isEdited()).isFalse();
+        assertThat(mapper.toDto(comment(null, null), 0, false, java.util.Map.of()).isEdited()).isFalse();
     }
 }

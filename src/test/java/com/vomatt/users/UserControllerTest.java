@@ -107,7 +107,14 @@ class UserControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.avatarUrl").value("bot:" + kind));
         }
-        assertThat(BotAvatar.KINDS).hasSize(48).doesNotHaveDuplicates();
+        // Copied from vomatt-web src/features/avatars/catalog.ts BOT_FAMILIES; update both together
+        assertThat(BotAvatar.KINDS).containsExactly(
+                "boba", "bao", "oolong", "su", "egg", "ice", "youtiao", "tofu", "sausage", "chip", "tower", "lumen",
+                "mazu", "tudi", "yuelao", "qiye", "baye", "shi", "long", "denglong", "ding", "jiaobei", "xiang", "banyan",
+                "gray", "nordic", "reptile", "mantis", "anu", "tallwhite", "moth", "blob", "cyclops", "probe", "saucer", "trio",
+                "bear", "magpie", "pangolin", "shihu", "macaque", "deer", "pheasant", "firefly", "crab", "flyfish", "turtle", "dog",
+                "fold", "munchkin", "chinchilla", "mainecoon", "siamese", "orange", "tuxedo", "calico", "sphynx", "ragdoll", "british", "bengal",
+                "shiba", "corgi", "golden", "husky", "pug", "dachshund", "poodle", "frenchie", "beagle", "collie", "dalmatian", "labrador");
     }
 
     @Test

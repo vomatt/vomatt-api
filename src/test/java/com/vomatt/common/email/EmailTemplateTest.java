@@ -58,7 +58,7 @@ class EmailTemplateTest {
         emailService.sendPreSignupEmail("a@example.com", "123456");
 
         String html = sentHtml();
-        assertThat(html).contains("123456", "感謝您註冊", "3 分鐘", "服務條款", "https://staging.vomatt.com/privacy-policy")
+        assertThat(html).contains("123456", "你好，", "感謝您註冊 Vomatt 帳戶", "3 分鐘", "服務條款", "https://staging.vomatt.com/privacy-policy")
                 .doesNotContain("??", "©", "點一下驗證碼");
     }
 
@@ -70,7 +70,7 @@ class EmailTemplateTest {
         logger.addAppender(logs);
         try {
             emailService.sendVerificationEmail("carol@example.com", "654321");
-            emailService.sendWelcomeEmail("carol@example.com", "Carol", Locale.ENGLISH);
+            emailService.sendWelcomeEmail("carol@example.com", Locale.ENGLISH);
         } finally {
             logger.detachAppender(logs);
         }
@@ -99,11 +99,11 @@ class EmailTemplateTest {
 
     @Test
     void shouldRenderWelcomeEmailWhenLocaleIsZhTwOrEn() throws Exception {
-        emailService.sendWelcomeEmail("a@example.com", "Amy", ZH_TW);
-        assertThat(sentHtml()).contains("您好 Amy", "投下您的第一票", "隱私權政策", "lang=\"zh-TW\"").doesNotContain("??");
+        emailService.sendWelcomeEmail("a@example.com", ZH_TW);
+        assertThat(sentHtml()).contains("你好，", "歡迎加入 Vomatt", "Vomatt 團隊", "投下您的第一票", "隱私權政策", "lang=\"zh-TW\"").doesNotContain("??", "您好", "Amy");
 
-        emailService.sendWelcomeEmail("b@example.com", "Bob", Locale.ENGLISH);
-        assertThat(sentHtml()).contains("Hello Bob", "cast your first Ballot", "Privacy Policy", "lang=\"en\"").doesNotContain("??");
+        emailService.sendWelcomeEmail("b@example.com", Locale.ENGLISH);
+        assertThat(sentHtml()).contains("Hello,", "cast your first Ballot", "Privacy Policy", "lang=\"en\"").doesNotContain("??");
     }
 
     @Test
@@ -122,18 +122,45 @@ class EmailTemplateTest {
     void shouldSendOverResendWithInlineLogoWhenProviderIsResend() throws Exception {
         Emails emails = useResend();
 
-        emailService.sendWelcomeEmail("a@example.com", "Amy", Locale.ENGLISH);
+        emailService.sendWelcomeEmail("a@example.com", Locale.ENGLISH);
 
         ArgumentCaptor<CreateEmailOptions> captor = ArgumentCaptor.forClass(CreateEmailOptions.class);
         verify(emails).send(captor.capture());
         CreateEmailOptions sent = captor.getValue();
         assertThat(sent.getFrom()).isEqualTo("noreply@vomatt.com");
         assertThat(sent.getTo()).containsExactly("a@example.com");
-        assertThat(sent.getHtml()).contains("Hello Amy", "cid:logo");
+        assertThat(sent.getHtml()).contains("Hello,", "cid:logo");
+        assertThat(sent.getText()).contains("Hello,").doesNotContain("<", "cid:logo");
+        assertThat(sent.getReplyTo()).isNullOrEmpty();
         Attachment logo = sent.getAttachments().getFirst();
         assertThat(logo.getContentId()).isEqualTo("logo");
         assertThat(logo.getContent()).isNotBlank();
         verify(mailSender, never()).send(any(MimeMessage.class));
+    }
+
+    @Test
+    void shouldSendPlainTextPartWithLinksWhenSendingInvitation() throws Exception {
+        UUID pollId = UUID.fromString("0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05");
+        emailService.sendInvitationEmails(List.of("a@example.com"), "Amy", "Lunch <b>vote</b>", pollId, Locale.ENGLISH);
+
+        String text = sentText();
+        assertThat(text).contains("Amy invited you", "Lunch <b>vote</b>",
+                "Open the Poll (https://staging.vomatt.com/poll/" + pollId + ")",
+                "Privacy Policy (https://staging.vomatt.com/privacy-policy)")
+                .doesNotContain("<p", "<td", "<a ", "&lt;", "color-scheme", "\n\n");
+    }
+
+    @Test
+    void shouldSendPlainTextCodeAndReplyToWhenVerificationOverResend() throws Exception {
+        Emails emails = useResend();
+        ReflectionTestUtils.setField(emailService, "replyTo", "support@vomatt.com");
+
+        emailService.sendVerificationEmail("a@example.com", "654321");
+
+        ArgumentCaptor<CreateEmailOptions> captor = ArgumentCaptor.forClass(CreateEmailOptions.class);
+        verify(emails).send(captor.capture());
+        assertThat(captor.getValue().getText()).contains("654321", "expire in 3 minutes");
+        assertThat(captor.getValue().getReplyTo()).containsExactly("support@vomatt.com");
     }
 
     @Test
@@ -203,6 +230,14 @@ class EmailTemplateTest {
         return html;
     }
 
+    private String sentText() throws Exception {
+        ArgumentCaptor<MimeMessage> captor = ArgumentCaptor.forClass(MimeMessage.class);
+        verify(mailSender, atLeastOnce()).send(captor.capture());
+        MimeMessage message = captor.getValue();
+        message.saveChanges();
+        return (String) findPart(message, "text/plain").getContent();
+    }
+
     private Part findPart(Part part, String mimeType) throws Exception {
         if (part.isMimeType(mimeType)) {
             return part;
@@ -234,6 +269,7 @@ class EmailTemplateTest {
 
         EmailServiceImpl service = new EmailServiceImpl(mailSender, engine, messageSource);
         ReflectionTestUtils.setField(service, "fromEmail", "noreply@vomatt.com");
+        ReflectionTestUtils.setField(service, "replyTo", "");
         ReflectionTestUtils.setField(service, "siteUrl", "https://staging.vomatt.com");
         ReflectionTestUtils.setField(service, "otpTtlSeconds", 180L);
         ReflectionTestUtils.setField(service, "pollPath", defaultPollPath());

@@ -318,7 +318,7 @@ public class AuthService {
         AuthResponse response = buildAuthResponse(user, false, found.created());
         if ("signup".equals(otp.type())) {
             // Sent only after the login succeeded, in the background so SMTP latency does not delay the response
-            emailService.sendWelcomeEmail(normalizedEmail, user.getDisplayName(), LocaleContextHolder.getLocale());
+            emailService.sendWelcomeEmail(normalizedEmail, LocaleContextHolder.getLocale());
         }
         return response;
     }

@@ -19,6 +19,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.web.util.HtmlUtils;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
@@ -31,6 +32,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * EmailService over SMTP or the Resend HTTP API, chosen by {@code app.email.provider} (HTML templates under
@@ -51,8 +53,12 @@ public class EmailServiceImpl implements EmailService {
     private final TemplateEngine templateEngine;
     private final MessageSource messageSource;
 
-    @Value("${app.email.from:noreply@vomatt.com}")
+    @Value("${app.email.from:Vomatt <noreply@vomatt.com>}")
     private String fromEmail;
+
+    // Blank means no Reply-To; set it only to a mailbox that receives mail
+    @Value("${app.email.reply-to:}")
+    private String replyTo;
 
     @Value("${app.email.site-url:https://vomatt.com}")
     private String siteUrl;
@@ -124,9 +130,9 @@ public class EmailServiceImpl implements EmailService {
 
     @Async
     @Override
-    public void sendWelcomeEmail(String to, String username, Locale locale) {
+    public void sendWelcomeEmail(String to, Locale locale) {
         try {
-            send(to, "email.welcome.subject", "email/welcome-email", locale, Map.of("username", Objects.toString(username, "")));
+            send(to, "email.welcome.subject", "email/welcome-email", locale, Map.of());
             log.info("Welcome email sent to: {} with locale: {}", TextUtil.maskEmail(to), locale);
         } catch (MessagingException | ResendException | RuntimeException e) {
             log.error("Failed to send welcome email to: {}", TextUtil.maskEmail(to), e);
@@ -176,32 +182,38 @@ public class EmailServiceImpl implements EmailService {
         Context context = new Context(locale, variables);
         context.setVariable("siteUrl", siteUrl);
         String html = templateEngine.process(template, context);
+        // An HTML-only email scores as spam with Gmail and others, so every email carries a text/plain part too
+        String text = toPlainText(html);
 
         if (resend != null) {
-            sendViaResend(to, subject, html);
+            sendViaResend(to, subject, text, html);
         } else {
-            sendViaSmtp(to, subject, html);
+            sendViaSmtp(to, subject, text, html);
         }
     }
 
-    private void sendViaSmtp(String to, String subject, String html) throws MessagingException {
+    private void sendViaSmtp(String to, String subject, String text, String html) throws MessagingException {
         MimeMessage mimeMessage = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "utf-8");
         helper.setFrom(fromEmail);
+        if (!replyTo.isBlank()) {
+            helper.setReplyTo(replyTo);
+        }
         helper.setTo(to);
         helper.setSubject(subject);
-        helper.setText(html, true);
+        helper.setText(text, html);
         // Inline (CID) image: Gmail and Outlook strip inline SVG and block data: URIs
         helper.addInline("logo", LOGO, "image/png");
 
         mailSender.send(mimeMessage);
     }
 
-    private void sendViaResend(String to, String subject, String html) throws ResendException {
-        resend.emails().send(CreateEmailOptions.builder()
+    private void sendViaResend(String to, String subject, String text, String html) throws ResendException {
+        CreateEmailOptions.Builder email = CreateEmailOptions.builder()
                 .from(fromEmail)
                 .to(to)
                 .subject(subject)
+                .text(text)
                 .html(html)
                 // contentId makes it an inline image, so cid:logo in the templates resolves as it does over SMTP
                 .attachments(Attachment.builder()
@@ -209,8 +221,27 @@ public class EmailServiceImpl implements EmailService {
                         .contentType("image/png")
                         .content(logoBase64)
                         .contentId("logo")
-                        .build())
-                .build());
+                        .build());
+        if (!replyTo.isBlank()) {
+            email.replyTo(replyTo);
+        }
+        resend.emails().send(email.build());
+    }
+
+    /**
+     * Text version of a rendered template: links keep their URL, images their alt text, block ends become line breaks.
+     * Enough for the table layout of templates/email; it is not a general HTML-to-text converter.
+     */
+    static String toPlainText(String html) {
+        String text = html
+                .replaceAll("(?is)<head>.*?</head>|<!--.*?-->", "")
+                .replaceAll("\\s+", " ")
+                .replaceAll("(?i)<img\\s[^>]*?alt=\"([^\"]*)\"[^>]*>", "$1")
+                .replaceAll("(?i)<a\\s[^>]*?href=\"([^\"]*)\"[^>]*>(.*?)</a>", "$2 ($1)")
+                .replaceAll("(?i)<br\\s*/?>|</(p|div|h1|tr|table)>", "\n")
+                .replaceAll("<[^>]+>", "");
+        return HtmlUtils.htmlUnescape(text).lines().map(String::strip).filter(line -> !line.isEmpty())
+                .collect(Collectors.joining("\n"));
     }
 
     private static String readLogoBase64() {

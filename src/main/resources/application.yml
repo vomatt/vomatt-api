@@ -123,7 +123,10 @@ app:
     # smtp (spring.mail.*) or resend (HTTP API, for hosts that block outbound SMTP)
     provider: ${EMAIL_PROVIDER:smtp}
     resend-api-key: ${RESEND_API_KEY:}
-    from: ${EMAIL_FROM:noreply@vomatt.com}
+    # A display name ("Vomatt <...>") over a bare address: Gmail scores nameless senders lower
+    from: "${EMAIL_FROM:Vomatt <noreply@vomatt.com>}"
+    # Reply-To; leave blank until the address has a mailbox (vomatt.com has no MX record)
+    reply-to: ${EMAIL_REPLY_TO:}
     # Frontend origin used for links in emails (logo, footer)
     site-url: ${EMAIL_SITE_URL:https://vomatt.com}
     # Frontend path of a Poll, appended to site-url in invitation emails; {voteId} is replaced

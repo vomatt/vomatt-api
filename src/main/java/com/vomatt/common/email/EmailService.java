@@ -23,7 +23,7 @@ public interface EmailService {
      *
      * @param locale captured by the caller, because the background thread has no request locale
      */
-    void sendWelcomeEmail(String to, String username, Locale locale);
+    void sendWelcomeEmail(String to, Locale locale);
 
     /**
      * Sends the Poll's Invitation to each email Invitee, one after another in a single background task, linking to the

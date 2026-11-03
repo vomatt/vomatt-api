@@ -29,7 +29,7 @@ services:
       APP_KEY: ${APP_KEY:?set APP_KEY in .env.staging}
       # Real email when .env.staging sets EMAIL_ENABLED=true plus MAIL_*; otherwise read the OTP from the api log ([EMAIL-NOOP])
       EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
-      EMAIL_FROM: ${EMAIL_FROM:-noreply@vomatt.com}
+      EMAIL_FROM: "${EMAIL_FROM:-Vomatt <noreply@vomatt.com>}"
       EMAIL_SITE_URL: ${EMAIL_SITE_URL:-https://vomatt.com}
       MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
       MAIL_PORT: ${MAIL_PORT:-587}

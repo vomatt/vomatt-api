@@ -39,7 +39,7 @@ public class EmailServiceNoOp implements EmailService {
     }
 
     @Override
-    public void sendWelcomeEmail(String to, String username, Locale locale) {
+    public void sendWelcomeEmail(String to, Locale locale) {
         logger.debug("Email service disabled: skipping welcome email to {}", TextUtil.maskEmail(to));
     }
 

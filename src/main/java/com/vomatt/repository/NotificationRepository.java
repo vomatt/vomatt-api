@@ -187,6 +187,17 @@ public class NotificationRepository {
         return ((List<Object[]>) query.getResultList()).stream().map(NotificationRow::of).toList();
     }
 
+    /** The newest unread notifications of the given kinds, newest first, at most {@link #UNREAD_COUNT_CAP}. */
+    @SuppressWarnings("unchecked")
+    public List<NotificationRow> findUnread(UUID userId, Set<NotificationKind> kinds, OffsetDateTime now) {
+        if (kinds.isEmpty()) {
+            return List.of();
+        }
+        String sql = ROW + union(kinds, kinds, "") + ") n WHERE NOT " + READ
+                + " ORDER BY n.created_at DESC, n.source_id DESC LIMIT " + UNREAD_COUNT_CAP;
+        return ((List<Object[]>) bind(sql, userId, now).getResultList()).stream().map(NotificationRow::of).toList();
+    }
+
     /** Unread notifications of the given kinds, at most {@link #UNREAD_COUNT_CAP}. */
     public long countUnread(UUID userId, Set<NotificationKind> kinds, OffsetDateTime now) {
         if (kinds.isEmpty()) {

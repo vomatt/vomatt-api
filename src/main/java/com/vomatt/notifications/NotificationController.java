@@ -18,6 +18,7 @@ import com.vomatt.common.security.UserPrincipal;
 import com.vomatt.entity.NotificationCategory;
 import com.vomatt.notifications.dto.NotificationResponse;
 import com.vomatt.notifications.dto.UnreadCountResponse;
+import com.vomatt.notifications.dto.UnreadIdsResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -138,6 +139,32 @@ public class NotificationController {
             @RequestParam(required = false) NotificationCategory category,
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(notificationService.countUnread(principal.userId(), category)));
+    }
+
+    @GetMapping("/unread-ids")
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
+            content = @Content(examples = @ExampleObject(value = """
+                    {"success":true,"data":{"ids":["comment_0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b","result_0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05"]},"message":null,"errorCode":null,"error":null}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "`category` is not a category (errorCode `common.type_mismatch`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(value = """
+                            {"success":false,"data":null,"message":"Invalid parameter format: category","errorCode":"common.type_mismatch","error":"Invalid parameter format: category"}""")))
+    @Operation(summary = "Unread notification ids", description = """
+            **Auth**: required
+            **Precondition**: none
+            **Behavior**: returns the `id`s of the notifications `GET /api/notifications` lists with `read` false, newest \
+            first: every kind the caller's preferences leave on, or with `category` only that category's. At most 100, the \
+            newest ones. Call it before `POST /api/notifications/read-all` to keep highlighting what was unread while the \
+            feed is paged afterwards (every item then comes back with `read` true).
+            **Side effects**: none
+            **Errors**:
+            - 400 `common.type_mismatch`: `category` is not one of the categories""")
+    public ResponseEntity<ApiResponse<UnreadIdsResponse>> unreadIds(
+            @Parameter(description = "Only this category's notifications; omit for all", example = "CONVERSATION")
+            @RequestParam(required = false) NotificationCategory category,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(notificationService.unreadIds(principal.userId(), category)));
     }
 
     @PostMapping("/{id}/read")

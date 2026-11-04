@@ -597,6 +597,25 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should return the ids of unread notifications newest first, leaving out read ones")
+    void shouldReturnUnreadIdsWhenSomeAreRead() {
+        follow(alice, me);
+        Vote ended = poll(bob, Audience.PUBLIC, now.minusDays(2), now.minusHours(1));
+        ballot(me, ended);
+        em.flush();
+        List<String> unreadIds = feed(me).stream().map(NotificationResponse::id).toList();
+
+        assertThat(notificationService.unreadIds(me.getId().toString(), null).ids()).isEqualTo(unreadIds);
+
+        notificationService.markRead(me.getId().toString(), "result_" + ended.getId());
+        assertThat(notificationService.unreadIds(me.getId().toString(), null).ids())
+                .singleElement().asString().startsWith("followed_");
+
+        notificationService.markAllRead(me.getId().toString());
+        assertThat(notificationService.unreadIds(me.getId().toString(), null).ids()).isEmpty();
+    }
+
+    @Test
     @DisplayName("should page through the feed newest first with no item repeated or skipped")
     void shouldPageWithoutGapsWhenFollowingCursors() {
         for (int i = 0; i < 3; i++) {

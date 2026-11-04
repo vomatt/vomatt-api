@@ -68,6 +68,17 @@ class NotificationControllerTest {
     }
 
     @Test
+    @DisplayName("should return the unread ids")
+    void shouldReturnUnreadIds() throws Exception {
+        when(notificationService.unreadIds(USER_ID, null)).thenReturn(
+                new com.vomatt.notifications.dto.UnreadIdsResponse(List.of("followed_0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b")));
+
+        mockMvc.perform(get("/api/notifications/unread-ids"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.ids[0]").value("followed_0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b"));
+    }
+
+    @Test
     @DisplayName("should return the unread count")
     void shouldReturnUnreadCount() throws Exception {
         when(notificationService.countUnread(USER_ID, null)).thenReturn(new UnreadCountResponse(3));

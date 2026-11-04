@@ -27,6 +27,7 @@ import com.vomatt.entity.VoteOption;
 import com.vomatt.notifications.dto.NotificationPreferencesResponse;
 import com.vomatt.notifications.dto.NotificationResponse;
 import com.vomatt.notifications.dto.UnreadCountResponse;
+import com.vomatt.notifications.dto.UnreadIdsResponse;
 import com.vomatt.notifications.dto.UpdateNotificationPreferencesRequest;
 import com.vomatt.repository.BallotSelection;
 import com.vomatt.repository.NotificationRepository;
@@ -78,6 +79,13 @@ public class NotificationService {
                 OffsetDateTime.now(), size + 1);
         return CursorResponse.of(rows, size, Cursor.Scope.NOTIFICATIONS, row -> Cursor.of(row.createdAt(), row.sourceId()),
                 page -> toResponses(userUuid, page));
+    }
+
+    @Transactional(readOnly = true)
+    public UnreadIdsResponse unreadIds(String userId, NotificationCategory category) {
+        UUID userUuid = UUID.fromString(userId);
+        return new UnreadIdsResponse(notificationRepository.findUnread(userUuid, kinds(userUuid, category),
+                OffsetDateTime.now()).stream().map(id -> new NotificationId(id.getKey(), id.getValue()).toString()).toList());
     }
 
     @Transactional(readOnly = true)

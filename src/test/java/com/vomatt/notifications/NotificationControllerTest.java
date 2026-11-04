@@ -37,6 +37,7 @@ import com.vomatt.entity.NotificationCategory;
 import com.vomatt.entity.NotificationKind;
 import com.vomatt.notifications.dto.NotificationResponse;
 import com.vomatt.notifications.dto.UnreadCountResponse;
+import com.vomatt.notifications.dto.UnreadIdsResponse;
 import com.vomatt.users.dto.FollowUserDto;
 
 @ExtendWith(MockitoExtension.class)
@@ -65,6 +66,17 @@ class NotificationControllerTest {
     @AfterEach
     void tearDown() {
         SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    @DisplayName("should return the unread ids")
+    void shouldReturnUnreadIds() throws Exception {
+        when(notificationService.unreadIds(USER_ID, null)).thenReturn(
+                new UnreadIdsResponse(List.of("followed_0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b")));
+
+        mockMvc.perform(get("/api/notifications/unread-ids"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.ids[0]").value("followed_0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b"));
     }
 
     @Test

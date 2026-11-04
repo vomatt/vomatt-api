@@ -187,16 +187,32 @@ public class NotificationRepository {
         return ((List<Object[]>) query.getResultList()).stream().map(NotificationRow::of).toList();
     }
 
+    /** (kind, source id) of the newest unread notifications of the given kinds, newest first, at most {@link #UNREAD_COUNT_CAP}. */
+    @SuppressWarnings("unchecked")
+    public List<Map.Entry<NotificationKind, UUID>> findUnread(UUID userId, Set<NotificationKind> kinds, OffsetDateTime now) {
+        if (kinds.isEmpty()) {
+            return List.of();
+        }
+        String sql = "SELECT n.kind, n.source_id FROM (" + unread(kinds)
+                + " ORDER BY n.created_at DESC, n.source_id DESC LIMIT " + UNREAD_COUNT_CAP;
+        return ((List<Object[]>) bind(sql, userId, now).getResultList()).stream()
+                .map(row -> Map.entry(NotificationKind.valueOf((String) row[0]), (UUID) row[1])).toList();
+    }
+
     /** Unread notifications of the given kinds, at most {@link #UNREAD_COUNT_CAP}. */
     public long countUnread(UUID userId, Set<NotificationKind> kinds, OffsetDateTime now) {
         if (kinds.isEmpty()) {
             return 0;
         }
-        // ponytail: RESULT materializes every Poll the user ever took part in; add a time window or a stored counter
-        // if this shows up in slow queries
-        String sql = "SELECT COUNT(*) FROM (SELECT 1 FROM (" + union(kinds, kinds, "") + ") n WHERE NOT " + READ
-                + " LIMIT " + UNREAD_COUNT_CAP + ") capped";
+        String sql = "SELECT COUNT(*) FROM (SELECT 1 FROM (" + unread(kinds) + " LIMIT " + UNREAD_COUNT_CAP + ") capped";
         return ((Number) bind(sql, userId, now).getSingleResult()).longValue();
+    }
+
+    // The given kinds' unread notifications as n, for the badge count and the unread ids to agree.
+    // ponytail: RESULT materializes every Poll the user ever took part in; add a time window or a stored counter
+    // if this shows up in slow queries
+    private static String unread(Set<NotificationKind> kinds) {
+        return union(kinds, kinds, "") + ") n WHERE NOT " + READ;
     }
 
     /**

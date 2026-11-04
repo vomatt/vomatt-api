@@ -4696,7 +4696,7 @@
         "nullable" : true,
         "properties" : {
           "ids" : {
-            "description" : "Ids (`NotificationResponse.id`) of the notifications `GET /api/notifications` lists with `read` false, of the kinds the caller's preferences leave on (only the requested `category`'s when given), newest first; at most 100, the newest ones",
+            "description" : "Ids (`NotificationResponse.id`) of unread notifications, newest first",
             "items" : {
               "example" : "comment_0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b",
               "type" : "string"

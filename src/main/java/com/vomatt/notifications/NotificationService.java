@@ -81,12 +81,11 @@ public class NotificationService {
                 page -> toResponses(userUuid, page));
     }
 
-    /** Ids of the caller's newest unread notifications, as the feed lists them; at most 100. */
     @Transactional(readOnly = true)
     public UnreadIdsResponse unreadIds(String userId, NotificationCategory category) {
         UUID userUuid = UUID.fromString(userId);
         return new UnreadIdsResponse(notificationRepository.findUnread(userUuid, kinds(userUuid, category),
-                OffsetDateTime.now()).stream().map(row -> new NotificationId(row.kind(), row.sourceId()).toString()).toList());
+                OffsetDateTime.now()).stream().map(id -> new NotificationId(id.getKey(), id.getValue()).toString()).toList());
     }
 
     @Transactional(readOnly = true)

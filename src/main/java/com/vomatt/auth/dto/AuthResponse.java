@@ -46,7 +46,7 @@ public record AuthResponse(
             @Schema(description = "Username used in the public profile path; generated at signup", example = "john_0427")
             String username,
 
-            @Schema(description = "Display name. Set at signup only from the sign-in provider's name (Google, Apple, LINE); null otherwise, never part of the email or the phone number. Show the username when null", example = "Ming Wang", nullable = true)
+            @Schema(description = "Display name; null until the user sets one (never set at signup). Show the username when null", example = "Ming Wang", nullable = true)
             String displayName,
 
             @Schema(description = "Role list",

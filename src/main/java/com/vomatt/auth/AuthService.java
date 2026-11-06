@@ -1030,8 +1030,9 @@ public class AuthService {
                 User newUser = User.builder()
                         .email(email)
                         .username(generateUsername(localPart))
-                        // Never derived from the email: it is public by default, and null shows the username instead
-                        .displayName(StringUtils.hasText(fullName) ? fullName : null)
+                        // No display name: it is public by default, and null shows the username. The provider's name is
+                        // kept as the first name, which only the user sees until they choose otherwise
+                        .firstName(StringUtils.hasText(fullName) ? fullName.strip().substring(0, Math.min(fullName.strip().length(), 50)) : null)
                         .authMethod(authMethod)
                         .avatarUrl(BotAvatar.random())
                         .build();

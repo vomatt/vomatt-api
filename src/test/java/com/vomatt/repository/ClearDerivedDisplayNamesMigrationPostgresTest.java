@@ -26,6 +26,7 @@ class ClearDerivedDisplayNamesMigrationPostgresTest extends PostgresRepositoryTe
         phone.setDisplayName(phone.getPhoneNumber());
         User legacyPhone = persist(null, "+8869" + "%08d".formatted((n + 1) % 100000000L), null);
         legacyPhone.setDisplayName("09" + legacyPhone.getPhoneNumber().substring(5));
+        User mixedCase = persist("dana.dawson" + n + "@example.com", null, "Dana.Dawson" + n);
         User chosen = persist("erin" + n + "@example.com", null, "Erin");
         User otherDomainDotted = persist("frank" + n + "@example.com", null, "fr.ank" + n);
         em.flush();
@@ -40,6 +41,7 @@ class ClearDerivedDisplayNamesMigrationPostgresTest extends PostgresRepositoryTe
         assertThat(displayName(gmailDotted)).isNull();
         assertThat(displayName(phone)).isNull();
         assertThat(displayName(legacyPhone)).isNull();
+        assertThat(displayName(mixedCase)).isNull();
         assertThat(displayName(chosen)).isEqualTo("Erin");
         assertThat(displayName(otherDomainDotted)).isEqualTo("fr.ank" + n);
     }

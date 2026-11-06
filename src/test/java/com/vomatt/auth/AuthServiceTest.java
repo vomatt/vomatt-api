@@ -913,7 +913,8 @@ class AuthServiceTest {
 
         assertThat(result).isNotNull();
         assertThat(result.getEmail()).isEqualTo("fresh@example.com");
-        assertThat(result.getDisplayName()).isEqualTo("Fresh");
+        assertThat(result.getDisplayName()).isNull();
+        assertThat(result.getFirstName()).isEqualTo("Fresh");
         assertThat(result.getAuthMethod()).isEqualTo("google");
         // username is generated from the email local part: <local>_<4 digits>
         assertThat(result.getUsername()).matches("fresh_\\d{4}");

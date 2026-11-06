@@ -1030,7 +1030,8 @@ public class AuthService {
                 User newUser = User.builder()
                         .email(email)
                         .username(generateUsername(localPart))
-                        .displayName(StringUtils.hasText(fullName) ? fullName : localPart)
+                        // Never derived from the email: it is public by default, and null shows the username instead
+                        .displayName(StringUtils.hasText(fullName) ? fullName : null)
                         .authMethod(authMethod)
                         .avatarUrl(BotAvatar.random())
                         .build();
@@ -1049,7 +1050,6 @@ public class AuthService {
             User newUser = User.builder()
                     .phoneNumber(normalizedPhone)
                     .username(generateUsername("user"))
-                    .displayName(normalizedPhone)
                     .authMethod("phone_otp")
                     .avatarUrl(BotAvatar.random())
                     .build();

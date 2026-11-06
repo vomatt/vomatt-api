@@ -5094,7 +5094,7 @@
             "type" : "string"
           },
           "displayName" : {
-            "description" : "Display name. Set at signup (email local part, provider name, or the phone number); null only if the column is empty",
+            "description" : "Display name. Set at signup only from the sign-in provider's name (Google, Apple, LINE); null otherwise, never part of the email or the phone number. Show the username when null",
             "example" : "Ming Wang",
             "nullable" : true,
             "type" : "string"

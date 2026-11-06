@@ -2,6 +2,9 @@
 
 Contract changes that affect the frontend. 💥 BREAKING means frontend code must change. See [openapi.json](openapi.json) for the contract snapshot and [error-codes.md](error-codes.md) for error codes.
 
+## 2026-11-06
+- New accounts no longer get a display name made from their email or phone number. Before, an email sign-up was shown publicly as the part of the address before the `@`, and a phone sign-up as the phone number. Now `displayName` is `null` on login, `GET /api/users/me` and the public profile until the user sets one, except that Google, Apple and LINE sign-ups still start with the provider's name. Show the `username` when `displayName` is `null`, as clients already do when a user hides it. Deploy: Flyway `V11__clear_derived_display_names.sql` clears existing display names that equal the email's local part (also its pre-canonical Gmail form) or the phone number.
+
 ## 2026-11-04
 - New `GET /api/notifications/unread-ids?category=` (sign-in required): `{ "ids": string[] }`, the `id`s of the notifications `GET /api/notifications` lists with `read` false, newest first, at most the newest 100; same `category` filter as `/unread-count` (unknown value is 400 `common.type_mismatch`). Use it to call `POST /api/notifications/read-all` as soon as the notification page opens and still highlight what was unread: fetch the ids first, then read-all, then page the feed (whose items now come back `read` true) and highlight items whose `id` is in the list.
 

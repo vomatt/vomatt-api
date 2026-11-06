@@ -20,6 +20,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @Slf4j
@@ -140,6 +141,14 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.UNSUPPORTED_MEDIA_TYPE, MessageKey.COMMON_BAD_REQUEST);
     }
 
+    /** Over {@code spring.servlet.multipart.max-file-size}, the avatar upload limit. */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMaxUploadSize(MaxUploadSizeExceededException ex) {
+        log.warn("Upload too large: {}", ex.getMessage());
+        // The exception carries no usable limit (-1 from the servlet container); keep in step with application.yml
+        return error(HttpStatus.CONTENT_TOO_LARGE, MessageKey.COMMON_FILE_TOO_LARGE, "2 MB");
+    }
+
     /**
      * A unique constraint the service did not pre-check (e.g. a concurrent duplicate insert) is a conflict.
      * Any other integrity violation (FK, NOT NULL, CHECK) is a bug and goes to the 500 fallback with its stack trace.
@@ -160,8 +169,8 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.CONFLICT, MessageKey.COMMON_CONFLICT);
     }
 
-    private ResponseEntity<ApiResponse<Void>> error(HttpStatus status, MessageKey key) {
-        return ResponseEntity.status(status).body(ApiResponse.error(messageService.resolve(key), key.code()));
+    private ResponseEntity<ApiResponse<Void>> error(HttpStatus status, MessageKey key, Object... args) {
+        return ResponseEntity.status(status).body(ApiResponse.error(messageService.resolve(key, args), key.code()));
     }
 
     @ExceptionHandler(Exception.class)

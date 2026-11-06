@@ -529,4 +529,46 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.errorCode").value("common.type_mismatch"));
         verifyNoInteractions(passkeyService);
     }
+
+    @Test
+    @DisplayName("should pass the multipart file to the service and return the updated profile when uploading an avatar")
+    void shouldReturnProfileWhenAvatarUploaded() throws Exception {
+        signIn("u1");
+        when(userService.uploadAvatar(eq("u1"), argThat(f -> f != null && "file".equals(f.getName()))))
+                .thenReturn(new UserProfileResponse("id-1", "alice", null, null, "/api/avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47.jpg",
+                        null, 0, 0, 0, 0, null, null, null, null, null, false, false, false, null, null));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart(
+                        org.springframework.http.HttpMethod.PUT, "/api/users/me/avatar")
+                        .file(new org.springframework.mock.web.MockMultipartFile("file", "a.png", "image/png", new byte[] { 1 })))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.avatarUrl").value("/api/avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47.jpg"));
+    }
+
+    @Test
+    @DisplayName("should answer 400 with the service error code when the upload is not an image")
+    void shouldReturnBadRequestWhenUploadIsNotAnImage() throws Exception {
+        signIn("u1");
+        when(userService.uploadAvatar(eq("u1"), any()))
+                .thenThrow(ApiException.badRequest(MessageKey.USER_AVATAR_UNSUPPORTED_IMAGE));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart(
+                        org.springframework.http.HttpMethod.PUT, "/api/users/me/avatar")
+                        .file(new org.springframework.mock.web.MockMultipartFile("file", "a.txt", "text/plain", "hi".getBytes())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("user.avatar.unsupported_image"));
+    }
+
+    @Test
+    @DisplayName("should make only <uuid>.jpg under /api/avatars public")
+    void shouldExposeOnlyUuidJpegAvatarsPublicly() {
+        PathPatternParser parser = PathPatternParser.defaultInstance;
+        java.util.function.Predicate<String> isPublic = path -> Arrays.stream(SecurityEndpoints.PUBLIC_GET)
+                .anyMatch(p -> parser.parse(p).matches(PathContainer.parsePath(path)));
+        assertThat(isPublic.test("/api/avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47.jpg")).isTrue();
+        for (String path : List.of("/api/avatars/x.jpg", "/api/avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47.png",
+                "/api/avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47.jpg/x", "/api/avatars")) {
+            assertThat(isPublic.test(path)).as(path).isFalse();
+        }
+    }
 }

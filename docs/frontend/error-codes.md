@@ -17,15 +17,19 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `common.unauthorized` | 401 | 未授權的請求 | Unauthorized request | See [auth-flow.md](auth-flow.md) | JwtAuthenticationEntryPoint |
 | `common.forbidden` | 403 | 沒有權限執行此操作 | You do not have permission to perform this action | Show a permission-denied notice | GlobalExceptionHandler, JwtAccessDeniedHandler, JwtAuthFilter |
 | `common.rate_limited` | 429 | 請求過於頻繁，請稍後再試 | Too many requests, please try again later | Retry after the `Retry-After` seconds | FeedbackService, RateLimitFilter, UserService, VoteService |
-| `common.not_found` | 404 | 找不到指定資源 | The requested resource was not found | Show resource not found | GlobalExceptionHandler, PasskeyService |
+| `common.not_found` | 404 | 找不到指定資源 | The requested resource was not found | Show resource not found | AvatarController, GlobalExceptionHandler, PasskeyService |
 | `common.conflict` | 409 | 資源衝突，請重試 | Resource conflict, please try again | Show message (resource state conflict) | GlobalExceptionHandler |
 | `common.validation_failed` | 400 | 輸入資料驗證失敗 | Validation failed | Show message so the user can fix the input | AdminUserService, GlobalExceptionHandler |
 | `common.missing_param` | 400 | 缺少必要參數：{0} | Missing required parameter: {0} | Show message so the user can fix the input | GlobalExceptionHandler, UserController |
 | `common.type_mismatch` | 400 | 參數格式錯誤：{0} | Invalid parameter format: {0} | Show message so the user can fix the input | GlobalExceptionHandler |
+| `common.file_required` | 400 | 請選擇要上傳的檔案 | Please select a file to upload | Show message so the user can fix the input | UserService |
+| `common.file_read_failed` | 400 | 檔案讀取失敗 | Failed to read file | Show message so the user can fix the input | UserService |
+| `common.file_too_large` | 413 | 檔案大小超過上限（{0}），請壓縮後重新上傳 | File size exceeds the limit ({0}). Please compress and re-upload | Show message so the user can fix the input | GlobalExceptionHandler |
 | `common.invalid_status` | 400 | 無效的狀態：{0} | Invalid status: {0} | Show message so the user can fix the input | AdminUserService, VoteListOrder, VoteService, VoteStatus |
 | `common.invalid_sort` | 400 | 無效的排序：{0} | Invalid sort: {0} | Show message so the user can fix the input | VoteListOrder |
 | `common.invalid_direction` | 400 | 無效的方向：{0}（應為 blocking 或 blocked-by） | Invalid direction: {0} (expected blocking or blocked-by) | Show message so the user can fix the input | AdminUserService |
 | `common.cursor_invalid` | 400 | 分頁 cursor 無效 | Invalid pagination cursor | Show message so the user can fix the input | Cursor |
+| `common.storage_unavailable` | 503 | 圖片儲存服務暫時無法使用，請稍後再試 | Image storage is temporarily unavailable, please try again later | Show service temporarily unavailable, retry later | StorageService |
 | `auth.token.invalid` | 401 | Token 無效 | Invalid token | See [auth-flow.md](auth-flow.md) | JwtAuthFilter |
 | `auth.token.expired` | 401 | 登入已過期，請重新登入 | Session expired, please log in again | See [auth-flow.md](auth-flow.md) | JwtAuthFilter |
 | `auth.invalid_otp` | 401 | 驗證碼錯誤 | Invalid verification code | See [auth-flow.md](auth-flow.md) | AuthService |
@@ -67,6 +71,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `user.username.taken` | 409 | 使用者名稱已被使用 | Username already taken | Show message (resource state conflict) | UserService |
 | `user.delete.forbidden` | 403 | 只能刪除自己的帳號 | You can only delete your own account | Show a permission-denied notice | UserService |
 | `user.follow.blocked` | 400 | 不能追蹤已封鎖的使用者，請先解除封鎖 | You cannot follow a user you blocked; unblock them first | Show message so the user can fix the input | UserService |
+| `user.avatar.unsupported_image` | 400 | 不支援的圖片：請上傳 4000 萬像素以內的 JPEG、PNG、GIF 或 BMP | Unsupported image: upload a JPEG, PNG, GIF or BMP of at most 40 megapixels | Show message so the user can fix the input | AvatarImage |
 | `vote.not_found` | 404 | 找不到投票 | Vote not found | Show resource not found | AdminVoteService, VoteService |
 | `vote.option.not_found` | 404 | 找不到投票選項 | Vote option not found | Show resource not found | VoteService |
 | `vote.option.not_in_vote` | 400 | 選項不屬於此投票 | Option does not belong to this vote | Show message so the user can fix the input | VoteService |
@@ -117,9 +122,6 @@ Keys not found on any error path (mostly success-response `message` values, e.g.
 | key | zh-TW message | en message | Used in |
 |-----|-----------|---------|----------|
 | `common.admin_only` | 此功能限管理員使用 | This feature is for administrators only |  |
-| `common.file_required` | 請選擇要上傳的檔案 | Please select a file to upload |  |
-| `common.file_read_failed` | 檔案讀取失敗 | Failed to read file |  |
-| `common.file_too_large` | 檔案大小超過上限（{0}），請壓縮後重新上傳 | File size exceeds the limit ({0}). Please compress and re-upload |  |
 | `common.invalid_content_type` | 不支援的檔案格式：{0} | Unsupported file type: {0} |  |
 | `common.image_upload_failed` | 圖片上傳失敗：{0} | Image upload failed: {0} |  |
 | `common.sign_url_failed` | 簽署 URL 失敗 | Failed to generate signed URL |  |

@@ -25,7 +25,7 @@ public class CommentDto {
             example = "alice", nullable = true)
     private String author;
 
-    @Schema(description = "Avatar of the author as `bot:<kind>` (the bot cast). Older accounts may hold an image URL; null if never set, and on a deleted placeholder (`deleted` = true)",
+    @Schema(description = "Avatar of the author as `bot:<kind>` (the bot cast) or `/api/avatars/<id>.jpg` (an uploaded image, a path on the API origin). Older accounts may hold an image URL; null if never set, and on a deleted placeholder (`deleted` = true)",
             example = "bot:boba", nullable = true)
     private String authorAvatarUrl;
 

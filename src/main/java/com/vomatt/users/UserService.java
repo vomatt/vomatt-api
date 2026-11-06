@@ -44,12 +44,13 @@ import com.vomatt.common.util.UUIDv7Generator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Limit;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -87,6 +88,7 @@ public class UserService {
     private final TagRepository tagRepository;
     private final StorageService storageService;
     private final LookupService lookupService;
+    private final TransactionTemplate transactionTemplate;
 
     /** One export per user per UTC day: the response is the account's whole footprint and is not cheap to build. */
     private static final String EXPORT_COUNTER_NS = "export:daily";
@@ -478,23 +480,18 @@ public class UserService {
         return ownProfileAfterEdit(user);
     }
 
-    /** Upload limit; {@code spring.servlet.multipart.max-file-size} rejects larger files before they reach here. */
-    static final long AVATAR_MAX_BYTES = 2L * 1024 * 1024;
     /** {@code users.avatar_url} prefix of an uploaded avatar; the rest is its object name under {@link #AVATAR_KEY_PREFIX}. */
     public static final String AVATAR_URL_PREFIX = "/api/avatars/";
     public static final String AVATAR_KEY_PREFIX = "avatars/";
 
     /**
      * Replaces the caller's avatar with an uploaded image, stored as a new 512x512 JPEG object. The previous uploaded
-     * object, if any, is deleted after commit.
+     * object, if any, is deleted after commit. The file size limit is {@code spring.servlet.multipart.max-file-size}.
+     * <p>Decoding and the bucket put run outside the transaction, so no pooled connection waits on them.</p>
      */
-    @Transactional
     public UserProfileResponse uploadAvatar(String userId, MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw ApiException.badRequest(MessageKey.COMMON_FILE_REQUIRED);
-        }
-        if (file.getSize() > AVATAR_MAX_BYTES) {
-            throw new ApiException(HttpStatus.CONTENT_TOO_LARGE, MessageKey.COMMON_FILE_TOO_LARGE, "2 MB");
         }
         // Counted before decoding, so failed decodes spend the quota too; fails closed (503) when Redis is down
         if (redisService.incrementAndExpire(AVATAR_UPLOAD_COUNTER_NS, userId + ":" + TextUtil.utcDay(), Duration.ofDays(1))
@@ -502,20 +499,28 @@ public class UserService {
             throw ApiException.tooManyRequests(MessageKey.COMMON_RATE_LIMITED);
         }
         byte[] jpeg;
-        try {
-            jpeg = AvatarImage.toJpeg(file.getBytes());
+        try (InputStream in = file.getInputStream()) {
+            jpeg = AvatarImage.toJpeg(in);
         } catch (IOException e) {
             throw ApiException.badRequest(MessageKey.COMMON_FILE_READ_FAILED);
         }
-        User user = findUserById(userId);
         String name = UUIDv7Generator.generateId() + ".jpg";
-        // ponytail: a rollback after the put leaves an orphan object; add a sweep if that ever matters
-        storageService.put(AVATAR_KEY_PREFIX + name, jpeg, "image/jpeg");
-        deleteUploadedAvatarAfterCommit(user.getAvatarUrl());
-        user.setAvatarUrl(AVATAR_URL_PREFIX + name);
-        userRepository.save(user);
-        log.info("Avatar uploaded for user {}", userId);
-        return ownProfileAfterEdit(user);
+        String key = AVATAR_KEY_PREFIX + name;
+        storageService.put(key, jpeg, "image/jpeg");
+        try {
+            return transactionTemplate.execute(status -> {
+                User user = findUserById(userId);
+                deleteUploadedAvatarAfterCommit(user.getAvatarUrl());
+                user.setAvatarUrl(AVATAR_URL_PREFIX + name);
+                userRepository.save(user);
+                log.info("Avatar uploaded for user {}", userId);
+                return ownProfileAfterEdit(user);
+            });
+        } catch (RuntimeException e) {
+            // Nothing references the new object once the update failed
+            deleteObjectQuietly(key);
+            throw e;
+        }
     }
 
     /** Deletes the uploaded avatar object behind {@code avatarUrl} once committed; a no-op for bot:* or null. Failures are logged. */
@@ -524,13 +529,15 @@ public class UserService {
             return;
         }
         String key = AVATAR_KEY_PREFIX + avatarUrl.substring(AVATAR_URL_PREFIX.length());
-        AfterCommit.run(() -> {
-            try {
-                storageService.delete(key);
-            } catch (RuntimeException e) {
-                log.warn("Avatar object {} not deleted: {}", key, e.getMessage());
-            }
-        });
+        AfterCommit.run(() -> deleteObjectQuietly(key));
+    }
+
+    private void deleteObjectQuietly(String key) {
+        try {
+            storageService.delete(key);
+        } catch (RuntimeException e) {
+            log.warn("Avatar object {} not deleted: {}", key, e.getMessage());
+        }
     }
 
     /** The owner's own profile right after an edit: no follow or block of oneself exists. */

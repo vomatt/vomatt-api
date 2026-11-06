@@ -38,11 +38,13 @@ public final class SecurityEndpoints {
      * Poll ID (UUID) path segment. Matching only UUIDs means named sub-paths like {@code /api/votes/my} are never permitted by the public rules,
      * without relying on {@link #AUTHENTICATED_VOTES} being ordered first.
      */
-    private static final String VOTE = "/api/votes/{voteId:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}";
+    private static final String UUID = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
+
+    private static final String VOTE = "/api/votes/{voteId:" + UUID + "}";
 
     /** An uploaded avatar, {@code <UUID>.jpg} only (see {@code UserService#AVATAR_URL_PREFIX}); also the controller mapping. */
     public static final String AVATAR_FILE =
-            "/api/avatars/{file:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\\.jpg}";
+            "/api/avatars/{file:" + UUID + "\\.jpg}";
 
     /** GET-only public endpoints (Poll details, an Invite-only Poll's owner, results after the Poll ends, comments and replies are readable without login) */
     public static final String[] PUBLIC_GET = { "/api/tags", "/api/tags/popular", "/api/votes", VOTE, VOTE + "/creator",

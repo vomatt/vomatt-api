@@ -24,7 +24,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `common.type_mismatch` | 400 | 參數格式錯誤：{0} | Invalid parameter format: {0} | Show message so the user can fix the input | GlobalExceptionHandler |
 | `common.file_required` | 400 | 請選擇要上傳的檔案 | Please select a file to upload | Show message so the user can fix the input | UserService |
 | `common.file_read_failed` | 400 | 檔案讀取失敗 | Failed to read file | Show message so the user can fix the input | UserService |
-| `common.file_too_large` | 413 | 檔案大小超過上限（{0}），請壓縮後重新上傳 | File size exceeds the limit ({0}). Please compress and re-upload | Show message so the user can fix the input | GlobalExceptionHandler, UserService |
+| `common.file_too_large` | 413 | 檔案大小超過上限（{0}），請壓縮後重新上傳 | File size exceeds the limit ({0}). Please compress and re-upload | Show message so the user can fix the input | GlobalExceptionHandler |
 | `common.invalid_status` | 400 | 無效的狀態：{0} | Invalid status: {0} | Show message so the user can fix the input | AdminUserService, VoteListOrder, VoteService, VoteStatus |
 | `common.invalid_sort` | 400 | 無效的排序：{0} | Invalid sort: {0} | Show message so the user can fix the input | VoteListOrder |
 | `common.invalid_direction` | 400 | 無效的方向：{0}（應為 blocking 或 blocked-by） | Invalid direction: {0} (expected blocking or blocked-by) | Show message so the user can fix the input | AdminUserService |

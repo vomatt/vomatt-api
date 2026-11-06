@@ -13,6 +13,7 @@ import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.response.SimpleResultResponse;
 import com.vomatt.common.annotation.CommonApiResponses;
 import com.vomatt.common.annotation.PublicApiResponse;
+import com.vomatt.common.annotation.StorageUnavailableResponse;
 import com.vomatt.users.dto.UserDto;
 import com.vomatt.users.dto.UserProfileResponse;
 import com.vomatt.common.security.RefreshTokenService;
@@ -323,10 +324,7 @@ public class UserController {
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"File size exceeds the limit (2 MB). Please compress and re-upload","errorCode":"common.file_too_large","error":"File size exceeds the limit (2 MB). Please compress and re-upload"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503", description = "Image storage not configured or unreachable (errorCode `common.storage_unavailable`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"Image storage is temporarily unavailable, please try again later","errorCode":"common.storage_unavailable","error":"Image storage is temporarily unavailable, please try again later"}""")))
+    @StorageUnavailableResponse
     @Operation(summary = "Upload my avatar", description = """
             **Auth**: required
             **Precondition**: multipart/form-data with the image in part `file`, at most 2 MB; JPEG, PNG, GIF (first frame) or BMP of at most 40 megapixels; \

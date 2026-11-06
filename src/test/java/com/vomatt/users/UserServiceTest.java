@@ -21,6 +21,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.http.HttpStatus;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -70,6 +75,7 @@ class UserServiceTest {
     @Mock com.vomatt.repository.TagRepository tagRepository;
     @Mock com.vomatt.common.storage.StorageService storageService;
     @Mock com.vomatt.lookups.LookupService lookupService;
+    @Mock TransactionTemplate transactionTemplate;
     @Spy com.vomatt.repository.LockTimeout lockTimeout = new com.vomatt.repository.LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @InjectMocks UserService userService;
 
@@ -159,7 +165,7 @@ class UserServiceTest {
         assertThat(export.feedback()).extracting(f -> f.content()).containsExactly("Please add dark mode.");
         assertThat(export.bookmarks()).extracting(b -> b.voteId()).containsExactly(poll.getId().toString());
         assertThatThrownBy(() -> userService.exportMyData(id.toString()))
-                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getStatus()).isEqualTo(org.springframework.http.HttpStatus.TOO_MANY_REQUESTS));
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS));
     }
 
     @Test
@@ -394,7 +400,7 @@ class UserServiceTest {
 
         assertThatThrownBy(() -> userService.updateMyProfile(id.toString(), request))
                 .isInstanceOf(ApiException.class)
-                .extracting("status").isEqualTo(org.springframework.http.HttpStatus.CONFLICT);
+                .extracting("status").isEqualTo(HttpStatus.CONFLICT);
         assertThat(user.getUsername()).isEqualTo("old_name");
         verify(userRepository, never()).save(user);
     }
@@ -554,7 +560,7 @@ class UserServiceTest {
 
         assertThatThrownBy(() -> userService.followUser(caller.toString(), target.toString()))
                 .isInstanceOfSatisfying(ApiException.class, e -> {
-                    assertThat(e.getStatus()).isEqualTo(org.springframework.http.HttpStatus.BAD_REQUEST);
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_FOLLOW_BLOCKED);
                 });
         // The pair lock is taken before the block check
@@ -816,6 +822,15 @@ class UserServiceTest {
         return user;
     }
 
+    /** Runs the upload's short transaction inline. */
+    private void runTransactionsInline() {
+        when(transactionTemplate.execute(any())).thenAnswer(inv -> inv.<TransactionCallback<?>>getArgument(0).doInTransaction(null));
+    }
+
+    private static MockMultipartFile pngUpload(byte[] content) {
+        return new MockMultipartFile("file", "a.png", "image/png", content);
+    }
+
     /** Today's attempt count the cap check sees, with the default limit. */
     private void avatarUploadsToday(long count) {
         when(redisService.incrementAndExpire(eq("avatar-upload:daily"), any(), any())).thenReturn(count);
@@ -837,18 +852,18 @@ class UserServiceTest {
     @Test
     @DisplayName("should store a 512x512 JPEG on white, point avatarUrl at it and delete the old upload after commit")
     void shouldStoreSquareJpegAndDeleteOldUploadWhenAvatarUploaded() throws Exception {
+        runTransactionsInline();
         avatarUploadsToday(1);
         UUID id = UUID.randomUUID();
         User user = avatarUser(id, "/api/avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47.jpg");
         // Fully transparent and not square: must come out opaque white and cropped to a square
-        org.springframework.mock.web.MockMultipartFile file = new org.springframework.mock.web.MockMultipartFile(
-                "file", "a.png", "image/png", png(1600, 900, true));
+        MockMultipartFile file = pngUpload(png(1600, 900, true));
         TransactionSynchronizationManager.initSynchronization();
         try {
             userService.uploadAvatar(id.toString(), file);
 
-            org.mockito.ArgumentCaptor<String> key = org.mockito.ArgumentCaptor.forClass(String.class);
-            org.mockito.ArgumentCaptor<byte[]> body = org.mockito.ArgumentCaptor.forClass(byte[].class);
+            ArgumentCaptor<String> key = ArgumentCaptor.forClass(String.class);
+            ArgumentCaptor<byte[]> body = ArgumentCaptor.forClass(byte[].class);
             verify(storageService).put(key.capture(), body.capture(), eq("image/jpeg"));
             assertThat(key.getValue()).matches("avatars/[0-9a-f-]{36}\\.jpg");
             assertThat(user.getAvatarUrl()).isEqualTo("/api/" + key.getValue());
@@ -871,12 +886,12 @@ class UserServiceTest {
     @Test
     @DisplayName("should delete nothing when the replaced avatar was a bot avatar")
     void shouldNotDeleteAnythingWhenOldAvatarIsBot() throws Exception {
+        runTransactionsInline();
         avatarUploadsToday(1);
         UUID id = UUID.randomUUID();
         avatarUser(id, "bot:boba");
 
-        userService.uploadAvatar(id.toString(), new org.springframework.mock.web.MockMultipartFile(
-                "file", "a.png", "image/png", png(100, 300, false)));
+        userService.uploadAvatar(id.toString(), pngUpload(png(100, 300, false)));
 
         verify(storageService).put(any(), any(), eq("image/jpeg"));
         verify(storageService, never()).delete(any());
@@ -886,13 +901,12 @@ class UserServiceTest {
     @DisplayName("should reject with 400 and store nothing when the file is not an image")
     void shouldRejectWhenUploadIsNotAnImage() {
         avatarUploadsToday(1);
-        org.springframework.mock.web.MockMultipartFile file = new org.springframework.mock.web.MockMultipartFile(
-                "file", "a.png", "image/png", "<?php echo 1; ?>".getBytes());
+        MockMultipartFile file = pngUpload("<?php echo 1; ?>".getBytes());
 
         assertThatThrownBy(() -> userService.uploadAvatar(UUID.randomUUID().toString(), file))
                 .isInstanceOfSatisfying(ApiException.class, e -> {
                     assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_AVATAR_UNSUPPORTED_IMAGE);
-                    assertThat(e.getStatus()).isEqualTo(org.springframework.http.HttpStatus.BAD_REQUEST);
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
                 });
         verify(storageService, never()).put(any(), any(), any());
     }
@@ -902,26 +916,11 @@ class UserServiceTest {
     void shouldRejectWhenImageExceedsPixelLimit() throws Exception {
         avatarUploadsToday(1);
         // 8000x8000 = 64M pixels, a few KB as PNG (1-bit raster, so building the fixture stays small too)
-        org.springframework.mock.web.MockMultipartFile file = new org.springframework.mock.web.MockMultipartFile(
-                "file", "bomb.png", "image/png", png(8000, 8000, java.awt.image.BufferedImage.TYPE_BYTE_BINARY));
+        MockMultipartFile file = pngUpload(png(8000, 8000, java.awt.image.BufferedImage.TYPE_BYTE_BINARY));
 
         assertThatThrownBy(() -> userService.uploadAvatar(UUID.randomUUID().toString(), file))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_AVATAR_UNSUPPORTED_IMAGE));
-    }
-
-    @Test
-    @DisplayName("should reject with 413 when the file exceeds 2 MB")
-    void shouldRejectWhenUploadExceedsSizeLimit() {
-        org.springframework.mock.web.MockMultipartFile file = new org.springframework.mock.web.MockMultipartFile(
-                "file", "big.png", "image/png", new byte[(int) UserService.AVATAR_MAX_BYTES + 1]);
-
-        assertThatThrownBy(() -> userService.uploadAvatar(UUID.randomUUID().toString(), file))
-                .isInstanceOfSatisfying(ApiException.class, e -> {
-                    assertThat(e.getMessageKey()).isEqualTo(MessageKey.COMMON_FILE_TOO_LARGE);
-                    assertThat(e.getStatus()).isEqualTo(org.springframework.http.HttpStatus.CONTENT_TOO_LARGE);
-                });
-        verify(storageService, never()).put(any(), any(), any());
     }
 
     @Test
@@ -956,13 +955,12 @@ class UserServiceTest {
     @DisplayName("should reject with 429 before decoding when the daily avatar upload limit is spent")
     void shouldRejectWhenDailyAvatarUploadLimitReached() throws Exception {
         avatarUploadsToday(UserService.AVATAR_UPLOAD_DAILY_LIMIT + 1);
-        org.springframework.mock.web.MockMultipartFile file = new org.springframework.mock.web.MockMultipartFile(
-                "file", "a.png", "image/png", png(100, 100, false));
+        MockMultipartFile file = pngUpload(png(100, 100, false));
 
         assertThatThrownBy(() -> userService.uploadAvatar(UUID.randomUUID().toString(), file))
                 .isInstanceOfSatisfying(ApiException.class, e -> {
                     assertThat(e.getMessageKey()).isEqualTo(MessageKey.COMMON_RATE_LIMITED);
-                    assertThat(e.getStatus()).isEqualTo(org.springframework.http.HttpStatus.TOO_MANY_REQUESTS);
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
                 });
         verify(userRepository, never()).findById(any());
         verify(storageService, never()).put(any(), any(), any());
@@ -971,15 +969,31 @@ class UserServiceTest {
     @Test
     @DisplayName("should allow the upload that reaches the configured limit exactly")
     void shouldUseConfiguredLimitWhenLookupOverridesIt() throws Exception {
+        runTransactionsInline();
         UUID id = UUID.randomUUID();
         avatarUser(id, "bot:boba");
         when(redisService.incrementAndExpire(eq("avatar-upload:daily"), eq(id + ":" + com.vomatt.common.util.TextUtil.utcDay()),
                 eq(java.time.Duration.ofDays(1)))).thenReturn(3L);
         when(lookupService.configInt(UserService.AVATAR_UPLOAD_LIMIT_KEY, UserService.AVATAR_UPLOAD_DAILY_LIMIT)).thenReturn(3);
 
-        userService.uploadAvatar(id.toString(), new org.springframework.mock.web.MockMultipartFile(
-                "file", "a.png", "image/png", png(100, 100, false)));
+        userService.uploadAvatar(id.toString(), pngUpload(png(100, 100, false)));
 
         verify(storageService).put(any(), any(), eq("image/jpeg"));
+    }
+
+    @Test
+    @DisplayName("should delete the just-stored object when the profile update fails")
+    void shouldDeleteStoredObjectWhenProfileUpdateFails() throws Exception {
+        UUID id = UUID.randomUUID();
+        avatarUploadsToday(1);
+        runTransactionsInline();
+        when(userRepository.findById(id)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.uploadAvatar(id.toString(), pngUpload(png(100, 100, false))))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND));
+        ArgumentCaptor<String> key = ArgumentCaptor.forClass(String.class);
+        verify(storageService).put(key.capture(), any(), eq("image/jpeg"));
+        verify(storageService).delete(key.getValue());
     }
 }

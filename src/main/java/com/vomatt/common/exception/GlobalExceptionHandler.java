@@ -145,9 +145,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ApiResponse<Void>> handleMaxUploadSize(MaxUploadSizeExceededException ex) {
         log.warn("Upload too large: {}", ex.getMessage());
-        MessageKey key = MessageKey.COMMON_FILE_TOO_LARGE;
-        return ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE)
-                .body(ApiResponse.error(messageService.resolve(key, "2 MB"), key.code()));
+        // The exception carries no usable limit (-1 from the servlet container); keep in step with application.yml
+        return error(HttpStatus.CONTENT_TOO_LARGE, MessageKey.COMMON_FILE_TOO_LARGE, "2 MB");
     }
 
     /**
@@ -170,8 +169,8 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.CONFLICT, MessageKey.COMMON_CONFLICT);
     }
 
-    private ResponseEntity<ApiResponse<Void>> error(HttpStatus status, MessageKey key) {
-        return ResponseEntity.status(status).body(ApiResponse.error(messageService.resolve(key), key.code()));
+    private ResponseEntity<ApiResponse<Void>> error(HttpStatus status, MessageKey key, Object... args) {
+        return ResponseEntity.status(status).body(ApiResponse.error(messageService.resolve(key, args), key.code()));
     }
 
     @ExceptionHandler(Exception.class)

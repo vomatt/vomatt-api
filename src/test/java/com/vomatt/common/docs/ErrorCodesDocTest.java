@@ -38,7 +38,7 @@ class ErrorCodesDocTest {
             "conflict", 409, "tooManyRequests", 429, "serviceUnavailable", 503);
     private static final Map<String, Integer> HTTP_STATUS = Map.of(
             "BAD_REQUEST", 400, "UNAUTHORIZED", 401, "FORBIDDEN", 403, "NOT_FOUND", 404, "CONFLICT", 409,
-            "CONTENT_TOO_LARGE", 413, "UNPROCESSABLE_ENTITY", 422, "TOO_MANY_REQUESTS", 429, "INTERNAL_SERVER_ERROR", 500,
+            "UNPROCESSABLE_ENTITY", 422, "TOO_MANY_REQUESTS", 429, "INTERNAL_SERVER_ERROR", 500,
             "SERVICE_UNAVAILABLE", 503);
 
     private static final Pattern FACTORY = Pattern.compile(

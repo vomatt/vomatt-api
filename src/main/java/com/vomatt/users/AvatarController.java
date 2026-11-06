@@ -1,6 +1,7 @@
 package com.vomatt.users;
 
 import com.vomatt.common.annotation.PublicApiResponse;
+import com.vomatt.common.annotation.StorageUnavailableResponse;
 import com.vomatt.common.config.OpenAPIConfig;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
@@ -38,10 +39,7 @@ public class AvatarController {
             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"Resource not found","errorCode":"common.not_found","error":"Resource not found"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503", description = "Image storage not configured or unreachable (errorCode `common.storage_unavailable`)",
-            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"Image storage is temporarily unavailable, please try again later","errorCode":"common.storage_unavailable","error":"Image storage is temporarily unavailable, please try again later"}""")))
+    @StorageUnavailableResponse
     @Operation(summary = "Get an uploaded avatar", description = """
             **Auth**: none
             **Precondition**: `file` is `<id>.jpg` as in an `avatarUrl` of `/api/avatars/<id>.jpg`; other shapes are not served. \

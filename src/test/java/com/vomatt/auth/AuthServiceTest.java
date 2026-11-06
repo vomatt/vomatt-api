@@ -913,7 +913,8 @@ class AuthServiceTest {
 
         assertThat(result).isNotNull();
         assertThat(result.getEmail()).isEqualTo("fresh@example.com");
-        assertThat(result.getDisplayName()).isEqualTo("Fresh");
+        assertThat(result.getDisplayName()).isNull();
+        assertThat(result.getFirstName()).isEqualTo("Fresh");
         assertThat(result.getAuthMethod()).isEqualTo("google");
         // username is generated from the email local part: <local>_<4 digits>
         assertThat(result.getUsername()).matches("fresh_\\d{4}");
@@ -936,8 +937,8 @@ class AuthServiceTest {
 
         verify(userRepository, org.mockito.Mockito.times(2)).existsByUsername(anyString());
         assertThat(result.getUsername()).matches("fresh_\\d{4}");
-        // When fullName is empty, displayName falls back to the email local part
-        assertThat(result.getDisplayName()).isEqualTo("fresh");
+        // No fullName: no display name, so profiles show the username, never part of the email
+        assertThat(result.getDisplayName()).isNull();
     }
 
     @Test
@@ -1271,7 +1272,7 @@ class AuthServiceTest {
         assertThat(result.getPhoneNumber()).isEqualTo("+886912345678");
         assertThat(result.getEmail()).isNull();
         assertThat(result.getUsername()).matches("user_\\d{4}");
-        assertThat(result.getDisplayName()).isEqualTo("+886912345678");
+        assertThat(result.getDisplayName()).isNull();
         // A random cast member, never bot:none (that is only ever the user's own choice)
         assertThat(result.getAvatarUrl()).startsWith("bot:").isNotEqualTo("bot:none");
         assertThat(com.vomatt.users.BotAvatar.KINDS).contains(result.getAvatarUrl().substring("bot:".length()));

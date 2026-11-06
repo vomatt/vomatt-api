@@ -9,6 +9,7 @@ import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.security.UserPrincipal;
 import com.vomatt.common.storage.StorageService;
+import com.vomatt.lookups.LookupService;
 import com.vomatt.users.dto.FollowUserDto;
 import com.vomatt.users.dto.MyProfileResponse;
 import com.vomatt.users.dto.UpdateProfileRequest;
@@ -85,11 +86,17 @@ public class UserService {
     private final VoteBookmarkRepository bookmarkRepository;
     private final TagRepository tagRepository;
     private final StorageService storageService;
+    private final LookupService lookupService;
 
     /** One export per user per UTC day: the response is the account's whole footprint and is not cheap to build. */
     private static final String EXPORT_COUNTER_NS = "export:daily";
 
     private static final int MUTUAL_PREVIEW_SIZE = 3;
+
+    /** Avatar uploads one user may attempt per UTC day: each decode + resize is CPU-heavy. Tunable as a config lookup. */
+    static final String AVATAR_UPLOAD_LIMIT_KEY = "avatar_upload_daily_limit";
+    static final int AVATAR_UPLOAD_DAILY_LIMIT = 20;
+    private static final String AVATAR_UPLOAD_COUNTER_NS = "avatar-upload:daily";
 
     /**
      * The user themself or an active admin can delete the account; deletion also revokes all of the user's refresh tokens.
@@ -488,6 +495,11 @@ public class UserService {
         }
         if (file.getSize() > AVATAR_MAX_BYTES) {
             throw new ApiException(HttpStatus.CONTENT_TOO_LARGE, MessageKey.COMMON_FILE_TOO_LARGE, "2 MB");
+        }
+        // Counted before decoding, so failed decodes spend the quota too; fails closed (503) when Redis is down
+        if (redisService.incrementAndExpire(AVATAR_UPLOAD_COUNTER_NS, userId + ":" + TextUtil.utcDay(), Duration.ofDays(1))
+                > lookupService.configInt(AVATAR_UPLOAD_LIMIT_KEY, AVATAR_UPLOAD_DAILY_LIMIT)) {
+            throw ApiException.tooManyRequests(MessageKey.COMMON_RATE_LIMITED);
         }
         byte[] jpeg;
         try {

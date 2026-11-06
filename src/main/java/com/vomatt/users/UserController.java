@@ -329,17 +329,20 @@ public class UserController {
                             {"success":false,"data":null,"message":"Image storage is temporarily unavailable, please try again later","errorCode":"common.storage_unavailable","error":"Image storage is temporarily unavailable, please try again later"}""")))
     @Operation(summary = "Upload my avatar", description = """
             **Auth**: required
-            **Precondition**: multipart/form-data with the image in part `file`, at most 2 MB; JPEG, PNG, GIF (first frame) or BMP of at most 40 megapixels
+            **Precondition**: multipart/form-data with the image in part `file`, at most 2 MB; JPEG, PNG, GIF (first frame) or BMP of at most 40 megapixels; \
+            fewer than the daily upload limit attempted today (UTC)
             **Behavior**: center-crops the image to a square, resizes it to 512x512 and re-encodes it as JPEG (transparent pixels become white; \
             EXIF metadata, GPS included, is dropped). Each upload is a new image with a new path: `avatarUrl` becomes `/api/avatars/<id>.jpg`, \
             a path on the API origin served by `GET /api/avatars/{file}`. Returns the caller's profile after the update, as `PATCH /api/users/me` does. \
             To go back to a bot avatar, send `avatarUrl` = `bot:<kind>` to `PATCH /api/users/me`.
-            **Side effects**: stores the image; once the change commits, the previously uploaded image (if any) is deleted and its path returns 404
+            **Side effects**: counts one attempt toward the daily upload limit (before the image is checked); stores the image; once the change commits, the previously uploaded image (if any) is deleted and its path returns 404
             **Errors**:
             - 400 `common.file_required`: part `file` is missing or empty
             - 400 `common.file_read_failed`: the uploaded file could not be read
             - 400 `user.avatar.unsupported_image`: the file is not a decodable JPEG, PNG, GIF or BMP, or exceeds 40 megapixels
             - 413 `common.file_too_large`: the file exceeds 2 MB
+            - 429 `common.rate_limited`: the caller already attempted the daily number of avatar uploads (20 by default, \
+            counted per UTC day, failed attempts included); retry the next UTC day
             - 404 `user.not_found`: the account no longer exists
             - 503 `common.storage_unavailable`: image storage is not configured or unreachable; retry later""")
     public ResponseEntity<ApiResponse<UserProfileResponse>> uploadAvatar(

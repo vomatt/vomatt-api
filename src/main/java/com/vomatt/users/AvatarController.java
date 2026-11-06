@@ -44,7 +44,9 @@ public class AvatarController {
                             {"success":false,"data":null,"message":"Image storage is temporarily unavailable, please try again later","errorCode":"common.storage_unavailable","error":"Image storage is temporarily unavailable, please try again later"}""")))
     @Operation(summary = "Get an uploaded avatar", description = """
             **Auth**: none
-            **Precondition**: `file` is `<id>.jpg` as in an `avatarUrl` of `/api/avatars/<id>.jpg`; other shapes are not served
+            **Precondition**: `file` is `<id>.jpg` as in an `avatarUrl` of `/api/avatars/<id>.jpg`; other shapes are not served. \
+            Such an `avatarUrl` is a path relative to the API origin, not a full URL: web, iOS and Android clients must prefix their \
+            API base URL (the web app runs on a different origin, so using the path as is would request it from the web host)
             **Behavior**: streams the image as `image/jpeg` with `Cache-Control: public, max-age=31536000, immutable`: \
             a path never changes content, since every upload gets a new one
             **Side effects**: none

@@ -69,6 +69,7 @@ class UserServiceTest {
     @Mock com.vomatt.repository.VoteBookmarkRepository bookmarkRepository;
     @Mock com.vomatt.repository.TagRepository tagRepository;
     @Mock com.vomatt.common.storage.StorageService storageService;
+    @Mock com.vomatt.lookups.LookupService lookupService;
     @Spy com.vomatt.repository.LockTimeout lockTimeout = new com.vomatt.repository.LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @InjectMocks UserService userService;
 
@@ -815,6 +816,13 @@ class UserServiceTest {
         return user;
     }
 
+    /** Today's attempt count the cap check sees, with the default limit. */
+    private void avatarUploadsToday(long count) {
+        when(redisService.incrementAndExpire(eq("avatar-upload:daily"), any(), any())).thenReturn(count);
+        when(lookupService.configInt(UserService.AVATAR_UPLOAD_LIMIT_KEY, UserService.AVATAR_UPLOAD_DAILY_LIMIT))
+                .thenReturn(UserService.AVATAR_UPLOAD_DAILY_LIMIT);
+    }
+
     private static byte[] png(int width, int height, boolean alpha) throws java.io.IOException {
         return png(width, height, alpha ? java.awt.image.BufferedImage.TYPE_INT_ARGB : java.awt.image.BufferedImage.TYPE_INT_RGB);
     }
@@ -829,6 +837,7 @@ class UserServiceTest {
     @Test
     @DisplayName("should store a 512x512 JPEG on white, point avatarUrl at it and delete the old upload after commit")
     void shouldStoreSquareJpegAndDeleteOldUploadWhenAvatarUploaded() throws Exception {
+        avatarUploadsToday(1);
         UUID id = UUID.randomUUID();
         User user = avatarUser(id, "/api/avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47.jpg");
         // Fully transparent and not square: must come out opaque white and cropped to a square
@@ -862,6 +871,7 @@ class UserServiceTest {
     @Test
     @DisplayName("should delete nothing when the replaced avatar was a bot avatar")
     void shouldNotDeleteAnythingWhenOldAvatarIsBot() throws Exception {
+        avatarUploadsToday(1);
         UUID id = UUID.randomUUID();
         avatarUser(id, "bot:boba");
 
@@ -875,6 +885,7 @@ class UserServiceTest {
     @Test
     @DisplayName("should reject with 400 and store nothing when the file is not an image")
     void shouldRejectWhenUploadIsNotAnImage() {
+        avatarUploadsToday(1);
         org.springframework.mock.web.MockMultipartFile file = new org.springframework.mock.web.MockMultipartFile(
                 "file", "a.png", "image/png", "<?php echo 1; ?>".getBytes());
 
@@ -889,6 +900,7 @@ class UserServiceTest {
     @Test
     @DisplayName("should reject before decoding when the image declares more than 40 megapixels")
     void shouldRejectWhenImageExceedsPixelLimit() throws Exception {
+        avatarUploadsToday(1);
         // 8000x8000 = 64M pixels, a few KB as PNG (1-bit raster, so building the fixture stays small too)
         org.springframework.mock.web.MockMultipartFile file = new org.springframework.mock.web.MockMultipartFile(
                 "file", "bomb.png", "image/png", png(8000, 8000, java.awt.image.BufferedImage.TYPE_BYTE_BINARY));
@@ -938,5 +950,36 @@ class UserServiceTest {
 
         verify(storageService).delete("avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47.jpg");
         verify(userRepository).delete(user);
+    }
+
+    @Test
+    @DisplayName("should reject with 429 before decoding when the daily avatar upload limit is spent")
+    void shouldRejectWhenDailyAvatarUploadLimitReached() throws Exception {
+        avatarUploadsToday(UserService.AVATAR_UPLOAD_DAILY_LIMIT + 1);
+        org.springframework.mock.web.MockMultipartFile file = new org.springframework.mock.web.MockMultipartFile(
+                "file", "a.png", "image/png", png(100, 100, false));
+
+        assertThatThrownBy(() -> userService.uploadAvatar(UUID.randomUUID().toString(), file))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getMessageKey()).isEqualTo(MessageKey.COMMON_RATE_LIMITED);
+                    assertThat(e.getStatus()).isEqualTo(org.springframework.http.HttpStatus.TOO_MANY_REQUESTS);
+                });
+        verify(userRepository, never()).findById(any());
+        verify(storageService, never()).put(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("should allow the upload that reaches the configured limit exactly")
+    void shouldUseConfiguredLimitWhenLookupOverridesIt() throws Exception {
+        UUID id = UUID.randomUUID();
+        avatarUser(id, "bot:boba");
+        when(redisService.incrementAndExpire(eq("avatar-upload:daily"), eq(id + ":" + com.vomatt.common.util.TextUtil.utcDay()),
+                eq(java.time.Duration.ofDays(1)))).thenReturn(3L);
+        when(lookupService.configInt(UserService.AVATAR_UPLOAD_LIMIT_KEY, UserService.AVATAR_UPLOAD_DAILY_LIMIT)).thenReturn(3);
+
+        userService.uploadAvatar(id.toString(), new org.springframework.mock.web.MockMultipartFile(
+                "file", "a.png", "image/png", png(100, 100, false)));
+
+        verify(storageService).put(any(), any(), eq("image/jpeg"));
     }
 }

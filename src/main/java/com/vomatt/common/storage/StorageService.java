@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.checksums.RequestChecksumCalculation;
 import software.amazon.awssdk.core.checksums.ResponseChecksumValidation;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -57,21 +58,35 @@ public class StorageService {
     }
 
     public void put(String key, byte[] content, String contentType) {
-        client().putObject(b -> b.bucket(bucket).key(key).contentType(contentType), RequestBody.fromBytes(content));
+        S3Client s3 = client();
+        try {
+            s3.putObject(b -> b.bucket(bucket).key(key).contentType(contentType), RequestBody.fromBytes(content));
+        } catch (SdkException e) {
+            throw unavailable("put", key, e);
+        }
     }
 
     /** The object's stream, which the caller must close, or empty when no object has this key. */
     public Optional<ResponseInputStream<GetObjectResponse>> get(String key) {
+        S3Client s3 = client();
         try {
-            return Optional.of(client().getObject(b -> b.bucket(bucket).key(key)));
+            return Optional.of(s3.getObject(b -> b.bucket(bucket).key(key)));
         } catch (NoSuchKeyException e) {
             return Optional.empty();
+        } catch (SdkException e) {
+            throw unavailable("get", key, e);
         }
     }
 
-    /** Deletes the object; a missing key is not an error. */
+    /** Deletes the object; a missing key is not an error. Failures propagate as is: callers treat deletion as best-effort. */
     public void delete(String key) {
         client().deleteObject(b -> b.bucket(bucket).key(key));
+    }
+
+    /** Any other storage failure (unreachable, denied, 5xx) is the bucket being unavailable, not a server bug. */
+    private static ApiException unavailable(String operation, String key, SdkException e) {
+        log.warn("Storage {} failed for {}: {}", operation, key, e.getMessage());
+        return ApiException.serviceUnavailable(MessageKey.COMMON_STORAGE_UNAVAILABLE);
     }
 
     private S3Client client() {

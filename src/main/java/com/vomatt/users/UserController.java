@@ -33,8 +33,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -294,7 +296,7 @@ public class UserController {
     @Operation(summary = "Update my profile", description = """
             **Auth**: required
             **Precondition**: none
-            **Behavior**: updates `username`, `displayName`, `firstName`, `lastName`, `birthday`, `bio`, `avatarUrl` and/or `anonymousBallotByDefault` (the default for Ballots that omit `anonymous`; existing Ballots are unchanged). `avatarUrl` must be `bot:<kind>` with one of the bot cast kinds, or `bot:none` for no character. `firstName` and `lastName` are stored without surrounding whitespace, and a blank value clears them. `birthday` is an ISO date (`yyyy-MM-dd`) from 1900-01-01 to yesterday in Asia/Taipei. Sending the current `username` is a no-op, except that an older account holding a reserved name gets 400 (omit `username` when unchanged). A field that is omitted or `null` is left unchanged \
+            **Behavior**: updates `username`, `displayName`, `firstName`, `lastName`, `birthday`, `bio`, `avatarUrl` and/or `anonymousBallotByDefault` (the default for Ballots that omit `anonymous`; existing Ballots are unchanged). `avatarUrl` must be `bot:<kind>` with one of the bot cast kinds, or `bot:none` for no character; an uploaded image is set only through `PUT /api/users/me/avatar`, and switching to a bot avatar deletes the uploaded image once the change commits. `firstName` and `lastName` are stored without surrounding whitespace, and a blank value clears them. `birthday` is an ISO date (`yyyy-MM-dd`) from 1900-01-01 to yesterday in Asia/Taipei. Sending the current `username` is a no-op, except that an older account holding a reserved name gets 400 (omit `username` when unchanged). A field that is omitted or `null` is left unchanged \
             (`null` cannot be used to clear a value; send an empty string instead, except `avatarUrl` and `birthday`, which cannot be cleared). Returns the caller's profile after the update: \
             optional fields the caller explicitly hid are `null`, fields whose visibility was never set are shown.
             **Side effects**: persists the new values; after a `username` change the old public profile path returns 404
@@ -310,6 +312,41 @@ public class UserController {
         UserProfileResponse profile = userService.updateMyProfile(principal.userId(), request);
         log.info("Profile updated for user: {}", principal.userId());
         return ResponseEntity.ok(ApiResponse.ok(profile));
+    }
+
+    @PutMapping(value = "/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
+            content = @Content(examples = @ExampleObject(value = """
+                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice C.","bio":"Poll enthusiast","avatarUrl":"/api/avatars/019a5e3c-2f1d-7b6a-8c4e-5d7f9a1b3c2e.jpg","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"firstName":"Alice","lastName":null,"location":null,"points":null,"membershipLevel":null,"isFollowing":false,"isBlocked":false},"message":null,"errorCode":null,"error":null}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "413", description = "File larger than 2 MB (errorCode `common.file_too_large`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(value = """
+                            {"success":false,"data":null,"message":"File size exceeds the limit (2 MB). Please compress and re-upload","errorCode":"common.file_too_large","error":"File size exceeds the limit (2 MB). Please compress and re-upload"}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503", description = "Image storage not configured or unreachable (errorCode `common.storage_unavailable`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(value = """
+                            {"success":false,"data":null,"message":"Image storage is temporarily unavailable, please try again later","errorCode":"common.storage_unavailable","error":"Image storage is temporarily unavailable, please try again later"}""")))
+    @Operation(summary = "Upload my avatar", description = """
+            **Auth**: required
+            **Precondition**: multipart/form-data with the image in part `file`, at most 2 MB; JPEG, PNG, GIF (first frame) or BMP of at most 40 megapixels
+            **Behavior**: center-crops the image to a square, resizes it to 512x512 and re-encodes it as JPEG (transparent pixels become white; \
+            EXIF metadata, GPS included, is dropped). Each upload is a new image with a new path: `avatarUrl` becomes `/api/avatars/<id>.jpg`, \
+            a path on the API origin served by `GET /api/avatars/{file}`. Returns the caller's profile after the update, as `PATCH /api/users/me` does. \
+            To go back to a bot avatar, send `avatarUrl` = `bot:<kind>` to `PATCH /api/users/me`.
+            **Side effects**: stores the image; once the change commits, the previously uploaded image (if any) is deleted and its path returns 404
+            **Errors**:
+            - 400 `common.file_required`: part `file` is missing or empty
+            - 400 `common.file_read_failed`: the uploaded file could not be read
+            - 400 `user.avatar.unsupported_image`: the file is not a decodable JPEG, PNG, GIF or BMP, or exceeds 40 megapixels
+            - 413 `common.file_too_large`: the file exceeds 2 MB
+            - 404 `user.not_found`: the account no longer exists
+            - 503 `common.storage_unavailable`: image storage is not configured or unreachable; retry later""")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> uploadAvatar(
+            @Parameter(description = "Image file (JPEG, PNG, GIF or BMP), at most 2 MB", required = true)
+            @RequestPart(value = "file", required = false) MultipartFile file,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(userService.uploadAvatar(principal.userId(), file)));
     }
 
     @GetMapping("/search")

@@ -2,6 +2,11 @@
 
 Contract changes that affect the frontend. 💥 BREAKING means frontend code must change. See [openapi.json](openapi.json) for the contract snapshot and [error-codes.md](error-codes.md) for error codes.
 
+## 2026-11-06
+
+- New `PUT /api/users/me/avatar` (sign-in required): upload an avatar as multipart/form-data, image in part `file` (JPEG, PNG, GIF or BMP, at most 2 MB and 40 megapixels). The server center-crops it to a square, resizes it to 512x512 and stores it as JPEG (EXIF/GPS dropped, transparency becomes white). Returns the updated profile, same `UserProfileResponse` as `PATCH /api/users/me`. Errors: 400 `common.file_required`, 400 `user.avatar.unsupported_image`, 413 `common.file_too_large`, 503 `common.storage_unavailable` (new codes `user.avatar.unsupported_image`, `common.storage_unavailable`).
+- `avatarUrl` (every response that carries one) may now also be `/api/avatars/<id>.jpg`: a path on the API origin, so prefix it with the API base URL; render `bot:<kind>` as before. New public `GET /api/avatars/{file}` serves it as `image/jpeg` with `Cache-Control: public, max-age=31536000, immutable`; each upload gets a new path, and the old one returns 404 once replaced. `PATCH /api/users/me` still accepts only `bot:<kind>` / `bot:none` for `avatarUrl`; sending one after an upload switches back and deletes the uploaded image. Deleting the account deletes it too.
+
 ## 2026-11-04
 - New `GET /api/notifications/unread-ids?category=` (sign-in required): `{ "ids": string[] }`, the `id`s of the notifications `GET /api/notifications` lists with `read` false, newest first, at most the newest 100; same `category` filter as `/unread-count` (unknown value is 400 `common.type_mismatch`). Use it to call `POST /api/notifications/read-all` as soon as the notification page opens and still highlight what was unread: fetch the ids first, then read-all, then page the feed (whose items now come back `read` true) and highlight items whose `id` is in the list.
 

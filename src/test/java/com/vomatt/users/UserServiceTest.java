@@ -68,6 +68,7 @@ class UserServiceTest {
     @Mock com.vomatt.votes.VoteViewRecorder voteViewRecorder;
     @Mock com.vomatt.repository.VoteBookmarkRepository bookmarkRepository;
     @Mock com.vomatt.repository.TagRepository tagRepository;
+    @Mock com.vomatt.common.storage.StorageService storageService;
     @Spy com.vomatt.repository.LockTimeout lockTimeout = new com.vomatt.repository.LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @InjectMocks UserService userService;
 
@@ -801,5 +802,141 @@ class UserServiceTest {
         assertThatThrownBy(() -> userService.listMutualFollowers("alice", followersCursor, 1, caller))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.COMMON_CURSOR_INVALID));
+    }
+
+    // === Avatar upload ===
+
+    private User avatarUser(UUID id, String avatarUrl) {
+        User user = User.builder().id(id).username("alice").avatarUrl(avatarUrl).build();
+        when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        UserProfileProjection profile = org.mockito.Mockito.mock(UserProfileProjection.class);
+        when(profile.getId()).thenReturn(id);
+        when(userRepository.findProfileByUsername("alice")).thenReturn(Optional.of(profile));
+        return user;
+    }
+
+    private static byte[] png(int width, int height, boolean alpha) throws java.io.IOException {
+        return png(width, height, alpha ? java.awt.image.BufferedImage.TYPE_INT_ARGB : java.awt.image.BufferedImage.TYPE_INT_RGB);
+    }
+
+    private static byte[] png(int width, int height, int type) throws java.io.IOException {
+        java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(width, height, type);
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(image, "png", out);
+        return out.toByteArray();
+    }
+
+    @Test
+    @DisplayName("should store a 512x512 JPEG on white, point avatarUrl at it and delete the old upload after commit")
+    void shouldStoreSquareJpegAndDeleteOldUploadWhenAvatarUploaded() throws Exception {
+        UUID id = UUID.randomUUID();
+        User user = avatarUser(id, "/api/avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47.jpg");
+        // Fully transparent and not square: must come out opaque white and cropped to a square
+        org.springframework.mock.web.MockMultipartFile file = new org.springframework.mock.web.MockMultipartFile(
+                "file", "a.png", "image/png", png(1600, 900, true));
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            userService.uploadAvatar(id.toString(), file);
+
+            org.mockito.ArgumentCaptor<String> key = org.mockito.ArgumentCaptor.forClass(String.class);
+            org.mockito.ArgumentCaptor<byte[]> body = org.mockito.ArgumentCaptor.forClass(byte[].class);
+            verify(storageService).put(key.capture(), body.capture(), eq("image/jpeg"));
+            assertThat(key.getValue()).matches("avatars/[0-9a-f-]{36}\\.jpg");
+            assertThat(user.getAvatarUrl()).isEqualTo("/api/" + key.getValue());
+            javax.imageio.ImageReader reader = javax.imageio.ImageIO.getImageReadersByFormatName("jpeg").next();
+            reader.setInput(javax.imageio.ImageIO.createImageInputStream(new java.io.ByteArrayInputStream(body.getValue())));
+            java.awt.image.BufferedImage stored = reader.read(0);
+            assertThat(stored.getWidth()).isEqualTo(512);
+            assertThat(stored.getHeight()).isEqualTo(512);
+            assertThat(stored.getRGB(256, 256) & 0xFFFFFF).isGreaterThan(0xF0F0F0);
+            verify(userRepository).save(user);
+
+            verify(storageService, never()).delete(any());
+            TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+            verify(storageService).delete("avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47.jpg");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    @DisplayName("should delete nothing when the replaced avatar was a bot avatar")
+    void shouldNotDeleteAnythingWhenOldAvatarIsBot() throws Exception {
+        UUID id = UUID.randomUUID();
+        avatarUser(id, "bot:boba");
+
+        userService.uploadAvatar(id.toString(), new org.springframework.mock.web.MockMultipartFile(
+                "file", "a.png", "image/png", png(100, 300, false)));
+
+        verify(storageService).put(any(), any(), eq("image/jpeg"));
+        verify(storageService, never()).delete(any());
+    }
+
+    @Test
+    @DisplayName("should reject with 400 and store nothing when the file is not an image")
+    void shouldRejectWhenUploadIsNotAnImage() {
+        org.springframework.mock.web.MockMultipartFile file = new org.springframework.mock.web.MockMultipartFile(
+                "file", "a.png", "image/png", "<?php echo 1; ?>".getBytes());
+
+        assertThatThrownBy(() -> userService.uploadAvatar(UUID.randomUUID().toString(), file))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_AVATAR_UNSUPPORTED_IMAGE);
+                    assertThat(e.getStatus()).isEqualTo(org.springframework.http.HttpStatus.BAD_REQUEST);
+                });
+        verify(storageService, never()).put(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("should reject before decoding when the image declares more than 40 megapixels")
+    void shouldRejectWhenImageExceedsPixelLimit() throws Exception {
+        // 8000x8000 = 64M pixels, a few KB as PNG (1-bit raster, so building the fixture stays small too)
+        org.springframework.mock.web.MockMultipartFile file = new org.springframework.mock.web.MockMultipartFile(
+                "file", "bomb.png", "image/png", png(8000, 8000, java.awt.image.BufferedImage.TYPE_BYTE_BINARY));
+
+        assertThatThrownBy(() -> userService.uploadAvatar(UUID.randomUUID().toString(), file))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.USER_AVATAR_UNSUPPORTED_IMAGE));
+    }
+
+    @Test
+    @DisplayName("should reject with 413 when the file exceeds 2 MB")
+    void shouldRejectWhenUploadExceedsSizeLimit() {
+        org.springframework.mock.web.MockMultipartFile file = new org.springframework.mock.web.MockMultipartFile(
+                "file", "big.png", "image/png", new byte[(int) UserService.AVATAR_MAX_BYTES + 1]);
+
+        assertThatThrownBy(() -> userService.uploadAvatar(UUID.randomUUID().toString(), file))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getMessageKey()).isEqualTo(MessageKey.COMMON_FILE_TOO_LARGE);
+                    assertThat(e.getStatus()).isEqualTo(org.springframework.http.HttpStatus.CONTENT_TOO_LARGE);
+                });
+        verify(storageService, never()).put(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("should delete the uploaded avatar after commit when switching back to a bot avatar")
+    void shouldDeleteUploadedAvatarWhenSwitchingToBot() {
+        UUID id = UUID.randomUUID();
+        User user = avatarUser(id, "/api/avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47.jpg");
+        UpdateProfileRequest request = new UpdateProfileRequest();
+        request.setAvatarUrl("bot:dog");
+
+        userService.updateMyProfile(id.toString(), request);
+
+        assertThat(user.getAvatarUrl()).isEqualTo("bot:dog");
+        verify(storageService).delete("avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47.jpg");
+    }
+
+    @Test
+    @DisplayName("should delete the uploaded avatar when deleting the account, and not fail when that delete fails")
+    void shouldDeleteUploadedAvatarWhenDeletingUser() {
+        UUID id = UUID.randomUUID();
+        User user = User.builder().id(id).username("u").avatarUrl("/api/avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47.jpg").build();
+        when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        org.mockito.Mockito.doThrow(new IllegalStateException("bucket down")).when(storageService).delete(any());
+
+        userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), List.of("user"), null));
+
+        verify(storageService).delete("avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47.jpg");
+        verify(userRepository).delete(user);
     }
 }

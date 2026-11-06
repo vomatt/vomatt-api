@@ -28,6 +28,7 @@
         <postgresql.version>42.7.7</postgresql.version>
         <resend.version>4.29.0</resend.version>
         <webauthn4j.version>0.31.11.RELEASE</webauthn4j.version>
+        <awssdk.version>2.57.10</awssdk.version>
     </properties>
 
     <dependencies>
@@ -112,6 +113,13 @@
             <groupId>com.webauthn4j</groupId>
             <artifactId>webauthn4j-core</artifactId>
             <version>${webauthn4j.version}</version>
+        </dependency>
+
+        <!-- Object storage (S3-compatible bucket); all SDK code lives in common.storage.StorageService -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${awssdk.version}</version>
         </dependency>
 
         <!-- Rate Limiting -->

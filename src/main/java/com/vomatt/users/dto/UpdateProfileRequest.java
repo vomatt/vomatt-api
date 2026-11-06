@@ -50,7 +50,7 @@ public class UpdateProfileRequest {
     @Size(max = 500, message = "Bio cannot exceed 500 characters")
     private String bio;
 
-    @Schema(description = "New avatar, one of the bot cast as `bot:<kind>`, or `bot:none` for no character; any other value is rejected. "
+    @Schema(description = "New avatar, one of the bot cast as `bot:<kind>`, or `bot:none` for no character; any other value is rejected (an uploaded `/api/avatars/<id>.jpg` is set only through `PUT /api/users/me/avatar`). "
             + "null or omitted keeps the current value", example = "bot:boba", nullable = true)
     @Pattern(regexp = BotAvatar.PATTERN, message = "Avatar must be bot:<kind> with a known bot kind, or bot:none")
     private String avatarUrl;

@@ -15,7 +15,7 @@ public record UserProfileResponse(
         String displayName,
         @Schema(description = "Bio; null if the owner hid it (public by default) or never set one", example = "Poll enthusiast", nullable = true)
         String bio,
-        @Schema(description = "Avatar as `bot:<kind>` (the bot cast); always public. Older accounts may hold an image URL; null if never set",
+        @Schema(description = "Avatar as `bot:<kind>` (the bot cast) or `/api/avatars/<id>.jpg` (an uploaded image, a path on the API origin); always public. Older accounts may hold an image URL; null if never set",
                 example = "bot:boba", nullable = true)
         String avatarUrl,
         @Schema(description = "When the account was created", example = "2026-08-01T10:00:00+08:00")

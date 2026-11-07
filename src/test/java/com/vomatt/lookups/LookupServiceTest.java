@@ -121,6 +121,18 @@ class LookupServiceTest {
         }
 
         @Test
+        @DisplayName("Unknown type: should return empty and not cache it")
+        void shouldNotCacheWhenTypeUnknown() {
+            String madeUp = "z".repeat(8000);
+            when(redisService.get(eq(CacheNamespaces.LOOKUP_BY_TYPE), eq(madeUp), any(TypeReference.class)))
+                    .thenReturn(null);
+            when(lookupRepository.findByLookupTypeAndIsActiveTrueOrderBySeqAsc(madeUp)).thenReturn(List.of());
+
+            assertThat(lookupService.getActiveByType(madeUp)).isEmpty();
+            verify(redisService, never()).set(anyString(), anyString(), any(), any());
+        }
+
+        @Test
         @DisplayName("Cache hit: should return cached list without querying DB")
         void shouldReturnCachedItems() {
             LookupDto dto = buildDto("CITY", "TPE");

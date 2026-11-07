@@ -25,6 +25,7 @@ public enum MessageKey {
     COMMON_INVALID_SORT("common.invalid_sort"),
     COMMON_INVALID_DIRECTION("common.invalid_direction"),
     COMMON_CURSOR_INVALID("common.cursor_invalid"),
+    COMMON_STORAGE_UNAVAILABLE("common.storage_unavailable"),
 
     // === Auth ===
     AUTH_OTP_SENT("auth.otp.sent"),
@@ -86,6 +87,7 @@ public enum MessageKey {
     USER_BLOCK_SELF("user.block.self"),
     USER_FOLLOW_SELF("user.follow.self"),
     USER_FOLLOW_BLOCKED("user.follow.blocked"),
+    USER_AVATAR_UNSUPPORTED_IMAGE("user.avatar.unsupported_image"),
 
     // === Vote ===
     VOTE_NOT_FOUND("vote.not_found"),

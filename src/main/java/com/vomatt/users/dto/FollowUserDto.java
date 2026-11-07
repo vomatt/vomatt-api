@@ -11,7 +11,7 @@ public record FollowUserDto(
         String username,
         @Schema(description = "Display name; null if the owner hid it (public by default) or never set one", example = "Alice", nullable = true)
         String displayName,
-        @Schema(description = "Avatar as `bot:<kind>` (the bot cast). Older accounts may hold an image URL; null if never set",
+        @Schema(description = "Avatar as `bot:<kind>` (the bot cast) or `/api/avatars/<id>.jpg` (an uploaded image, a path on the API origin). Older accounts may hold an image URL; null if never set",
                 example = "bot:boba", nullable = true)
         String avatarUrl,
         @Schema(description = "Whether the caller follows this user; false for the caller's own entry", example = "true")

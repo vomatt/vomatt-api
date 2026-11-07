@@ -46,7 +46,8 @@ import com.vomatt.users.UserService;
 import com.vomatt.votes.VoteServiceSlice;
 
 /** The notification feed, derived on read (ADR 0005): each kind, blocks, preferences, read state and pagination. */
-@Import({ NotificationService.class, VoteServiceSlice.class, UserService.class, UserMapper.class })
+@Import({ NotificationService.class, VoteServiceSlice.class, UserService.class, UserMapper.class,
+        com.vomatt.common.storage.StorageService.class })
 @DisplayName("Notification feed (Postgres)")
 class NotificationFeedPostgresTest extends PostgresRepositoryTest {
 

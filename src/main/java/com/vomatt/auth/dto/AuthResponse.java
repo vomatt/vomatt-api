@@ -46,7 +46,7 @@ public record AuthResponse(
             @Schema(description = "Username used in the public profile path; generated at signup", example = "john_0427")
             String username,
 
-            @Schema(description = "Display name. Set at signup (email local part, provider name, or the phone number); null only if the column is empty", example = "Ming Wang", nullable = true)
+            @Schema(description = "Display name; null until the user sets one (never set at signup). Show the username when null", example = "Ming Wang", nullable = true)
             String displayName,
 
             @Schema(description = "Role list",
@@ -54,7 +54,7 @@ public record AuthResponse(
                     allowableValues = {"user", "moderator", "admin"})
             List<String> roles,
 
-            @Schema(description = "Avatar as `bot:<kind>` (the bot cast), assigned at random on sign-up. Older accounts may hold an image URL or null", example = "bot:boba",
+            @Schema(description = "Avatar as `bot:<kind>` (the bot cast) or `/api/avatars/<id>.jpg` (an uploaded image, a path on the API origin), assigned at random on sign-up. Older accounts may hold an image URL or null", example = "bot:boba",
                     nullable = true)
             String avatarUrl,
 

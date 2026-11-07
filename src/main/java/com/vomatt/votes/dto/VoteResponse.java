@@ -31,7 +31,7 @@ public class VoteResponse {
     @Schema(description = "Username of the owner", example = "alice")
     private String creatorUsername;
 
-    @Schema(description = "Avatar of the owner as `bot:<kind>` (the bot cast). Older accounts may hold an image URL; null if never set",
+    @Schema(description = "Avatar of the owner as `bot:<kind>` (the bot cast) or `/api/avatars/<id>.jpg` (an uploaded image, a path on the API origin). Older accounts may hold an image URL; null if never set",
             example = "bot:boba", nullable = true)
     private String creatorAvatarUrl;
 

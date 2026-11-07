@@ -19,7 +19,7 @@ import lombok.ToString;
  * when someone verifies that email). An email member is always shown by its address.
  */
 @Entity
-// Unique per kind: (parent, user_id) WHERE email IS NULL and (parent, email) WHERE email IS NOT NULL (V12)
+// Unique per kind: (parent, user_id) WHERE email IS NULL and (parent, email) WHERE email IS NOT NULL (V14)
 @Table(name = "invite_list_members")
 @Getter
 @NoArgsConstructor

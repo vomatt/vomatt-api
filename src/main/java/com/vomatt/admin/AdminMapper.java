@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 
 import com.vomatt.admin.dto.AdminCommentReportResponse;
 import com.vomatt.admin.dto.AdminCommentResponse;
+import com.vomatt.admin.dto.AdminContactMessageResponse;
 import com.vomatt.admin.dto.AdminFeedbackResponse;
 import com.vomatt.admin.dto.AdminUserBlockResponse;
 import com.vomatt.admin.dto.AdminUserDetail;
@@ -15,6 +16,7 @@ import com.vomatt.admin.dto.AdminVoteReportResponse;
 import com.vomatt.common.audit.AuditLog;
 import com.vomatt.common.util.TextUtil;
 import com.vomatt.entity.CommentReport;
+import com.vomatt.entity.ContactMessage;
 import com.vomatt.entity.Feedback;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserBlock;
@@ -81,6 +83,11 @@ public class AdminMapper {
     public AdminFeedbackResponse toFeedbackResponse(Feedback feedback) {
         return new AdminFeedbackResponse(feedback.getId().toString(), feedback.getUser().getId().toString(),
                 feedback.getUser().getUsername(), feedback.getContent(), feedback.getCreatedAt());
+    }
+
+    public AdminContactMessageResponse toContactMessageResponse(ContactMessage message) {
+        return new AdminContactMessageResponse(message.getId().toString(), message.getName(), message.getEmail(),
+                message.getMessage(), message.getLocale(), message.getCreatedAt());
     }
 
     public AuditLogResponse toAuditLogResponse(AuditLog log) {

@@ -8,6 +8,8 @@ import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.security.UserPrincipal;
+import com.vomatt.common.storage.StorageService;
+import com.vomatt.lookups.LookupService;
 import com.vomatt.users.dto.FollowUserDto;
 import com.vomatt.users.dto.MyProfileResponse;
 import com.vomatt.users.dto.UpdateProfileRequest;
@@ -44,7 +46,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -80,11 +86,19 @@ public class UserService {
     private final VoteViewRecorder voteViewRecorder;
     private final VoteBookmarkRepository bookmarkRepository;
     private final TagRepository tagRepository;
+    private final StorageService storageService;
+    private final LookupService lookupService;
+    private final TransactionTemplate transactionTemplate;
 
     /** One export per user per UTC day: the response is the account's whole footprint and is not cheap to build. */
     private static final String EXPORT_COUNTER_NS = "export:daily";
 
     private static final int MUTUAL_PREVIEW_SIZE = 3;
+
+    /** Avatar uploads one user may attempt per UTC day: each decode + resize is CPU-heavy. Tunable as a config lookup. */
+    static final String AVATAR_UPLOAD_LIMIT_KEY = "avatar_upload_daily_limit";
+    static final int AVATAR_UPLOAD_DAILY_LIMIT = 20;
+    private static final String AVATAR_UPLOAD_COUNTER_NS = "avatar-upload:daily";
 
     /**
      * The user themself or an active admin can delete the account; deletion also revokes all of the user's refresh tokens.
@@ -114,6 +128,7 @@ public class UserService {
         voteOptionRepository.decrementForUserBallots(user.getId());
         voteRepository.decrementShareCountForUserShares(user.getId());
         auditLogRepository.anonymizeByUserId(userId);
+        deleteUploadedAvatarAfterCommit(user.getAvatarUrl());
         userRepository.delete(user);
         log.info("User {} deleted by {}", userId, principal.userId());
     }
@@ -453,20 +468,85 @@ public class UserService {
         if (request.getBio() != null) {
             user.setBio(request.getBio());
         }
-        if (request.getAvatarUrl() != null) {
+        if (request.getAvatarUrl() != null && !request.getAvatarUrl().equals(user.getAvatarUrl())) {
+            // Only bot:* passes validation, so an uploaded avatar being replaced is no longer referenced
+            deleteUploadedAvatarAfterCommit(user.getAvatarUrl());
             user.setAvatarUrl(request.getAvatarUrl());
         }
         if (request.getAnonymousBallotByDefault() != null) {
             savePreference(user, UserPreference.ANONYMOUS_BALLOT_KEY, request.getAnonymousBallotByDefault().toString());
         }
         userRepository.save(user);
+        return ownProfileAfterEdit(user);
+    }
+
+    /** {@code users.avatar_url} prefix of an uploaded avatar; the rest is its object name under {@link #AVATAR_KEY_PREFIX}. */
+    public static final String AVATAR_URL_PREFIX = "/api/avatars/";
+    public static final String AVATAR_KEY_PREFIX = "avatars/";
+
+    /**
+     * Replaces the caller's avatar with an uploaded image, stored as a new 512x512 JPEG object. The previous uploaded
+     * object, if any, is deleted after commit. The file size limit is {@code spring.servlet.multipart.max-file-size}.
+     * <p>Decoding and the bucket put run outside the transaction, so no pooled connection waits on them.</p>
+     */
+    public UserProfileResponse uploadAvatar(String userId, MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw ApiException.badRequest(MessageKey.COMMON_FILE_REQUIRED);
+        }
+        // Counted before decoding, so failed decodes spend the quota too; fails closed (503) when Redis is down
+        if (redisService.incrementAndExpire(AVATAR_UPLOAD_COUNTER_NS, userId + ":" + TextUtil.utcDay(), Duration.ofDays(1))
+                > lookupService.configInt(AVATAR_UPLOAD_LIMIT_KEY, AVATAR_UPLOAD_DAILY_LIMIT)) {
+            throw ApiException.tooManyRequests(MessageKey.COMMON_RATE_LIMITED);
+        }
+        byte[] jpeg;
+        try (InputStream in = file.getInputStream()) {
+            jpeg = AvatarImage.toJpeg(in);
+        } catch (IOException e) {
+            throw ApiException.badRequest(MessageKey.COMMON_FILE_READ_FAILED);
+        }
+        String name = UUIDv7Generator.generateId() + ".jpg";
+        String key = AVATAR_KEY_PREFIX + name;
+        storageService.put(key, jpeg, "image/jpeg");
+        try {
+            return transactionTemplate.execute(status -> {
+                User user = findUserById(userId);
+                deleteUploadedAvatarAfterCommit(user.getAvatarUrl());
+                user.setAvatarUrl(AVATAR_URL_PREFIX + name);
+                userRepository.save(user);
+                log.info("Avatar uploaded for user {}", userId);
+                return ownProfileAfterEdit(user);
+            });
+        } catch (RuntimeException e) {
+            // Nothing references the new object once the update failed
+            deleteObjectQuietly(key);
+            throw e;
+        }
+    }
+
+    /** Deletes the uploaded avatar object behind {@code avatarUrl} once committed; a no-op for bot:* or null. Failures are logged. */
+    private void deleteUploadedAvatarAfterCommit(String avatarUrl) {
+        if (avatarUrl == null || !avatarUrl.startsWith(AVATAR_URL_PREFIX)) {
+            return;
+        }
+        String key = AVATAR_KEY_PREFIX + avatarUrl.substring(AVATAR_URL_PREFIX.length());
+        AfterCommit.run(() -> deleteObjectQuietly(key));
+    }
+
+    private void deleteObjectQuietly(String key) {
+        try {
+            storageService.delete(key);
+        } catch (RuntimeException e) {
+            log.warn("Avatar object {} not deleted: {}", key, e.getMessage());
+        }
+    }
+
+    /** The owner's own profile right after an edit: no follow or block of oneself exists. */
+    private UserProfileResponse ownProfileAfterEdit(User user) {
         UserProfileProjection projection = userRepository.findProfileByUsername(user.getUsername())
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
-        // The owner's own profile: no follow or block of oneself exists
         return userMapper.toPublicProfileResponse(projection, loadVisibilitySettingsUnsetShown(user.getId()), false, false, false,
                 null, null);
     }
-
     /** Load user's field visibility settings; unset fields fall back to their default (display name and bio public) */
     private Map<String, Boolean> loadVisibilitySettings(UUID userId) {
         return loadVisibilitySettings(userId, VisibilityField::isVisibleByDefault);

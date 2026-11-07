@@ -6,6 +6,11 @@ spring:
   threads:
     virtual:
       enabled: true
+  servlet:
+    multipart:
+      # Avatar upload limit (UserService.AVATAR_MAX_BYTES); the request allows room for the multipart envelope
+      max-file-size: 2MB
+      max-request-size: 3MB
   autoconfigure:
     # Auth uses JWT, so the default in-memory user is not needed (faster startup, and no generated password in the log)
     exclude: org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
@@ -149,6 +154,16 @@ app:
     ballot-rate-limit:
       capacity: ${VOTE_BALLOT_RATE_LIMIT_CAPACITY:30}
       window: ${VOTE_BALLOT_RATE_LIMIT_WINDOW:PT60S}
+  storage:
+    # S3-compatible bucket for uploaded avatars (Railway Bucket; the s3 service in docker compose). Unset endpoint or bucket:
+    # the app starts, avatar uploads answer 503 common.storage_unavailable
+    endpoint: ${STORAGE_ENDPOINT:}
+    region: ${STORAGE_REGION:auto}
+    bucket: ${STORAGE_BUCKET:}
+    access-key-id: ${STORAGE_ACCESS_KEY_ID:}
+    secret-access-key: ${STORAGE_SECRET_ACCESS_KEY:}
+    # true for the docker compose s3 service; virtual-hosted style (bucket.endpoint) otherwise
+    path-style: ${STORAGE_PATH_STYLE:false}
   audit:
     enabled: ${AUDIT_ENABLED:true}
   retention:
@@ -218,3 +233,4 @@ rate-limit:
     - /api/votes/**
     - /api/users/**
     - /api/feedback/**
+    - /api/contact/**

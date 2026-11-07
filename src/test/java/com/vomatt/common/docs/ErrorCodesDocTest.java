@@ -35,14 +35,14 @@ class ErrorCodesDocTest {
 
     private static final Map<String, Integer> FACTORY_STATUS = Map.of(
             "badRequest", 400, "unauthorized", 401, "notFound", 404, "forbidden", 403,
-            "conflict", 409, "tooManyRequests", 429);
+            "conflict", 409, "tooManyRequests", 429, "serviceUnavailable", 503);
     private static final Map<String, Integer> HTTP_STATUS = Map.of(
             "BAD_REQUEST", 400, "UNAUTHORIZED", 401, "FORBIDDEN", 403, "NOT_FOUND", 404, "CONFLICT", 409,
             "UNPROCESSABLE_ENTITY", 422, "TOO_MANY_REQUESTS", 429, "INTERNAL_SERVER_ERROR", 500,
             "SERVICE_UNAVAILABLE", 503);
 
     private static final Pattern FACTORY = Pattern.compile(
-            "ApiException\\.(badRequest|unauthorized|notFound|forbidden|conflict|tooManyRequests)"
+            "ApiException\\.(badRequest|unauthorized|notFound|forbidden|conflict|tooManyRequests|serviceUnavailable)"
                     + "\\(\\s*MessageKey\\.(\\w+)");
     private static final Pattern WITH_DATA = Pattern.compile(
             "ApiException\\.withData\\(\\s*HttpStatus\\.(\\w+)\\s*,\\s*MessageKey\\.(\\w+)");
@@ -63,6 +63,7 @@ class ErrorCodesDocTest {
             Map.entry("COMMON_FORBIDDEN", Set.of(403)),
             Map.entry("COMMON_RATE_LIMITED", Set.of(429)),
             Map.entry("COMMON_CONFLICT", Set.of(409)),
+            Map.entry("COMMON_FILE_TOO_LARGE", Set.of(413)),
             Map.entry("COMMON_SERVICE_UNAVAILABLE", Set.of(503)),
             Map.entry("COMMON_INTERNAL_ERROR", Set.of(500)));
 
@@ -188,7 +189,7 @@ class ErrorCodesDocTest {
 
     private static String behavior(int status) {
         return switch (status) {
-            case 400, 422 -> "Show message so the user can fix the input";
+            case 400, 413, 422 -> "Show message so the user can fix the input";
             case 401 -> "See [auth-flow.md](auth-flow.md)";
             case 403 -> "Show a permission-denied notice";
             case 404 -> "Show resource not found";

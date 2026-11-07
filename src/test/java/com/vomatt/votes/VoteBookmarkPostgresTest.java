@@ -33,7 +33,8 @@ import com.vomatt.users.UserService;
 import com.vomatt.votes.dto.VoteResponse;
 
 /** Bookmarks: the bookmarked list, the per-caller flag, and the RESULT notification a bookmarked Poll gives when it Ends. */
-@Import({ NotificationService.class, VoteServiceSlice.class, UserService.class, UserMapper.class })
+@Import({ NotificationService.class, VoteServiceSlice.class, UserService.class, UserMapper.class,
+        com.vomatt.common.storage.StorageService.class })
 @DisplayName("Poll bookmarks (Postgres)")
 class VoteBookmarkPostgresTest extends PostgresRepositoryTest {
 

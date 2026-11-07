@@ -20,7 +20,7 @@ class InviteListMigrationPostgresTest extends PostgresRepositoryTest {
 
     private static final String SCRIPT = "db/migrations/2026-10-22-invite-lists.sql";
     // Flyway migrations after the baseline that touch invite_list_members; Flyway runs them after the script
-    private static final String LATER = "db/migration/V12__invitee_keys_by_kind.sql";
+    private static final String LATER = "db/migration/V14__invitee_keys_by_kind.sql";
 
     // Turns the baseline tables back into the pre-rename ones, names Postgres generated included
     private static final List<String> TO_GROUPS = List.of(
@@ -31,7 +31,7 @@ class InviteListMigrationPostgresTest extends PostgresRepositoryTest {
             "ALTER TABLE vomatt.invite_list_members RENAME TO group_members",
             "ALTER TABLE vomatt.group_members RENAME COLUMN invite_list_id TO group_id",
             "ALTER TABLE vomatt.group_members RENAME CONSTRAINT invite_list_members_pkey TO group_members_pkey",
-            // Before V12 the per-user key was an inline UNIQUE constraint
+            // Before V14 the per-user key was an inline UNIQUE constraint
             "DROP INDEX vomatt.uk_invite_list_members_list_user",
             "ALTER TABLE vomatt.group_members ADD CONSTRAINT group_members_group_id_user_id_key UNIQUE (group_id, user_id)",
             "ALTER TABLE vomatt.group_members RENAME CONSTRAINT invite_list_members_invite_list_id_fkey TO group_members_group_id_fkey",

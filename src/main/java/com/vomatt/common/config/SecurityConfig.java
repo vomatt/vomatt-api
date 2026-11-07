@@ -90,6 +90,8 @@ public class SecurityConfig {
                         .requestMatchers(SecurityEndpoints.AUTHENTICATED_VOTES).authenticated()
                         // Public GET: tags, vote list / detail / ended results, public user profile
                         .requestMatchers(HttpMethod.GET, SecurityEndpoints.PUBLIC_GET).permitAll()
+                        // Public POST: contact form
+                        .requestMatchers(HttpMethod.POST, SecurityEndpoints.PUBLIC_POST).permitAll()
                         // Public: Actuator health check
                         .requestMatchers(SecurityEndpoints.PUBLIC_ACTUATOR).permitAll()
                         // Admin endpoints (ADMIN role required)

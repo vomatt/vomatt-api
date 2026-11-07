@@ -1103,7 +1103,9 @@ public class AuthService {
                 User newUser = User.builder()
                         .email(email)
                         .username(generateUsername(localPart))
-                        .displayName(StringUtils.hasText(fullName) ? fullName : localPart)
+                        // No display name: it is public by default, and null shows the username. The provider's name is
+                        // kept as the first name, which only the user sees until they choose otherwise
+                        .firstName(StringUtils.hasText(fullName) ? fullName.strip().substring(0, Math.min(fullName.strip().length(), 50)) : null)
                         .authMethod(authMethod)
                         .avatarUrl(BotAvatar.random())
                         .build();
@@ -1122,7 +1124,6 @@ public class AuthService {
             User newUser = User.builder()
                     .phoneNumber(normalizedPhone)
                     .username(generateUsername("user"))
-                    .displayName(normalizedPhone)
                     .authMethod("phone_otp")
                     .avatarUrl(BotAvatar.random())
                     .build();

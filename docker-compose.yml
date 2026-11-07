@@ -1,5 +1,5 @@
 # Frontend integration: docker compose up -d --build -> API + Swagger at http://localhost:8080/swagger-ui.html
-# Backend development, DB only: docker compose up -d postgres redis, then ./mvnw spring-boot:run
+# Backend development, DB only: docker compose up -d postgres redis (add s3 for avatar uploads), then ./mvnw spring-boot:run
 # Flyway migrates the schema when the API starts; to rebuild the database: docker compose down -v
 services:
   postgres:
@@ -24,6 +24,25 @@ services:
       interval: 2s
       retries: 30
 
+  # S3-compatible stand-in for the Railway Bucket (uploaded avatars), path-style, any credentials accepted.
+  # (MinIO no longer publishes images on Docker Hub.) The vomatt bucket is created at startup
+  s3:
+    image: adobe/s3mock:5.2.0
+    # Root so it can write the named volume, which Docker creates root-owned
+    user: root
+    environment:
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: vomatt
+      COM_ADOBE_TESTING_S3MOCK_STORE_ROOT: /data
+      COM_ADOBE_TESTING_S3MOCK_STORE_RETAIN_FILES_ON_EXIT: "true"
+    ports:
+      - "9090:9090"
+    volumes:
+      - s3data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:9090/vomatt"]
+      interval: 2s
+      retries: 30
+
   api:
     build:
       context: .
@@ -34,6 +53,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      s3:
         condition: service_healthy
     # No env_file: .env points DB_URL at localhost, unreachable from inside the container
     environment:
@@ -49,6 +70,12 @@ services:
       # No SMTP locally; mail health would keep /actuator/health DOWN
       MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      STORAGE_ENDPOINT: http://s3:9090
+      STORAGE_BUCKET: vomatt
+      STORAGE_ACCESS_KEY_ID: local
+      STORAGE_SECRET_ACCESS_KEY: local
+      STORAGE_PATH_STYLE: "true"
 
 volumes:
   pgdata:
+  s3data:

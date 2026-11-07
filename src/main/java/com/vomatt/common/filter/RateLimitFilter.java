@@ -38,6 +38,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
      */
     private static final PathPatternRequestMatcher.Builder MATCHERS = PathPatternRequestMatcher.withDefaults();
     private static final RequestMatcher AUTH_PATHS = MATCHERS.matcher("/api/auth/**");
+    /** Anonymous writes with no other limit; also fail closed when Redis is down. */
+    private static final RequestMatcher CONTACT_PATHS = MATCHERS.matcher("/api/contact/**");
     private final Map<String, RequestMatcher> pathMatchers = new ConcurrentHashMap<>();
 
     private boolean matches(String pattern, HttpServletRequest request) {
@@ -53,6 +55,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
 
+
     // OPTIONS is listed defensively: Spring Security's CorsFilter normally answers preflights before this filter runs
     private static final Set<String> SKIPPED_METHODS = Set.of("GET", "HEAD", "OPTIONS");
 
@@ -63,10 +66,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
         long now = Instant.now().getEpochSecond();
         Long count = countRequest(request, now / limit.getWindowSeconds(), limit);
         if (count == null) {
-            // When Redis is down, auth endpoints fail closed (blocked with 429) to prevent OTP brute force;
-            // other endpoints fail open (allowed) to preserve availability.
-            // No Retry-After here: waiting does not bring Redis back.
-            if (AUTH_PATHS.matches(request)) {
+            // When Redis is down, auth endpoints fail closed (blocked with 429) to prevent OTP brute force, and so does
+            // the anonymous contact form, whose daily limit also lives in Redis; other endpoints fail open (allowed) to
+            // preserve availability. No Retry-After here: waiting does not bring Redis back.
+            if (AUTH_PATHS.matches(request) || CONTACT_PATHS.matches(request)) {
                 errorWriter.write(request, response, HttpStatus.TOO_MANY_REQUESTS.value(), MessageKey.COMMON_RATE_LIMITED);
                 return;
             }

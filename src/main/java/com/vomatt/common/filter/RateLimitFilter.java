@@ -43,6 +43,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
     /** Auth endpoint patterns; these fail closed when Redis is down (prevents OTP brute force). */
     private static final String AUTH_PATH_PATTERN = "/api/auth/**";
 
+    /** Anonymous writes with no other limit; also fail closed when Redis is down. */
+    private static final String CONTACT_PATH_PATTERN = "/api/contact/**";
+
     // OPTIONS is listed defensively: Spring Security's CorsFilter normally answers preflights before this filter runs
     private static final Set<String> SKIPPED_METHODS = Set.of("GET", "HEAD", "OPTIONS");
 
@@ -53,10 +56,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
         long now = Instant.now().getEpochSecond();
         Long count = countRequest(request, now / limit.getWindowSeconds(), limit);
         if (count == null) {
-            // When Redis is down, auth endpoints fail closed (blocked with 429) to prevent OTP brute force;
-            // other endpoints fail open (allowed) to preserve availability.
-            // No Retry-After here: waiting does not bring Redis back.
-            if (pathMatcher.match(AUTH_PATH_PATTERN, request.getRequestURI())) {
+            // When Redis is down, auth endpoints fail closed (blocked with 429) to prevent OTP brute force, and so does
+            // the anonymous contact form, whose daily limit also lives in Redis; other endpoints fail open (allowed) to
+            // preserve availability. No Retry-After here: waiting does not bring Redis back.
+            String uri = request.getRequestURI();
+            if (pathMatcher.match(AUTH_PATH_PATTERN, uri) || pathMatcher.match(CONTACT_PATH_PATTERN, uri)) {
                 errorWriter.write(request, response, HttpStatus.TOO_MANY_REQUESTS.value(), MessageKey.COMMON_RATE_LIMITED);
                 return;
             }

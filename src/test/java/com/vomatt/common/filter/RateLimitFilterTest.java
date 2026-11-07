@@ -164,6 +164,23 @@ class RateLimitFilterTest {
     }
 
     @Test
+    void whenRedisDownOnContactEndpoint_shouldFailClosed() throws Exception {
+        // Anonymous, and its daily limit is in Redis too: without Redis nothing would limit it
+        config.setPaths(List.of("/api/auth/**", "/api/contact/**"));
+        when(redisService.incrementAndExpire(anyString(), anyString(), any(Duration.class)))
+                .thenThrow(new RedisOperationException("Redis down", null));
+
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/contact");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        verify(chain, never()).doFilter(any(), any());
+        assertThat(response.getStatus()).isEqualTo(429);
+    }
+
+    @Test
     void whenRedisDownOnNonAuthEndpoint_shouldFailOpen() throws Exception {
         // Non-auth endpoints stay fail-open; a Redis outage does not affect availability
         config.setPaths(List.of("/api/auth/**", "/api/sensitive/**"));

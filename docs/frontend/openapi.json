@@ -180,6 +180,44 @@
         },
         "type" : "object"
       },
+      "AdminContactMessageResponse" : {
+        "description" : "Contact form message as seen in the back office",
+        "properties" : {
+          "createdAt" : {
+            "description" : "When it was sent",
+            "example" : "2026-11-07T10:00:00+08:00",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "email" : {
+            "description" : "Sender's reply-to email address",
+            "example" : "alice@example.com",
+            "type" : "string"
+          },
+          "id" : {
+            "description" : "Message ID (UUIDv7)",
+            "example" : "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70",
+            "type" : "string"
+          },
+          "locale" : {
+            "description" : "Language of the page the visitor wrote from",
+            "enum" : [ "en", "zh" ],
+            "example" : "en",
+            "type" : "string"
+          },
+          "message" : {
+            "description" : "The question",
+            "example" : "Can my school use Vomatt for student council elections?",
+            "type" : "string"
+          },
+          "name" : {
+            "description" : "Sender's name",
+            "example" : "Alice Chen",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "AdminFeedbackResponse" : {
         "description" : "Feedback as seen in the back office",
         "properties" : {
@@ -1568,6 +1606,38 @@
         },
         "type" : "object"
       },
+      "ApiResponsePageResponseAdminContactMessageResponse" : {
+        "description" : "Envelope of every API response, success or error",
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/PageResponseAdminContactMessageResponse"
+          },
+          "error" : {
+            "description" : "Legacy duplicate of `message` on errors; null on success. Use `message` instead",
+            "example" : "Poll not found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "errorCode" : {
+            "description" : "Stable machine-readable error code (lowercase, dot-separated); branch on this, not on `message`. Null on success",
+            "example" : "vote.not_found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "message" : {
+            "description" : "Localized text following Accept-Language. On success it is usually null, except operations that attach a toast-ready text; on error it is the error message",
+            "example" : "Operation completed",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "success" : {
+            "description" : "true on success, false on error",
+            "example" : true,
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponsePageResponseAdminFeedbackResponse" : {
         "description" : "Envelope of every API response, success or error",
         "properties" : {
@@ -2589,6 +2659,41 @@
           }
         },
         "required" : [ "text" ],
+        "type" : "object"
+      },
+      "CreateContactMessageRequest" : {
+        "properties" : {
+          "email" : {
+            "description" : "Reply-to email address, max 254 characters; stored trimmed, case kept",
+            "example" : "alice@example.com",
+            "format" : "email",
+            "maxLength" : 254,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "locale" : {
+            "description" : "Language of the page the visitor wrote from",
+            "enum" : [ "en", "zh" ],
+            "example" : "en",
+            "pattern" : "en|zh",
+            "type" : "string"
+          },
+          "message" : {
+            "description" : "The question, not blank, max 5000 characters",
+            "example" : "Can my school use Vomatt for student council elections?",
+            "maxLength" : 5000,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "name" : {
+            "description" : "Sender's name, not blank, max 100 characters",
+            "example" : "Alice Chen",
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "email", "locale", "message", "name" ],
         "type" : "object"
       },
       "CreateFeedbackRequest" : {
@@ -3656,6 +3761,38 @@
             "description" : "Items of this page",
             "items" : {
               "$ref" : "#/components/schemas/AdminCommentResponse"
+            },
+            "type" : "array"
+          },
+          "limit" : {
+            "description" : "Page size",
+            "example" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "page" : {
+            "description" : "Current page number (1-based)",
+            "example" : 1,
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "total" : {
+            "description" : "Total number of items across all pages",
+            "example" : 123,
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "PageResponseAdminContactMessageResponse" : {
+        "description" : "Offset-style page container (page number and total count); most list endpoints use CursorResponse instead",
+        "nullable" : true,
+        "properties" : {
+          "content" : {
+            "description" : "Items of this page",
+            "items" : {
+              "$ref" : "#/components/schemas/AdminContactMessageResponse"
             },
             "type" : "array"
           },
@@ -6342,6 +6479,113 @@
         },
         "summary" : "Delete Comment",
         "tags" : [ "Admin - Comment" ]
+      }
+    },
+    "/api/admin/contact-messages" : {
+      "get" : {
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: offset page of messages sent from the about site's contact form, newest first. `page` is 1-based (default 1), `limit` 1-50 (default 20)\n**Side effects**: written to the audit log (action `VIEW`, resource `CONTACT_MESSAGE`), since messages hold names and email addresses\n**Errors**: none beyond the common ones",
+        "operationId" : "listMessages",
+        "parameters" : [ {
+          "description" : "Page number, 1-based (default 1)",
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "description" : "Page size (1-50, default 20)",
+          "in" : "query",
+          "name" : "limit",
+          "required" : false,
+          "schema" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "Contact messages" : {
+                    "description" : "Contact messages",
+                    "value" : {
+                      "data" : {
+                        "content" : [ {
+                          "createdAt" : "2026-11-07T10:00:00+08:00",
+                          "email" : "alice@example.com",
+                          "id" : "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70",
+                          "locale" : "en",
+                          "message" : "Can my school use Vomatt for student council elections?",
+                          "name" : "Alice Chen"
+                        } ],
+                        "limit" : 20,
+                        "page" : 1,
+                        "total" : 1
+                      },
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePageResponseAdminContactMessageResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "List contact messages",
+        "tags" : [ "Admin - Contact messages" ]
       }
     },
     "/api/admin/feedback" : {
@@ -11569,6 +11813,87 @@
         },
         "summary" : "Get an uploaded avatar",
         "tags" : [ "User" ]
+      }
+    },
+    "/api/contact" : {
+      "post" : {
+        "description" : "**Auth**: none\n**Precondition**: the client IP is under the daily contact limit (UTC day; 5 unless an admin set lookup `config` / `contact_daily_limit`, a positive number or numeric string). A server-side caller names the visitor's IP with `X-Client-IP` and `X-Client-IP-Secret`, as vomatt-web does\n**Behavior**: stores the message for staff to read in the back office; `name` and `email` are trimmed. Responds 201 with the new message id\n**Side effects**: counts toward the client IP's daily contact limit (only once stored)\n**Errors**:\n- 400 `common.validation_failed`: `name` blank or longer than 100 characters, `email` not a valid address or longer than 254 characters, `message` blank or longer than 5000 characters, or `locale` not `en` / `zh`\n- 429 `common.rate_limited`: daily contact limit reached, or too many write requests from this IP",
+        "operationId" : "createMessage",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "example" : {
+                "email" : "alice@example.com",
+                "locale" : "en",
+                "message" : "Can my school use Vomatt for student council elections?",
+                "name" : "Alice Chen"
+              },
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateContactMessageRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : {
+                    "id" : "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70",
+                    "message" : null,
+                    "status" : null,
+                    "success" : true
+                  },
+                  "error" : null,
+                  "errorCode" : null,
+                  "message" : null,
+                  "success" : true
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseSimpleResultResponse"
+                }
+              }
+            },
+            "description" : "Message stored; `id` is the new message id"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Resource not found (errorCode e.g. `vote.not_found`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Send a contact message",
+        "tags" : [ "Contact" ]
       }
     },
     "/api/feedback" : {
@@ -21050,5 +21375,11 @@
   }, {
     "description" : "Reading user feedback (Admin)",
     "name" : "Admin - Feedback"
+  }, {
+    "description" : "Questions from the about site's contact form",
+    "name" : "Contact"
+  }, {
+    "description" : "Reading contact form messages (Admin)",
+    "name" : "Admin - Contact messages"
   } ]
 }

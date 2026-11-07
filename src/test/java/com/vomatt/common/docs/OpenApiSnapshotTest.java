@@ -67,6 +67,19 @@ class OpenApiSnapshotTest {
                 "./mvnw test -Dtest=OpenApiSnapshotTest -Dsnapshot.update=true");
     }
 
+    /** Real filter chain: anyone may POST a contact message; reading them takes an admin. */
+    @Test
+    void shouldLetSignedOutVisitorsPostContactMessagesOnly() throws Exception {
+        MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(context)
+                .apply(org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity()).build();
+        // Reaches the controller: 400 validation, not the 401 entry point
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/contact")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/contact")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/admin/contact-messages")).andExpect(status().isUnauthorized());
+    }
+
     /** Real filter chain: the follow lists need a token, the profile does not. */
     @Test
     void shouldReturn401WhenReadingFollowListsSignedOut() throws Exception {

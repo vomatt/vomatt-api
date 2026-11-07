@@ -230,3 +230,4 @@ rate-limit:
     - /api/votes/**
     - /api/users/**
     - /api/feedback/**
+    - /api/contact/**

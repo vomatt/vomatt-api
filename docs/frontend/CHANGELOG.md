@@ -2,6 +2,11 @@
 
 Contract changes that affect the frontend. 💥 BREAKING means frontend code must change. See [openapi.json](openapi.json) for the contract snapshot and [error-codes.md](error-codes.md) for error codes.
 
+## 2026-11-07
+
+- New public `POST /api/contact` (no sign-in): the about site's contact form. Body `{ "name": string, "email": string, "message": string, "locale": "en" | "zh" }`; `name` not blank and at most 100 characters, `email` a valid address of at most 254 characters, `message` not blank and at most 5000 characters, `locale` the page language. `name`, `email` and `message` are stored trimmed. 201 `SimpleResultResponse` with the new message `id`, same as `POST /api/feedback`. Each client IP may send 5 per UTC day (admins can tune it with the `config` lookup `contact_daily_limit`); a server-side caller names the visitor's IP with `X-Client-IP` and `X-Client-IP-Secret`, as vomatt-web does. Errors: 400 `common.validation_failed`, 429 `common.rate_limited` (daily limit, or the per-IP write bucket, which now covers `/api/contact/**` and, like `/api/auth/**`, answers 429 while Redis is down).
+- New `GET /api/admin/contact-messages?page=&limit=` (role ADMIN): offset page of contact messages, newest first, each with `id`, `name`, `email`, `message`, `locale`, `createdAt`; same paging as `GET /api/admin/feedback` (`page` 1-based, default 1; `limit` 1-50, default 20). Opening it is audit-logged (action `VIEW`, resource `CONTACT_MESSAGE`). Deploy: Flyway `V12__contact_messages.sql` adds `contact_messages` at startup.
+
 ## 2026-11-06
 
 - New `PUT /api/users/me/avatar` (sign-in required): upload an avatar as multipart/form-data, image in part `file` (JPEG, PNG, GIF or BMP, at most 2 MB and 40 megapixels). The server center-crops it to a square, resizes it to 512x512 and stores it as JPEG (EXIF/GPS dropped, transparency becomes white). Returns the updated profile, same `UserProfileResponse` as `PATCH /api/users/me`. Each user may attempt 20 uploads per UTC day (failed ones included; admins can tune it with the `config` lookup `avatar_upload_daily_limit`); over it 429 `common.rate_limited`. Errors: 400 `common.file_required`, 400 `user.avatar.unsupported_image`, 413 `common.file_too_large`, 429 `common.rate_limited`, 503 `common.storage_unavailable` (new codes `user.avatar.unsupported_image`, `common.storage_unavailable`).

@@ -2,6 +2,12 @@
 
 Contract changes that affect the frontend. 💥 BREAKING means frontend code must change. See [openapi.json](openapi.json) for the contract snapshot and [error-codes.md](error-codes.md) for error codes.
 
+## 2026-11-07
+- 💥 `POST /api/auth/send-otp` with `phoneNumber` no longer checks for an existing account: an unregistered number gets an SMS like a registered one, and verifying it signs up (as email already does). Error code `auth.phone.not_registered` is removed. A client that showed "not registered" on that error must drop the branch.
+- 💥 `POST /api/auth/admin/send-otp` answers every email alike: 200 with the same cooldown and daily count, and the email is sent only to an active admin. It no longer returns 403 `auth.admin.forbidden` or `auth.account_banned`. `POST /api/auth/admin/verify-otp` checks the code first, so an email that is not an active admin gets 401 `auth.otp.invalid_or_expired` like any unknown code; 403 `auth.admin.forbidden` / `auth.account_banned` now come only after a correct code. The admin console should show "if this address is an admin, a code was sent".
+- OTP daily limit (`auth.otp.daily_limit`, 429) is now counted per address and client IP (20 email / 5 phone per UTC day), with a ceiling of 3 times that across all IPs. Requests from other IPs can no longer use up the owner's own allowance.
+- `POST /api/admin/users/{userId}/unlock-login` accepts a new `clear` target `daily`, which resets today's OTP daily counts for the user's identifiers (for the given IP plus the all-IP ceiling, or every IP that guessed wrong when no IP is given). `GET /api/admin/users/options` lists it. An empty `clear` now also clears `daily`.
+
 ## 2026-11-04
 - New `GET /api/notifications/unread-ids?category=` (sign-in required): `{ "ids": string[] }`, the `id`s of the notifications `GET /api/notifications` lists with `read` false, newest first, at most the newest 100; same `category` filter as `/unread-count` (unknown value is 400 `common.type_mismatch`). Use it to call `POST /api/notifications/read-all` as soon as the notification page opens and still highlight what was unread: fetch the ids first, then read-all, then page the feed (whose items now come back `read` true) and highlight items whose `id` is in the list.
 

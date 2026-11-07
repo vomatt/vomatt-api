@@ -37,7 +37,7 @@ sequenceDiagram
 
 | Step | API | Notes |
 |------|-----|------|
-| 1 | `POST /api/auth/send-otp` | OTP is valid for 180 seconds by default; resending to the same email has a cooldown (default 180 seconds). Each email can be sent at most 20 OTPs per UTC day (5 per phone number), across all IPs; over it, 429 `auth.otp.daily_limit` without `Retry-After`. The response is the same whether or not the email is registered |
+| 1 | `POST /api/auth/send-otp` | OTP is valid for 180 seconds by default; resending to the same email has a cooldown (default 180 seconds). Each IP can request at most 20 OTPs per email per UTC day (5 per phone number), and all IPs together 3 times that; over either, 429 `auth.otp.daily_limit` without `Retry-After`. The response is the same whether or not the email is registered |
 | 2 | `POST /api/auth/verify-otp` | Success consumes the OTP; a new email automatically creates an account and the response says so with `isNewUser: true` |
 
 Wrong codes are limited per email (or phone, §3) **and client IP**:
@@ -62,7 +62,7 @@ sequenceDiagram
     API-->>App: 200 { token, refreshToken, user, isNewUser }
 ```
 
-- Omitting `type` is the same as `login`; the phone number must then already be registered, otherwise 400 `auth.phone.not_registered`. For new numbers, send `type: "signup"`.
+- `type` (`login` or `signup`) is informational: registered and unregistered numbers get the same 200, and `POST /api/auth/phone/verify-otp` signs in or creates the account and reports which in `isNewUser`, as the email flow does.
 - `verify-otp` has no `type`: if the number does not exist an account is created; if it exists the user is logged in.
 - Wrong codes lock the number per client IP with the same rules as email (§2).
 - Numbers are stored as E.164 with Taiwan as the default region: a Taiwan mobile number `09xxxxxxxx` or `+` country code and number are accepted, spaces, `-`, `(` and `)` are ignored. `0912345678` and `+886912345678` are the same number, and `user.phoneNumber` comes back as `+886912345678`. Any other format gets 400 `auth.phone.invalid`.
@@ -186,7 +186,7 @@ UI: on `auth.account_banned`, at login or on any write, show "This account has b
 
 The admin console signs in with its own endpoints, `POST /api/auth/admin/send-otp` (`{ email }`) and `POST /api/auth/admin/verify-otp` (`{ email, code }`). They are the only sign-in whose tokens grant the admin role:
 
-- The account must **already exist and have the `admin` role**, otherwise 403 `auth.admin.forbidden`. The check happens before the OTP is sent / consumed, so it never creates an account or burns an OTP.
+- Only an existing, active account with the `admin` role receives the email. `admin/send-otp` answers 200 for every email so it never reveals who is an admin; for any other email no mail goes out and `admin/verify-otp` fails like a wrong code (401). It never creates an account. After a correct code, a since-demoted or suspended account gets 403 `auth.admin.forbidden` / `auth.account_banned`.
 - Admin OTPs, wrong-code counts, lockouts and the resend cooldown are separate from the consumer login: a code from `send-otp` does not work on `admin/verify-otp`, and vice versa. The limits themselves (180 s OTP, 180 s cooldown, 20 sends per UTC day, 3 wrong codes per IP, 10 guesses per OTP) are the same.
 - Every other sign-in (`verify-otp`, phone, Google, LINE, Apple) issues tokens that never grant the admin role, even for an admin account: `/api/admin/**` answers 403 `common.forbidden`. `user.roles` in the response still lists `admin`, so read it as profile info, not as access.
 - `POST /api/auth/refresh` keeps the scope of the sign-in: an admin console session refreshes into admin tokens, a consumer session never does.
@@ -199,13 +199,12 @@ The admin console signs in with its own endpoints, `POST /api/auth/admin/send-ot
 | `auth.identifier.required` | 400 | Neither email nor phone provided | Prompt the user to fill it in |
 | `auth.otp.resend_cooldown` | 400 | Resent during the cooldown; `message` includes the remaining seconds | Allow resend only after the countdown |
 | `auth.email.send_failed` / `auth.sms.send_failed` | 400 | Failed to send the email / SMS; the OTP is dropped and a resend is allowed after 30 seconds | Allow resend after a 30-second countdown |
-| `auth.phone.not_registered` | 400 | `type=login` but the number is not registered | Go to the signup flow (`type=signup`) |
 | `auth.phone.invalid` | 400 | The number is neither `09xxxxxxxx` nor `+` country code and number | Show the accepted formats next to the field |
 | `auth.otp.invalid_or_expired` | 401 | No valid OTP (expired, already used, never sent, or its 10 guesses are used up) | Guide the user to resend |
 | `auth.invalid_otp` | 401 | Wrong code | Ask the user to re-enter |
 | `auth.otp.too_many_attempts` | 401 | 3 wrong codes from this IP; the email / phone is locked for this IP for 5 minutes, doubling on each further lockout up to 24 hours, and `send-otp`, `phone/send-otp` and both `verify-otp` return this until then | Tell the user to try again later (no exact time is returned); disable resend |
-| `auth.otp.daily_limit` | 429 | Over the daily send limit for this email (20) or phone (5), counted per UTC day across all IPs; no `Retry-After` | Tell the user to try again tomorrow or use another method |
-| `auth.admin.forbidden` | 403 | `admin/send-otp` or `admin/verify-otp` for an email that is not an existing admin | Show no permission |
+| `auth.otp.daily_limit` | 429 | Over the daily send limit for this email (20) or phone (5) from this IP, or 3 times that from all IPs, counted per UTC day; no `Retry-After` | Tell the user to try again tomorrow or use another method |
+| `auth.admin.forbidden` | 403 | `admin/verify-otp` with a correct code for an account that is no longer an admin, or the admin passkey sign-in by a non-admin | Show no permission |
 | `auth.account_banned` | 403 | Account is suspended (at login, or on a write with a still-valid access token) | Show that the account is suspended |
 | `auth.email_not_verified` | 401 | The OAuth provider's email is not verified | Suggest another login method |
 | `auth.google.*` / `auth.line.*` / `auth.apple.*` | 400 / 401 | Provider credential is invalid or the backend is not configured | Suggest another method or retry later |

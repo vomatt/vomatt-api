@@ -94,15 +94,19 @@ public class NotificationRepository {
                     FROM vomatt.vote_bookmarks bm JOIN vomatt.votes v ON v.id = bm.vote_id
                     WHERE bm.user_id = :userId AND bm.created_at < v.end_time AND v.audience <> 'INVITE_ONLY'
                       AND v.deleted_at IS NULL AND v.end_time <= :now AND v.end_time > v.start_time AND v.turnout > 0""",
+            // Once per Poll, however many Invitee rows (by ID and by address) the user has there
             NotificationKind.CANCELLED, select(NotificationKind.CANCELLED, "v.id", "v.end_time", "v.creator_id", "v.id", NONE) + """
-                    FROM vomatt.vote_invitees i JOIN vomatt.votes v ON v.id = i.vote_id
-                    WHERE i.user_id = :userId AND v.deleted_at IS NULL AND v.audience = 'INVITE_ONLY'
+                    FROM vomatt.votes v
+                    WHERE EXISTS (SELECT 1 FROM vomatt.vote_invitees i WHERE i.vote_id = v.id AND i.user_id = :userId)
+                      AND v.deleted_at IS NULL AND v.audience = 'INVITE_ONLY'
                       AND v.end_time <= :now AND v.end_time <= v.start_time""",
             // Until the Poll Ends; its RESULT takes over then. updated_at is when the user was invited, or when their
-            // email Invitee bound to the account. A removed and re-added Invitee is a new row, so a new, unread notification
+            // email Invitee bound to the account. A removed and re-added Invitee is a new row, so a new, unread notification.
+            // A user invited both by ID and by address gets one, from their first row (InviteeRepository.FIRST_OF_USER)
             NotificationKind.INVITATION, select(NotificationKind.INVITATION, "i.id", "i.updated_at", "v.creator_id", "v.id", NONE) + """
                     FROM vomatt.vote_invitees i JOIN vomatt.votes v ON v.id = i.vote_id
-                    WHERE i.user_id = :userId AND v.deleted_at IS NULL AND v.audience = 'INVITE_ONLY' AND v.end_time > :now""",
+                    WHERE i.user_id = :userId AND v.deleted_at IS NULL AND v.audience = 'INVITE_ONLY' AND v.end_time > :now
+                      AND """ + InviteeRepository.FIRST_OF_USER,
             NotificationKind.FOLLOWED, select(NotificationKind.FOLLOWED, "f.id", "f.created_at", "f.follower_id", NONE, NONE) + """
                     FROM vomatt.user_follows f WHERE f.followed_id = :userId""",
             // Others' Comments and Replies on the user's Polls, and others' Replies to the user's live Comments

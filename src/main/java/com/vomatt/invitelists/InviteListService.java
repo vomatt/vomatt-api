@@ -101,8 +101,9 @@ public class InviteListService {
     }
 
     /**
-     * Same rules as adding Invitees: duplicates, the owner and anyone already a member are skipped; an email row keeps
-     * the address and also holds the user of an active account. Returns the full member list.
+     * Same rules as adding Invitees: ID and email members are independent keys, so a user already a member by ID, an
+     * address already a member, duplicates and the owner are skipped; an email row keeps the address and also holds the
+     * user of an active account, even one already a member by ID. Returns the full member list.
      */
     public List<InviteListMemberResponse> addMembers(String inviteListId, InviteListMembersRequest request, String userId) {
         // Exclusive lock: concurrent adds and email binding on this Invite List cannot collide
@@ -118,18 +119,18 @@ public class InviteListService {
             throw ApiException.badRequest(MessageKey.INVITE_LIST_MEMBER_IDS_INVALID);
         }
         List<InviteListMember> existing = inviteListMemberRepository.findByInviteListId(inviteList.getId());
-        Set<UUID> memberUsers = existing.stream().filter(m -> m.getUser() != null)
+        Set<UUID> membersById = existing.stream().filter(m -> m.getEmail() == null)
             .map(m -> m.getUser().getId()).collect(Collectors.toCollection(HashSet::new));
         existing.forEach(m -> newEmails.remove(m.getEmail()));
         List<InviteListMember> added = new ArrayList<>();
-        users.stream().filter(u -> memberUsers.add(u.getId())).forEach(u -> added.add(new InviteListMember(inviteList, u)));
+        users.stream().filter(u -> membersById.add(u.getId())).forEach(u -> added.add(new InviteListMember(inviteList, u)));
         Map<String, User> accounts = newEmails.isEmpty() ? Map.of() : userRepository.findByEmailIn(newEmails).stream()
             .filter(User::isActive).collect(Collectors.toMap(User::getEmail, u -> u));
         for (String email : newEmails) {
             User account = accounts.get(email);
             if (account == null) {
                 added.add(new InviteListMember(inviteList, email));
-            } else if (!account.getId().equals(ownerId) && memberUsers.add(account.getId())) {
+            } else if (!account.getId().equals(ownerId)) {
                 added.add(new InviteListMember(inviteList, account, email));
             }
         }
@@ -190,7 +191,7 @@ public class InviteListService {
             return;
         }
         inviteListMemberRepository.bindEmail(user.getId(), email, inviteListIds);
-        // Pending rows already covered by a user row (or the owner's own address) go
+        // Pending rows of the owner's own address go; a row of a user already a member stays
         inviteListMemberRepository.deleteUnbindableEmail(user.getId(), email, inviteListIds);
     }
 

@@ -1526,7 +1526,7 @@ class VoteServiceTest {
             Invitee invitee = new Invitee(vote, User.builder().id(inviteeId).build());
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
             when(inviteeRepository.findByVoteIdAndUserIdAndEmailIsNull(voteId, inviteeId)).thenReturn(Optional.of(invitee));
-            when(userVoteRepository.existsByUserIdAndVoteId(inviteeId, voteId)).thenReturn(true);
+            when(inviteeRepository.holdsBallot(invitee.getId())).thenReturn(true);
 
             assertThatThrownBy(() -> voteService.removeInvitee(voteId.toString(), inviteeId.toString(), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_INVITEE_HAS_BALLOT));
@@ -1897,7 +1897,7 @@ class VoteServiceTest {
             voteService.removeEmailInvitee(voteId.toString(), " Carol@Example.com ", userId.toString());
 
             verify(inviteeRepository).delete(pending);
-            verify(userVoteRepository, never()).existsByUserIdAndVoteId(any(), any());
+            verify(inviteeRepository, never()).holdsBallot(any());
         }
 
         @Test
@@ -1907,7 +1907,7 @@ class VoteServiceTest {
             Invitee resolved = new Invitee(vote, User.builder().id(inviteeId).build(), "bob@example.com");
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
             when(inviteeRepository.findByVoteIdAndEmail(voteId, "bob@example.com")).thenReturn(Optional.of(resolved));
-            when(userVoteRepository.existsByUserIdAndVoteId(inviteeId, voteId)).thenReturn(true);
+            when(inviteeRepository.holdsBallot(resolved.getId())).thenReturn(true);
 
             assertThatThrownBy(() -> voteService.removeEmailInvitee(voteId.toString(), "bob@example.com", userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_INVITEE_HAS_BALLOT));

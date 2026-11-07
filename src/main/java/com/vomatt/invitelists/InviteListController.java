@@ -198,8 +198,8 @@ public class InviteListController {
     @Operation(summary = "Add Invite List members", description = """
             **Auth**: required (owner only)
             **Precondition**: the Invite List stays within the member limit (default 100, admin-configurable). A list already over a lowered limit is kept but accepts no new members
-            **Behavior**: adds the users and email addresses as members. Members already in the Invite List, duplicates and the owner's own ID / address are ignored. \
-            An address is always listed as entered, whether or not it belongs to an account; once someone verifies it at sign-up / sign-in it is tied to that user, \
+            **Behavior**: adds the users and email addresses as members. Users already members by ID, addresses already members, duplicates and the owner's own ID / address are ignored. \
+            An address is always listed as entered, whether or not it belongs to an account, including one of a user already a member by ID; once someone verifies it at sign-up / sign-in it is tied to that user, \
             still listed by the address. Returns the full member list.
             **Side effects**: nobody is notified (members never learn about the Invite List); the action is audit-logged.
             **Errors**:

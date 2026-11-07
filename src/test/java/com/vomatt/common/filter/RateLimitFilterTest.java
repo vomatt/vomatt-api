@@ -60,6 +60,37 @@ class RateLimitFilterTest {
         assertThat(response.getStatus()).isEqualTo(200);
     }
 
+    /** The decoded path is what routes, so a percent-encoded spelling must count in the same bucket. */
+    @ParameterizedTest
+    @ValueSource(strings = { "/api/%61uth/send-otp", "/api/auth/%73end-otp" })
+    void shouldReturn429WhenAuthPathPercentEncodedOverLimit(String path) throws Exception {
+        when(redisService.incrementAndExpire(eq("rate:limit"), anyString(), any(Duration.class))).thenReturn(301L);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", path);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        verify(chain, never()).doFilter(any(), any());
+        assertThat(response.getStatus()).isEqualTo(429);
+    }
+
+    @Test
+    void shouldCountInWriteBucketWhenWritePathPercentEncoded() throws Exception {
+        config.setPaths(List.of("/api/auth/**", "/api/feedback/**"));
+        when(redisService.incrementAndExpire(eq("rate:limit:write"), anyString(), any(Duration.class))).thenReturn(301L);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/%66eedback");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        verify(chain, never()).doFilter(any(), any());
+        assertThat(response.getStatus()).isEqualTo(429);
+    }
+
     /** Passkey sign-in shares the per-IP auth bucket with the OTP endpoints (application.yml: /api/auth/**). */
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(strings = { "/api/auth/passkey/login/options",

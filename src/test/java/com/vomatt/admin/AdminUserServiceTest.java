@@ -262,7 +262,7 @@ class AdminUserServiceTest {
         target.setEmail("a@example.com");
         target.setPhoneNumber("+886912345678");
         when(userRepository.findById(id)).thenReturn(Optional.of(target));
-        java.util.Set<String> all = java.util.Set.of("lock", "attempts", "cooldown");
+        java.util.Set<String> all = java.util.Set.of("lock", "attempts", "cooldown", "daily");
         when(authService.unlockLogin("email", "a@example.com", null, all)).thenReturn(2);
         when(authService.unlockLogin("admin", "a@example.com", null, all)).thenReturn(1);
         when(authService.unlockLogin("phone", "+886912345678", null, all)).thenReturn(0);

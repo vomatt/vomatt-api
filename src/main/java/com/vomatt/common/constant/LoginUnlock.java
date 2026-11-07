@@ -24,6 +24,9 @@ public final class LoginUnlock {
     /** Resend cooldown, including the 15-minute one after an OTP's guesses run out */
     public static final String TARGET_COOLDOWN = "cooldown";
 
-    public static final List<String> TARGETS = List.of(TARGET_LOCK, TARGET_ATTEMPTS, TARGET_COOLDOWN);
-    public static final String TARGET_PATTERN = "lock|attempts|cooldown";
+    /** Today's OTP send counts: the identifier's flood ceiling and the per-IP counts known from wrong-code attempts */
+    public static final String TARGET_DAILY = "daily";
+
+    public static final List<String> TARGETS = List.of(TARGET_LOCK, TARGET_ATTEMPTS, TARGET_COOLDOWN, TARGET_DAILY);
+    public static final String TARGET_PATTERN = "lock|attempts|cooldown|daily";
 }

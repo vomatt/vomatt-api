@@ -151,13 +151,13 @@ public class AuthController {
                     **Precondition**: none; the same endpoint serves login and signup (the server picks which by whether the email is registered)
                     **Behavior**: generates a 6-digit OTP, stores it with a TTL (default 180 s) and emails it. The email is lower-cased and trimmed; a Gmail address (gmail.com / googlemail.com) also loses its +tag and dots and moves to gmail.com. \
                     The admin console signs in with `POST /api/auth/admin/send-otp` instead
-                    **Side effects**: sends an email; replaces any previous OTP for this address. A resend is refused during the cooldown (default 180 s), and at most 20 OTPs are sent to one address per UTC day
+                    **Side effects**: sends an email; replaces any previous OTP for this address. A resend is refused during the cooldown (default 180 s), and each IP can request at most 20 OTPs for one address per UTC day, and all IPs together 60
                     **Errors**:
                     - 400 `auth.identifier.required`: `email` is missing or blank
                     - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
                     - 400 `auth.email.send_failed`: the email provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
                     - 401 `auth.otp.too_many_attempts`: this email is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected
-                    - 429 `auth.otp.daily_limit`: 20 OTPs were already sent to this address today (UTC)""")
+                    - 429 `auth.otp.daily_limit`: 20 OTPs were already requested for this address from this IP today (UTC), or 60 from all IPs""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> sendOtp(@Valid @RequestBody SendOtpRequest req, HttpServletRequest httpRequest) {
         authService.sendOtp(req.email(), null, null, ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
@@ -206,24 +206,20 @@ public class AuthController {
             content = @Content(examples = @ExampleObject(value = OK_RESULT)))
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
                     {"email": "admin@example.com"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-            description = "The email is not an existing admin account (`auth.admin.forbidden`) or the admin is suspended (`auth.account_banned`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = ADMIN_FORBIDDEN)))
     @Operation(summary = "Send admin console email OTP",
             description = """
                     **Auth**: public
-                    **Precondition**: the email belongs to an existing, active account holding the admin role
-                    **Behavior**: like `POST /api/auth/send-otp` (6-digit OTP, TTL default 180 s, same email normalization), but only for admin accounts. \
+                    **Precondition**: none for the call; only an existing, active account holding the admin role receives the email
+                    **Behavior**: like `POST /api/auth/send-otp` (6-digit OTP, TTL default 180 s, same email normalization), but the email is sent only to an active admin. \
+                    Every other email gets the same 200, cooldown and daily count with no email sent, so the response never tells whether an email is an admin. \
                     Its OTPs, wrong-code counters, lockouts and resend cooldown are separate from the consumer login, so a code from `send-otp` does not work here and vice versa
-                    **Side effects**: sends an email; replaces any previous admin console OTP for this address. A resend is refused during the cooldown (default 180 s), and at most 20 OTPs are sent to one address per UTC day
+                    **Side effects**: sends an email (to an active admin only); replaces any previous admin console OTP for this address. A resend is refused during the cooldown (default 180 s), and each IP can request at most 20 OTPs for one address per UTC day, and all IPs together 60
                     **Errors**:
                     - 400 `auth.identifier.required`: `email` is missing or blank
                     - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
                     - 400 `auth.email.send_failed`: the email provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
                     - 401 `auth.otp.too_many_attempts`: this email is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected
-                    - 429 `auth.otp.daily_limit`: 20 OTPs were already sent to this address today (UTC)
-                    - 403 `auth.admin.forbidden`: the email is not an existing admin account
-                    - 403 `auth.account_banned`: the admin is suspended (`active=false`); no OTP is sent""")
+                    - 429 `auth.otp.daily_limit`: 20 OTPs were already requested for this address from this IP today (UTC), or 60 from all IPs""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> adminSendOtp(@Valid @RequestBody SendOtpRequest req, HttpServletRequest httpRequest) {
         authService.sendAdminOtp(req.email(), ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
@@ -246,7 +242,7 @@ public class AuthController {
             description = """
                     **Auth**: public
                     **Precondition**: an OTP was sent to this email via `POST /api/auth/admin/send-otp` and has not expired
-                    **Behavior**: the only sign-in whose tokens grant the admin role (`/api/admin/**`). Checks the account is an existing admin before consuming the OTP, then returns an access token and refresh token; \
+                    **Behavior**: the only sign-in whose tokens grant the admin role (`/api/admin/**`). Verifies the OTP first (an email that is not an active admin never received one, so it fails like a wrong code), then checks the account is an active admin, and returns an access token and refresh token; \
                     refreshing them keeps the admin scope. Never creates an account. Wrong-code counting, lockouts and the 10-guess budget work as in `POST /api/auth/verify-otp`, separately from it
                     **Side effects**: the OTP is consumed on success; `lastLoginAt` is updated
                     **Errors**:
@@ -254,8 +250,8 @@ public class AuthController {
                     - 401 `auth.otp.invalid_or_expired`: no admin console OTP exists for this email (never sent, expired, already used, or its 10 guesses are used up)
                     - 401 `auth.invalid_otp`: the code is wrong
                     - 401 `auth.otp.too_many_attempts`: 3rd wrong code, or this email is locked for the caller's IP (even a correct code is refused until the lock ends)
-                    - 403 `auth.admin.forbidden`: the email is not an existing admin account
-                    - 403 `auth.account_banned`: the admin is suspended (`active=false`); checked before the OTP is consumed""")
+                    - 403 `auth.admin.forbidden`: the code was right but the account is no longer an admin (only possible for a code sent while it was one)
+                    - 403 `auth.account_banned`: the code was right but the admin was suspended since (`active=false`)""")
     public ResponseEntity<ApiResponse<AuthResponse>> adminVerifyOtp(@Valid @RequestBody VerifyOtpRequest req, HttpServletRequest httpRequest) {
         return ResponseEntity.ok(ApiResponse.ok(authService.verifyAdminOtp(req.email(), req.code(), ClientIpResolver.resolve(httpRequest))));
     }
@@ -372,16 +368,16 @@ public class AuthController {
     @Operation(summary = "Send phone OTP",
             description = """
                     **Auth**: public
-                    **Precondition**: for `type` "login" (the default) the phone number must already be registered
-                    **Behavior**: normalizes the number to E.164 (`0912345678` and `+886912345678` are the same number), generates a 6-digit OTP, stores it with a TTL (default 180 s) and sends it by SMS. `type` is "login" or "signup"
-                    **Side effects**: sends an SMS; replaces any previous OTP for this number. A resend is refused during the cooldown (default 180 s), and at most 5 OTPs are sent to one number per UTC day
+                    **Precondition**: none; registered and unregistered numbers get the same response, so it never tells whether a number has an account
+                    **Behavior**: normalizes the number to E.164 (`0912345678` and `+886912345678` are the same number), generates a 6-digit OTP, stores it with a TTL (default 180 s) and sends it by SMS. \
+                    `type` ("login" or "signup") is informational only; `POST /api/auth/phone/verify-otp` signs in an existing account or creates one and reports which in `isNewUser`
+                    **Side effects**: sends an SMS; replaces any previous OTP for this number. A resend is refused during the cooldown (default 180 s), and each IP can request at most 5 OTPs for one number per UTC day, and all IPs together 15
                     **Errors**:
                     - 400 `auth.phone.invalid`: the number is neither a Taiwan mobile number (`09` + 8 digits) nor `+` country code and number (8-15 digits)
                     - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
-                    - 400 `auth.phone.not_registered`: `type` is "login" and the number is not registered
                     - 400 `auth.sms.send_failed`: the SMS provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
                     - 401 `auth.otp.too_many_attempts`: this number is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected
-                    - 429 `auth.otp.daily_limit`: 5 OTPs were already sent to this number today (UTC)""")
+                    - 429 `auth.otp.daily_limit`: 5 OTPs were already requested for this number from this IP today (UTC), or 15 from all IPs""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> phoneSendOtp(@Valid @RequestBody PhoneSendOtpRequest req, HttpServletRequest httpRequest) {
         authService.sendOtp(null, req.phone(), req.type(), ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));

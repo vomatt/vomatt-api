@@ -19,6 +19,8 @@ import com.vomatt.entity.User;
 class InviteListMigrationPostgresTest extends PostgresRepositoryTest {
 
     private static final String SCRIPT = "db/migrations/2026-10-22-invite-lists.sql";
+    // Flyway migrations after the baseline that touch invite_list_members; Flyway runs them after the script
+    private static final String LATER = "db/migration/V12__invitee_keys_by_kind.sql";
 
     // Turns the baseline tables back into the pre-rename ones, names Postgres generated included
     private static final List<String> TO_GROUPS = List.of(
@@ -29,7 +31,9 @@ class InviteListMigrationPostgresTest extends PostgresRepositoryTest {
             "ALTER TABLE vomatt.invite_list_members RENAME TO group_members",
             "ALTER TABLE vomatt.group_members RENAME COLUMN invite_list_id TO group_id",
             "ALTER TABLE vomatt.group_members RENAME CONSTRAINT invite_list_members_pkey TO group_members_pkey",
-            "ALTER TABLE vomatt.group_members RENAME CONSTRAINT invite_list_members_invite_list_id_user_id_key TO group_members_group_id_user_id_key",
+            // Before V12 the per-user key was an inline UNIQUE constraint
+            "DROP INDEX vomatt.uk_invite_list_members_list_user",
+            "ALTER TABLE vomatt.group_members ADD CONSTRAINT group_members_group_id_user_id_key UNIQUE (group_id, user_id)",
             "ALTER TABLE vomatt.group_members RENAME CONSTRAINT invite_list_members_invite_list_id_fkey TO group_members_group_id_fkey",
             "ALTER TABLE vomatt.group_members RENAME CONSTRAINT invite_list_members_user_id_fkey TO group_members_user_id_fkey",
             "ALTER TABLE vomatt.group_members RENAME CONSTRAINT chk_invite_list_members_user_or_email TO chk_group_members_user_or_email",
@@ -52,16 +56,20 @@ class InviteListMigrationPostgresTest extends PostgresRepositoryTest {
         TO_GROUPS.forEach(sql -> em.createNativeQuery(sql).executeUpdate());
         assertThat(names()).isEmpty();
         // The script is one DO block; comments are whole lines
-        String script = new ClassPathResource(SCRIPT).getContentAsString(StandardCharsets.UTF_8).lines()
-                .filter(line -> !line.startsWith("--")).collect(Collectors.joining("\n")).strip();
         for (int run = 0; run < 2; run++) {
-            em.createNativeQuery(script).executeUpdate();
+            em.createNativeQuery(sql(SCRIPT)).executeUpdate();
         }
+        em.createNativeQuery(sql(LATER)).executeUpdate();
 
         assertThat(names()).isEqualTo(schemaNames);
         assertThat(em.createNativeQuery("SELECT l.name || ' ' || m.email FROM vomatt.invite_list_members m "
                 + "JOIN vomatt.invite_lists l ON l.id = m.invite_list_id WHERE m.id = :id")
                 .setParameter("id", member.getId()).getSingleResult()).isEqualTo("Club member@example.com");
+    }
+
+    private static String sql(String path) throws Exception {
+        return new ClassPathResource(path).getContentAsString(StandardCharsets.UTF_8).lines()
+                .filter(line -> !line.startsWith("--")).collect(Collectors.joining("\n")).strip();
     }
 
     @SuppressWarnings("unchecked")

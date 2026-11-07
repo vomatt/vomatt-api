@@ -19,6 +19,8 @@ import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.entity.Audience;
 import com.vomatt.entity.Invitee;
+import com.vomatt.entity.InviteList;
+import com.vomatt.entity.InviteListMember;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.invitelists.dto.InviteListMemberResponse;
@@ -176,8 +178,8 @@ class InviteListPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("should drop the pending email member when the verified user already is a member by ID")
-    void shouldDropEmailMemberWhenUserAlreadyMember() {
+    @DisplayName("should bind, not drop, the pending email member when the verified user already is a member by ID")
+    void shouldKeepEmailMemberWhenUserAlreadyMemberById() {
         User carol = User.builder().username("gr-carol-" + System.nanoTime()).email(carolEmail).active(false).build();
         em.persist(carol);
         em.flush();
@@ -190,8 +192,41 @@ class InviteListPostgresTest extends PostgresRepositoryTest {
         inviteListService.bindEmailMembers(carol);
         em.clear();
 
-        assertThat(inviteListService.getMembers(inviteListId, ownerId)).singleElement()
-                .satisfies(m -> assertThat(m.userId()).isEqualTo(carol.getId().toString()));
+        assertThat(inviteListService.getMembers(inviteListId, ownerId))
+                .extracting(InviteListMemberResponse::userId, InviteListMemberResponse::email)
+                .containsExactly(Tuple.tuple(null, carolEmail), Tuple.tuple(carol.getId().toString(), null));
+        assertThat(inviteListMemberRepository.findByInviteListIdAndEmail(UUID.fromString(inviteListId), carolEmail))
+                .hasValueSatisfying(m -> assertThat(m.getUser().getId()).isEqualTo(carol.getId()));
+    }
+
+    @Test
+    @DisplayName("should list an address of a user already a member by ID exactly like an unknown address, and the reverse")
+    void shouldListEmailMemberWhenAddressBelongsToMemberById() {
+        String unknown = "gr-nobody-" + System.nanoTime() + "@example.com";
+        addMembers(inviteListId, List.of(bob.getId()), List.of(), ownerId);
+
+        List<InviteListMemberResponse> members = addMembers(inviteListId, List.of(), List.of(bob.getEmail(), unknown), ownerId);
+
+        assertThat(members).extracting(InviteListMemberResponse::userId, InviteListMemberResponse::username, InviteListMemberResponse::email)
+                .containsExactlyInAnyOrder(Tuple.tuple(bob.getId().toString(), bob.getUsername(), null),
+                        Tuple.tuple(null, null, bob.getEmail()), Tuple.tuple(null, null, unknown));
+        assertThat(inviteListService.getInviteLists(ownerId)).singleElement().satisfies(g -> assertThat(g.memberCount()).isEqualTo(3));
+
+        // The reverse: removing bob's ID entry leaves his address, and adding him by ID again lists him again
+        inviteListService.removeMember(inviteListId, bob.getId().toString(), ownerId);
+        assertThat(addMembers(inviteListId, List.of(bob.getId()), List.of(), ownerId)).hasSize(3);
+    }
+
+    @Test
+    @DisplayName("should let an ID member and an email member of one user coexist, but reject a second ID member")
+    void shouldKeyMembersByKindWhenSameUserAddedTwice() {
+        InviteList inviteList = em.find(InviteList.class, UUID.fromString(inviteListId));
+        em.persist(new InviteListMember(inviteList, bob));
+        em.persist(new InviteListMember(inviteList, bob, bob.getEmail()));
+        em.flush();
+        em.persist(new InviteListMember(inviteList, bob));
+
+        assertThatThrownBy(() -> em.flush()).hasMessageContaining("uk_invite_list_members_list_user");
     }
 
     @Test

@@ -6,7 +6,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+
+import org.assertj.core.groups.Tuple;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -17,6 +20,7 @@ import org.springframework.context.annotation.Import;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.entity.Audience;
 import com.vomatt.entity.Invitee;
+import com.vomatt.entity.NotificationKind;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteStatus;
@@ -159,8 +163,8 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("should drop the email row when the verified user already is an Invitee, and bind nothing on a rerun")
-    void shouldDropEmailRowWhenUserAlreadyInvitee() {
+    @DisplayName("should bind, not drop, the email row when the verified user already is an Invitee by ID, so the address stays listed")
+    void shouldKeepEmailRowWhenUserAlreadyInviteeById() {
         User carol = User.builder().username("em-carol-" + System.nanoTime()).email(carolEmail).build();
         em.persist(carol);
         em.persist(new Invitee(poll, carol));
@@ -171,8 +175,113 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
         voteService.bindEmailInvitees(carol);
         em.clear();
 
-        assertThat(inviteeRepository.findByVoteId(poll.getId())).singleElement()
-                .satisfies(i -> assertThat(i.getUser().getId()).isEqualTo(carol.getId()));
+        assertThat(inviteeRepository.findByVoteId(poll.getId()))
+                .allSatisfy(i -> assertThat(i.getUser().getId()).isEqualTo(carol.getId()))
+                .extracting(Invitee::getEmail).containsExactlyInAnyOrder(null, carolEmail);
+        assertThat(voteService.getInvitees(poll.getId().toString(), owner.getId().toString()))
+                .extracting(InviteeResponse::email).containsExactly(null, carolEmail);
+    }
+
+    @Test
+    @DisplayName("should list an address of a user already invited by ID exactly like an unknown address")
+    void shouldListEmailWhenAddressBelongsToUserInvitedById() {
+        User carol = account(carolEmail);
+        InviteesRequest byId = new InviteesRequest();
+        byId.setUserIds(List.of(carol.getId()));
+        voteService.addInvitees(poll.getId().toString(), byId, owner.getId().toString());
+        String unknown = "nobody-" + System.nanoTime() + "@example.com";
+
+        InviteesRequest byEmail = new InviteesRequest();
+        byEmail.setEmails(List.of(carolEmail, unknown));
+        List<InviteeResponse> invitees = voteService.addInvitees(poll.getId().toString(), byEmail, owner.getId().toString());
+        em.clear();
+
+        assertThat(invitees).extracting(InviteeResponse::userId, InviteeResponse::email).containsExactlyInAnyOrder(
+                Tuple.tuple(carol.getId().toString(), null), Tuple.tuple(null, carolEmail), Tuple.tuple(null, unknown));
+        assertThat(invitees).filteredOn(i -> i.email() != null)
+                .allSatisfy(i -> {
+                    assertThat(i.userId()).isNull();
+                    assertThat(i.username()).isNull();
+                    assertThat(i.avatarUrl()).isNull();
+                    assertThat(i.hasBallot()).isFalse();
+                });
+        assertThat(voteService.getVote(poll.getId().toString(), owner.getId().toString()).getInviteeCount()).isEqualTo(3L);
+        assertThat(inviteeRepository.findInvitationsSent(poll.getId(), List.of(carolEmail, unknown)))
+                .containsExactlyInAnyOrder(carolEmail, unknown);
+    }
+
+    @Test
+    @DisplayName("should add a user by ID when an address of theirs is already invited, and remove each entry on its own")
+    void shouldAddIdInviteeWhenUserAlreadyInvitedByEmail() {
+        User carol = account(carolEmail);
+        inviteEmail(carolEmail);
+
+        InviteesRequest byId = new InviteesRequest();
+        byId.setUserIds(List.of(carol.getId()));
+        assertThat(voteService.addInvitees(poll.getId().toString(), byId, owner.getId().toString()))
+                .extracting(InviteeResponse::userId, InviteeResponse::email)
+                .containsExactly(Tuple.tuple(null, carolEmail), Tuple.tuple(carol.getId().toString(), null));
+
+        assertThat(voteService.removeInvitee(poll.getId().toString(), carol.getId().toString(), owner.getId().toString()))
+                .extracting(InviteeResponse::email).containsExactly(carolEmail);
+        assertThat(voteService.addInvitees(poll.getId().toString(), byId, owner.getId().toString())).hasSize(2);
+        assertThat(voteService.removeEmailInvitee(poll.getId().toString(), carolEmail, owner.getId().toString()))
+                .extracting(InviteeResponse::userId).containsExactly(carol.getId().toString());
+    }
+
+    @Test
+    @DisplayName("should show a voted user's Ballot on their first entry only, so a later address of theirs reads, removes and blocks auto-end like an unknown one")
+    void shouldShowBallotOnFirstEntryOnlyWhenUserListedTwice() {
+        // The pending unknown address keeps the Poll Open past bob's Ballot
+        String unknown = "nobody-" + System.nanoTime() + "@example.com";
+        User bob = votedInvitee(unknown);
+
+        InviteesRequest byEmail = new InviteesRequest();
+        byEmail.setEmails(List.of(bob.getEmail()));
+        List<InviteeResponse> invitees = voteService.addInvitees(poll.getId().toString(), byEmail, owner.getId().toString());
+
+        assertThat(invitees).extracting(InviteeResponse::email, InviteeResponse::hasBallot).containsExactlyInAnyOrder(
+                Tuple.tuple(null, true), Tuple.tuple(bob.getEmail(), false), Tuple.tuple(unknown, false));
+        voteService.removeEmailInvitee(poll.getId().toString(), unknown, owner.getId().toString());
+        assertThat(reloaded().getStatus()).as("bob's address blocks the end like a pending one").isEqualTo(VoteStatus.OPEN);
+        assertThat(voteService.removeEmailInvitee(poll.getId().toString(), bob.getEmail(), owner.getId().toString()))
+                .singleElement().satisfies(i -> assertThat(i.hasBallot()).isTrue());
+        assertThat(reloaded().getStatus()).isEqualTo(VoteStatus.ENDED);
+    }
+
+    @Test
+    @DisplayName("should give a user invited by ID and by address one Invitation, and one Cancelled notification once the Poll is Cancelled")
+    void shouldNotifyOncePerPollWhenUserListedTwice() {
+        User carol = account(carolEmail);
+        em.persist(new Invitee(poll, carol));
+        em.persist(new Invitee(poll, carol, carolEmail));
+        Vote cancelled = persistPoll(owner, now.plusDays(1), now.minusHours(1), Audience.INVITE_ONLY, "A", "B");
+        em.persist(new Invitee(cancelled, carol));
+        em.persist(new Invitee(cancelled, carol, carolEmail));
+        em.flush();
+
+        List<NotificationRepository.NotificationRow> rows = notificationRepository.findPage(carol.getId(),
+                Set.of(NotificationKind.INVITATION, NotificationKind.CANCELLED), null, now, 50);
+
+        assertThat(rows).extracting(NotificationRepository.NotificationRow::kind, NotificationRepository.NotificationRow::voteId)
+                .containsExactlyInAnyOrder(Tuple.tuple(NotificationKind.INVITATION, poll.getId()),
+                        Tuple.tuple(NotificationKind.CANCELLED, cancelled.getId()));
+        // The Invitation comes from the first row, so a user invited once keeps the read state they had
+        UUID first = inviteeRepository.findByVoteIdAndUserIdAndEmailIsNull(poll.getId(), carol.getId()).orElseThrow().getId();
+        assertThat(rows).filteredOn(r -> r.kind() == NotificationKind.INVITATION).singleElement()
+                .satisfies(r -> assertThat(r.sourceId()).isEqualTo(first));
+    }
+
+    @Test
+    @DisplayName("should let an ID row and an email row of one user coexist, but reject a second ID row")
+    void shouldKeyInviteesByKindWhenSameUserInvitedTwice() {
+        User carol = account(carolEmail);
+        em.persist(new Invitee(poll, carol));
+        em.persist(new Invitee(poll, carol, carolEmail));
+        em.flush();
+        em.persist(new Invitee(poll, carol));
+
+        assertThatThrownBy(() -> em.flush()).hasMessageContaining("uk_vote_invitees_vote_user");
     }
 
     @Test
@@ -263,8 +372,8 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("should keep a user listed by ID and by account email on edit instead of deleting and re-adding them")
-    void shouldKeepUserInviteeWhenListedByEmailOnEdit() {
+    @DisplayName("should replace an Invitee by ID with an email entry on edit when only their account's address is listed, like any address")
+    void shouldReplaceIdInviteeWithEmailWhenOnlyAddressListedOnEdit() {
         User carol = User.builder().username("em-carol-" + System.nanoTime()).email(carolEmail).build();
         em.persist(carol);
         Vote scheduled = persistPoll(owner, now.plusDays(1), now.plusDays(2), "A", "B");
@@ -286,11 +395,11 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
         em.flush();
         em.clear();
 
-        assertThat(inviteeRepository.findByVoteId(scheduled.getId())).singleElement()
-                .satisfies(i -> assertThat(i.getId()).isEqualTo(before));
-        // Not a new Invitee, so the read Invitation stays read
-        assertThat(reads().isNotified(carol.getId(), scheduled.getId(), now)).isTrue();
-        assertThat(reads().countUnread(carol.getId(), now)).isZero();
+        // The ID entry goes and the address is a new entry, exactly as for an address with no account
+        assertThat(inviteeRepository.findByVoteId(scheduled.getId())).singleElement().satisfies(i -> {
+            assertThat(i.getId()).isNotEqualTo(before);
+            assertThat(i.getEmail()).isEqualTo(carolEmail);
+        });
     }
 
     @Test
@@ -382,8 +491,8 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("should End the Poll when binding drops the only pending row, already covered by a voted Invitee added by ID")
-    void shouldEndPollWhenBindingDropsLastPendingRow() {
+    @DisplayName("should keep the Poll Open and the address listed when binding ties it to a voted Invitee added by ID")
+    void shouldKeepPendingRowWhenBindingToVotedIdInvitee() {
         String bobEmail = "bob-" + System.nanoTime() + "@example.com";
         User bob = votedInvitee(bobEmail);
         // bob verifies an address that was also invited by email
@@ -393,11 +502,11 @@ class EmailInviteePostgresTest extends PostgresRepositoryTest {
 
         voteService.bindEmailInvitees(em.find(User.class, bob.getId()));
 
-        Vote ended = reloaded();
-        assertThat(ended.getStatus()).isEqualTo(VoteStatus.ENDED);
-        assertThat(ended.getDeadline()).isEqualTo(poll.getDeadline());
-        assertThat(inviteeRepository.findByVoteId(poll.getId())).singleElement()
-                .satisfies(i -> assertThat(i.getEmail()).isNull());
+        // The bound address reads like any address nobody answered from: still listed, no Ballot, the Poll stays Open
+        assertThat(reloaded().getStatus()).isEqualTo(VoteStatus.OPEN);
+        assertThat(voteService.getInvitees(poll.getId().toString(), owner.getId().toString()))
+                .extracting(InviteeResponse::email, InviteeResponse::hasBallot)
+                .containsExactly(Tuple.tuple(null, true), Tuple.tuple(bobEmail, false));
     }
 
     @Test

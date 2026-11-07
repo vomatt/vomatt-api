@@ -7,7 +7,6 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -20,9 +19,8 @@ import lombok.ToString;
  * active account (at invite time, or when someone verifies that email). An email row is always shown by its address.
  */
 @Entity
-@Table(name = "vote_invitees", uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"vote_id", "user_id"})
-})
+// Unique per kind: (parent, user_id) WHERE email IS NULL and (parent, email) WHERE email IS NOT NULL (V12)
+@Table(name = "vote_invitees")
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor

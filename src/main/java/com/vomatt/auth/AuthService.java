@@ -897,7 +897,8 @@ public class AuthService {
             Supplier<ApiException> invalidToken, Supplier<ApiException> keyNotFound,
             Supplier<ApiException> invalidSignature) throws Exception {
         Base64.Decoder base64 = Base64.getUrlDecoder();
-        String[] parts = idToken.split("\\.");
+        // Limit -1 keeps trailing empty segments, so "h.p.s." is refused instead of read as "h.p.s"
+        String[] parts = idToken.split("\\.", -1);
         if (parts.length != 3)
             throw invalidToken.get();
 
@@ -924,7 +925,12 @@ public class AuthService {
         var sig = Signature.getInstance("SHA256withRSA");
         sig.initVerify(rsaKey);
         sig.update((parts[0] + "." + parts[1]).getBytes(StandardCharsets.UTF_8));
-        if (!sig.verify(base64.decode(parts[2])))
+        byte[] signature = base64.decode(parts[2]);
+        // The JDK decoder accepts '=' padding and ignores unused low bits, so one signature has several spellings;
+        // only the canonical (unpadded, re-encodable) one is accepted, so the replay marker sees one token per signature
+        if (!Base64.getUrlEncoder().withoutPadding().encodeToString(signature).equals(parts[2]))
+            throw invalidToken.get();
+        if (!sig.verify(signature))
             throw invalidSignature.get();
 
         return JSON_MAPPER.readValue(base64.decode(parts[1]), Map.class);
@@ -933,7 +939,9 @@ public class AuthService {
     /**
      * Marks a verified id_token as used, refusing it the second time: a token captured in transit or pasted elsewhere
      * signs in at most once. The marker lives as long as the token is still accepted (its exp plus the clock skew),
-     * so it cannot expire before the token does. Keyed by the token's hash so Redis never holds the token itself.
+     * so it cannot expire before the token does. Keyed by the hash of the signed part (header.payload, which
+     * {@link #verifyRs256} has checked is exactly what precedes the last '.'), so no re-encoding of the signature
+     * segment gets a fresh marker, and Redis never holds the token itself.
      *
      * @param exp the token's exp claim, already checked by {@link #isExpired}
      */
@@ -943,7 +951,8 @@ public class AuthService {
         if (ttl.compareTo(Duration.ofSeconds(1)) < 0) {
             ttl = Duration.ofSeconds(1);
         }
-        if (!redisService.setIfAbsent(OAUTH_USED_NS, AppKey.sha256Hex(idToken), "1", ttl)) {
+        String signedInput = idToken.substring(0, idToken.lastIndexOf('.'));
+        if (!redisService.setIfAbsent(OAUTH_USED_NS, AppKey.sha256Hex(signedInput), "1", ttl)) {
             throw ApiException.unauthorized(MessageKey.AUTH_OAUTH_TOKEN_REPLAYED);
         }
     }

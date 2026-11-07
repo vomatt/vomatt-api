@@ -1180,11 +1180,32 @@ class AuthServiceTest {
     void shouldRejectGoogleTokenWhenPresentedTwice() throws Exception {
         ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
         String idToken = signedGoogleToken(googlePayload("carol@example.com", true));
-        when(redisService.setIfAbsent(eq("oauth:used"), eq(com.vomatt.common.security.AppKey.sha256Hex(idToken)), eq("1"), any(Duration.class)))
+        when(redisService.setIfAbsent(eq("oauth:used"), eq(com.vomatt.common.security.AppKey.sha256Hex(signedInput(idToken))), eq("1"), any(Duration.class)))
                 .thenReturn(false);
 
         assertGoogleRejected(idToken, MessageKey.AUTH_OAUTH_TOKEN_REPLAYED);
         verify(userRepository, never()).findByEmail(anyString());
+    }
+
+    @Test
+    void shouldRejectGoogleTokenWhenSignatureSegmentIsNotCanonical() throws Exception {
+        ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
+        String idToken = signedGoogleToken(googlePayload("carol@example.com", true));
+        String signature = idToken.substring(idToken.lastIndexOf('.') + 1);
+        // A 2048-bit signature is 342 base64url characters, so the last one carries 4 unused low bits
+        char last = signature.charAt(signature.length() - 1);
+        String alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        String lowBitsFlipped = idToken.substring(0, idToken.length() - 1) + alphabet.charAt(alphabet.indexOf(last) ^ 1);
+
+        // Each spelling decodes to the same signature bytes; none may sign in or reach the replay marker
+        for (String variant : List.of(idToken + "==", idToken + ".", lowBitsFlipped)) {
+            assertGoogleRejected(variant, MessageKey.AUTH_GOOGLE_NO_EMAIL);
+        }
+        verify(redisService, never()).setIfAbsent(eq("oauth:used"), anyString(), any(), any(Duration.class));
+    }
+
+    private static String signedInput(String idToken) {
+        return idToken.substring(0, idToken.lastIndexOf('.'));
     }
 
     @Test
@@ -1217,7 +1238,7 @@ class AuthServiceTest {
         when(refreshTokenService.issue(anyString(), any(), anyBoolean())).thenReturn(new RefreshTokenService.IssuedTokens("mock-token", "mock-refresh-token"));
         assertThat(authService.appleLogin(idToken, null, "raw-nonce").token()).isEqualTo("mock-token");
         // The marker outlives the token: exp (600 s) plus the 60 s clock skew
-        verify(redisService).setIfAbsent(eq("oauth:used"), eq(com.vomatt.common.security.AppKey.sha256Hex(idToken)), eq("1"),
+        verify(redisService).setIfAbsent(eq("oauth:used"), eq(com.vomatt.common.security.AppKey.sha256Hex(signedInput(idToken))), eq("1"),
                 argThat((Duration ttl) -> ttl.compareTo(Duration.ofMinutes(10)) > 0 && ttl.compareTo(Duration.ofMinutes(11)) <= 0));
     }
 

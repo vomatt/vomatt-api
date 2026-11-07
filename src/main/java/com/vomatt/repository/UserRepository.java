@@ -48,8 +48,6 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     boolean existsByEmail(String email);
 
-    boolean existsByPhoneNumber(String phoneNumber);
-
     /** The account's {@code active} flag: empty when the account no longer exists, false when it is suspended. */
     @Query("SELECT u.active FROM User u WHERE u.id = :id")
     Optional<Boolean> findActiveById(@Param("id") UUID id);

@@ -1,6 +1,6 @@
 -- Invitees and Invite List members are keyed by kind: an ID entry by user, an email entry by address. A user may now hold
 -- both on the same Poll / Invite List, so whether an address belongs to an already-invited user never changes what the
--- owner sees (security finding F05). The (…, email) WHERE email IS NOT NULL unique indexes already exist.
+-- owner sees. The (…, email) WHERE email IS NOT NULL unique indexes already exist.
 -- The old UNIQUE (…, user_id) constraints were declared inline, so their names are Postgres-generated: find them by
 -- their columns. Idempotent.
 DO $$
@@ -22,3 +22,7 @@ END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_vote_invitees_vote_user ON vomatt.vote_invitees (vote_id, user_id) WHERE email IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uk_invite_list_members_list_user ON vomatt.invite_list_members (invite_list_id, user_id) WHERE email IS NULL;
+-- The dropped constraints' indexes also served lookups by parent alone (lists, counts, ON DELETE CASCADE) and by
+-- parent + user without an email condition (the first-row-of-user rule); the partial indexes above serve neither
+CREATE INDEX IF NOT EXISTS idx_vote_invitees_vote_user ON vomatt.vote_invitees (vote_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_invite_list_members_list_user ON vomatt.invite_list_members (invite_list_id, user_id);

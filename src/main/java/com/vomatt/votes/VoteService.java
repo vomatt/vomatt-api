@@ -13,6 +13,7 @@ import com.vomatt.common.dto.ReportRequest;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -682,15 +683,15 @@ public class VoteService {
         return inviteeRepository.findStatuses(voteId).stream()
             // An Invitee added by email is shown only by that address, never revealing whether it has an account
             .map(s -> s.getEmail() != null
-                ? new InviteeResponse(null, null, null, s.getEmail(), s.getHasBallot(), s.getInvitedAt())
-                : new InviteeResponse(s.getUserId().toString(), s.getUsername(), s.getAvatarUrl(), null, s.getHasBallot(), s.getInvitedAt()))
+                ? new InviteeResponse(null, null, null, s.getEmail(), s.getHasBallot(), s.getInvitedAt().atOffset(ZoneOffset.UTC))
+                : new InviteeResponse(s.getUserId().toString(), s.getUsername(), s.getAvatarUrl(), null, s.getHasBallot(), s.getInvitedAt().atOffset(ZoneOffset.UTC)))
             .toList();
     }
 
     /**
      * ID and email Invitees are independent keys, deduplicated only against their own kind: a user already invited by
      * ID, an address already invited, duplicates and the owner (never an Invitee) are skipped. Whether an address
-     * belongs to an account never decides whether it is listed (F05): its row keeps the address and also holds the
+     * belongs to an account never decides whether it is listed: its row keeps the address and also holds the
      * user of an active account, so they get access right away, even when that user is already invited by ID. Any
      * other address (unknown or suspended) stays pending until verified. Every new email row is sent an invitation
      * once committed.
@@ -735,7 +736,7 @@ public class VoteService {
     /**
      * Edit only happens while Scheduled, so no Invitee can hold a Ballot yet. A null list keeps that kind of Invitee.
      * An Invitee added by email is kept when its stored address is listed; one added by ID when its user ID is listed,
-     * never by the email of their account (whether an address is someone's account must not change the outcome, F05).
+     * never by the email of their account (whether an address is someone's account must not change the outcome).
      * Kept ones are never deleted and re-added, so only truly new Invitees see the Invitation unread again.
      */
     private void replaceInvitees(Vote vote, List<UUID> userIds, List<String> emails) {

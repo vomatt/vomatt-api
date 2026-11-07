@@ -40,13 +40,14 @@ public interface InviteeRepository extends JpaRepository<Invitee, UUID> {
                          AND (e.updated_at, e.id) < (i.updated_at, i.id)))""";
 
     /** Invitees of a Poll with whether each holds a Ballot ({@link #FIRST_OF_USER}), earliest invited first. */
-    @Query("""
-            SELECT u.id AS userId, u.username AS username, u.avatarUrl AS avatarUrl, i.email AS email, i.createdAt AS invitedAt,
-                   CASE WHEN EXISTS (SELECT 1 FROM UserVote uv WHERE uv.vote.id = i.vote.id AND uv.user.id = u.id)
-                         AND NOT EXISTS (SELECT 1 FROM Invitee e WHERE e.vote.id = i.vote.id AND e.user.id = u.id
-                             AND (e.updatedAt < i.updatedAt OR (e.updatedAt = i.updatedAt AND e.id < i.id)))
-                        THEN true ELSE false END AS hasBallot
-            FROM Invitee i LEFT JOIN i.user u WHERE i.vote.id = :voteId ORDER BY i.createdAt, i.id""")
+    @Query(value = """
+            SELECT u.id AS "userId", u.username AS "username", u.avatar_url AS "avatarUrl", i.email AS "email",
+                   i.created_at AS "invitedAt",
+                   (EXISTS (SELECT 1 FROM vomatt.user_votes uv WHERE uv.vote_id = i.vote_id AND uv.user_id = i.user_id)
+                    AND """ + FIRST_OF_USER + """
+            ) AS "hasBallot"
+            FROM vomatt.vote_invitees i LEFT JOIN vomatt.users u ON u.id = i.user_id
+            WHERE i.vote_id = :voteId ORDER BY i.created_at, i.id""", nativeQuery = true)
     List<InviteeStatus> findStatuses(@Param("voteId") UUID voteId);
 
     /**

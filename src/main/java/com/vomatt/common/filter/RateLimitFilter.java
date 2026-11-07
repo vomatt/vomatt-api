@@ -33,25 +33,25 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final RateLimitConfig rateLimitConfig;
     private final SecurityErrorWriter errorWriter;
     /**
-     * Matchers per pattern, on the parsed, decoded path that SecurityConfig and Spring MVC route on: matching the raw
-     * request URI let /api/%61uth/send-otp reach the auth handler uncounted.
+     * Matchers on the parsed, decoded path that SecurityConfig and Spring MVC route on: matching the raw request URI
+     * let /api/%61uth/send-otp reach the auth handler uncounted. Configured paths are cached per pattern.
      */
-    private final Map<String, RequestMatcher> matchers = new ConcurrentHashMap<>();
+    private static final PathPatternRequestMatcher.Builder MATCHERS = PathPatternRequestMatcher.withDefaults();
+    private static final RequestMatcher AUTH_PATHS = MATCHERS.matcher("/api/auth/**");
+    private final Map<String, RequestMatcher> pathMatchers = new ConcurrentHashMap<>();
 
     private boolean matches(String pattern, HttpServletRequest request) {
-        return matchers.computeIfAbsent(pattern, PathPatternRequestMatcher.withDefaults()::matcher).matches(request);
+        return pathMatchers.computeIfAbsent(pattern, MATCHERS::matcher).matches(request);
     }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         if (!rateLimitConfig.isEnabled()) return true;
         // Outside auth only writes count (Ballots, Comments, likes...); reads stay unlimited
-        if (SKIPPED_METHODS.contains(request.getMethod()) && !matches(AUTH_PATH_PATTERN, request)) return true;
+        if (SKIPPED_METHODS.contains(request.getMethod()) && !AUTH_PATHS.matches(request)) return true;
         return rateLimitConfig.getPaths().stream().noneMatch(p -> matches(p, request));
     }
 
-    /** Auth endpoint patterns; these fail closed when Redis is down (prevents OTP brute force). */
-    private static final String AUTH_PATH_PATTERN = "/api/auth/**";
 
     // OPTIONS is listed defensively: Spring Security's CorsFilter normally answers preflights before this filter runs
     private static final Set<String> SKIPPED_METHODS = Set.of("GET", "HEAD", "OPTIONS");
@@ -66,7 +66,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             // When Redis is down, auth endpoints fail closed (blocked with 429) to prevent OTP brute force;
             // other endpoints fail open (allowed) to preserve availability.
             // No Retry-After here: waiting does not bring Redis back.
-            if (matches(AUTH_PATH_PATTERN, request)) {
+            if (AUTH_PATHS.matches(request)) {
                 errorWriter.write(request, response, HttpStatus.TOO_MANY_REQUESTS.value(), MessageKey.COMMON_RATE_LIMITED);
                 return;
             }
@@ -84,7 +84,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private Long countRequest(HttpServletRequest request, long window, RateLimitConfig.Limit limit) {
         try {
             // Writes get their own bucket so heavy voting cannot lock an IP out of /api/auth/refresh
-            String prefix = matches(AUTH_PATH_PATTERN, request) ? "rate:limit" : "rate:limit:write";
+            String prefix = AUTH_PATHS.matches(request) ? "rate:limit" : "rate:limit:write";
             return redisService.incrementAndExpire(prefix, ClientIpResolver.resolve(request) + ":" + window, limit.ttl());
         } catch (Exception e) {
             log.warn("Rate limit check failed for uri={}: {}", request.getRequestURI(), e.getMessage());

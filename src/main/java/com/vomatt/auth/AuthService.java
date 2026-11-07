@@ -550,9 +550,8 @@ public class AuthService {
         }
         if (targets.contains(LoginUnlock.TARGET_DAILY)) {
             // Today's flood ceiling, and the per-IP counts of the IPs that guessed wrong (or the one IP given)
-            String day = ":" + TextUtil.utcDay();
-            List<String> dailyKeys = new ArrayList<>(List.of(key + day));
-            attemptKeys.forEach(a -> dailyKeys.add(a + day));
+            List<String> dailyKeys = new ArrayList<>(List.of(DailyQuota.of(key, "").identifierKey()));
+            attemptKeys.forEach(a -> dailyKeys.add(DailyQuota.of(key, a).sourceKey()));
             removed += redisService.deleteAll(namespace + OTP_DAILY_SUFFIX, dailyKeys);
         }
         // Lock and counter are both gone for these keys, so the index has nothing left to point at

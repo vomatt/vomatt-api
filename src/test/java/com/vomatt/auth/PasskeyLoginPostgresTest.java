@@ -61,7 +61,7 @@ class PasskeyLoginPostgresTest extends PostgresRepositoryTest {
         when(redisService.getAndDelete(anyString(), anyString(), any()))
                 .thenAnswer(inv -> redis.remove(inv.getArgument(0) + ":" + inv.getArgument(1)));
         passkeyService = new PasskeyService(passkeyCredentialRepository, userRepository, redisService, "vomatt.com",
-                PasskeyServicePostgresTest.PROD_ORIGINS);
+                PasskeyServicePostgresTest.PROD_ORIGINS, PasskeyServicePostgresTest.ADMIN_ORIGINS);
         user = persistUser("passkey-login-" + UUID.randomUUID().toString().substring(0, 8));
         em.flush();
         emulator = new PasskeyEmulator("https://vomatt.com");
@@ -69,10 +69,15 @@ class PasskeyLoginPostgresTest extends PostgresRepositoryTest {
 
     /** Registers a passkey for {@link #user} on {@link #emulator} through the real register flow. */
     private PasskeyCredential register() {
+        return register(false);
+    }
+
+    /** {@code adminScope}: registered with an admin console access token. */
+    private PasskeyCredential register(boolean adminScope) {
         var options = PasskeyServicePostgresTest.toWebAuthn(passkeyService.registrationOptions(user.getId().toString()));
         var credential = JsonMapper.builder().build().convertValue(emulator.create(options),
                 com.vomatt.auth.dto.PasskeyRegistrationVerifyRequest.Credential.class);
-        var saved = passkeyService.verifyRegistration(user.getId().toString(),
+        var saved = passkeyService.verifyRegistration(user.getId().toString(), adminScope,
                 new com.vomatt.auth.dto.PasskeyRegistrationVerifyRequest(credential, null));
         return passkeyCredentialRepository.findById(saved.id()).orElseThrow();
     }
@@ -88,6 +93,11 @@ class PasskeyLoginPostgresTest extends PostgresRepositoryTest {
 
     private static PasskeyLoginVerifyRequest request(Map<String, Object> json) {
         return new PasskeyLoginVerifyRequest(JsonMapper.builder().build().convertValue(json, PasskeyLoginVerifyRequest.Credential.class));
+    }
+
+    /** An admin console sign-in: admin challenge, signed on https://admin.vomatt.com unless the emulator says otherwise. */
+    private Map<String, Object> adminSignIn(PasskeyEmulator authenticator) {
+        return authenticator.get(toWebAuthn(passkeyService.adminLoginOptions()));
     }
 
     private static void assertInvalid(ThrowingCallable call) {
@@ -229,5 +239,57 @@ class PasskeyLoginPostgresTest extends PostgresRepositoryTest {
     void shouldRejectWhenResponseMalformed() {
         assertInvalid(() -> passkeyService.authenticate(new PasskeyLoginVerifyRequest(new PasskeyLoginVerifyRequest.Credential(
                 "a", "a", "public-key", new PasskeyLoginVerifyRequest.Response("%%%", "%%%", "%%%", null), null, null))));
+    }
+
+    // ── admin console sign-in ────────────────────────────────────────
+
+    @Test
+    @DisplayName("should sign in to the admin console with a passkey registered from it, on the admin origin")
+    void shouldReturnOwnerWhenAdminScopePasskeySignsInFromAdminOrigin() {
+        register(true);
+
+        User signedIn = passkeyService.authenticateAdmin(request(adminSignIn(emulator.withOrigin("https://admin.vomatt.com"))));
+
+        assertThat(signedIn.getId()).isEqualTo(user.getId());
+        verify(redisService).setOrThrow(eq("passkey:challenge"), anyString(),
+                eq(new PasskeyService.PasskeyChallenge(PasskeyService.PasskeyChallenge.Purpose.ADMIN_AUTHENTICATION, null)),
+                eq(Duration.ofMinutes(5)));
+    }
+
+    @Test
+    @DisplayName("should answer 403 auth.passkey.admin_scope_required for a passkey registered outside the admin console")
+    void shouldReturn403WhenConsumerScopePasskeyUsedForAdminSignIn() {
+        PasskeyCredential registered = register(false);
+        long countAtRegistration = registered.getSignCount();
+
+        assertThatThrownBy(() -> passkeyService.authenticateAdmin(request(adminSignIn(emulator.withOrigin("https://admin.vomatt.com")))))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getMessageKey()).isEqualTo(MessageKey.AUTH_PASSKEY_ADMIN_SCOPE_REQUIRED);
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                });
+        em.flush();
+        em.clear();
+        // Refused before the bookkeeping: the passkey was not used
+        assertThat(passkeyCredentialRepository.findById(registered.getId()).orElseThrow().getSignCount()).isEqualTo(countAtRegistration);
+        // The same passkey still signs in to the consumer apps
+        assertThat(passkeyService.authenticate(request(signIn())).getId()).isEqualTo(user.getId());
+    }
+
+    @Test
+    @DisplayName("should reject an admin-scope passkey's assertion from the consumer origin at the admin sign-in")
+    void shouldRejectWhenAdminSignInAssertionComesFromConsumerOrigin() {
+        register(true);
+
+        assertInvalid(() -> passkeyService.authenticateAdmin(request(adminSignIn(emulator.withOrigin("https://vomatt.com")))));
+    }
+
+    @Test
+    @DisplayName("should reject a consumer sign-in challenge at the admin sign-in, and an admin one at the consumer sign-in")
+    void shouldRejectWhenChallengeIssuedForTheOtherSignIn() {
+        register(true);
+        PasskeyEmulator admin = emulator.withOrigin("https://admin.vomatt.com");
+
+        assertInvalid(() -> passkeyService.authenticateAdmin(request(admin.get(toWebAuthn(passkeyService.loginOptions())))));
+        assertInvalid(() -> passkeyService.authenticate(request(adminSignIn(admin))));
     }
 }

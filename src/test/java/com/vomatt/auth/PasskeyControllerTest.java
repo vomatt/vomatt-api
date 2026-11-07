@@ -91,7 +91,7 @@ class PasskeyControllerTest {
     @DisplayName("should return the stored passkey when verification succeeds")
     void shouldReturnPasskeyWhenVerified() throws Exception {
         UUID id = UUID.randomUUID();
-        when(passkeyService.verifyRegistration(eq(USER_ID), any(PasskeyRegistrationVerifyRequest.class)))
+        when(passkeyService.verifyRegistration(eq(USER_ID), eq(false), any(PasskeyRegistrationVerifyRequest.class)))
                 .thenReturn(new PasskeyResponse(id, "iPhone", OffsetDateTime.now(), null, List.of("internal")));
 
         mockMvc.perform(post("/api/auth/passkey/register/verify").contentType(MediaType.APPLICATION_JSON).content(VERIFY_BODY))
@@ -102,10 +102,24 @@ class PasskeyControllerTest {
     }
 
     @Test
+    @DisplayName("should register an admin-console passkey only when the access token grants admin")
+    void shouldPassAdminScopeWhenRegisteringWithAdminToken() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new UserPrincipal(USER_ID, List.of("user", "admin"), null), null,
+                AuthorityUtils.createAuthorityList("ROLE_USER", "ROLE_ADMIN")));
+        when(passkeyService.verifyRegistration(eq(USER_ID), eq(true), any(PasskeyRegistrationVerifyRequest.class)))
+                .thenReturn(new PasskeyResponse(UUID.randomUUID(), "YubiKey", OffsetDateTime.now(), null, List.of("usb")));
+
+        mockMvc.perform(post("/api/auth/passkey/register/verify").contentType(MediaType.APPLICATION_JSON).content(VERIFY_BODY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("YubiKey"));
+    }
+
+    @Test
     @DisplayName("should answer 400 auth.passkey.invalid when the service rejects the passkey")
     void shouldReturn400WhenPasskeyInvalid() throws Exception {
         when(messageService.resolve(any(MessageKey.class))).thenReturn("Passkey verification failed. Please try again");
-        when(passkeyService.verifyRegistration(eq(USER_ID), any(PasskeyRegistrationVerifyRequest.class)))
+        when(passkeyService.verifyRegistration(eq(USER_ID), eq(false), any(PasskeyRegistrationVerifyRequest.class)))
                 .thenThrow(ApiException.badRequest(MessageKey.AUTH_PASSKEY_INVALID));
 
         mockMvc.perform(post("/api/auth/passkey/register/verify").contentType(MediaType.APPLICATION_JSON).content(VERIFY_BODY))

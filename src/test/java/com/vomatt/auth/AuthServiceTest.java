@@ -657,7 +657,7 @@ class AuthServiceTest {
     void shouldIssueAdminScopeWhenAdminPasskeySignInSucceeds() {
         User admin = User.builder().id(UUID.randomUUID()).email("admin@example.com")
                 .roles(new String[] { "user", "admin" }).active(true).build();
-        when(passkeyService.authenticate(PASSKEY)).thenReturn(admin);
+        when(passkeyService.authenticateAdmin(PASSKEY)).thenReturn(admin);
         when(refreshTokenService.issue(anyString(), any(), eq(true))).thenReturn(new RefreshTokenService.IssuedTokens("admin-token", "admin-refresh"));
 
         AuthResponse response = authService.verifyAdminPasskey(PASSKEY);
@@ -670,7 +670,7 @@ class AuthServiceTest {
     void shouldReturn403AdminForbiddenLikeAdminOtpWhenNonAdminUsesAdminPasskeySignIn() {
         User customer = User.builder().id(UUID.randomUUID()).email("user@example.com")
                 .roles(new String[] { "user" }).active(true).build();
-        when(passkeyService.authenticate(PASSKEY)).thenReturn(customer);
+        when(passkeyService.authenticateAdmin(PASSKEY)).thenReturn(customer);
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(customer));
 
         // The same error /admin/verify-otp gives this user
@@ -687,7 +687,7 @@ class AuthServiceTest {
     @Test
     void shouldReturn403BannedWhenSuspendedAdminUsesAdminPasskeySignIn() {
         User admin = User.builder().id(UUID.randomUUID()).roles(new String[] { "user", "admin" }).active(false).build();
-        when(passkeyService.authenticate(PASSKEY)).thenReturn(admin);
+        when(passkeyService.authenticateAdmin(PASSKEY)).thenReturn(admin);
 
         assertThatThrownBy(() -> authService.verifyAdminPasskey(PASSKEY)).isInstanceOfSatisfying(ApiException.class,
                 ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.AUTH_ACCOUNT_BANNED));

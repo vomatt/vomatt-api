@@ -124,7 +124,9 @@ public class PasskeyController {
                     **Behavior**: send the created credential's `credential.toJSON()` as `credential` (iOS: the same fields from \
                     `ASAuthorizationPlatformPublicKeyCredentialRegistration`, base64url), with an optional `name` (at most 100 characters; blank is stored as null). \
                     The server checks the challenge, the origin (https://vomatt.com or https://admin.vomatt.com), the RP ID hash (vomatt.com), \
-                    user presence and the key algorithm, then stores the passkey for the caller and returns it
+                    user presence and the key algorithm, then stores the passkey for the caller and returns it. \
+                    Only a passkey registered with an admin console access token (from `POST /api/auth/admin/verify-otp` or the admin passkey sign-in) \
+                    can sign in to the admin console; one registered with any other token signs in to the consumer apps only
                     **Side effects**: the challenge is spent whether or not verification succeeds, so a retry needs new options; a new passkey row
                     **Errors**:
                     - 400 `auth.passkey.invalid`: the response is malformed or fails verification (wrong origin or RP ID, unknown, spent, expired or another user's challenge, unsupported algorithm); get new options and retry
@@ -135,6 +137,6 @@ public class PasskeyController {
                     - 409 `common.conflict`: this passkey is already registered (to this or another account)""")
     public ResponseEntity<ApiResponse<PasskeyResponse>> verifyRegistration(
             @Valid @RequestBody PasskeyRegistrationVerifyRequest request, @AuthenticationPrincipal UserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.ok(passkeyService.verifyRegistration(principal.userId(), request)));
+        return ResponseEntity.ok(ApiResponse.ok(passkeyService.verifyRegistration(principal.userId(), principal.grantsAdmin(), request)));
     }
 }

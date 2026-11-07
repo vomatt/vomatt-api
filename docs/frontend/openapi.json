@@ -9698,9 +9698,75 @@
         "tags" : [ "Admin - Poll" ]
       }
     },
+    "/api/auth/admin/passkey/login/options" : {
+      "post" : {
+        "description" : "**Auth**: public\n**Precondition**: none; usernameless, like `POST /api/auth/passkey/login/options`\n**Behavior**: the admin console counterpart of `POST /api/auth/passkey/login/options`, with the same response: pass `data` to `PublicKeyCredential.parseRequestOptionsFromJSON` and `navigator.credentials.get({ publicKey })` on https://admin.vomatt.com, and send `credential.toJSON()` to `POST /api/auth/admin/passkey/login/verify`. The challenge is accepted only there, and that endpoint accepts no other challenge\n**Side effects**: issues a one-time challenge that expires after 5 minutes\n**Errors**:\n- 429 `common.rate_limited`: too many auth requests from this IP",
+        "operationId" : "adminPasskeyLoginOptions",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : {
+                    "allowCredentials" : [ ],
+                    "challenge" : "Qm8AYkRgZ3B1c2hxS1d0X0Nmc2VhLWtPZ2V3UjN2cTQ",
+                    "rpId" : "vomatt.com",
+                    "timeout" : 300000,
+                    "userVerification" : "preferred"
+                  },
+                  "error" : null,
+                  "errorCode" : null,
+                  "message" : null,
+                  "success" : true
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePasskeyLoginOptionsResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Resource not found (errorCode e.g. `vote.not_found`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Get admin console passkey sign-in options",
+        "tags" : [ "Auth" ]
+      }
+    },
     "/api/auth/admin/passkey/login/verify" : {
       "post" : {
-        "description" : "**Auth**: public\n**Precondition**: a challenge from `POST /api/auth/passkey/login/options` (shared with the consumer sign-in), at most 5 minutes old and not yet used\n**Behavior**: the passkey counterpart of `POST /api/auth/admin/verify-otp`: verifies the passkey as `POST /api/auth/passkey/login/verify` does, then requires the owner to be an active admin and returns tokens that grant the admin role (`/api/admin/**`); refreshing them keeps the admin scope\n**Side effects**: the challenge is spent whether or not the sign-in succeeds, also when the owner is not an admin; on success the passkey's sign count and last use, and `lastLoginAt`, are updated\n**Errors**:\n- 400 `common.validation_failed`: `credential` or one of its required fields is missing\n- 401 `auth.passkey.invalid`: the response is malformed or fails verification; get new options and retry\n- 403 `auth.admin.forbidden`: the passkey's owner is not an admin (same response as `POST /api/auth/admin/verify-otp`)\n- 403 `auth.account_banned`: the admin is suspended\n- 429 `common.rate_limited`: too many auth requests from this IP",
+        "description" : "**Auth**: public\n**Precondition**: a challenge from `POST /api/auth/admin/passkey/login/options` (a consumer sign-in challenge is refused), at most 5 minutes old and not yet used, and a passkey registered from the admin console (`POST /api/auth/passkey/register/verify` with an admin console access token)\n**Behavior**: the passkey counterpart of `POST /api/auth/admin/verify-otp`: verifies the passkey as `POST /api/auth/passkey/login/verify` does, but accepts only the admin console origin (https://admin.vomatt.com), then requires a passkey registered from the admin console and an active admin owner, and returns tokens that grant the admin role (`/api/admin/**`); refreshing them keeps the admin scope\n**Side effects**: the challenge is spent whether or not the sign-in succeeds, also when the owner is not an admin; on success the passkey's sign count and last use, and `lastLoginAt`, are updated\n**Errors**:\n- 400 `common.validation_failed`: `credential` or one of its required fields is missing\n- 401 `auth.passkey.invalid`: the response is malformed or fails verification (including a consumer sign-in challenge or a non-admin-console origin); get new options and retry\n- 403 `auth.passkey.admin_scope_required`: the passkey was registered outside the admin console (including every passkey registered before this check existed); sign in with `POST /api/auth/admin/send-otp`, then register a passkey from the admin console\n- 403 `auth.admin.forbidden`: the passkey's owner is not an admin (same response as `POST /api/auth/admin/verify-otp`)\n- 403 `auth.account_banned`: the admin is suspended\n- 429 `common.rate_limited`: too many auth requests from this IP",
         "operationId" : "adminPasskeyLoginVerify",
         "requestBody" : {
           "content" : {
@@ -9789,19 +9855,34 @@
           "403" : {
             "content" : {
               "application/json" : {
-                "example" : {
-                  "data" : null,
-                  "error" : "This account does not have admin privileges",
-                  "errorCode" : "auth.admin.forbidden",
-                  "message" : "This account does not have admin privileges",
-                  "success" : false
+                "examples" : {
+                  "admin_forbidden" : {
+                    "description" : "admin_forbidden",
+                    "value" : {
+                      "data" : null,
+                      "error" : "This account does not have admin privileges",
+                      "errorCode" : "auth.admin.forbidden",
+                      "message" : "This account does not have admin privileges",
+                      "success" : false
+                    }
+                  },
+                  "admin_scope_required" : {
+                    "description" : "admin_scope_required",
+                    "value" : {
+                      "data" : null,
+                      "error" : "This passkey cannot sign in to the admin console. Sign in with an email code, then register a passkey from the admin console",
+                      "errorCode" : "auth.passkey.admin_scope_required",
+                      "message" : "This passkey cannot sign in to the admin console. Sign in with an email code, then register a passkey from the admin console",
+                      "success" : false
+                    }
+                  }
                 },
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
               }
             },
-            "description" : "Not an admin account (`auth.admin.forbidden`) or account suspended (`auth.account_banned`)"
+            "description" : "The passkey was not registered from the admin console (`auth.passkey.admin_scope_required`), not an admin account (`auth.admin.forbidden`) or account suspended (`auth.account_banned`)"
           },
           "404" : {
             "content" : {
@@ -10534,7 +10615,7 @@
     },
     "/api/auth/passkey/login/options" : {
       "post" : {
-        "description" : "**Auth**: public\n**Precondition**: none; the user does not enter an email or username (usernameless sign-in)\n**Behavior**: returns WebAuthn request options: pass `data` to `PublicKeyCredential.parseRequestOptionsFromJSON` and then `navigator.credentials.get({ publicKey })`, and send `credential.toJSON()` to `POST /api/auth/passkey/login/verify` (or `POST /api/auth/admin/passkey/login/verify` in the admin console). `allowCredentials` is always empty, so the user picks any passkey for vomatt.com\n**Side effects**: issues a one-time challenge that expires after 5 minutes\n**Errors**:\n- 429 `common.rate_limited`: too many auth requests from this IP",
+        "description" : "**Auth**: public\n**Precondition**: none; the user does not enter an email or username (usernameless sign-in)\n**Behavior**: returns WebAuthn request options: pass `data` to `PublicKeyCredential.parseRequestOptionsFromJSON` and then `navigator.credentials.get({ publicKey })`, and send `credential.toJSON()` to `POST /api/auth/passkey/login/verify`. `allowCredentials` is always empty, so the user picks any passkey for vomatt.com. The admin console uses `POST /api/auth/admin/passkey/login/options` instead\n**Side effects**: issues a one-time challenge that expires after 5 minutes\n**Errors**:\n- 429 `common.rate_limited`: too many auth requests from this IP",
         "operationId" : "passkeyLoginOptions",
         "responses" : {
           "200" : {
@@ -10851,7 +10932,7 @@
     },
     "/api/auth/passkey/register/verify" : {
       "post" : {
-        "description" : "**Auth**: required (Bearer token), the same user who got the options\n**Precondition**: a challenge from `POST /api/auth/passkey/register/options`, at most 5 minutes old and not yet used\n**Behavior**: send the created credential's `credential.toJSON()` as `credential` (iOS: the same fields from `ASAuthorizationPlatformPublicKeyCredentialRegistration`, base64url), with an optional `name` (at most 100 characters; blank is stored as null). The server checks the challenge, the origin (https://vomatt.com or https://admin.vomatt.com), the RP ID hash (vomatt.com), user presence and the key algorithm, then stores the passkey for the caller and returns it\n**Side effects**: the challenge is spent whether or not verification succeeds, so a retry needs new options; a new passkey row\n**Errors**:\n- 400 `auth.passkey.invalid`: the response is malformed or fails verification (wrong origin or RP ID, unknown, spent, expired or another user's challenge, unsupported algorithm); get new options and retry\n- 400 `common.validation_failed`: `credential` or one of its required fields is missing, or `name` is too long\n- 401 `common.unauthorized`: no or invalid access token\n- 403 `auth.account_banned`: the account is suspended\n- 404 `user.not_found`: the account no longer exists\n- 409 `common.conflict`: this passkey is already registered (to this or another account)",
+        "description" : "**Auth**: required (Bearer token), the same user who got the options\n**Precondition**: a challenge from `POST /api/auth/passkey/register/options`, at most 5 minutes old and not yet used\n**Behavior**: send the created credential's `credential.toJSON()` as `credential` (iOS: the same fields from `ASAuthorizationPlatformPublicKeyCredentialRegistration`, base64url), with an optional `name` (at most 100 characters; blank is stored as null). The server checks the challenge, the origin (https://vomatt.com or https://admin.vomatt.com), the RP ID hash (vomatt.com), user presence and the key algorithm, then stores the passkey for the caller and returns it. Only a passkey registered with an admin console access token (from `POST /api/auth/admin/verify-otp` or the admin passkey sign-in) can sign in to the admin console; one registered with any other token signs in to the consumer apps only\n**Side effects**: the challenge is spent whether or not verification succeeds, so a retry needs new options; a new passkey row\n**Errors**:\n- 400 `auth.passkey.invalid`: the response is malformed or fails verification (wrong origin or RP ID, unknown, spent, expired or another user's challenge, unsupported algorithm); get new options and retry\n- 400 `common.validation_failed`: `credential` or one of its required fields is missing, or `name` is too long\n- 401 `common.unauthorized`: no or invalid access token\n- 403 `auth.account_banned`: the account is suspended\n- 404 `user.not_found`: the account no longer exists\n- 409 `common.conflict`: this passkey is already registered (to this or another account)",
         "operationId" : "verifyRegistration",
         "requestBody" : {
           "content" : {

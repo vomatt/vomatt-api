@@ -303,9 +303,12 @@ public class AuthService {
         return buildAuthResponse(passkeyService.authenticate(request), false, false);
     }
 
-    /** Admin console passkey sign-in: the passkey counterpart of {@link #verifyAdminOtp}, with the same role checks. */
+    /**
+     * Admin console passkey sign-in: the passkey counterpart of {@link #verifyAdminOtp}, with the same role checks. Only
+     * an admin sign-in challenge, an admin console origin and a passkey registered from the admin console are accepted.
+     */
     public AuthResponse verifyAdminPasskey(PasskeyLoginVerifyRequest request) {
-        return buildAuthResponse(requireActiveAdmin(Optional.of(passkeyService.authenticate(request))), true, false);
+        return buildAuthResponse(requireActiveAdmin(Optional.of(passkeyService.authenticateAdmin(request))), true, false);
     }
 
     private AuthResponse verifyEmailOtp(String normalizedEmail, String code, String clientIp) {

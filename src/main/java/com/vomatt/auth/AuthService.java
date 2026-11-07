@@ -45,10 +45,12 @@ import java.security.spec.RSAPublicKeySpec;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -185,47 +187,54 @@ public class AuthService {
         String normalizedEmail = requireEmail(email);
         // Lock first: a locked pair is refused from Redis alone, without a DB hit per attempt
         rejectIfLocked(OTP_ADMIN_EMAIL_NS, attemptKey(normalizedEmail, clientIp));
-        requireExistingAdminByEmail(normalizedEmail);
-        sendEmailOtp(OTP_ADMIN_EMAIL_NS, normalizedEmail, "login", generateOtpCode(), clientIp);
+        boolean activeAdmin = userRepository.findByEmail(normalizedEmail)
+                .filter(User::isAdmin).filter(User::isActive).isPresent();
+        // Any other email takes the same cooldown, quota and stored OTP but gets no mail, so this public endpoint
+        // answers alike for every email and cannot list the admins; verifyAdminOtp still requires an active admin
+        sendEmailOtp(OTP_ADMIN_EMAIL_NS, normalizedEmail, "login", generateOtpCode(), clientIp, activeAdmin);
     }
 
     private void sendEmailOtp(String normalizedEmail, String code, String clientIp) {
         // Checked before the DB lookup, for the same reason as sendAdminOtp; sendEmailOtp checks again (Redis only)
         rejectIfLocked(OTP_EMAIL_NS, attemptKey(normalizedEmail, clientIp));
         String otpType = userRepository.existsByEmail(normalizedEmail) ? "login" : "signup";
-        sendEmailOtp(OTP_EMAIL_NS, normalizedEmail, otpType, code, clientIp);
+        sendEmailOtp(OTP_EMAIL_NS, normalizedEmail, otpType, code, clientIp, true);
     }
 
-    private void sendEmailOtp(String namespace, String normalizedEmail, String otpType, String code, String clientIp) {
+    /** {@code deliver} false stores the OTP like any other but sends nothing, so it can never be redeemed. */
+    private void sendEmailOtp(String namespace, String normalizedEmail, String otpType, String code, String clientIp,
+            boolean deliver) {
         String attemptKey = attemptKey(normalizedEmail, clientIp);
         rejectIfLocked(namespace, attemptKey);
 
         String redisKey = redisKey(normalizedEmail);
         acquireResendCooldown(namespace, redisKey);
-        // Computed once: the refund on failure must hit the same day's key even across UTC midnight
-        String quotaKey = redisKey + ":" + TextUtil.utcDay();
-        takeDailyQuota(namespace, quotaKey, otpDailyLimitEmail);
+        // Computed once: the refund on failure must hit the same day's keys even across UTC midnight
+        DailyQuota quota = DailyQuota.of(redisKey, attemptKey);
+        takeDailyQuota(namespace, redisKey, quota, otpDailyLimitEmail);
         boolean testAccount = OTP_EMAIL_NS.equals(namespace) && StringUtils.hasText(otpTestCode)
                 && normalizedEmail.endsWith(TEST_EMAIL_DOMAIN);
         if (testAccount) {
             code = otpTestCode;
         }
-        storeOtp(namespace, redisKey, quotaKey, attemptKey, new OtpRecord(otpHash(normalizedEmail, code), otpType, Instant.now(), 0));
-        if (testAccount) {
+        storeOtp(namespace, redisKey, quota, attemptKey, new OtpRecord(otpHash(normalizedEmail, code), otpType, Instant.now(), 0));
+        if (testAccount || !deliver) {
+            return;
+        }
+        if (OTP_ADMIN_EMAIL_NS.equals(namespace)) {
+            sendAdminEmailInBackground(normalizedEmail, code);
             return;
         }
 
         try {
-            if (OTP_ADMIN_EMAIL_NS.equals(namespace)) {
-                emailService.sendAdminLoginEmail(normalizedEmail, code);
-            } else if ("signup".equals(otpType)) {
+            if ("signup".equals(otpType)) {
                 emailService.sendPreSignupEmail(normalizedEmail, code);
             } else {
                 emailService.sendVerificationEmail(normalizedEmail, code);
             }
         } catch (Exception ex) {
             // The code never reached the user: drop it and shorten the cooldown so a retry is possible soon
-            releaseUndeliveredOtp(namespace, redisKey, quotaKey);
+            releaseUndeliveredOtp(namespace, redisKey, quota);
             log.warn("Failed to send OTP email: {}", ex.getMessage());
             throw ApiException.badRequest(MessageKey.AUTH_EMAIL_SEND_FAILED);
         }
@@ -235,20 +244,19 @@ public class AuthService {
         String attemptKey = attemptKey(phone, clientIp);
         rejectIfLocked(OTP_PHONE_NS, attemptKey);
 
-        if ("login".equals(otpType) && !userRepository.existsByPhoneNumber(phone)) {
-            throw ApiException.badRequest(MessageKey.AUTH_PHONE_NOT_REGISTERED);
-        }
+        // No registration check: as with email, whether the number has an account is told by isNewUser after the
+        // code is verified, so this public endpoint cannot be used to find out which numbers are registered
 
         String redisKey = redisKey(phone);
         acquireResendCooldown(OTP_PHONE_NS, redisKey);
-        String quotaKey = redisKey + ":" + TextUtil.utcDay();
-        takeDailyQuota(OTP_PHONE_NS, quotaKey, otpDailyLimitPhone);
-        storeOtp(OTP_PHONE_NS, redisKey, quotaKey, attemptKey, new OtpRecord(otpHash(phone, code), otpType, Instant.now(), 0));
+        DailyQuota quota = DailyQuota.of(redisKey, attemptKey);
+        takeDailyQuota(OTP_PHONE_NS, redisKey, quota, otpDailyLimitPhone);
+        storeOtp(OTP_PHONE_NS, redisKey, quota, attemptKey, new OtpRecord(otpHash(phone, code), otpType, Instant.now(), 0));
 
         try {
             smsService.sendOtp(phone, code);
         } catch (Exception ex) {
-            releaseUndeliveredOtp(OTP_PHONE_NS, redisKey, quotaKey);
+            releaseUndeliveredOtp(OTP_PHONE_NS, redisKey, quota);
             log.warn("Failed to send OTP SMS: {}", ex.getMessage());
             throw ApiException.badRequest(MessageKey.AUTH_SMS_SEND_FAILED);
         }
@@ -268,10 +276,10 @@ public class AuthService {
     public AuthResponse verifyAdminOtp(String email, String code, String clientIp) {
         String normalizedEmail = requireEmail(email);
         rejectIfLocked(OTP_ADMIN_EMAIL_NS, attemptKey(normalizedEmail, clientIp));
-        // P5-#13: the role check runs before the OTP is consumed, so a non-admin or suspended attempt burns nothing
-        User user = requireExistingAdminByEmail(normalizedEmail);
+        // OTP first, role second: an email that is not an active admin never received a code, so it fails here like
+        // any wrong code and the response reveals no role; only someone holding a delivered code sees the role checks
         consumeOtp(OTP_ADMIN_EMAIL_NS, normalizedEmail, code, clientIp);
-        return buildAuthResponse(user, true, false);
+        return buildAuthResponse(requireExistingAdminByEmail(normalizedEmail), true, false);
     }
 
     private static String requireEmail(String email) {
@@ -303,9 +311,12 @@ public class AuthService {
         return buildAuthResponse(passkeyService.authenticate(request), false, false);
     }
 
-    /** Admin console passkey sign-in: the passkey counterpart of {@link #verifyAdminOtp}, with the same role checks. */
+    /**
+     * Admin console passkey sign-in: the passkey counterpart of {@link #verifyAdminOtp}, with the same role checks. Only
+     * an admin sign-in challenge, an admin console origin and a passkey registered from the admin console are accepted.
+     */
     public AuthResponse verifyAdminPasskey(PasskeyLoginVerifyRequest request) {
-        return buildAuthResponse(requireActiveAdmin(Optional.of(passkeyService.authenticate(request))), true, false);
+        return buildAuthResponse(requireActiveAdmin(Optional.of(passkeyService.authenticateAdmin(request))), true, false);
     }
 
     private AuthResponse verifyEmailOtp(String normalizedEmail, String code, String clientIp) {
@@ -358,8 +369,23 @@ public class AuthService {
     /** Namespace suffix for the resend cooldown marker (SET NX), holding the epoch second a resend is allowed again. */
     private static final String OTP_COOLDOWN_SUFFIX = ":cooldown";
 
-    /** Namespace suffix for the per-identifier, per-UTC-day send counter (all IPs), so one address cannot be flooded. */
+    /**
+     * Namespace suffix for the per-UTC-day send counters ({@link DailyQuota}): one per identifier + IP holding the daily
+     * limit, and one per identifier (all IPs) at {@link #OTP_DAILY_FLOOD_FACTOR} times it, so one address cannot be
+     * flooded yet a stranger alone cannot spend the owner's sends.
+     */
     private static final String OTP_DAILY_SUFFIX = ":daily";
+
+    /** The per-identifier daily ceiling, as a multiple of the per-identifier + IP limit. */
+    static final int OTP_DAILY_FLOOD_FACTOR = 3;
+
+    /** The day's send counters an OTP send takes, computed once so a refund hits the same day. */
+    record DailyQuota(String identifierKey, String sourceKey) {
+        static DailyQuota of(String redisKey, String attemptKey) {
+            String day = TextUtil.utcDay();
+            return new DailyQuota(redisKey + ":" + day, attemptKey + ":" + day);
+        }
+    }
 
     private static final Duration OTP_LOCK_BASE = Duration.ofMinutes(5);
     // ponytail: lockout capped at 24h (5 min doubling reaches it at the 10th lockout); a longer ban needs an admin action
@@ -525,6 +551,12 @@ public class AuthService {
         if (targets.contains(LoginUnlock.TARGET_COOLDOWN)) {
             removed += redisService.deleteAll(namespace + OTP_COOLDOWN_SUFFIX, List.of(key));
         }
+        if (targets.contains(LoginUnlock.TARGET_DAILY)) {
+            // Today's flood ceiling, and the per-IP counts of the IPs that guessed wrong (or the one IP given)
+            List<String> dailyKeys = new ArrayList<>(List.of(DailyQuota.of(key, "").identifierKey()));
+            attemptKeys.forEach(a -> dailyKeys.add(DailyQuota.of(key, a).sourceKey()));
+            removed += redisService.deleteAll(namespace + OTP_DAILY_SUFFIX, dailyKeys);
+        }
         // Lock and counter are both gone for these keys, so the index has nothing left to point at
         if (lock) {
             if (clientIp == null) {
@@ -593,21 +625,34 @@ public class AuthService {
     }
 
     /**
-     * Counts this send against the identifier's daily cap, after the cooldown slot is taken so a user clicking resend
-     * during the cooldown does not burn the cap. Over it the cooldown stays set, which is harmless: no OTP is sent
-     * either way. Fails closed (RedisOperationException) like the OTP write itself.
+     * Counts this send against the daily caps, after the cooldown slot is taken so a user clicking resend during the
+     * cooldown does not burn the cap. A refused send gives back the cooldown it just took: the cooldown is shared by all
+     * IPs, so an IP over its own cap must not keep renewing it for the owner. Fails closed (RedisOperationException)
+     * like the OTP write itself.
      */
-    private void takeDailyQuota(String namespace, String quotaKey, long limit) {
-        long sent = redisService.incrementAndExpire(namespace + OTP_DAILY_SUFFIX, quotaKey, Duration.ofDays(1));
-        if (sent > limit) {
+    private void takeDailyQuota(String namespace, String redisKey, DailyQuota quota, long limit) {
+        String ns = namespace + OTP_DAILY_SUFFIX;
+        boolean refused = redisService.incrementAndExpire(ns, quota.sourceKey(), Duration.ofDays(1)) > limit;
+        if (!refused && redisService.incrementAndExpire(ns, quota.identifierKey(), Duration.ofDays(1)) > limit * OTP_DAILY_FLOOD_FACTOR) {
+            // Only the flood ceiling refused: this caller's own count gets its slot back
+            refund(ns, quota.sourceKey());
+            refused = true;
+        }
+        if (refused) {
+            redisService.delete(namespace + OTP_COOLDOWN_SUFFIX, redisKey);
             throw ApiException.tooManyRequests(MessageKey.AUTH_OTP_DAILY_LIMIT);
         }
     }
 
-    /** Gives back the slot taken by {@link #takeDailyQuota} when no OTP went out. Fail-soft: it must not mask the real failure. */
-    private void refundDailyQuota(String namespace, String quotaKey) {
+    /** Gives back the slots taken by {@link #takeDailyQuota} when no OTP went out. Fail-soft: it must not mask the real failure. */
+    private void refundDailyQuota(String namespace, DailyQuota quota) {
+        refund(namespace + OTP_DAILY_SUFFIX, quota.sourceKey());
+        refund(namespace + OTP_DAILY_SUFFIX, quota.identifierKey());
+    }
+
+    private void refund(String ns, String key) {
         try {
-            redisService.incrementAndExpire(namespace + OTP_DAILY_SUFFIX, quotaKey, -1, Duration.ofDays(1));
+            redisService.incrementAndExpire(ns, key, -1, Duration.ofDays(1));
         } catch (RuntimeException ex) {
             log.warn("Failed to refund OTP daily quota: {}", ex.getMessage());
         }
@@ -617,7 +662,7 @@ public class AuthService {
      * Stores the OTP and, in the same transaction, extends this identifier + IP's failure counter to outlive it, so a
      * resend never grants fresh guesses (the counter is not reset). If that fails, releases the cooldown just claimed.
      */
-    private void storeOtp(String namespace, String key, String quotaKey, String attemptKey, OtpRecord record) {
+    private void storeOtp(String namespace, String key, DailyQuota quota, String attemptKey, OtpRecord record) {
         Duration ttl = Duration.ofSeconds(otpTtlSeconds);
         try {
             redisService.execInTransaction(List.of(
@@ -625,7 +670,7 @@ public class AuthService {
                     RedisService.RedisWrite.expire(namespace + OTP_FAIL_SUFFIX, attemptKey, ttl)));
         } catch (RuntimeException ex) {
             // Every cleanup is fail-soft and runs in full: Redis is likely down, and the store failure is the one to report
-            refundDailyQuota(namespace, quotaKey);
+            refundDailyQuota(namespace, quota);
             try {
                 redisService.delete(namespace + OTP_COOLDOWN_SUFFIX, key);
             } catch (RuntimeException cleanup) {
@@ -639,8 +684,8 @@ public class AuthService {
      * Drops an OTP whose delivery failed and shortens its cooldown to {@link #OTP_FAILED_SEND_COOLDOWN}, so the user can
      * retry soon but a failing provider is not hit on every request. Fail-soft: a Redis error must not mask the send failure.
      */
-    private void releaseUndeliveredOtp(String namespace, String key, String quotaKey) {
-        refundDailyQuota(namespace, quotaKey);
+    private void releaseUndeliveredOtp(String namespace, String key, DailyQuota quota) {
+        refundDailyQuota(namespace, quota);
         try {
             // Cooldown first: if the delete then fails, the user can at least retry soon; the other order could leave a
             // full-length cooldown with no OTP behind it
@@ -649,6 +694,25 @@ public class AuthService {
         } catch (RuntimeException cleanup) {
             log.warn("Failed to release undelivered OTP: {}", cleanup.getMessage());
         }
+    }
+
+    /**
+     * Admin send-otp answers every email alike, so the mail goes out after the response: waiting for the provider would
+     * make an admin's request slower, and its failure would answer differently. A failed send is only logged; the
+     * undelivered OTP expires and the admin retries after the cooldown.
+     */
+    private void sendAdminEmailInBackground(String email, String code) {
+        Locale locale = LocaleContextHolder.getLocale();
+        Thread.ofVirtual().start(() -> {
+            LocaleContextHolder.setLocale(locale);
+            try {
+                emailService.sendAdminLoginEmail(email, code);
+            } catch (RuntimeException ex) {
+                log.warn("Failed to send admin OTP email: {}", ex.getMessage());
+            } finally {
+                LocaleContextHolder.resetLocaleContext();
+            }
+        });
     }
 
     private static String availableAt(Duration cooldown) {
@@ -897,7 +961,8 @@ public class AuthService {
             Supplier<ApiException> invalidToken, Supplier<ApiException> keyNotFound,
             Supplier<ApiException> invalidSignature) throws Exception {
         Base64.Decoder base64 = Base64.getUrlDecoder();
-        String[] parts = idToken.split("\\.");
+        // Limit -1 keeps trailing empty segments, so "h.p.s." is refused instead of read as "h.p.s"
+        String[] parts = idToken.split("\\.", -1);
         if (parts.length != 3)
             throw invalidToken.get();
 
@@ -924,7 +989,12 @@ public class AuthService {
         var sig = Signature.getInstance("SHA256withRSA");
         sig.initVerify(rsaKey);
         sig.update((parts[0] + "." + parts[1]).getBytes(StandardCharsets.UTF_8));
-        if (!sig.verify(base64.decode(parts[2])))
+        byte[] signature = base64.decode(parts[2]);
+        // The JDK decoder accepts '=' padding and ignores unused low bits, so one signature has several spellings;
+        // only the canonical (unpadded, re-encodable) one is accepted, so the replay marker sees one token per signature
+        if (!Base64.getUrlEncoder().withoutPadding().encodeToString(signature).equals(parts[2]))
+            throw invalidToken.get();
+        if (!sig.verify(signature))
             throw invalidSignature.get();
 
         return JSON_MAPPER.readValue(base64.decode(parts[1]), Map.class);
@@ -933,7 +1003,9 @@ public class AuthService {
     /**
      * Marks a verified id_token as used, refusing it the second time: a token captured in transit or pasted elsewhere
      * signs in at most once. The marker lives as long as the token is still accepted (its exp plus the clock skew),
-     * so it cannot expire before the token does. Keyed by the token's hash so Redis never holds the token itself.
+     * so it cannot expire before the token does. Keyed by the hash of the signed part (header.payload, which
+     * {@link #verifyRs256} has checked is exactly what precedes the last '.'), so no re-encoding of the signature
+     * segment gets a fresh marker, and Redis never holds the token itself.
      *
      * @param exp the token's exp claim, already checked by {@link #isExpired}
      */
@@ -943,7 +1015,8 @@ public class AuthService {
         if (ttl.compareTo(Duration.ofSeconds(1)) < 0) {
             ttl = Duration.ofSeconds(1);
         }
-        if (!redisService.setIfAbsent(OAUTH_USED_NS, AppKey.sha256Hex(idToken), "1", ttl)) {
+        String signedInput = idToken.substring(0, idToken.lastIndexOf('.'));
+        if (!redisService.setIfAbsent(OAUTH_USED_NS, AppKey.sha256Hex(signedInput), "1", ttl)) {
             throw ApiException.unauthorized(MessageKey.AUTH_OAUTH_TOKEN_REPLAYED);
         }
     }

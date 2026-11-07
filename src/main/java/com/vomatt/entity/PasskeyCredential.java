@@ -61,6 +61,10 @@ public class PasskeyCredential extends BaseEntity {
     @Column(name = "name", length = 100)
     private String name;
 
+    /** Registered by an admin console (admin-scope) session; only such a passkey signs in to the admin console. */
+    @Column(name = "admin_scope", nullable = false, updatable = false)
+    private boolean adminScope;
+
     @Column(name = "last_used_at")
     private OffsetDateTime lastUsedAt;
 }

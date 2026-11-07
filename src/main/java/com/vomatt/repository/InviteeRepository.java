@@ -29,26 +29,39 @@ public interface InviteeRepository extends JpaRepository<Invitee, UUID> {
     @Query("SELECT i.vote.id AS id, COUNT(i) AS count FROM Invitee i WHERE i.vote.id IN :voteIds GROUP BY i.vote.id")
     List<IdCount> countByVoteIds(@Param("voteIds") Collection<UUID> voteIds);
 
-    /** Invitees of a Poll with whether each holds a Ballot, earliest invited first. */
-    @Query("""
-            SELECT u.id AS userId, u.username AS username, u.avatarUrl AS avatarUrl, i.email AS email, i.createdAt AS invitedAt,
-                   CASE WHEN EXISTS (SELECT 1 FROM UserVote uv WHERE uv.vote.id = i.vote.id AND uv.user.id = u.id)
-                        THEN true ELSE false END AS hasBallot
-            FROM Invitee i LEFT JOIN i.user u WHERE i.vote.id = :voteId ORDER BY i.createdAt, i.id""")
+    /**
+     * A user can be an Invitee twice on one Poll (by ID and by an address of theirs), but Ballot state is the user's, not
+     * the row's. It goes on the user's first row only, earliest tied to them by (updated_at, id); every later row of
+     * theirs reads like a pending address. Otherwise a fresh address showing a Ballot would tell the owner it is the
+     * account of someone already invited. For a row aliased {@code i} tied to a user.
+     */
+    String FIRST_OF_USER = """
+            (NOT EXISTS (SELECT 1 FROM vomatt.vote_invitees e WHERE e.vote_id = i.vote_id AND e.user_id = i.user_id
+                         AND (e.updated_at, e.id) < (i.updated_at, i.id)))""";
+
+    /** Invitees of a Poll with whether each holds a Ballot ({@link #FIRST_OF_USER}), earliest invited first. */
+    @Query(value = """
+            SELECT u.id AS "userId", u.username AS "username", u.avatar_url AS "avatarUrl", i.email AS "email",
+                   i.created_at AS "invitedAt",
+                   (EXISTS (SELECT 1 FROM vomatt.user_votes uv WHERE uv.vote_id = i.vote_id AND uv.user_id = i.user_id)
+                    AND """ + FIRST_OF_USER + """
+            ) AS "hasBallot"
+            FROM vomatt.vote_invitees i LEFT JOIN vomatt.users u ON u.id = i.user_id
+            WHERE i.vote_id = :voteId ORDER BY i.created_at, i.id""", nativeQuery = true)
     List<InviteeStatus> findStatuses(@Param("voteId") UUID voteId);
 
     /**
-     * The one binding predicate, for a pending email row aliased {@code i}: the user is neither already an Invitee of
-     * that Poll nor its owner. Shared by every binding statement so they agree on which rows bind.
+     * The one binding predicate, for a pending email row aliased {@code i}: the user is not the Poll's owner. A row of
+     * the user already on the Poll (by ID or another address) does not stop it: the address stays listed as entered.
+     * Shared by every binding statement so they agree on which rows bind.
      */
     String BINDABLE = """
-            (NOT EXISTS (SELECT 1 FROM vomatt.vote_invitees u WHERE u.vote_id = i.vote_id AND u.user_id = :userId)
-             AND NOT EXISTS (SELECT 1 FROM vomatt.votes v WHERE v.id = i.vote_id AND v.creator_id = :userId))""";
+            (NOT EXISTS (SELECT 1 FROM vomatt.votes v WHERE v.id = i.vote_id AND v.creator_id = :userId))""";
 
     /**
      * Binding step 1: write-locks the Polls holding a pending row of this email, in id order. The owner changes
-     * Invitees under the same lock, so binding and a concurrent invite of the same user serialize and cannot both
-     * add that user; the lock also lets binding auto-end a Poll whose last pending row it drops. A Ballot on such a
+     * Invitees under the same lock, so binding and a concurrent Invitee change serialize; the lock also lets
+     * binding auto-end a Poll whose last pending row it drops. A Ballot on such a
      * Poll waits for the sign-in (and vice versa); both are short. Every other path locks a single Poll, so the id
      * order rules out a cycle. FOR UPDATE also blocks FOR KEY SHARE, so inserts that reference the Poll by foreign key
      * without taking its lock (Comments) briefly wait behind a binding; they lock nothing else
@@ -60,18 +73,19 @@ public interface InviteeRepository extends JpaRepository<Invitee, UUID> {
             ORDER BY v.id FOR UPDATE""", nativeQuery = true)
     List<UUID> lockVotesWithPendingEmail(@Param("email") String email);
 
-    /** Binding step 2: ties the bindable pending rows of the locked Polls to the user; each keeps its email. */
+    /**
+     * Binding step 2: ties the bindable pending rows of the locked Polls to the user; each keeps its email. updated_at is
+     * the wall clock, not now() (transaction start, before step 1 waited), so a row bound here is never ordered before a
+     * row the owner added while binding waited ({@link #FIRST_OF_USER}).
+     */
     @Modifying(flushAutomatically = true)
     @Query(value = """
-            UPDATE vomatt.vote_invitees i SET user_id = :userId, updated_at = now()
+            UPDATE vomatt.vote_invitees i SET user_id = :userId, updated_at = clock_timestamp()
             WHERE i.email = :email AND i.user_id IS NULL AND i.vote_id IN (:voteIds) AND """ + BINDABLE,
             nativeQuery = true)
     int bindEmail(@Param("userId") UUID userId, @Param("email") String email, @Param("voteIds") Collection<UUID> voteIds);
 
-    /**
-     * Binding step 3: drops the pending rows of the locked Polls left unbound, i.e. already covered by a user row
-     * (an Invitee added by ID) or the owner's own address.
-     */
+    /** Binding step 3: drops the pending rows of the locked Polls left unbound, i.e. the owner's own address. */
     @Modifying(flushAutomatically = true)
     @Query(value = """
             DELETE FROM vomatt.vote_invitees i
@@ -114,12 +128,23 @@ public interface InviteeRepository extends JpaRepository<Invitee, UUID> {
             nativeQuery = true)
     int deleteUnregisteredOfPollsEndedBefore(@Param("cutoff") OffsetDateTime cutoff);
 
-    /** At least one Invitee, and none without a Ballot; an Invitee not tied to a user (NULL user_id) counts as without. */
+    /**
+     * At least one Invitee, and none without a Ballot; an Invitee not tied to a user (NULL user_id) counts as without,
+     * and so does a user's row other than their first ({@link #FIRST_OF_USER}).
+     */
     @Query(value = """
             SELECT EXISTS (SELECT 1 FROM vomatt.vote_invitees WHERE vote_id = :voteId)
                AND NOT EXISTS (SELECT 1 FROM vomatt.vote_invitees i WHERE i.vote_id = :voteId
-                   AND (i.user_id IS NULL OR NOT EXISTS (
+                   AND (i.user_id IS NULL OR NOT """ + FIRST_OF_USER + """
+                        OR NOT EXISTS (
                        SELECT 1 FROM vomatt.user_votes uv WHERE uv.vote_id = i.vote_id AND uv.user_id = i.user_id)))""",
            nativeQuery = true)
     boolean allHoldBallot(@Param("voteId") UUID voteId);
+
+    /** Whether this Invitee row holds a Ballot: it is tied to a user who cast one, and is that user's first row ({@link #FIRST_OF_USER}). */
+    @Query(value = """
+            SELECT EXISTS (SELECT 1 FROM vomatt.vote_invitees i WHERE i.id = :inviteeId AND """ + FIRST_OF_USER + """
+                 AND EXISTS (SELECT 1 FROM vomatt.user_votes uv WHERE uv.vote_id = i.vote_id AND uv.user_id = i.user_id))""",
+           nativeQuery = true)
+    boolean holdsBallot(@Param("inviteeId") UUID inviteeId);
 }

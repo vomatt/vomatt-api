@@ -837,7 +837,8 @@ public class VoteController {
             **Precondition**: none; the list is empty for a Poll that is not INVITE_ONLY
             **Behavior**: the Poll's Invitees, earliest invited first, each with `hasBallot` so the owner sees who has not answered yet. \
             An Invitee added by email is always listed by that address with `userId` / `username` null, whether or not the address belongs to an account \
-            (`hasBallot` turns true once that person casts a Ballot). \
+            (`hasBallot` turns true once that person casts a Ballot). A user listed twice (by ID and by an address of theirs) shows `hasBallot` \
+            on the entry tied to them first only; the other entry reads like an address nobody has answered from, also for auto-end. \
             Never tells which option anyone chose, so Sealed results stay sealed.
             **Side effects**: none
             **Errors**:
@@ -866,8 +867,9 @@ public class VoteController {
             **Auth**: required (owner only)
             **Precondition**: the Poll is INVITE_ONLY and Scheduled or Open (Invitees can still be added after it opened)
             **Behavior**: adds the users and email addresses as Invitees, so they can see the Poll, cast a Ballot and Comment, and find it in My Polls. \
-            Users or addresses already invited, duplicates and the owner's own ID / address are ignored. \
-            An address is always listed as entered, whether or not it belongs to an account; an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in. \
+            Users already invited by ID, addresses already invited, duplicates and the owner's own ID / address are ignored. \
+            An address is always listed as entered, whether or not it belongs to an account, including one of a user already invited by ID (who is then listed twice); \
+            an active account's user gets access right away, any other address once someone verifies it at sign-up / sign-in. \
             `inviteListIds` invites the current members of the caller's Invite Lists: members added by ID join `userIds` (suspended ones are skipped) and members added by email \
             join `emails` by their stored address; later Invite List changes never touch the Poll. Returns the full Invitee list.
             **Side effects**: `inviteeCount` grows (email Invitees included); each new Invitee tied to a user gets an unread Invitation notification \
@@ -916,7 +918,7 @@ public class VoteController {
     @Operation(summary = "Remove an Invitee", description = """
             **Auth**: required (owner only)
             **Precondition**: the Poll is INVITE_ONLY and Scheduled or Open, and the Invitee holds no Ballot
-            **Behavior**: removes the Invitee added by this user ID; from then on the Poll is 404 `vote.not_found` for them. \
+            **Behavior**: removes the Invitee added by this user ID; from then on the Poll is 404 `vote.not_found` for them, unless they are still an Invitee through another entry (an address of theirs). \
             Idempotent: succeeds, changing nothing, when the user is not an Invitee added by ID; one added by email \
             is removed through `DELETE /api/votes/{voteId}/invitees?email=`. Returns the full Invitee list.
             **Side effects**: `inviteeCount` drops; the action is audit-logged. When every remaining Invitee of an Open Poll holds a Ballot \
@@ -957,7 +959,7 @@ public class VoteController {
             **Auth**: required (owner only)
             **Precondition**: the Poll is INVITE_ONLY and Scheduled or Open, and the Invitee holds no Ballot
             **Behavior**: removes the Invitee added by this address (normalized like sign-in does: lower-cased, trimmed, Gmail in canonical form), whether or not it belongs to an account; \
-            from then on the Poll is 404 `vote.not_found` for that person and verifying the address no longer grants access. \
+            from then on the Poll is 404 `vote.not_found` for that person and verifying the address no longer grants access, unless they are still an Invitee through another entry. \
             Idempotent: succeeds, changing nothing, when the address is not an Invitee. Returns the full Invitee list.
             **Side effects**: `inviteeCount` drops; the action is audit-logged. When every remaining Invitee of an Open Poll holds a Ballot \
             (and at least one remains), the Poll Ends now (`endTime` moves, `deadline` stays) and the Ended Notification follows. \

@@ -17,7 +17,7 @@ public final class SecurityEndpoints {
             "/api/auth/phone/send-otp", "/api/auth/phone/verify-otp", "/api/auth/google", "/api/auth/line",
             "/api/auth/apple", "/api/auth/refresh", "/api/auth/logout", "/api/auth/admin/send-otp",
             "/api/auth/admin/verify-otp", "/api/auth/passkey/login/options", "/api/auth/passkey/login/verify",
-            "/api/auth/admin/passkey/login/verify" };
+            "/api/auth/admin/passkey/login/options", "/api/auth/admin/passkey/login/verify" };
 
     /**
      * Authenticated /api/users sub-paths; must be matched before {@link #PUBLIC_GET},

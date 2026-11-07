@@ -166,7 +166,7 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("should make email binding wait for the owner inviting the same user by ID, then drop the email row instead of failing")
+    @DisplayName("should make email binding wait for the owner inviting the same user by ID, then bind the email row alongside it, after it")
     void shouldBindAfterOwnerInvitesSameUserWhenOwnerHoldsPollFirst() throws Exception {
         OffsetDateTime now = OffsetDateTime.now();
         String email = "lock-" + UUID.randomUUID() + "@example.com";
@@ -194,9 +194,11 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
         inviter.get(10, TimeUnit.SECONDS);
         binder.get(10, TimeUnit.SECONDS);
 
-        assertThat(em.createQuery("SELECT i FROM Invitee i WHERE i.vote.id = :id", Invitee.class)
-                .setParameter("id", poll.getId()).getResultList()).singleElement()
-                .satisfies(i -> assertThat(i.getEmail()).isNull());
+        // Bound after the owner's row, so the ID row stays the user's first (InviteeRepository.FIRST_OF_USER)
+        assertThat(em.createQuery("SELECT i FROM Invitee i WHERE i.vote.id = :id ORDER BY i.updatedAt, i.id", Invitee.class)
+                .setParameter("id", poll.getId()).getResultList())
+                .allSatisfy(i -> assertThat(i.getUser().getId()).isEqualTo(voter.getId()))
+                .extracting(Invitee::getEmail).containsExactly(null, email);
     }
 
     @Test

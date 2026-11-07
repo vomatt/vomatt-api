@@ -32,14 +32,13 @@ public interface InviteListMemberRepository extends JpaRepository<InviteListMemb
     @Query("SELECT m.inviteList.id AS id, COUNT(m) AS count FROM InviteListMember m WHERE m.inviteList.id IN :inviteListIds GROUP BY m.inviteList.id")
     List<IdCount> countByInviteListIds(@Param("inviteListIds") Collection<UUID> inviteListIds);
 
-    /** Same rule as {@link InviteeRepository#BINDABLE}: the user is neither already a member of that Invite List nor its owner. */
+    /** Same rule as {@link InviteeRepository#BINDABLE}: the user is not the Invite List's owner; being a member already does not stop it. */
     String BINDABLE = """
-            (NOT EXISTS (SELECT 1 FROM vomatt.invite_list_members u WHERE u.invite_list_id = m.invite_list_id AND u.user_id = :userId)
-             AND NOT EXISTS (SELECT 1 FROM vomatt.invite_lists l WHERE l.id = m.invite_list_id AND l.owner_id = :userId))""";
+            (NOT EXISTS (SELECT 1 FROM vomatt.invite_lists l WHERE l.id = m.invite_list_id AND l.owner_id = :userId))""";
 
     /**
      * Binding step 1: share-locks the Invite Lists holding a pending row of this email, in id order. Member changes take the
-     * Invite List's write lock, so binding and a concurrent add of the same user serialize and cannot both add that user.
+     * Invite List's write lock, so binding and a concurrent member change serialize.
      */
     @Query(value = """
             SELECT l.id FROM vomatt.invite_lists l
@@ -55,7 +54,7 @@ public interface InviteListMemberRepository extends JpaRepository<InviteListMemb
             nativeQuery = true)
     int bindEmail(@Param("userId") UUID userId, @Param("email") String email, @Param("inviteListIds") Collection<UUID> inviteListIds);
 
-    /** Binding step 3: drops the pending rows left unbound, i.e. already covered by a user row or the owner's own address. */
+    /** Binding step 3: drops the pending rows left unbound, i.e. the owner's own address. */
     @Modifying(flushAutomatically = true)
     @Query(value = """
             DELETE FROM vomatt.invite_list_members m

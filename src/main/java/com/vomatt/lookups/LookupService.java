@@ -45,7 +45,11 @@ public class LookupService {
                 .stream()
                 .map(lookupMapper::toDto)
                 .toList();
-        redisService.set(CacheNamespaces.LOOKUP_BY_TYPE, lookupType, result, LOOKUP_CACHE_DURATION);
+        // Only types that exist are cached: lookupType is caller input, so caching misses would let any user
+        // fill the shared Redis with one two-hour key per made-up type
+        if (!result.isEmpty()) {
+            redisService.set(CacheNamespaces.LOOKUP_BY_TYPE, lookupType, result, LOOKUP_CACHE_DURATION);
+        }
         return result;
     }
 

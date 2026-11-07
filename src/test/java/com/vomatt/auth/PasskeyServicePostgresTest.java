@@ -59,6 +59,7 @@ import tools.jackson.databind.json.JsonMapper;
 class PasskeyServicePostgresTest extends PostgresRepositoryTest {
 
     static final List<String> PROD_ORIGINS = List.of("https://vomatt.com", "https://admin.vomatt.com");
+    static final List<String> ADMIN_ORIGINS = List.of("https://admin.vomatt.com");
 
     @Autowired PasskeyCredentialRepository passkeyCredentialRepository;
     @Autowired UserRepository userRepository;
@@ -81,7 +82,7 @@ class PasskeyServicePostgresTest extends PostgresRepositoryTest {
     }
 
     PasskeyService service(List<String> origins) {
-        return new PasskeyService(passkeyCredentialRepository, userRepository, redisService, "vomatt.com", origins);
+        return new PasskeyService(passkeyCredentialRepository, userRepository, redisService, "vomatt.com", origins, ADMIN_ORIGINS);
     }
 
     /** Turns the options JSON back into what the browser's parseCreationOptionsFromJSON would build. */
@@ -109,6 +110,7 @@ class PasskeyServicePostgresTest extends PostgresRepositoryTest {
         PropertySourcesPropertyResolver env = new PropertySourcesPropertyResolver(sources);
         assertThat(env.resolvePlaceholders("${passkey.rp-id}")).isEqualTo("vomatt.com");
         assertThat(env.resolvePlaceholders("${passkey.allowed-origins}")).isEqualTo(String.join(",", PROD_ORIGINS));
+        assertThat(env.resolvePlaceholders("${passkey.admin-origins}")).isEqualTo(String.join(",", ADMIN_ORIGINS));
 
         assertThat(passkeyService.registrationOptions(user.getId().toString()).rp().id()).isEqualTo("vomatt.com");
     }
@@ -148,7 +150,7 @@ class PasskeyServicePostgresTest extends PostgresRepositoryTest {
         assertThat(passkeyService.registrationOptions(user.getId().toString()).excludeCredentials()).isEmpty();
 
         PasskeyCredential saved = passkeyCredentialRepository.saveAndFlush(
-                PasskeyService.toEntity(user, PasskeyEmulator.registeredRecord(), null));
+                PasskeyService.toEntity(user, PasskeyEmulator.registeredRecord(), null, false));
         User other = persistUser("passkey-other-" + UUID.randomUUID().toString().substring(0, 8));
 
         assertThat(passkeyService.registrationOptions(user.getId().toString()).excludeCredentials())
@@ -200,7 +202,7 @@ class PasskeyServicePostgresTest extends PostgresRepositoryTest {
     void shouldStoreCredentialWhenRegistrationVerifies() {
         PasskeyRegistrationVerifyRequest request = register(passkeyService, "https://vomatt.com", "  MacBook  ");
 
-        PasskeyResponse response = passkeyService.verifyRegistration(userId(), request);
+        PasskeyResponse response = passkeyService.verifyRegistration(userId(), false, request);
         em.clear();
 
         PasskeyCredential stored = passkeyCredentialRepository.findById(response.id()).orElseThrow();
@@ -219,7 +221,7 @@ class PasskeyServicePostgresTest extends PostgresRepositoryTest {
     void shouldRejectWhenOriginIsWrong() {
         PasskeyRegistrationVerifyRequest request = register(passkeyService, "https://vomatt.co", null);
 
-        assertInvalid(() -> passkeyService.verifyRegistration(userId(), request));
+        assertInvalid(() -> passkeyService.verifyRegistration(userId(), false, request));
         assertThat(passkeyCredentialRepository.findByUserIdOrderByCreatedAt(user.getId())).isEmpty();
     }
 
@@ -232,16 +234,16 @@ class PasskeyServicePostgresTest extends PostgresRepositoryTest {
                 options.getAuthenticatorSelection(), options.getAttestation(), null);
         PasskeyRegistrationVerifyRequest request = request(new PasskeyEmulator("https://vomatt.com").create(forged), null);
 
-        assertInvalid(() -> passkeyService.verifyRegistration(userId(), request));
+        assertInvalid(() -> passkeyService.verifyRegistration(userId(), false, request));
     }
 
     @Test
     @DisplayName("should reject the same response a second time: the challenge was spent by getAndDelete")
     void shouldRejectWhenChallengeReused() {
         PasskeyRegistrationVerifyRequest request = register(passkeyService, "https://vomatt.com", null);
-        passkeyService.verifyRegistration(userId(), request);
+        passkeyService.verifyRegistration(userId(), false, request);
 
-        assertInvalid(() -> passkeyService.verifyRegistration(userId(), request));
+        assertInvalid(() -> passkeyService.verifyRegistration(userId(), false, request));
         assertThat(passkeyCredentialRepository.findByUserIdOrderByCreatedAt(user.getId())).hasSize(1);
     }
 
@@ -251,7 +253,7 @@ class PasskeyServicePostgresTest extends PostgresRepositoryTest {
         PasskeyRegistrationVerifyRequest request = register(passkeyService, "https://vomatt.com", null);
         redis.clear(); // the 5-minute TTL elapsed
 
-        assertInvalid(() -> passkeyService.verifyRegistration(userId(), request));
+        assertInvalid(() -> passkeyService.verifyRegistration(userId(), false, request));
     }
 
     @Test
@@ -260,19 +262,19 @@ class PasskeyServicePostgresTest extends PostgresRepositoryTest {
         PasskeyRegistrationVerifyRequest request = register(passkeyService, "https://vomatt.com", null);
         User other = persistUser("passkey-thief-" + UUID.randomUUID().toString().substring(0, 8));
 
-        assertInvalid(() -> passkeyService.verifyRegistration(other.getId().toString(), request));
+        assertInvalid(() -> passkeyService.verifyRegistration(other.getId().toString(), false, request));
         assertThat(passkeyCredentialRepository.findByUserIdOrderByCreatedAt(other.getId())).isEmpty();
     }
 
     @Test
     @DisplayName("should accept https://vomatt.test only when the configured origins include it")
     void shouldAcceptLocalOriginOnlyWhenConfigured() {
-        assertInvalid(() -> passkeyService.verifyRegistration(userId(), register(passkeyService, "https://vomatt.test", null)));
+        assertInvalid(() -> passkeyService.verifyRegistration(userId(), false, register(passkeyService, "https://vomatt.test", null)));
 
         List<String> local = new java.util.ArrayList<>(PROD_ORIGINS);
         local.add("https://vomatt.test");
         PasskeyService localService = service(local);
-        assertThat(localService.verifyRegistration(userId(), register(localService, "https://vomatt.test", null)).id()).isNotNull();
+        assertThat(localService.verifyRegistration(userId(), false, register(localService, "https://vomatt.test", null)).id()).isNotNull();
     }
 
     @Test
@@ -286,12 +288,12 @@ class PasskeyServicePostgresTest extends PostgresRepositoryTest {
         PasskeyRegistrationVerifyRequest notBase64 = new PasskeyRegistrationVerifyRequest(new PasskeyRegistrationVerifyRequest.Credential(
                 c.id(), c.rawId(), c.type(), new PasskeyRegistrationVerifyRequest.Response("%%%", "%%%", null), null, null), null);
 
-        assertInvalid(() -> passkeyService.verifyRegistration(userId(), garbled));
-        assertInvalid(() -> passkeyService.verifyRegistration(userId(), notBase64));
+        assertInvalid(() -> passkeyService.verifyRegistration(userId(), false, garbled));
+        assertInvalid(() -> passkeyService.verifyRegistration(userId(), false, notBase64));
     }
 
     private PasskeyCredential persistPasskey(User owner, String name) {
-        PasskeyCredential c = PasskeyService.toEntity(owner, PasskeyEmulator.registeredRecord(), name);
+        PasskeyCredential c = PasskeyService.toEntity(owner, PasskeyEmulator.registeredRecord(), name, false);
         c.setTransports(new String[] { "hybrid", "internal" });
         return passkeyCredentialRepository.saveAndFlush(c);
     }

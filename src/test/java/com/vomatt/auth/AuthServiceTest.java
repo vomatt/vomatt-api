@@ -336,7 +336,7 @@ class AuthServiceTest {
     @Test
     void shouldRejectSendOtpWhenDailyLimitReached() {
         when(userRepository.existsByEmail("user@example.com")).thenReturn(true);
-        when(redisService.incrementAndExpire(eq("otp:email:daily"), startsWith(k("user@example.com") + ":"), eq(Duration.ofDays(1))))
+        when(redisService.incrementAndExpire(eq("otp:email:daily"), startsWith(attempt("user@example.com") + ":"), eq(Duration.ofDays(1))))
                 .thenReturn(21L);
 
         assertThatThrownBy(() -> authService.sendOtp("user@example.com", null, null, IP))
@@ -345,18 +345,19 @@ class AuthServiceTest {
 
         verify(redisService, never()).execInTransaction(any());
         verify(emailService, never()).sendVerificationEmail(anyString(), anyString());
+        // The refused send gives back the shared cooldown, so this IP cannot keep the owner waiting
+        verify(redisService).delete("otp:email:cooldown", k("user@example.com"));
     }
 
     @Test
     void shouldSendPhoneOtpWhenDailyLimitNotReached() {
-        when(userRepository.existsByPhoneNumber("+886912345678")).thenReturn(true);
-        when(redisService.incrementAndExpire(eq("otp:phone:daily"), startsWith(k("+886912345678") + ":"), eq(Duration.ofDays(1))))
+        when(redisService.incrementAndExpire(eq("otp:phone:daily"), startsWith(attempt("+886912345678") + ":"), eq(Duration.ofDays(1))))
                 .thenReturn(5L);
 
         authService.sendOtp(null, "0912345678", "login", IP);
 
         verify(smsService).sendOtp(eq("+886912345678"), anyString());
-        when(redisService.incrementAndExpire(eq("otp:phone:daily"), startsWith(k("+886912345678") + ":"), eq(Duration.ofDays(1))))
+        when(redisService.incrementAndExpire(eq("otp:phone:daily"), startsWith(attempt("+886912345678") + ":"), eq(Duration.ofDays(1))))
                 .thenReturn(6L);
         assertThatThrownBy(() -> authService.sendOtp(null, "0912345678", "login", IP))
                 .isInstanceOf(ApiException.class)
@@ -556,49 +557,47 @@ class AuthServiceTest {
         verify(redisService).delete("otp:email:level", attempt("user@example.com"));
     }
 
-    // ── admin console login (P5-#13: check role before consuming OTP / creating account / sending email) ────────
+    // ── admin console login: OTP first, role second, so no response reveals a role ────────
 
     @Test
-    void shouldReturn403WithoutConsumingOtpWhenAdminLoginByNonAdmin() {
+    void shouldRejectAsInvalidOtpWithoutRoleLookupWhenAdminLoginHasNoOtp() {
+        // A non-admin never receives an admin OTP, so it fails like any unknown code and the role stays hidden
+        assertThatThrownBy(() -> authService.verifyAdminOtp("user@example.com", "123456", IP))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_INVALID_OR_EXPIRED));
+
+        verify(userRepository, never()).findByEmail(anyString());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldReturn403AfterConsumingOtpWhenAdminRoleWasRemoved() {
+        // Holder of a delivered code whose admin role was revoked since: the code is spent, no account or token
+        OtpRecord otpRecord = new OtpRecord(h("user@example.com", "123456"), "login", Instant.now(), 0);
         User customer = User.builder().id(UUID.randomUUID()).email("user@example.com")
-                .displayName("Customer").roles(new String[] { "user" }).build();
+                .displayName("Customer").roles(new String[] { "user" }).active(true).build();
+        when(redisService.get(eq("otp:admin-email"), eq(k("user@example.com")), eq(OtpRecord.class))).thenReturn(otpRecord);
+        when(redisService.getAndDelete("otp:admin-email", k("user@example.com"), OtpRecord.class)).thenReturn(otpRecord);
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(customer));
 
         assertThatThrownBy(() -> authService.verifyAdminOtp("user@example.com", "123456", IP))
-                .isInstanceOf(ApiException.class)
-                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey())
-                        .isEqualTo(MessageKey.AUTH_ADMIN_FORBIDDEN));
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.AUTH_ADMIN_FORBIDDEN));
 
-        // OTP must not be consumed (neither read nor deleted), no account created, no welcome email sent
-        verify(redisService, org.mockito.Mockito.never()).get(anyString(), anyString(), any(Class.class));
-        verify(redisService, org.mockito.Mockito.never()).delete(anyString(), anyString());
-        verify(userRepository, org.mockito.Mockito.never()).save(any());
-        verify(emailService, org.mockito.Mockito.never()).sendWelcomeEmail(anyString(), any());
+        verify(userRepository, never()).save(any());
+        verify(refreshTokenService, never()).issue(anyString(), any(), anyBoolean());
     }
 
     @Test
-    void shouldReturn403WithoutConsumingOtpWhenAdminLoginHasNoAccount() {
-        when(userRepository.findByEmail("ghost@example.com")).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> authService.verifyAdminOtp("ghost@example.com", "123456", IP))
-                .isInstanceOf(ApiException.class)
-                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey())
-                        .isEqualTo(MessageKey.AUTH_ADMIN_FORBIDDEN));
-
-        verify(redisService, org.mockito.Mockito.never()).get(anyString(), anyString(), any(Class.class));
-        verify(userRepository, org.mockito.Mockito.never()).save(any());
-    }
-
-    @Test
-    void shouldNotSendOtpWhenAdminSendOtpByNonAdmin() {
+    void shouldAnswerAlikeWithoutEmailWhenAdminSendOtpByNonAdmin() {
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.empty());
+        when(redisService.setIfAbsent(eq("otp:admin-email:cooldown"), eq(k("user@example.com")), any(), any())).thenReturn(true);
 
-        assertThatThrownBy(() -> authService.sendAdminOtp("user@example.com", IP))
-                .isInstanceOf(ApiException.class)
-                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey())
-                        .isEqualTo(MessageKey.AUTH_ADMIN_FORBIDDEN));
+        authService.sendAdminOtp("user@example.com", IP);
 
-        verify(redisService, never()).execInTransaction(any());
+        // Same cooldown, quota and stored OTP as an admin gets, only no mail
+        storedOtp("otp:admin-email", k("user@example.com"));
+        verify(redisService).incrementAndExpire(eq("otp:admin-email:daily"), startsWith(attempt("user@example.com") + ":"), eq(Duration.ofDays(1)));
         verify(emailService, never()).sendAdminLoginEmail(anyString(), anyString());
     }
 
@@ -657,7 +656,7 @@ class AuthServiceTest {
     void shouldIssueAdminScopeWhenAdminPasskeySignInSucceeds() {
         User admin = User.builder().id(UUID.randomUUID()).email("admin@example.com")
                 .roles(new String[] { "user", "admin" }).active(true).build();
-        when(passkeyService.authenticate(PASSKEY)).thenReturn(admin);
+        when(passkeyService.authenticateAdmin(PASSKEY)).thenReturn(admin);
         when(refreshTokenService.issue(anyString(), any(), eq(true))).thenReturn(new RefreshTokenService.IssuedTokens("admin-token", "admin-refresh"));
 
         AuthResponse response = authService.verifyAdminPasskey(PASSKEY);
@@ -670,10 +669,13 @@ class AuthServiceTest {
     void shouldReturn403AdminForbiddenLikeAdminOtpWhenNonAdminUsesAdminPasskeySignIn() {
         User customer = User.builder().id(UUID.randomUUID()).email("user@example.com")
                 .roles(new String[] { "user" }).active(true).build();
-        when(passkeyService.authenticate(PASSKEY)).thenReturn(customer);
+        when(passkeyService.authenticateAdmin(PASSKEY)).thenReturn(customer);
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(customer));
 
-        // The same error /admin/verify-otp gives this user
+        // The same error /admin/verify-otp gives this user once a delivered code is spent
+        OtpRecord otpRecord = new OtpRecord(h("user@example.com", "123456"), "login", Instant.now(), 0);
+        when(redisService.get(eq("otp:admin-email"), eq(k("user@example.com")), eq(OtpRecord.class))).thenReturn(otpRecord);
+        when(redisService.getAndDelete("otp:admin-email", k("user@example.com"), OtpRecord.class)).thenReturn(otpRecord);
         for (ThrowingCallable call : List.<ThrowingCallable>of(() -> authService.verifyAdminPasskey(PASSKEY),
                 () -> authService.verifyAdminOtp("user@example.com", "123456", IP))) {
             assertThatThrownBy(call).isInstanceOfSatisfying(ApiException.class, ex -> {
@@ -687,7 +689,7 @@ class AuthServiceTest {
     @Test
     void shouldReturn403BannedWhenSuspendedAdminUsesAdminPasskeySignIn() {
         User admin = User.builder().id(UUID.randomUUID()).roles(new String[] { "user", "admin" }).active(false).build();
-        when(passkeyService.authenticate(PASSKEY)).thenReturn(admin);
+        when(passkeyService.authenticateAdmin(PASSKEY)).thenReturn(admin);
 
         assertThatThrownBy(() -> authService.verifyAdminPasskey(PASSKEY)).isInstanceOfSatisfying(ApiException.class,
                 ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.AUTH_ACCOUNT_BANNED));
@@ -747,6 +749,19 @@ class AuthServiceTest {
     }
 
     @Test
+    void shouldClearTodaysDailyCountsWhenUnlockTargetsDaily() {
+        when(redisService.deleteAll(anyString(), any())).thenReturn(2L);
+
+        int cleared = authService.unlockLogin("email", "user@example.com", IP, Set.of("daily"));
+
+        // The flood ceiling and the given IP's own count, both for today (UTC)
+        String day = ":" + com.vomatt.common.util.TextUtil.utcDay();
+        assertThat(cleared).isEqualTo(2);
+        verify(redisService).deleteAll("otp:email:daily", List.of(k("user@example.com") + day, attempt("user@example.com") + day));
+        verify(redisService, never()).deleteAll(eq("otp:email:lock"), any());
+    }
+
+    @Test
     void shouldAlsoClearCounterWhenUnlockClearsOnlyLock() {
         // A lock removed with its counter still at 3 would keep refusing the right code
         when(redisService.hGetAll("otp:phone:attempt-idx", k("+886912345678")))
@@ -773,15 +788,33 @@ class AuthServiceTest {
     }
 
     @Test
-    void shouldRefuseSuspendedAdminBeforeSendingOtp() {
+    void shouldSendNoEmailWhenSuspendedAdminRequestsOtp() {
         User admin = User.builder().id(UUID.randomUUID()).email("admin@example.com")
                 .roles(new String[] { "user", "admin" }).active(false).build();
         when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
+        when(redisService.setIfAbsent(eq("otp:admin-email:cooldown"), eq(k("admin@example.com")), any(), any())).thenReturn(true);
 
-        assertThatThrownBy(() -> authService.sendAdminOtp("admin@example.com", IP))
-                .isInstanceOfSatisfying(ApiException.class,
-                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.AUTH_ACCOUNT_BANNED));
+        authService.sendAdminOtp("admin@example.com", IP);
+
         verify(emailService, never()).sendAdminLoginEmail(anyString(), anyString());
+    }
+
+    @Test
+    void shouldKeepOwnersDailyQuotaWhenOtherIpsHitTheFloodCeiling() {
+        // Other IPs pushed the identifier past limit x 3; this caller is refused but its own per-IP slot is given back
+        when(userRepository.existsByEmail("user@example.com")).thenReturn(true);
+        when(redisService.setIfAbsent(eq("otp:email:cooldown"), eq(k("user@example.com")), any(), any())).thenReturn(true);
+        when(redisService.incrementAndExpire(eq("otp:email:daily"), startsWith(attempt("user@example.com") + ":"), eq(Duration.ofDays(1))))
+                .thenReturn(1L);
+        when(redisService.incrementAndExpire(eq("otp:email:daily"), startsWith(k("user@example.com") + ":"), eq(Duration.ofDays(1))))
+                .thenReturn(61L);
+
+        assertThatThrownBy(() -> authService.sendOtp("user@example.com", null, null, IP))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_DAILY_LIMIT));
+
+        verify(redisService).incrementAndExpire(eq("otp:email:daily"), startsWith(attempt("user@example.com") + ":"), eq(-1L), eq(Duration.ofDays(1)));
+        verify(emailService, never()).sendVerificationEmail(anyString(), anyString());
     }
 
     @Test
@@ -803,7 +836,8 @@ class AuthServiceTest {
 
         authService.sendAdminOtp("admin@example.com", IP);
 
-        verify(emailService).sendAdminLoginEmail(eq("admin@example.com"), anyString());
+        // Sent after the response, on its own thread
+        verify(emailService, org.mockito.Mockito.timeout(2000)).sendAdminLoginEmail(eq("admin@example.com"), anyString());
         verify(userRepository, never()).existsByEmail(anyString());
     }
 
@@ -1181,11 +1215,32 @@ class AuthServiceTest {
     void shouldRejectGoogleTokenWhenPresentedTwice() throws Exception {
         ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
         String idToken = signedGoogleToken(googlePayload("carol@example.com", true));
-        when(redisService.setIfAbsent(eq("oauth:used"), eq(com.vomatt.common.security.AppKey.sha256Hex(idToken)), eq("1"), any(Duration.class)))
+        when(redisService.setIfAbsent(eq("oauth:used"), eq(com.vomatt.common.security.AppKey.sha256Hex(signedInput(idToken))), eq("1"), any(Duration.class)))
                 .thenReturn(false);
 
         assertGoogleRejected(idToken, MessageKey.AUTH_OAUTH_TOKEN_REPLAYED);
         verify(userRepository, never()).findByEmail(anyString());
+    }
+
+    @Test
+    void shouldRejectGoogleTokenWhenSignatureSegmentIsNotCanonical() throws Exception {
+        ReflectionTestUtils.setField(authService, "googleClientId", "client-id");
+        String idToken = signedGoogleToken(googlePayload("carol@example.com", true));
+        String signature = idToken.substring(idToken.lastIndexOf('.') + 1);
+        // A 2048-bit signature is 342 base64url characters, so the last one carries 4 unused low bits
+        char last = signature.charAt(signature.length() - 1);
+        String alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        String lowBitsFlipped = idToken.substring(0, idToken.length() - 1) + alphabet.charAt(alphabet.indexOf(last) ^ 1);
+
+        // Each spelling decodes to the same signature bytes; none may sign in or reach the replay marker
+        for (String variant : List.of(idToken + "==", idToken + ".", lowBitsFlipped)) {
+            assertGoogleRejected(variant, MessageKey.AUTH_GOOGLE_NO_EMAIL);
+        }
+        verify(redisService, never()).setIfAbsent(eq("oauth:used"), anyString(), any(), any(Duration.class));
+    }
+
+    private static String signedInput(String idToken) {
+        return idToken.substring(0, idToken.lastIndexOf('.'));
     }
 
     @Test
@@ -1218,7 +1273,7 @@ class AuthServiceTest {
         when(refreshTokenService.issue(anyString(), any(), anyBoolean())).thenReturn(new RefreshTokenService.IssuedTokens("mock-token", "mock-refresh-token"));
         assertThat(authService.appleLogin(idToken, null, "raw-nonce").token()).isEqualTo("mock-token");
         // The marker outlives the token: exp (600 s) plus the 60 s clock skew
-        verify(redisService).setIfAbsent(eq("oauth:used"), eq(com.vomatt.common.security.AppKey.sha256Hex(idToken)), eq("1"),
+        verify(redisService).setIfAbsent(eq("oauth:used"), eq(com.vomatt.common.security.AppKey.sha256Hex(signedInput(idToken))), eq("1"),
                 argThat((Duration ttl) -> ttl.compareTo(Duration.ofMinutes(10)) > 0 && ttl.compareTo(Duration.ofMinutes(11)) <= 0));
     }
 
@@ -1282,7 +1337,6 @@ class AuthServiceTest {
     void shouldResolveSameAccountWhenOtpSentToLocalFormAndVerifiedAsE164() {
         User existing = User.builder().id(UUID.randomUUID()).phoneNumber("+886912345678")
                 .displayName("Phone User").roles(new String[] { "user" }).build();
-        when(userRepository.existsByPhoneNumber("+886912345678")).thenReturn(true);
         when(userRepository.findByPhoneNumber("+886912345678")).thenReturn(Optional.of(existing));
 
         authService.sendOtp(null, "0912345678", "login", IP);

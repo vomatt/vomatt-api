@@ -46,7 +46,6 @@ public enum MessageKey {
     AUTH_ADMIN_FORBIDDEN("auth.admin.forbidden"),
     AUTH_IDENTIFIER_REQUIRED("auth.identifier.required"),
     AUTH_EMAIL_SEND_FAILED("auth.email.send_failed"),
-    AUTH_PHONE_NOT_REGISTERED("auth.phone.not_registered"),
     AUTH_PHONE_INVALID("auth.phone.invalid"),
     AUTH_SMS_SEND_FAILED("auth.sms.send_failed"),
     AUTH_INVALID_USER_ID("auth.invalid_user_id"),
@@ -72,6 +71,7 @@ public enum MessageKey {
     AUTH_EMAIL_NOT_VERIFIED("auth.email_not_verified"),
     AUTH_ACCOUNT_BANNED("auth.account_banned"),
     AUTH_PASSKEY_INVALID("auth.passkey.invalid"),
+    AUTH_PASSKEY_ADMIN_SCOPE_REQUIRED("auth.passkey.admin_scope_required"),
     AUTH_SESSION_REVOKED("auth.session_revoked"),
     AUTH_SESSION_NOT_FOUND("auth.session_not_found"),
 

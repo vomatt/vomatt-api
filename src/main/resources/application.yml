@@ -186,6 +186,9 @@ passkey:
   rp-id: ${PASSKEY_RP_ID:vomatt.com}
   # Comma-separated origins accepted in a passkey's clientDataJSON; add https://vomatt.test for local development only
   allowed-origins: ${PASSKEY_ALLOWED_ORIGINS:https://vomatt.com,https://admin.vomatt.com}
+  # Comma-separated origins the admin console passkey sign-in accepts; the RP ID is shared, so a consumer-origin
+  # assertion must not sign in to the admin console. Add https://admin.vomatt.test for local development only
+  admin-origins: ${PASSKEY_ADMIN_ORIGINS:https://admin.vomatt.com}
 
 jwt:
   # Comma-separated: the first key signs, every key verifies (see JwtUtil for the rotation steps)

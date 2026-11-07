@@ -25,7 +25,7 @@ public record UnlockLoginRequest(
         String ip,
 
         @ArraySchema(arraySchema = @Schema(description = "What to clear; omit for all", example = "[\"lock\", \"attempts\"]", nullable = true),
-                schema = @Schema(allowableValues = {"lock", "attempts", "cooldown"}))
+                schema = @Schema(allowableValues = {"lock", "attempts", "cooldown", "daily"}))
         List<@NotNull @Pattern(regexp = LoginUnlock.TARGET_PATTERN) String> clear
 ) implements AuditDetails {
 

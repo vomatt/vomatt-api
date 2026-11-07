@@ -84,7 +84,8 @@ public class PasskeyService {
 
     /** What an issued challenge is for and whom; verify rejects a challenge issued for another purpose or user. */
     record PasskeyChallenge(Purpose purpose, String userId) {
-        enum Purpose { REGISTRATION, AUTHENTICATION }
+        // ADMIN_AUTHENTICATION is spent only by the admin console sign-in, AUTHENTICATION only by the consumer one
+        enum Purpose { REGISTRATION, AUTHENTICATION, ADMIN_AUTHENTICATION }
     }
 
     private final PasskeyCredentialRepository passkeyCredentialRepository;
@@ -92,16 +93,24 @@ public class PasskeyService {
     private final RedisService redisService;
     private final String rpId;
     private final Set<Origin> allowedOrigins;
+    /** The only origins the admin console sign-in accepts: the RP ID is shared, so the origin is what tells them apart. */
+    private final Set<Origin> adminOrigins;
 
     public PasskeyService(PasskeyCredentialRepository passkeyCredentialRepository, UserRepository userRepository,
                           RedisService redisService, @Value("${passkey.rp-id}") String rpId,
-                          @Value("${passkey.allowed-origins}") List<String> allowedOrigins) {
+                          @Value("${passkey.allowed-origins}") List<String> allowedOrigins,
+                          @Value("${passkey.admin-origins}") List<String> adminOrigins) {
         this.passkeyCredentialRepository = passkeyCredentialRepository;
         this.userRepository = userRepository;
         this.redisService = redisService;
         this.rpId = rpId;
         // Parsed at startup, so a malformed PASSKEY_ALLOWED_ORIGINS fails the boot instead of every verify
-        this.allowedOrigins = allowedOrigins.stream().map(String::strip).map(Origin::new).collect(Collectors.toUnmodifiableSet());
+        this.allowedOrigins = parseOrigins(allowedOrigins);
+        this.adminOrigins = parseOrigins(adminOrigins);
+    }
+
+    private static Set<Origin> parseOrigins(List<String> origins) {
+        return origins.stream().map(String::strip).map(Origin::new).collect(Collectors.toUnmodifiableSet());
     }
 
     @Transactional(readOnly = true)
@@ -133,10 +142,11 @@ public class PasskeyService {
 
     /**
      * Verifies {@code credential.toJSON()} against a challenge this user was issued and stores the passkey. Any
-     * malformed, forged, replayed or expired response is 400 {@code auth.passkey.invalid}.
+     * malformed, forged, replayed or expired response is 400 {@code auth.passkey.invalid}. {@code adminScope} is whether
+     * the registering session is an admin console one; only such a passkey can later sign in to the admin console.
      */
     @Transactional
-    public PasskeyResponse verifyRegistration(String userId, PasskeyRegistrationVerifyRequest request) {
+    public PasskeyResponse verifyRegistration(String userId, boolean adminScope, PasskeyRegistrationVerifyRequest request) {
         RegistrationData data;
         try {
             data = WEB_AUTHN_MANAGER.parseRegistrationResponseJSON(OBJECT_CONVERTER.getJsonConverter().writeValueAsString(
@@ -172,7 +182,7 @@ public class PasskeyService {
         CredentialRecord record = new CredentialRecordImpl(data.getAttestationObject(), data.getCollectedClientData(),
                 data.getClientExtensions(), data.getTransports());
         String name = request.name() == null || request.name().isBlank() ? null : request.name().strip();
-        PasskeyCredential saved = passkeyCredentialRepository.saveAndFlush(toEntity(user, record, name));
+        PasskeyCredential saved = passkeyCredentialRepository.saveAndFlush(toEntity(user, record, name, adminScope));
         return PasskeyResponse.from(saved);
     }
 
@@ -192,7 +202,16 @@ public class PasskeyService {
 
     /** Usernameless sign-in options: no allowCredentials, so the user picks any passkey for this RP. */
     public PasskeyLoginOptionsResponse loginOptions() {
-        String challenge = newChallenge(new PasskeyChallenge(PasskeyChallenge.Purpose.AUTHENTICATION, null));
+        return loginOptions(PasskeyChallenge.Purpose.AUTHENTICATION);
+    }
+
+    /** Admin console sign-in options: the challenge is accepted only by {@link #authenticateAdmin}. */
+    public PasskeyLoginOptionsResponse adminLoginOptions() {
+        return loginOptions(PasskeyChallenge.Purpose.ADMIN_AUTHENTICATION);
+    }
+
+    private PasskeyLoginOptionsResponse loginOptions(PasskeyChallenge.Purpose purpose) {
+        String challenge = newChallenge(new PasskeyChallenge(purpose, null));
         return new PasskeyLoginOptionsResponse(challenge, CHALLENGE_TTL.toMillis(), rpId, List.of(), "preferred");
     }
 
@@ -203,6 +222,20 @@ public class PasskeyService {
      */
     @Transactional
     public User authenticate(PasskeyLoginVerifyRequest request) {
+        return authenticate(request, PasskeyChallenge.Purpose.AUTHENTICATION, allowedOrigins);
+    }
+
+    /**
+     * The admin console counterpart of {@link #authenticate}: an admin sign-in challenge and an admin console origin
+     * only. A passkey registered outside the admin console is 403 {@code auth.passkey.admin_scope_required}, checked
+     * only after the signature verifies so a bare credential id reveals nothing.
+     */
+    @Transactional
+    public User authenticateAdmin(PasskeyLoginVerifyRequest request) {
+        return authenticate(request, PasskeyChallenge.Purpose.ADMIN_AUTHENTICATION, adminOrigins);
+    }
+
+    private User authenticate(PasskeyLoginVerifyRequest request, PasskeyChallenge.Purpose purpose, Set<Origin> origins) {
         AuthenticationData data;
         try {
             PasskeyLoginVerifyRequest.Credential c = request.credential();
@@ -215,8 +248,8 @@ public class PasskeyService {
         Challenge challenge = data.getCollectedClientData() == null ? null : data.getCollectedClientData().getChallenge();
         PasskeyChallenge issued = challenge == null ? null
                 : redisService.getAndDelete(CHALLENGE_NS, BASE64URL.encodeToString(challenge.getValue()), PasskeyChallenge.class);
-        if (issued == null || issued.purpose() != PasskeyChallenge.Purpose.AUTHENTICATION) {
-            throw loginRejected("unknown, spent, expired or registration challenge", null);
+        if (issued == null || issued.purpose() != purpose) {
+            throw loginRejected("unknown, spent, expired or wrong-purpose challenge", null);
         }
         PasskeyCredential credential = passkeyCredentialRepository.findByCredentialId(data.getCredentialId())
                 .orElseThrow(() -> loginRejected("unknown credential", null));
@@ -225,11 +258,15 @@ public class PasskeyService {
             throw loginRejected("user handle does not match the credential's owner", null);
         }
         CredentialRecord record = toRecord(credential);
-        ServerProperty serverProperty = ServerProperty.builder().origins(allowedOrigins).rpId(rpId).challenge(challenge).build();
+        ServerProperty serverProperty = ServerProperty.builder().origins(origins).rpId(rpId).challenge(challenge).build();
         try {
             WEB_AUTHN_MANAGER.verify(data, new AuthenticationParameters(serverProperty, record, null, false, true));
         } catch (WebAuthnException e) {
             throw loginRejected("authentication response failed verification", e);
+        }
+        if (purpose == PasskeyChallenge.Purpose.ADMIN_AUTHENTICATION && !credential.isAdminScope()) {
+            log.info("Passkey admin sign-in rejected: passkey was not registered from the admin console");
+            throw ApiException.forbidden(MessageKey.AUTH_PASSKEY_ADMIN_SCOPE_REQUIRED);
         }
         // verify() updated the record from the authenticator data
         credential.setSignCount(record.getCounter());
@@ -267,7 +304,7 @@ public class PasskeyService {
         return ByteBuffer.allocate(16).putLong(id.getMostSignificantBits()).putLong(id.getLeastSignificantBits()).array();
     }
 
-    static PasskeyCredential toEntity(User user, CredentialRecord record, String name) {
+    static PasskeyCredential toEntity(User user, CredentialRecord record, String name, boolean adminScope) {
         AttestedCredentialData data = record.getAttestedCredentialData();
         Set<AuthenticatorTransport> transports = record.getTransports() == null ? Set.of() : record.getTransports();
         return PasskeyCredential.builder()
@@ -280,6 +317,7 @@ public class PasskeyService {
                 .backupEligible(Boolean.TRUE.equals(record.isBackupEligible()))
                 .backedUp(Boolean.TRUE.equals(record.isBackedUp()))
                 .name(name)
+                .adminScope(adminScope)
                 .build();
     }
 

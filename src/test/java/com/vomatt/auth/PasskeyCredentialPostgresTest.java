@@ -22,7 +22,7 @@ class PasskeyCredentialPostgresTest extends PostgresRepositoryTest {
     @Autowired UserRepository userRepository;
 
     private PasskeyCredential save(User user, CredentialRecord record) {
-        return passkeyCredentialRepository.saveAndFlush(PasskeyService.toEntity(user, record, "MacBook"));
+        return passkeyCredentialRepository.saveAndFlush(PasskeyService.toEntity(user, record, "MacBook", false));
     }
 
     @Test

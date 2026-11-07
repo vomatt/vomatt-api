@@ -213,11 +213,10 @@ public class AuthController {
                     **Behavior**: like `POST /api/auth/send-otp` (6-digit OTP, TTL default 180 s, same email normalization), but the email is sent only to an active admin. \
                     Every other email gets the same 200, cooldown and daily count with no email sent, so the response never tells whether an email is an admin. \
                     Its OTPs, wrong-code counters, lockouts and resend cooldown are separate from the consumer login, so a code from `send-otp` does not work here and vice versa
-                    **Side effects**: sends an email (to an active admin only); replaces any previous admin console OTP for this address. A resend is refused during the cooldown (default 180 s), and each IP can request at most 20 OTPs for one address per UTC day, and all IPs together 60
+                    **Side effects**: sends an email (to an active admin only, after the response; a provider failure is only logged, so retry after the cooldown if no email arrives); replaces any previous admin console OTP for this address. A resend is refused during the cooldown (default 180 s), and each IP can request at most 20 OTPs for one address per UTC day, and all IPs together 60
                     **Errors**:
                     - 400 `auth.identifier.required`: `email` is missing or blank
                     - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
-                    - 400 `auth.email.send_failed`: the email provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
                     - 401 `auth.otp.too_many_attempts`: this email is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected
                     - 429 `auth.otp.daily_limit`: 20 OTPs were already requested for this address from this IP today (UTC), or 60 from all IPs""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> adminSendOtp(@Valid @RequestBody SendOtpRequest req, HttpServletRequest httpRequest) {

@@ -50,6 +50,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -210,7 +211,7 @@ public class AuthService {
         acquireResendCooldown(namespace, redisKey);
         // Computed once: the refund on failure must hit the same day's keys even across UTC midnight
         DailyQuota quota = DailyQuota.of(redisKey, attemptKey);
-        takeDailyQuota(namespace, quota, otpDailyLimitEmail);
+        takeDailyQuota(namespace, redisKey, quota, otpDailyLimitEmail);
         boolean testAccount = OTP_EMAIL_NS.equals(namespace) && StringUtils.hasText(otpTestCode)
                 && normalizedEmail.endsWith(TEST_EMAIL_DOMAIN);
         if (testAccount) {
@@ -220,11 +221,13 @@ public class AuthService {
         if (testAccount || !deliver) {
             return;
         }
+        if (OTP_ADMIN_EMAIL_NS.equals(namespace)) {
+            sendAdminEmailInBackground(normalizedEmail, code);
+            return;
+        }
 
         try {
-            if (OTP_ADMIN_EMAIL_NS.equals(namespace)) {
-                emailService.sendAdminLoginEmail(normalizedEmail, code);
-            } else if ("signup".equals(otpType)) {
+            if ("signup".equals(otpType)) {
                 emailService.sendPreSignupEmail(normalizedEmail, code);
             } else {
                 emailService.sendVerificationEmail(normalizedEmail, code);
@@ -247,7 +250,7 @@ public class AuthService {
         String redisKey = redisKey(phone);
         acquireResendCooldown(OTP_PHONE_NS, redisKey);
         DailyQuota quota = DailyQuota.of(redisKey, attemptKey);
-        takeDailyQuota(OTP_PHONE_NS, quota, otpDailyLimitPhone);
+        takeDailyQuota(OTP_PHONE_NS, redisKey, quota, otpDailyLimitPhone);
         storeOtp(OTP_PHONE_NS, redisKey, quota, attemptKey, new OtpRecord(otpHash(phone, code), otpType, Instant.now(), 0));
 
         try {
@@ -622,18 +625,21 @@ public class AuthService {
     }
 
     /**
-     * Counts this send against the identifier's daily cap, after the cooldown slot is taken so a user clicking resend
-     * during the cooldown does not burn the cap. Over it the cooldown stays set, which is harmless: no OTP is sent
-     * either way. Fails closed (RedisOperationException) like the OTP write itself.
+     * Counts this send against the daily caps, after the cooldown slot is taken so a user clicking resend during the
+     * cooldown does not burn the cap. A refused send gives back the cooldown it just took: the cooldown is shared by all
+     * IPs, so an IP over its own cap must not keep renewing it for the owner. Fails closed (RedisOperationException)
+     * like the OTP write itself.
      */
-    private void takeDailyQuota(String namespace, DailyQuota quota, long limit) {
+    private void takeDailyQuota(String namespace, String redisKey, DailyQuota quota, long limit) {
         String ns = namespace + OTP_DAILY_SUFFIX;
-        if (redisService.incrementAndExpire(ns, quota.sourceKey(), Duration.ofDays(1)) > limit) {
-            throw ApiException.tooManyRequests(MessageKey.AUTH_OTP_DAILY_LIMIT);
-        }
-        if (redisService.incrementAndExpire(ns, quota.identifierKey(), Duration.ofDays(1)) > limit * OTP_DAILY_FLOOD_FACTOR) {
+        boolean refused = redisService.incrementAndExpire(ns, quota.sourceKey(), Duration.ofDays(1)) > limit;
+        if (!refused && redisService.incrementAndExpire(ns, quota.identifierKey(), Duration.ofDays(1)) > limit * OTP_DAILY_FLOOD_FACTOR) {
             // Only the flood ceiling refused: this caller's own count gets its slot back
             refund(ns, quota.sourceKey());
+            refused = true;
+        }
+        if (refused) {
+            redisService.delete(namespace + OTP_COOLDOWN_SUFFIX, redisKey);
             throw ApiException.tooManyRequests(MessageKey.AUTH_OTP_DAILY_LIMIT);
         }
     }
@@ -688,6 +694,25 @@ public class AuthService {
         } catch (RuntimeException cleanup) {
             log.warn("Failed to release undelivered OTP: {}", cleanup.getMessage());
         }
+    }
+
+    /**
+     * Admin send-otp answers every email alike, so the mail goes out after the response: waiting for the provider would
+     * make an admin's request slower, and its failure would answer differently. A failed send is only logged; the
+     * undelivered OTP expires and the admin retries after the cooldown.
+     */
+    private void sendAdminEmailInBackground(String email, String code) {
+        Locale locale = LocaleContextHolder.getLocale();
+        Thread.ofVirtual().start(() -> {
+            LocaleContextHolder.setLocale(locale);
+            try {
+                emailService.sendAdminLoginEmail(email, code);
+            } catch (RuntimeException ex) {
+                log.warn("Failed to send admin OTP email: {}", ex.getMessage());
+            } finally {
+                LocaleContextHolder.resetLocaleContext();
+            }
+        });
     }
 
     private static String availableAt(Duration cooldown) {

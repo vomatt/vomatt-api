@@ -345,6 +345,8 @@ class AuthServiceTest {
 
         verify(redisService, never()).execInTransaction(any());
         verify(emailService, never()).sendVerificationEmail(anyString(), anyString());
+        // The refused send gives back the shared cooldown, so this IP cannot keep the owner waiting
+        verify(redisService).delete("otp:email:cooldown", k("user@example.com"));
     }
 
     @Test
@@ -834,7 +836,8 @@ class AuthServiceTest {
 
         authService.sendAdminOtp("admin@example.com", IP);
 
-        verify(emailService).sendAdminLoginEmail(eq("admin@example.com"), anyString());
+        // Sent after the response, on its own thread
+        verify(emailService, org.mockito.Mockito.timeout(2000)).sendAdminLoginEmail(eq("admin@example.com"), anyString());
         verify(userRepository, never()).existsByEmail(anyString());
     }
 

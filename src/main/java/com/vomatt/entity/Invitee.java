@@ -19,7 +19,7 @@ import lombok.ToString;
  * active account (at invite time, or when someone verifies that email). An email row is always shown by its address.
  */
 @Entity
-// Unique per kind: (parent, user_id) WHERE email IS NULL and (parent, email) WHERE email IS NOT NULL (V14)
+// Unique per kind: (parent, user_id) WHERE email IS NULL and (parent, email) WHERE email IS NOT NULL (V20261107141721__invitee_keys_by_kind.sql)
 @Table(name = "vote_invitees")
 @Getter
 @NoArgsConstructor

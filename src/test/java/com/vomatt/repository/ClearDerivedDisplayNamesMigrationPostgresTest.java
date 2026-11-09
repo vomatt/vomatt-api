@@ -10,11 +10,11 @@ import org.springframework.core.io.ClassPathResource;
 
 import com.vomatt.entity.User;
 
-/** Runs the real db/migration/V11__clear_derived_display_names.sql again inside the rolled-back test transaction. */
-@DisplayName("V11__clear_derived_display_names.sql (Postgres)")
+/** Runs the real db/migration/V20261106092526__clear_derived_display_names.sql again inside the rolled-back test transaction. */
+@DisplayName("V20261106092526__clear_derived_display_names.sql (Postgres)")
 class ClearDerivedDisplayNamesMigrationPostgresTest extends PostgresRepositoryTest {
 
-    private static final String SCRIPT = "db/migration/V11__clear_derived_display_names.sql";
+    private static final String SCRIPT = "db/migration/V20261106092526__clear_derived_display_names.sql";
 
     @Test
     @DisplayName("should clear display names made from the email or phone, keep chosen ones, also on rerun")

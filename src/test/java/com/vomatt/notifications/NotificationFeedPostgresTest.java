@@ -147,6 +147,22 @@ class NotificationFeedPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should list the RESULT only once the reveal time passed when the Poll Ended with results still Sealed")
+    void shouldListResultAtRevealWhenRevealAtSet() {
+        Vote sealed = poll(alice, Audience.PUBLIC, now.minusDays(2), now.minusHours(1));
+        sealed.setRevealAt(now.plusHours(1));
+        ballot(me, sealed);
+        Vote revealed = poll(alice, Audience.PUBLIC, now.minusDays(2), now.minusHours(2));
+        revealed.setRevealAt(now.minusMinutes(30));
+        ballot(me, revealed);
+
+        assertThat(feed(me)).singleElement().satisfies(n -> {
+            assertThat(n.poll().id()).isEqualTo(revealed.getId().toString());
+            assertThat(n.createdAt().toInstant()).isEqualTo(revealed.getRevealAt().toInstant());
+        });
+    }
+
+    @Test
     @DisplayName("should give no RESULT to the owner, an Invitee or a bookmark when a Poll Ended with no Ballots, and one when it holds a Ballot")
     void shouldNotListResultWhenPollEndedWithNoBallots() {
         Vote emptyInviteOnly = invitePoll(me, now.minusHours(1), now.plusDays(2), alice);

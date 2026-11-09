@@ -137,4 +137,39 @@ class AdminVoteServiceTest {
 
         assertThat(service.listVotes(null, " open ", null, null, null, null, null).total()).isZero();
     }
+
+    @Test
+    void shouldForceVoterVisibilityNobodyWhenProTurnedOn() {
+        when(voteService.toResponses(anyList(), isNull())).thenReturn(List.of(new VoteResponse()));
+        vote.setVoterVisibility(com.vomatt.entity.VoterVisibility.SIGNED_IN);
+        vote.setAnonymous(false);
+
+        service.setPro(voteId, true, adminId);
+
+        assertThat(vote.isPro()).isTrue();
+        assertThat(vote.getVoterVisibility()).isEqualTo(com.vomatt.entity.VoterVisibility.NOBODY);
+        assertThat(vote.isAnonymous()).isTrue();
+        verify(voteRepository).saveAndFlush(vote);
+    }
+
+    @Test
+    void shouldKeepVoterVisibilityWhenProTurnedOff() {
+        when(voteService.toResponses(anyList(), isNull())).thenReturn(List.of(new VoteResponse()));
+        vote.setPro(true);
+        vote.setVoterVisibility(com.vomatt.entity.VoterVisibility.NOBODY);
+
+        service.setPro(voteId, false, adminId);
+
+        assertThat(vote.isPro()).isFalse();
+        assertThat(vote.getVoterVisibility()).isEqualTo(com.vomatt.entity.VoterVisibility.NOBODY);
+    }
+
+    @Test
+    void shouldThrowNotFoundWhenSettingProOnDeletedPoll() {
+        vote.setDeletedAt(OffsetDateTime.now().minusHours(1));
+
+        assertThatThrownBy(() -> service.setPro(voteId, true, adminId)).isInstanceOfSatisfying(ApiException.class,
+                e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.VOTE_NOT_FOUND));
+        assertThat(vote.isPro()).isFalse();
+    }
 }

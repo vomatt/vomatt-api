@@ -2163,4 +2163,78 @@ class VoteServiceTest {
             assertThat(vote.getDeletedAt()).isNotNull();
         }
     }
+
+    // ─── Pro polls ────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("Pro poll")
+    class ProPollTests {
+
+        private VoteRequest ballotRequest(Boolean anonymous) {
+            VoteRequest request = new VoteRequest();
+            request.setOptionIds(List.of(UUID.randomUUID().toString()));
+            request.setAnonymous(anonymous);
+            return request;
+        }
+
+        @Test
+        void shouldRefuseBallotChangesWhenProPollAndPhoneNotVerified() {
+            vote.setPro(true);
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), ballotRequest(null), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_BALLOT_PHONE_VERIFICATION_REQUIRED));
+            assertThatThrownBy(() -> voteService.retract(voteId.toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_BALLOT_PHONE_VERIFICATION_REQUIRED));
+            verify(userVoteRepository, never()).saveAndFlush(any());
+        }
+
+        @Test
+        void shouldRefuseAnonymousBallotWhenProPoll() {
+            vote.setPro(true);
+            user.setPhoneVerifiedAt(OffsetDateTime.now().minusDays(1));
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+            UUID optionId = UUID.randomUUID();
+            setId(option, optionId);
+            when(voteOptionRepository.findById(optionId)).thenReturn(Optional.of(option));
+            VoteRequest request = ballotRequest(true);
+            request.setOptionIds(List.of(optionId.toString()));
+
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_BALLOT_ANONYMOUS_NOT_ALLOWED));
+            verify(userVoteRepository, never()).saveAndFlush(any());
+        }
+
+        @Test
+        void shouldRejectCreateWhenRevealAtBeforeEndTime() {
+            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
+            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
+            when(voteConfig.getMaxVoteDuration()).thenReturn(Duration.ofDays(365));
+            OffsetDateTime end = OffsetDateTime.now().plusDays(1);
+            CreateVoteRequest request = new CreateVoteRequest();
+            request.setTitle("Test");
+            request.setOptions(List.of(buildOption("A"), buildOption("B")));
+            request.setEndTime(end);
+            request.setRevealAt(end.minusMinutes(1));
+
+            assertThatThrownBy(() -> voteService.createVote(request, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_REVEAL_BEFORE_END));
+            verify(voteRepository, never()).save(any());
+        }
+
+        @Test
+        void shouldSealResultsWhenEndedBeforeRevealAt() {
+            vote.setStartTime(OffsetDateTime.now().minusDays(2));
+            vote.scheduleEnd(OffsetDateTime.now().minusDays(1));
+            vote.setRevealAt(OffsetDateTime.now().plusHours(1));
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+
+            assertThatThrownBy(() -> voteService.getVoteResults(voteId.toString(), null))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_RESULTS_SEALED));
+            assertThatThrownBy(() -> voteService.getVoters(voteId.toString(), userId.toString(), null, null))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_RESULTS_SEALED));
+        }
+    }
 }

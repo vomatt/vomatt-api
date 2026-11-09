@@ -48,6 +48,12 @@ public class CreateVoteRequest {
             example = "2026-10-19T09:00:00+08:00", requiredMode = Schema.RequiredMode.REQUIRED)
     private OffsetDateTime endTime;
 
+    @Schema(description = "When the results unseal (ISO-8601 with offset): until then per-option counts, results and voters stay Sealed "
+            + "even after the Poll has Ended. Optional; null on create unseals them as the Poll Ends, null on edit keeps the current value "
+            + "(it cannot be cleared). Must not be before `endTime` (`vote.reveal_at.before_end`)",
+            example = "2026-10-20T09:00:00+08:00", nullable = true)
+    private OffsetDateTime revealAt;
+
     @Schema(description = "Deprecated: Polls are single-choice. Sending true is rejected with 400 `vote.multiple.not_allowed`",
             deprecated = true, example = "false")
     private boolean allowMultipleChoices = false;
@@ -59,7 +65,7 @@ public class CreateVoteRequest {
 
     @Schema(description = "Who may see which option each Participant chose once the Poll has Ended: NOBODY (not even the owner), "
             + "OWNER (default) or SIGNED_IN (anyone who can see the Poll). Null keeps the default OWNER on create and the current value on edit. "
-            + "Participants see this level before casting a Ballot",
+            + "Participants see this level before casting a Ballot. A Pro poll is always NOBODY: any other value is ignored",
             example = "OWNER", nullable = true)
     private VoterVisibility voterVisibility;
 

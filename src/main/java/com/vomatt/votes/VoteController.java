@@ -140,6 +140,7 @@ public class VoteController {
                     - 400 `vote.options.max`: more options than the limit (default 10, admin-configurable)
                     - 400 `vote.end_time.past`: `endTime` is in the past
                     - 400 `vote.end_time.before_start`: `endTime` is not after `startTime`
+                    - 400 `vote.reveal_at.before_end`: `revealAt` is before `endTime`
                     - 400 `vote.duration.exceeded`: `endTime` is further after the start time than the limit (default 365 days, admin-configurable)
                     - 400 `tag.ids.invalid`: one of `tagIds` does not exist
                     - 400 `common.validation_failed`: a field breaks its size / required rule (first failing field only)
@@ -201,6 +202,7 @@ public class VoteController {
             - 400 `vote.options.max`: more options than the limit (default 10, admin-configurable)
             - 400 `vote.end_time.past`: `endTime` is in the past
             - 400 `vote.end_time.before_start`: `endTime` is not after `startTime`
+            - 400 `vote.reveal_at.before_end`: `revealAt` (the one sent, or the current one when omitted) is before `endTime`
             - 400 `vote.duration.exceeded`: `endTime` is further after the start time than the limit (default 365 days, admin-configurable)
             - 400 `tag.ids.invalid`: one of `tagIds` does not exist
             - 400 `common.validation_failed`: a field breaks its size / required rule (first failing field only)
@@ -239,7 +241,7 @@ public class VoteController {
     @Operation(summary = "Get Poll by ID", description = """
             **Auth**: public (optional login changes response: `myOptionId` holds the caller's Selection when signed in and a Ballot exists, otherwise null)
             **Precondition**: none; Scheduled, Open and Ended Polls are all readable
-            **Behavior**: returns the Poll. `options[].votes` is null (Sealed) for everyone, owner included, until the Poll has Ended; `participantCount` (Turnout) is always present, \
+            **Behavior**: returns the Poll. `options[].votes` is null (Sealed) for everyone, owner included, until the Poll has Ended and its `revealAt` (if set) has passed; `participantCount` (Turnout) is always present, \
             and so is `inviteeCount` for an INVITE_ONLY Poll.
             **Side effects**: counts a View (input for Trending) when the caller is signed in and not the owner and the Poll is Open \
             and PUBLIC, at most once per user and Poll per 24 hours; counted asynchronously, never fails or delays the request
@@ -579,17 +581,19 @@ public class VoteController {
             **Precondition**: the Poll is Open (not Scheduled, not Ended)
             **Behavior**: records the caller's Ballot with exactly one Selection. If the caller already holds a Ballot it is replaced by the new one (change of mind); \
             casting the same option again only updates `anonymous`. `anonymous: true` makes it an Anonymous Ballot, left out of `GET /api/votes/{voteId}/voters` \
-            whatever the Poll's Voter Visibility; an omitted or `null` `anonymous` keeps the current Ballot's flag, and a first Ballot uses the caller's `anonymousBallotByDefault` (false until set). \
+            whatever the Poll's Voter Visibility; an omitted or `null` `anonymous` keeps the current Ballot's flag, and a first Ballot uses the caller's `anonymousBallotByDefault` (false until set), except on a Pro poll, where it is false. \
             The response is the Poll with the results still Sealed and `myOptionId` set.
             **Side effects**: Turnout +1 on the first Ballot only; the option counts move silently (not visible until the Poll has Ended); the action is audit-logged. \
             When this Ballot leaves every Invitee of an INVITE_ONLY Poll holding a Ballot (the owner's own Ballot never counts), the Poll Ends now \
-            (`endTime` moves, `deadline` stays), so the response comes back Ended with results visible and the Ended Notification follows.
+            (`endTime` moves, `deadline` stays), so the response comes back Ended with results visible (unless `revealAt` is still ahead) and the Ended Notification follows.
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen
             - 403 `vote.ballot.official_not_allowed`: the request acts as an official account (`X-Act-As`); official accounts never vote (an ANALYST gets `official.role_forbidden` first)
+            - 403 `vote.ballot.phone_verification_required`: the Poll is a Pro poll (`pro`) and the caller has no verified phone number; route them to phone binding
             - 400 `vote.not_allowed`: the Poll is still Scheduled
             - 400 `vote.multiple.not_allowed`: `optionIds` holds more than one ID
+            - 400 `vote.ballot.anonymous_not_allowed`: `anonymous` is true on a Pro poll (it names nobody anyway)
             - 404 `vote.option.not_found`: the option ID does not exist
             - 400 `vote.option.not_in_vote`: the option belongs to another Poll
             - 404 `user.not_found`: the signed-in user no longer exists
@@ -633,6 +637,7 @@ public class VoteController {
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen
             - 403 `vote.ballot.official_not_allowed`: the request acts as an official account (`X-Act-As`); official accounts never vote (an ANALYST gets `official.role_forbidden` first)
+            - 403 `vote.ballot.phone_verification_required`: the Poll is a Pro poll (`pro`) and the caller has no verified phone number; route them to phone binding
             - 400 `vote.not_allowed`: the Poll is still Scheduled
             - 429 `common.rate_limited`: more than 30 Ballot writes (cast, Retract, remove Selection) by the caller within 60 seconds; no `Retry-After`
             - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was recorded, try again
@@ -665,6 +670,7 @@ public class VoteController {
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen
             - 403 `vote.ballot.official_not_allowed`: the request acts as an official account (`X-Act-As`); official accounts never vote (an ANALYST gets `official.role_forbidden` first)
+            - 403 `vote.ballot.phone_verification_required`: the Poll is a Pro poll (`pro`) and the caller has no verified phone number; route them to phone binding
             - 400 `vote.not_allowed`: the Poll is still Scheduled
             - 429 `common.rate_limited`: more than 30 Ballot writes (cast, Retract, remove Selection) by the caller within 60 seconds; no `Retry-After`
             - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was recorded, try again
@@ -690,12 +696,12 @@ public class VoteController {
     @PublicApiResponse
     @Operation(summary = "Get Poll results", description = """
             **Auth**: public
-            **Precondition**: the Poll has Ended (Sealed before that, for everyone including the owner)
+            **Precondition**: the Poll has Ended and its `revealAt` (if set) has passed (Sealed before that, for everyone including the owner)
             **Behavior**: returns per-option counts and Support (`percentage`, 0-100, share of Participants) plus Turnout.
             **Side effects**: none
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
-            - 403 `vote.results.sealed`: the Poll is still Scheduled or Open
+            - 403 `vote.results.sealed`: the Poll is still Scheduled or Open, or its `revealAt` has not passed
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Results of the Ended Poll",
             content = @Content(examples = @ExampleObject(name = "Ended Poll results", value = """
@@ -717,7 +723,7 @@ public class VoteController {
                         ]
                       }, "message": null, "errorCode": null, "error": null }
                     """)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "The Poll has not Ended, results are Sealed (`vote.results.sealed`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "The Poll has not Ended or its `revealAt` has not passed, results are Sealed (`vote.results.sealed`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.results.sealed", value = ERR_MESSAGE + "Results are sealed until the Poll ends" + ERR_CODE + "vote.results.sealed" + ERR_ERROR + "Results are sealed until the Poll ends" + ERR_END)))
     public ResponseEntity<ApiResponse<VoteResultResponse>> getVoteResults(
@@ -732,7 +738,7 @@ public class VoteController {
     @CommonApiResponses
     @Operation(summary = "List Participants of an Ended Poll", description = """
             **Auth**: required
-            **Precondition**: the Poll has Ended, and its Voter Visibility allows the caller: NOBODY allows no one (not even the owner), OWNER allows only the owner, SIGNED_IN allows anyone who can see the Poll (for INVITE_ONLY: the owner and Invitees)
+            **Precondition**: the Poll has Ended and its `revealAt` (if set) has passed, and its Voter Visibility allows the caller: NOBODY allows no one (not even the owner), OWNER allows only the owner, SIGNED_IN allows anyone who can see the Poll (for INVITE_ONLY: the owner and Invitees)
             **Behavior**: cursor-paged list of who took part, oldest Ballot first. Anonymous Ballots are left out, so the list can be shorter than `participantCount`. \
             `optionId` is present only when the Poll holds no Anonymous Ballot other than the caller's own; otherwise it is null for every Participant, \
             so the anonymous choices cannot be worked out from the named ones and the option totals. \
@@ -740,7 +746,7 @@ public class VoteController {
             **Side effects**: none
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
-            - 403 `vote.results.sealed`: the Poll is still Scheduled or Open
+            - 403 `vote.results.sealed`: the Poll is still Scheduled or Open, or its `revealAt` has not passed
             - 403 `vote.voters.hidden`: Voter Visibility does not allow the caller
             - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list or another ordering of this list
             """)
@@ -753,7 +759,7 @@ public class VoteController {
                         "nextCursor": null
                       }, "message": null, "errorCode": null, "error": null }
                     """)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Poll not Ended (`vote.results.sealed`), or Voter Visibility does not allow the caller or the Poll holds 1 or 2 Anonymous Ballots other than the caller's own (`vote.voters.hidden`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Poll not Ended or `revealAt` not passed (`vote.results.sealed`), or Voter Visibility does not allow the caller or the Poll holds 1 or 2 Anonymous Ballots other than the caller's own (`vote.voters.hidden`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.voters.hidden", value = ERR_MESSAGE + "Voters of this Poll are hidden" + ERR_CODE + "vote.voters.hidden" + ERR_ERROR + "Voters of this Poll are hidden" + ERR_END)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller, or its owner blocked the caller (`vote.not_found`)",

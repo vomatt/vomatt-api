@@ -104,6 +104,14 @@ public class Vote extends AuditableEntity {
     @Column(name = "voter_visibility", nullable = false)
     private VoterVisibility voterVisibility = VoterVisibility.OWNER;
 
+    /** Pro poll (set by an admin): only phone-verified users vote, Voter Visibility is NOBODY, no Anonymous Ballot. */
+    @Column(name = "pro", nullable = false)
+    private boolean pro;
+
+    /** Results stay Sealed until then even once Ended; null = unsealed when the Poll Ends. Never before the end time. */
+    @Column(name = "reveal_at")
+    private OffsetDateTime revealAt;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "vote_type", nullable = false)
     private VoteType voteType = VoteType.STANDARD;
@@ -199,9 +207,18 @@ public class Vote extends AuditableEntity {
         return getStatus() == VoteStatus.OPEN;
     }
 
-    /** Sealed: nobody, including the owner, sees per-option counts or Support until the Poll has Ended. */
+    /** Sealed: nobody, including the owner, sees per-option counts or Support until the Poll has Ended and its reveal time (if any) passed. */
     public boolean isResultsSealed() {
-        return getStatus() != VoteStatus.ENDED;
+        OffsetDateTime now = OffsetDateTime.now();
+        return statusAt(now) != VoteStatus.ENDED || (revealAt != null && now.isBefore(revealAt));
+    }
+
+    /** Pro forces Voter Visibility NOBODY (and the legacy is_anonymous mirror); turning Pro off keeps it. */
+    public void applyProRules() {
+        if (pro) {
+            voterVisibility = VoterVisibility.NOBODY;
+            isAnonymous = true;
+        }
     }
 
     public void addTag(Tag tag) {

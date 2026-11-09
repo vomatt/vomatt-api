@@ -121,4 +121,43 @@ class AdminVoteControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.creatorEmail").value("alice@example.com"));
     }
+
+    @Test
+    void shouldReturnPollWhenAdminSetsPro() throws Exception {
+        authenticateAs("admin");
+        AdminVoteResponse body = response(null);
+        body.vote().setPro(true);
+        body.vote().setVoterVisibility(com.vomatt.entity.VoterVisibility.NOBODY);
+        when(adminVoteService.setPro(voteId, true, ADMIN_ID)).thenReturn(body);
+
+        mockMvc.perform(put("/api/admin/votes/{id}/pro", voteId)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"pro\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.vote.id").value(voteId.toString()))
+                .andExpect(jsonPath("$.data.vote.pro").value(true))
+                .andExpect(jsonPath("$.data.vote.voterVisibility").value("NOBODY"))
+                .andExpect(jsonPath("$.data.creatorEmail").value("alice@example.com"));
+    }
+
+    @Test
+    void shouldReturn400WhenProMissing() throws Exception {
+        authenticateAs("admin");
+
+        mockMvc.perform(put("/api/admin/votes/{id}/pro", voteId)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("common.validation_failed"));
+        verify(adminVoteService, never()).setPro(any(), org.mockito.ArgumentMatchers.anyBoolean(), any());
+    }
+
+    @Test
+    void shouldReturn403WhenUserRoleSetsPro() throws Exception {
+        authenticateAs("user");
+
+        mockMvc.perform(put("/api/admin/votes/{id}/pro", voteId)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"pro\":true}"))
+                .andExpect(status().isForbidden());
+        verify(adminVoteService, never()).setPro(any(), org.mockito.ArgumentMatchers.anyBoolean(), any());
+    }
 }

@@ -154,6 +154,9 @@ public enum MessageKey {
     OFFICIAL_LAST_OWNER("official.last_owner"),
     OFFICIAL_ROLES_FIXED("official.roles_fixed"),
     OFFICIAL_INVITEE_NOT_ALLOWED("official.invitee_not_allowed"),
+    VOTE_REVEAL_BEFORE_END("vote.reveal_at.before_end"),
+    VOTE_BALLOT_ANONYMOUS_NOT_ALLOWED("vote.ballot.anonymous_not_allowed"),
+    VOTE_BALLOT_PHONE_VERIFICATION_REQUIRED("vote.ballot.phone_verification_required"),
     ;
 
     private final String code;

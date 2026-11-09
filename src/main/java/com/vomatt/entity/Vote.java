@@ -209,8 +209,16 @@ public class Vote extends AuditableEntity {
 
     /** Sealed: nobody, including the owner, sees per-option counts or Support until the Poll has Ended and its reveal time (if any) passed. */
     public boolean isResultsSealed() {
-        OffsetDateTime now = OffsetDateTime.now();
-        return statusAt(now) != VoteStatus.ENDED || (revealAt != null && now.isBefore(revealAt));
+        return isResultsSealedAt(OffsetDateTime.now());
+    }
+
+    public boolean isResultsSealedAt(OffsetDateTime now) {
+        return statusAt(now) != VoteStatus.ENDED || now.isBefore(resultsRevealAt());
+    }
+
+    /** When the results unseal: the reveal time when set, else the end time (mirrored in SQL by NotificationRepository). */
+    public OffsetDateTime resultsRevealAt() {
+        return revealAt != null ? revealAt : endTime;
     }
 
     /** Pro forces Voter Visibility NOBODY (and the legacy is_anonymous mirror); turning Pro off keeps it. */

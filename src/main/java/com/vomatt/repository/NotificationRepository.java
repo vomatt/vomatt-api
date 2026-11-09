@@ -78,7 +78,7 @@ public class NotificationRepository {
         return (kind == NotificationKind.MENTION ? NotificationKind.COMMENT : kind).name();
     }
 
-    // When a Poll's results unseal (Vote.isResultsSealed); GREATEST skips a null reveal_at
+    // When a Poll's results unseal (Vote.resultsRevealAt); GREATEST skips a null reveal_at
     private static final String RESULT_AT = "GREATEST(v.end_time, v.reveal_at)";
 
     // Branches bind :userId, and :now and :soon where they use them. A row's created_at does not change while it is

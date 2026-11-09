@@ -24,9 +24,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Stream;
 
 import static org.springframework.http.HttpMethod.DELETE;
 
@@ -44,15 +42,11 @@ public class ActAsFilter extends OncePerRequestFilter {
 
     public static final String HEADER = "X-Act-As";
 
-    private static final Set<String> READ_METHODS = Set.of("GET", "HEAD", "OPTIONS");
-    private static final RequestMatcher DENIED = new OrRequestMatcher(Stream.concat(
-            Arrays.stream(SecurityEndpoints.ACT_AS_DENIED).map(PathPatternRequestMatcher.withDefaults()::matcher),
-            Arrays.stream(SecurityEndpoints.ACT_AS_DENIED_DELETE).map(p -> PathPatternRequestMatcher.withDefaults().matcher(DELETE, p)))
-            .map(RequestMatcher.class::cast).toList());
-    private static final RequestMatcher PUBLIC_AUTH = new OrRequestMatcher(Arrays.stream(SecurityEndpoints.PUBLIC_AUTH)
-            .map(PathPatternRequestMatcher.withDefaults()::matcher).map(RequestMatcher.class::cast).toList());
-    private static final RequestMatcher PROFILE = new OrRequestMatcher(Arrays.stream(SecurityEndpoints.ACT_AS_PROFILE)
-            .map(PathPatternRequestMatcher.withDefaults()::matcher).map(RequestMatcher.class::cast).toList());
+    private static final RequestMatcher DENIED = new OrRequestMatcher(JwtAuthFilter.anyOf(SecurityEndpoints.ACT_AS_DENIED),
+            new OrRequestMatcher(Arrays.stream(SecurityEndpoints.ACT_AS_DENIED_DELETE)
+                    .map(p -> PathPatternRequestMatcher.withDefaults().matcher(DELETE, p)).map(RequestMatcher.class::cast).toList()));
+    private static final RequestMatcher PUBLIC_AUTH = JwtAuthFilter.anyOf(SecurityEndpoints.PUBLIC_AUTH);
+    private static final RequestMatcher PROFILE = JwtAuthFilter.anyOf(SecurityEndpoints.ACT_AS_PROFILE);
 
     private final OfficialMemberRepository memberRepository;
     private final SecurityErrorWriter errorWriter;
@@ -91,9 +85,9 @@ public class ActAsFilter extends OncePerRequestFilter {
             return false;
         }
         if (PROFILE.matches(request)) {
-            return READ_METHODS.contains(request.getMethod()) || role.canEditProfile();
+            return JwtAuthFilter.READ_METHODS.contains(request.getMethod()) || role.canEditProfile();
         }
-        return READ_METHODS.contains(request.getMethod()) || role.canPublish();
+        return JwtAuthFilter.READ_METHODS.contains(request.getMethod()) || role.canPublish();
     }
 
     private static UUID parseUuid(String value) {

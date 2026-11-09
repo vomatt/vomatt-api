@@ -126,12 +126,6 @@ public class OfficialService {
         log.info("Official account {}: ownership transferred from {} to {}", officialId, callerId, userId);
     }
 
-    /** Whether the member may read the official account's result reports (OWNER, ADMIN, ANALYST). */
-    @Transactional(readOnly = true)
-    public boolean canReadReports(UUID officialId, UUID memberId) {
-        return memberRepository.findActiveRole(officialId, memberId).filter(OfficialRole::canReadReports).isPresent();
-    }
-
     private OfficialRole requireRole(UUID officialId, String callerId) {
         return memberRepository.findActiveRole(officialId, UUID.fromString(callerId))
                 .orElseThrow(() -> ApiException.forbidden(MessageKey.OFFICIAL_NOT_MEMBER));

@@ -177,14 +177,4 @@ class OfficialServiceTest {
                 .satisfies(ex -> assertKey(ex, MessageKey.OFFICIAL_ROLE_FORBIDDEN));
     }
 
-    @Test
-    void shouldAllowReportsWhenRoleIsOwnerAdminOrAnalyst() {
-        for (OfficialRole role : OfficialRole.values()) {
-            when(memberRepository.findActiveRole(officialId, callerId)).thenReturn(Optional.of(role));
-            assertThat(service.canReadReports(officialId, callerId)).as(role.name()).isEqualTo(role != EDITOR);
-        }
-        when(memberRepository.findActiveRole(officialId, callerId)).thenReturn(Optional.empty());
-        assertThat(service.canReadReports(officialId, callerId)).isFalse();
-        assertThat(ANALYST.canPublish()).isFalse();
-    }
 }

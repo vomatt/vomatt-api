@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.Period;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -12,6 +13,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +23,7 @@ import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.security.ActingMember;
 import com.vomatt.common.util.TimeUtil;
 import com.vomatt.entity.Audience;
+import com.vomatt.entity.Gender;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
 import com.vomatt.lookups.LookupService;
@@ -31,7 +34,6 @@ import com.vomatt.repository.InviteeRepository;
 import com.vomatt.repository.PollReportRepository;
 import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.VoteRepository;
-import com.vomatt.users.OfficialService;
 import com.vomatt.votes.VoteService;
 
 import lombok.RequiredArgsConstructor;
@@ -56,10 +58,9 @@ public class PollReportService {
     static final List<String> AGE_BANDS = List.of("UNDER_18", "18-29", "30-39", "40-49", "50-59", "60+", NOT_PROVIDED);
     // Own mapper, not the web one: the stored format must not follow API serialization settings
     private static final JsonMapper JSON = JsonMapper.builder().build();
-    static final List<String> GENDERS = List.of("MALE", "FEMALE", "OTHER", "UNDISCLOSED", NOT_PROVIDED);
+    static final List<String> GENDERS = Stream.concat(Arrays.stream(Gender.values()).map(Enum::name), Stream.of(NOT_PROVIDED)).toList();
 
     private final VoteService voteService;
-    private final OfficialService officialService;
     private final VoteRepository voteRepository;
     private final VoteOptionRepository voteOptionRepository;
     private final InviteeRepository inviteeRepository;
@@ -76,18 +77,19 @@ public class PollReportService {
             throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
         }
         ActingMember.current()
-                .filter(a -> !officialService.canReadReports(a.officialId(), a.memberId()))
+                .filter(a -> !a.role().canReadReports())
                 .ifPresent(a -> {
                     throw ApiException.forbidden(MessageKey.OFFICIAL_ROLE_FORBIDDEN);
                 });
         if (!vote.isPro()) {
             throw ApiException.badRequest(MessageKey.REPORT_NOT_PRO);
         }
-        if (vote.isResultsSealed()) {
+        OffsetDateTime now = OffsetDateTime.now();
+        if (vote.isResultsSealedAt(now)) {
             throw ApiException.forbidden(MessageKey.REPORT_NOT_READY);
         }
         String data = reportRepository.findData(vote.getId()).orElseGet(() -> {
-            store(vote, OffsetDateTime.now());
+            store(vote, now, minCellSize());
             // Read back: a concurrent first read may have stored its own snapshot first
             return reportRepository.findData(vote.getId()).orElseThrow();
         });
@@ -97,11 +99,12 @@ public class PollReportService {
     /** RetentionJob: snapshots every Ended Pro poll that has none yet. Returns how many were stored. */
     public int generateMissing(OffsetDateTime now) {
         int stored = 0;
+        int minCellSize = minCellSize();
         for (Vote vote : voteRepository.findAllById(reportRepository.findEndedProPollsWithoutReport(now))) {
             // One bad report must not stop the rest of the retention run; the first read after End retries it.
             // ponytail: a database error still aborts the shared transaction; give each report its own if that shows up
             try {
-                stored += store(vote, now) ? 1 : 0;
+                stored += store(vote, now, minCellSize) ? 1 : 0;
             } catch (RuntimeException e) {
                 log.error("Poll report generation failed for {}", vote.getId(), e);
             }
@@ -109,8 +112,8 @@ public class PollReportService {
         return stored;
     }
 
-    private boolean store(Vote vote, OffsetDateTime now) {
-        PollReportResponse report = generate(vote, now);
+    private boolean store(Vote vote, OffsetDateTime now, int minCellSize) {
+        PollReportResponse report = generate(vote, now, minCellSize);
         boolean stored = reportRepository.insertIfAbsent(vote.getId(), now, JSON.writeValueAsString(report));
         if (stored) {
             log.info("Poll report generated for {}", vote.getId());
@@ -118,11 +121,14 @@ public class PollReportService {
         return stored;
     }
 
-    PollReportResponse generate(Vote vote, OffsetDateTime now) {
+    // Never below 2: a threshold of 1 would show single voters' choices by age band and gender
+    int minCellSize() {
+        return Math.max(2, lookupService.configInt(MIN_CELL_SIZE_KEY, DEFAULT_MIN_CELL_SIZE));
+    }
+
+    PollReportResponse generate(Vote vote, OffsetDateTime now, int minCellSize) {
         List<VoteOption> options = voteOptionRepository.findByVoteIdOrderByDisplayOrder(vote.getId());
         List<BallotDemographics> ballots = reportRepository.findBallots(vote.getId());
-        // Never below 2: a threshold of 1 would show single voters' choices by age band and gender
-        int minCellSize = Math.max(2, lookupService.configInt(MIN_CELL_SIZE_KEY, DEFAULT_MIN_CELL_SIZE));
         LocalDate endDate = TimeUtil.taipeiBusinessDate(vote.getEndTime());
 
         // A sealed Anonymous Ballot (option NULL) counts in turnout but in no option
@@ -146,7 +152,7 @@ public class PollReportService {
                 now,
                 minCellSize,
                 new PollReportResponse.Timeline(vote.getCreatedAt(), vote.getStartTime(), vote.getEndTime(),
-                        vote.getRevealAt() != null ? vote.getRevealAt() : vote.getEndTime()),
+                        vote.resultsRevealAt()),
                 new PollReportResponse.Turnout(ballots.size(), invitees, rate),
                 IntStream.range(0, options.size())
                         .mapToObj(i -> new PollReportResponse.OptionCount(options.get(i).getId().toString(), options.get(i).getText(), optionCounts[i]))

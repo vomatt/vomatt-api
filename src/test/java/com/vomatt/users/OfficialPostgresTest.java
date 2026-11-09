@@ -166,7 +166,6 @@ class OfficialPostgresTest extends PostgresRepositoryTest {
 
         assertThat(memberRepository.findActiveRole(officialId, editor.getId())).contains(OfficialRole.OWNER);
         assertThat(memberRepository.findActiveRole(officialId, owner.getId())).contains(OfficialRole.ADMIN);
-        assertThat(officialService.canReadReports(officialId, owner.getId())).isTrue();
     }
 
     private static CreateVoteRequest.VoteOptionRequest option(String text) {

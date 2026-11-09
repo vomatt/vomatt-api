@@ -1,6 +1,5 @@
 package com.vomatt.users;
 
-import com.vomatt.common.constant.UserRole;
 import com.vomatt.users.dto.FollowUserDto;
 import com.vomatt.users.dto.MyProfileResponse;
 import com.vomatt.users.dto.UserDto;
@@ -9,7 +8,6 @@ import com.vomatt.entity.User;
 import com.vomatt.repository.UserProfileProjection;
 import org.springframework.stereotype.Component;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -104,7 +102,7 @@ public class UserMapper {
                 isBlocked,
                 mutualFollowersCount,
                 mutualFollowersPreview,
-                projection.getRoles() != null && Arrays.asList(projection.getRoles()).contains(UserRole.OFFICIAL)
+                projection.isOfficial()
         );
     }
 }

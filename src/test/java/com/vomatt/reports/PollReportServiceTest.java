@@ -40,14 +40,12 @@ import com.vomatt.repository.InviteeRepository;
 import com.vomatt.repository.PollReportRepository;
 import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.VoteRepository;
-import com.vomatt.users.OfficialService;
 import com.vomatt.votes.VoteService;
 
 @ExtendWith(MockitoExtension.class)
 class PollReportServiceTest {
 
     @Mock VoteService voteService;
-    @Mock OfficialService officialService;
     @Mock VoteRepository voteRepository;
     @Mock VoteOptionRepository voteOptionRepository;
     @Mock InviteeRepository inviteeRepository;
@@ -88,8 +86,7 @@ class PollReportServiceTest {
     @Test
     void shouldKeepThresholdAtTwoWhenConfiguredBelow() {
         when(lookupService.configInt(any(), anyInt())).thenReturn(1);
-        when(vote.getEndTime()).thenReturn(java.time.OffsetDateTime.parse("2026-11-01T12:00:00+08:00"));
-        assertThat(service.generate(vote, java.time.OffsetDateTime.now()).minCellSize()).isEqualTo(2);
+        assertThat(service.minCellSize()).isEqualTo(2);
     }
 
     // === Access matrix ===
@@ -108,7 +105,6 @@ class PollReportServiceTest {
     void shouldAllowWhenActingMemberMayReadReports() {
         UUID memberId = UUID.randomUUID();
         act(OfficialRole.ANALYST, UUID.fromString(ownerId), memberId);
-        when(officialService.canReadReports(UUID.fromString(ownerId), memberId)).thenReturn(true);
 
         assertThat(service.getReport(voteId.toString(), ownerId)).isNotNull();
     }
@@ -117,7 +113,6 @@ class PollReportServiceTest {
     void shouldRefuseWhenActingMemberMayNotReadReports() {
         UUID memberId = UUID.randomUUID();
         act(OfficialRole.EDITOR, UUID.fromString(ownerId), memberId);
-        when(officialService.canReadReports(UUID.fromString(ownerId), memberId)).thenReturn(false);
 
         assertRefused(ownerId, MessageKey.OFFICIAL_ROLE_FORBIDDEN);
     }
@@ -130,7 +125,7 @@ class PollReportServiceTest {
 
     @Test
     void shouldRefuseWhenResultsStillSealed() {
-        when(vote.isResultsSealed()).thenReturn(true);
+        when(vote.isResultsSealedAt(any())).thenReturn(true);
         assertRefused(ownerId, MessageKey.REPORT_NOT_READY);
     }
 

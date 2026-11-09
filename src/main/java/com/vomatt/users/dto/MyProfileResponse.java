@@ -34,10 +34,6 @@ public record MyProfileResponse(
         String avatarUrl,
         @Schema(description = "Location; null if not set", example = "Taipei", nullable = true)
         String location,
-        @Schema(description = "Points", example = "120")
-        int points,
-        @Schema(description = "Membership level; null if not set", example = "basic", nullable = true)
-        String membershipLevel,
         @Schema(description = "False when the account is suspended", example = "true")
         boolean active,
         @Schema(description = "Last sign-in time; null if the user never signed in", example = "2026-10-09T09:15:00+08:00", nullable = true)
@@ -60,7 +56,7 @@ public record MyProfileResponse(
         @Schema(description = "Number of users the caller follows; suspended accounts are not counted", example = "8")
         int followingCount,
         @Schema(description = "Field name to visible flag, i.e. what other users see on the public profile; "
-                + "keys: email, firstName, lastName, birthday, location, points, displayName, bio, membershipLevel",
+                + "keys: email, firstName, lastName, birthday, location, displayName, bio",
                 example = "{\"email\": false, \"displayName\": true, \"bio\": true}")
         Map<String, Boolean> visibilitySettings,
         @Schema(description = "Whether Ballots are Anonymous when a Ballot does not say otherwise; false until set", example = "false")

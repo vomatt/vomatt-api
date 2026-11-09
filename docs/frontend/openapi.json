@@ -420,22 +420,11 @@
             "nullable" : true,
             "type" : "string"
           },
-          "membershipLevel" : {
-            "description" : "Membership level: BASIC, SILVER, GOLD or PLATINUM",
-            "example" : "BASIC",
-            "type" : "string"
-          },
           "phoneNumber" : {
             "description" : "Phone number (E.164); null for accounts registered by email or OAuth",
             "example" : "+886912345678",
             "nullable" : true,
             "type" : "string"
-          },
-          "points" : {
-            "description" : "Points balance",
-            "example" : 120,
-            "format" : "int32",
-            "type" : "integer"
           },
           "pollCount" : {
             "description" : "Polls the user created, any Audience, Deleted ones included",
@@ -3583,23 +3572,11 @@
             "nullable" : true,
             "type" : "string"
           },
-          "membershipLevel" : {
-            "description" : "Membership level; null if not set",
-            "example" : "basic",
-            "nullable" : true,
-            "type" : "string"
-          },
           "phoneNumber" : {
             "description" : "Phone number; null if the account signed up with email only",
             "example" : "+886912345678",
             "nullable" : true,
             "type" : "string"
-          },
-          "points" : {
-            "description" : "Points",
-            "example" : 120,
-            "format" : "int32",
-            "type" : "integer"
           },
           "totalPolls" : {
             "description" : "Number of Polls the user created that have opened (Open and Ended; Scheduled and Cancelled-before-opening excluded)",
@@ -3620,11 +3597,11 @@
           },
           "visibilitySettings" : {
             "additionalProperties" : {
-              "description" : "Field name to visible flag, i.e. what other users see on the public profile; keys: email, firstName, lastName, birthday, location, points, displayName, bio, membershipLevel",
+              "description" : "Field name to visible flag, i.e. what other users see on the public profile; keys: email, firstName, lastName, birthday, location, displayName, bio",
               "example" : false,
               "type" : "boolean"
             },
-            "description" : "Field name to visible flag, i.e. what other users see on the public profile; keys: email, firstName, lastName, birthday, location, points, displayName, bio, membershipLevel",
+            "description" : "Field name to visible flag, i.e. what other users see on the public profile; keys: email, firstName, lastName, birthday, location, displayName, bio",
             "example" : {
               "bio" : true,
               "displayName" : true,
@@ -5093,11 +5070,11 @@
         "properties" : {
           "visibility" : {
             "additionalProperties" : {
-              "description" : "Field name to visible flag. Allowed keys: firstName, lastName, location, points, displayName, bio, membershipLevel. Omitted fields keep their current setting; unknown keys (including email and birthday, which are never public) are ignored",
+              "description" : "Field name to visible flag. Allowed keys: firstName, lastName, location, displayName, bio. Omitted fields keep their current setting; unknown keys (including email and birthday, which are never public) are ignored",
               "example" : false,
               "type" : "boolean"
             },
-            "description" : "Field name to visible flag. Allowed keys: firstName, lastName, location, points, displayName, bio, membershipLevel. Omitted fields keep their current setting; unknown keys (including email and birthday, which are never public) are ignored",
+            "description" : "Field name to visible flag. Allowed keys: firstName, lastName, location, displayName, bio. Omitted fields keep their current setting; unknown keys (including email and birthday, which are never public) are ignored",
             "example" : {
               "firstName" : true,
               "location" : false
@@ -5354,12 +5331,6 @@
             "nullable" : true,
             "type" : "string"
           },
-          "membershipLevel" : {
-            "description" : "Membership level; null when hidden (default) or not set",
-            "example" : "basic",
-            "nullable" : true,
-            "type" : "string"
-          },
           "mutualFollowersCount" : {
             "description" : "Number of this user's followers whom the caller follows, as in `GET /api/users/{username}/mutual-followers` (suspended accounts and users with a block between them and the caller left out); null when signed out and on the caller's own profile",
             "example" : 3,
@@ -5374,13 +5345,6 @@
             },
             "nullable" : true,
             "type" : "array"
-          },
-          "points" : {
-            "description" : "Points; null when hidden (default)",
-            "example" : 120,
-            "format" : "int32",
-            "nullable" : true,
-            "type" : "integer"
           },
           "totalPolls" : {
             "description" : "Number of Polls the user created that have opened (Open and Ended; Scheduled and Cancelled-before-opening excluded)",
@@ -8167,7 +8131,7 @@
     },
     "/api/admin/users/{userId}" : {
       "get" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: returns the account with full contact details, names, birthday, sign-in details, points and counts of Polls created (any Audience, Deleted included), Ballots held, Comments written (deleted included), users this user blocks (`blockingCount`) and users who block them (`blockedByCount`)\n**Side effects**: the lookup is written to the audit log (action `VIEW`, resource `USER`), since it reveals personal data\n**Errors**:\n- 400 `common.type_mismatch`: `userId` is not a valid UUID\n- 404 `user.not_found`: no account with this ID",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: returns the account with full contact details, names, birthday, sign-in details and counts of Polls created (any Audience, Deleted included), Ballots held, Comments written (deleted included), users this user blocks (`blockingCount`) and users who block them (`blockedByCount`)\n**Side effects**: the lookup is written to the audit log (action `VIEW`, resource `USER`), since it reveals personal data\n**Errors**:\n- 400 `common.type_mismatch`: `userId` is not a valid UUID\n- 404 `user.not_found`: no account with this ID",
         "operationId" : "getUser",
         "parameters" : [ {
           "description" : "User ID (UUIDv7)",
@@ -8202,9 +8166,7 @@
                         "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
                         "lastLoginAt" : "2026-10-16T21:04:11+08:00",
                         "lastName" : "Chen",
-                        "membershipLevel" : "BASIC",
                         "phoneNumber" : null,
-                        "points" : 120,
                         "pollCount" : 8,
                         "roles" : [ "user" ],
                         "username" : "alice"
@@ -8495,9 +8457,7 @@
                         "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
                         "lastLoginAt" : "2026-10-16T21:04:11+08:00",
                         "lastName" : "Chen",
-                        "membershipLevel" : "BASIC",
                         "phoneNumber" : null,
-                        "points" : 120,
                         "pollCount" : 8,
                         "roles" : [ "user" ],
                         "username" : "alice"
@@ -8663,9 +8623,7 @@
                         "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
                         "lastLoginAt" : "2026-10-16T21:04:11+08:00",
                         "lastName" : "Chen",
-                        "membershipLevel" : "BASIC",
                         "phoneNumber" : null,
-                        "points" : 120,
                         "pollCount" : 8,
                         "roles" : [ "user" ],
                         "username" : "alice"
@@ -8943,9 +8901,7 @@
                         "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
                         "lastLoginAt" : "2026-10-16T21:04:11+08:00",
                         "lastName" : "Chen",
-                        "membershipLevel" : "BASIC",
                         "phoneNumber" : null,
-                        "points" : 120,
                         "pollCount" : 8,
                         "roles" : [ "user" ],
                         "username" : "alice"
@@ -14466,9 +14422,7 @@
                     "lastLoginAt" : "2026-10-09T09:15:00+08:00",
                     "lastName" : "Chen",
                     "location" : "Taipei",
-                    "membershipLevel" : "basic",
                     "phoneNumber" : null,
-                    "points" : 120,
                     "totalPolls" : 4,
                     "totalVotes" : 17,
                     "username" : "alice",
@@ -14477,9 +14431,7 @@
                       "displayName" : true,
                       "firstName" : false,
                       "lastName" : false,
-                      "location" : false,
-                      "membershipLevel" : false,
-                      "points" : false
+                      "location" : false
                     }
                   },
                   "error" : null,
@@ -14588,8 +14540,6 @@
                     "joinedAt" : "2026-08-01T10:00:00+08:00",
                     "lastName" : null,
                     "location" : null,
-                    "membershipLevel" : null,
-                    "points" : null,
                     "totalPolls" : 4,
                     "totalVotes" : 17,
                     "username" : "alice"
@@ -14725,8 +14675,6 @@
                     "joinedAt" : "2026-08-01T10:00:00+08:00",
                     "lastName" : null,
                     "location" : null,
-                    "membershipLevel" : null,
-                    "points" : null,
                     "totalPolls" : 4,
                     "totalVotes" : 17,
                     "username" : "alice"
@@ -15176,9 +15124,7 @@
                       "lastLoginAt" : "2026-10-09T09:15:00+08:00",
                       "lastName" : "Chen",
                       "location" : "Taipei",
-                      "membershipLevel" : "basic",
                       "phoneNumber" : null,
-                      "points" : 120,
                       "totalPolls" : 1,
                       "totalVotes" : 1,
                       "username" : "alice",
@@ -15187,9 +15133,7 @@
                         "displayName" : true,
                         "firstName" : false,
                         "lastName" : false,
-                        "location" : true,
-                        "membershipLevel" : false,
-                        "points" : false
+                        "location" : true
                       }
                     }
                   },
@@ -16209,9 +16153,7 @@
                     "displayName" : true,
                     "firstName" : true,
                     "lastName" : true,
-                    "location" : false,
-                    "membershipLevel" : false,
-                    "points" : false
+                    "location" : false
                   },
                   "error" : null,
                   "errorCode" : null,
@@ -16507,7 +16449,7 @@
     },
     "/api/users/{username}" : {
       "get" : {
-        "description" : "**Auth**: public; optional login fills `isFollowing`, `followsYou`, `isBlocked`, `mutualFollowersCount` and `mutualFollowersPreview`. An invalid or expired token is treated as signed out\n**Precondition**: none\n**Behavior**: returns the public view of a user. `isFollowing` / `isBlocked` say whether the caller follows / has blocked the user, and `followsYou` whether the user follows the caller: `null` when signed out, `false` on the caller's own profile. `mutualFollowersCount` counts the users in `GET /api/users/{username}/mutual-followers` (this user's followers whom the caller follows) and `mutualFollowersPreview` holds the first 3 of them (most recently followed first; `[]` when there are none): both `null` when signed out and on the caller's own profile. `followersCount` / `followingCount` count the users in `GET /api/users/{username}/followers` / `/following` (suspended accounts left out, blocks not filtered). Profile fields do not depend on the caller. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` (Public, non-Deleted Polls only) are always present (`avatarUrl` is `null` when never set). Every optional field is `null` unless the owner made it visible: `displayName` and `bio` are visible by default, `firstName`, `lastName`, `location`, `points` and `membershipLevel` are hidden by default; email and birthday are never returned. `totalPolls` counts only Polls that have opened (Open and Ended), matching `GET /api/users/{username}/votes`.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended",
+        "description" : "**Auth**: public; optional login fills `isFollowing`, `followsYou`, `isBlocked`, `mutualFollowersCount` and `mutualFollowersPreview`. An invalid or expired token is treated as signed out\n**Precondition**: none\n**Behavior**: returns the public view of a user. `isFollowing` / `isBlocked` say whether the caller follows / has blocked the user, and `followsYou` whether the user follows the caller: `null` when signed out, `false` on the caller's own profile. `mutualFollowersCount` counts the users in `GET /api/users/{username}/mutual-followers` (this user's followers whom the caller follows) and `mutualFollowersPreview` holds the first 3 of them (most recently followed first; `[]` when there are none): both `null` when signed out and on the caller's own profile. `followersCount` / `followingCount` count the users in `GET /api/users/{username}/followers` / `/following` (suspended accounts left out, blocks not filtered). Profile fields do not depend on the caller. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` (Public, non-Deleted Polls only) are always present (`avatarUrl` is `null` when never set). Every optional field is `null` unless the owner made it visible: `displayName` and `bio` are visible by default, `firstName`, `lastName` and `location` are hidden by default; email and birthday are never returned. `totalPolls` counts only Polls that have opened (Open and Ended), matching `GET /api/users/{username}/votes`.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended",
         "operationId" : "getUserProfile",
         "parameters" : [ {
           "description" : "Username of the user to look up",
@@ -16538,7 +16480,6 @@
                     "joinedAt" : "2026-08-01T10:00:00+08:00",
                     "lastName" : null,
                     "location" : null,
-                    "membershipLevel" : null,
                     "mutualFollowersCount" : 3,
                     "mutualFollowersPreview" : [ {
                       "avatarUrl" : "bot:boba",
@@ -16556,7 +16497,6 @@
                       "id" : "0199c1a3-2b3c-7d4e-9f5a-6b7c8d9e0f1a",
                       "username" : "ken"
                     } ],
-                    "points" : null,
                     "totalPolls" : 4,
                     "totalVotes" : 17,
                     "username" : "alice"

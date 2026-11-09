@@ -20,8 +20,6 @@ public record AdminUserDetail(
         @Schema(description = "Roles: user, moderator, admin", example = "[\"user\"]") List<String> roles,
         @Schema(description = "False when suspended", example = "true") boolean active,
         @Schema(description = "Last sign-in; null if never", example = "2026-10-16T21:04:11+08:00", nullable = true) OffsetDateTime lastLoginAt,
-        @Schema(description = "Points balance", example = "120") int points,
-        @Schema(description = "Membership level: BASIC, SILVER, GOLD or PLATINUM", example = "BASIC") String membershipLevel,
         @Schema(description = "When the account was created", example = "2026-09-01T10:00:00+08:00") OffsetDateTime createdAt,
         @Schema(description = "Polls the user created, any Audience, Deleted ones included", example = "8") long pollCount,
         @Schema(description = "Ballots the user currently holds", example = "35") long ballotCount,

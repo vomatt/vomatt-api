@@ -68,14 +68,6 @@ public class User extends AuditableEntity {
     @Column(name = "last_login_at")
     private OffsetDateTime lastLoginAt;
 
-    @Builder.Default
-    @Column(name = "points", nullable = false)
-    private int points = 0;
-
-    @Builder.Default
-    @Column(name = "membership_level", nullable = false, length = 20)
-    private String membershipLevel = "BASIC";
-
     /** false means suspended: all login paths and refresh rotation are rejected. */
     @Builder.Default
     @Column(name = "active", nullable = false)

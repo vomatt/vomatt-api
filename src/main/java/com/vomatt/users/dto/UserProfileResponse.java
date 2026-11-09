@@ -35,10 +35,6 @@ public record UserProfileResponse(
         String lastName,
         @Schema(description = "Location; null when hidden (default) or not set", example = "Taipei", nullable = true)
         String location,
-        @Schema(description = "Points; null when hidden (default)", example = "120", nullable = true)
-        Integer points,
-        @Schema(description = "Membership level; null when hidden (default) or not set", example = "basic", nullable = true)
-        String membershipLevel,
         // viewer relation: null for a signed-out caller, false on the caller's own profile
         @Schema(description = "Whether the caller follows this user; null when signed out, false on the caller's own profile",
                 example = "false", nullable = true)

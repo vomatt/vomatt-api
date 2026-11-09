@@ -2,6 +2,10 @@
 
 Contract changes that affect the frontend. 💥 BREAKING means frontend code must change. See [openapi.json](openapi.json) for the contract snapshot and [error-codes.md](error-codes.md) for error codes.
 
+## 2026-11-09
+
+- 💥 `points` and `membershipLevel` are removed from every response: `GET /api/users/me` (and the `profile` in `GET /api/users/me/export`), the public profile (`GET /api/users/{username}`, `PATCH /api/users/me`, `PUT /api/users/me/avatar`) and `GET /api/admin/users/{userId}`. They are also removed from the visibility settings (`visibilitySettings` in `GET /api/users/me`, the response of `PATCH /api/users/me/visibility`). `PATCH /api/users/me/visibility` still accepts the `points` and `membershipLevel` keys but ignores them, like any other unknown key. Drop any UI that shows points, membership level or their visibility toggles.
+
 ## 2026-11-07
 
 - 💥 Admin console passkey sign-in has its own challenge and origin. The admin console must call the new `POST /api/auth/admin/passkey/login/options` (public, same response as `POST /api/auth/passkey/login/options`) and send the result to `POST /api/auth/admin/passkey/login/verify`, which now refuses a challenge from the consumer options endpoint, and the consumer verify refuses an admin one (401 `auth.passkey.invalid`). The admin verify also accepts only an assertion made on the admin console origin (`PASSKEY_ADMIN_ORIGINS`, default `https://admin.vomatt.com`); a passkey used on vomatt.com no longer signs in to the admin console. Deploy the admin console change together with this release; until then admins sign in with the email code.

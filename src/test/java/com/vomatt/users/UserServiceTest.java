@@ -58,6 +58,7 @@ import com.vomatt.repository.VoteRepository;
 class UserServiceTest {
 
     @Mock UserRepository userRepository;
+    @Mock com.vomatt.repository.OfficialMemberRepository officialMemberRepository;
     @Mock UserPreferenceRepository preferenceRepository;
     @Mock UserBlockRepository blockRepository;
     @Mock UserFollowRepository followRepository;
@@ -184,6 +185,18 @@ class UserServiceTest {
         order.verify(auditLogRepository).anonymizeByUserId(id.toString());
         order.verify(userRepository).delete(user);
         verify(voteViewRecorder).forgetViewer(id.toString());
+    }
+
+    @Test
+    void shouldRefuseWhenDeletingSoleOwnerOfOfficialAccount() {
+        UUID id = UUID.randomUUID();
+        when(userRepository.findById(id)).thenReturn(Optional.of(User.builder().id(id).username("owner").build()));
+        when(officialMemberRepository.isSoleOwnerOfAny(id)).thenReturn(true);
+
+        assertThatThrownBy(() -> userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), List.of("user"), null)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.OFFICIAL_LAST_OWNER));
+        verify(userRepository, never()).delete(any());
     }
 
     @Test
@@ -423,8 +436,8 @@ class UserServiceTest {
         CursorResponse<UserDto> page = userService.searchUsersByUsername("ali", null, null);
 
         assertThat(page.items()).containsExactly(
-                new UserDto(shown.getId().toString(), "alice", "Alice", "https://cdn.example.com/a.jpg"),
-                new UserDto(hidden.getId().toString(), "alicia", null, null));
+                new UserDto(shown.getId().toString(), "alice", "Alice", "https://cdn.example.com/a.jpg", false),
+                new UserDto(hidden.getId().toString(), "alicia", null, null, false));
         assertThat(page.nextCursor()).isNull();
     }
 
@@ -587,7 +600,7 @@ class UserServiceTest {
 
         CursorResponse<FollowUserDto> page = userService.listFollowers("alice", null, null, UUID.randomUUID().toString());
 
-        assertThat(page.items()).containsExactly(new FollowUserDto(hidden.getId().toString(), "bob", null, null, false, false));
+        assertThat(page.items()).containsExactly(new FollowUserDto(hidden.getId().toString(), "bob", null, null, false, false, false));
         assertThat(page.nextCursor()).isNull();
     }
 
@@ -602,7 +615,7 @@ class UserServiceTest {
 
         CursorResponse<FollowUserDto> page = userService.listFollowing("alice", null, null, UUID.randomUUID().toString());
 
-        assertThat(page.items()).containsExactly(new FollowUserDto(bob.getId().toString(), "bob", "Bob", null, false, false));
+        assertThat(page.items()).containsExactly(new FollowUserDto(bob.getId().toString(), "bob", "Bob", null, false, false, false));
     }
 
     @Test

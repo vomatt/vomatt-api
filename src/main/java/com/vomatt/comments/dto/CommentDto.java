@@ -29,6 +29,9 @@ public class CommentDto {
             example = "bot:boba", nullable = true)
     private String authorAvatarUrl;
 
+    @Schema(description = "Whether the author is an official account (a group's page, shown with a badge); false on a deleted placeholder", example = "false")
+    private boolean authorOfficial;
+
     @Schema(description = "Comment text (max 2000 characters). Null only on a deleted placeholder (`deleted` = true)",
             example = "I would pick option B, it is the cheaper one.", nullable = true)
     private String text;

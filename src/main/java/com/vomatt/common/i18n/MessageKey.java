@@ -142,6 +142,17 @@ public enum MessageKey {
     // === Admin ===
     ADMIN_SELF_ACTION_FORBIDDEN("admin.self_action_forbidden"),
     ADMIN_LAST_ADMIN("admin.last_admin"),
+
+    // === Official accounts ===
+    AUTH_OFFICIAL_SIGN_IN_NOT_ALLOWED("auth.official_sign_in_not_allowed"),
+    VOTE_BALLOT_OFFICIAL_NOT_ALLOWED("vote.ballot.official_not_allowed"),
+    OFFICIAL_NOT_MEMBER("official.not_member"),
+    OFFICIAL_ROLE_FORBIDDEN("official.role_forbidden"),
+    OFFICIAL_MEMBER_NOT_FOUND("official.member.not_found"),
+    OFFICIAL_MEMBER_EXISTS("official.member.exists"),
+    OFFICIAL_MEMBER_INVALID("official.member.invalid"),
+    OFFICIAL_LAST_OWNER("official.last_owner"),
+    OFFICIAL_ROLES_FIXED("official.roles_fixed"),
     ;
 
     private final String code;

@@ -2,6 +2,7 @@ package com.vomatt.votes;
 
 import com.vomatt.lookups.LookupService;
 import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.security.ActingMember;
 import com.vomatt.common.util.AfterCommit;
 import com.vomatt.common.util.TextUtil;
 import com.vomatt.common.util.UUIDv7Generator;
@@ -129,6 +130,7 @@ public class VoteService {
         InviteListService.Members inviteLists = inviteListService.expand(orEmpty(request.getInviteListIds()), creator.getId());
 
         Vote vote = new Vote(request.getTitle(), request.getDescription(), creator, request.getEndTime());
+        vote.setActedBy(ActingMember.current().map(ActingMember::memberId).orElse(null));
         vote.setStartTime(request.getStartTime() != null ? request.getStartTime() : OffsetDateTime.now());
         applyVoterVisibility(vote, request);
         if (request.getAudience() != null) {
@@ -337,7 +339,7 @@ public class VoteService {
                 || inviteeRepository.existsByVoteIdAndUserId(v.getId(), UUID.fromString(viewerId)))
             .map(Vote::getCreator)
             .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
-        return new VoteCreatorResponse(creator.getUsername(), creator.getAvatarUrl());
+        return new VoteCreatorResponse(creator.getUsername(), creator.getAvatarUrl(), creator.isOfficial());
     }
 
     /**
@@ -902,6 +904,12 @@ public class VoteService {
         if (!owned.isOwnedBy(userId)) {
             throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
         }
+        // Acting as an official account, an EDITOR manages only the Polls it published itself (ANALYST none)
+        ActingMember.current()
+            .filter(a -> !a.role().canEditAllPolls() && !a.memberId().equals(owned.getActedBy()))
+            .ifPresent(a -> {
+                throw ApiException.forbidden(MessageKey.OFFICIAL_ROLE_FORBIDDEN);
+            });
         return owned;
     }
 
@@ -1004,12 +1012,23 @@ public class VoteService {
      */
     private Vote lockOpenVote(UUID voteId, String userId) {
         Vote vote = requireAccessible(lockVote(voteId), userId);
+        requireBallotEligible(vote);
         switch (vote.getStatus()) {
             case ENDED -> throw ApiException.badRequest(MessageKey.VOTE_ENDED);
             case SCHEDULED -> throw ApiException.badRequest(MessageKey.VOTE_NOT_ALLOWED);
             case OPEN -> { }
         }
         return vote;
+    }
+
+    /**
+     * The one check of who may hold a Ballot in a Poll, run by cast, change, Retraction and Selection removal: an
+     * official account never votes.
+     */
+    void requireBallotEligible(Vote vote) {
+        if (ActingMember.current().isPresent()) {
+            throw ApiException.forbidden(MessageKey.VOTE_BALLOT_OFFICIAL_NOT_ALLOWED);
+        }
     }
 
     // Deletes the Ballot row and returns the option whose count must be released

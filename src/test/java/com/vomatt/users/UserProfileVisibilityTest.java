@@ -89,6 +89,7 @@ class UserProfileVisibilityTest {
             @Override public Long getFollowersCount() { return 3L; }
             @Override public Long getFollowingCount() { return 2L; }
             @Override public Boolean getActive() { return active; }
+            @Override public String[] getRoles() { return new String[] { "user" }; }
             @Override public String getFirstName() { return "Test"; }
             @Override public String getLastName() { return "User"; }
             @Override public String getLocation() { return "Taipei"; }
@@ -127,7 +128,7 @@ class UserProfileVisibilityTest {
                     Map.of("firstName", false, "lastName", false,
                            "location", false),
                     false
-            );
+            , false);
 
             when(userRepository.findById(USER_UUID)).thenReturn(Optional.of(user));
             when(userRepository.findProfileByUsername(USERNAME)).thenReturn(Optional.of(projection));
@@ -203,7 +204,7 @@ class UserProfileVisibilityTest {
                     USER_ID, USERNAME, "TestDisplay", "Hello world", "bot:boba",
                     JOINED_AT, 5, 10, 3, 2,
                     null, null, null, null, null, null, null, null, null
-            );
+            , false);
 
             when(userRepository.findProfileForViewer(USERNAME, null)).thenReturn(Optional.of(projection));
             when(preferenceRepository.findByUserIdAndKeyStartingWith(USER_UUID, "visibility."))
@@ -248,7 +249,7 @@ class UserProfileVisibilityTest {
                     USER_ID, USERNAME, "TestDisplay", "Hello world", "bot:boba",
                     JOINED_AT, 5, 10, 3, 2,
                     null, null, "Taipei", null, null, null, null, null, null
-            );
+            , false);
 
             when(userRepository.findProfileForViewer(USERNAME, null)).thenReturn(Optional.of(projection));
             when(preferenceRepository.findByUserIdAndKeyStartingWith(USER_UUID, "visibility."))

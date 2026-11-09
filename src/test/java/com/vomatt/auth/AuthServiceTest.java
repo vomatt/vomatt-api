@@ -1439,6 +1439,19 @@ class AuthServiceTest {
     }
 
     @Test
+    void shouldRefuseSignInWhenUserIsOfficialAccount() {
+        // Every sign-in path (OTP, OAuth, passkey) funnels through buildAuthResponse
+        User official = User.builder().id(UUID.randomUUID()).username("sunrise_tower")
+                .roles(new String[] { "official" }).active(true).build();
+
+        assertThatThrownBy(() -> authService.buildAuthResponse(official, false, false))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey())
+                        .isEqualTo(MessageKey.AUTH_OFFICIAL_SIGN_IN_NOT_ALLOWED));
+        verify(refreshTokenService, org.mockito.Mockito.never()).issue(anyString(), any(), anyBoolean());
+    }
+
+    @Test
     void buildAuthResponse_activeUser_shouldReturnAuthResponse() {
         User user = User.builder().id(UUID.randomUUID()).email("ok@example.com").username("ok_user")
                 .displayName("OK User").roles(new String[] { "user" }).active(true)

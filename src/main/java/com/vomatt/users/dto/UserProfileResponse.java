@@ -54,5 +54,7 @@ public record UserProfileResponse(
         Integer mutualFollowersCount,
         @Schema(description = "First 3 of those mutual followers, most recently followed first; empty when there are none, "
                 + "null when signed out and on the caller's own profile", nullable = true)
-        List<UserDto> mutualFollowersPreview
+        List<UserDto> mutualFollowersPreview,
+        @Schema(description = "Whether this is an official account (a group's page, shown with a badge)", example = "false")
+        boolean official
 ) {}

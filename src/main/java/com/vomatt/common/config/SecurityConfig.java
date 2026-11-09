@@ -1,6 +1,7 @@
 package com.vomatt.common.config;
 
 import com.vomatt.common.filter.RateLimitFilter;
+import com.vomatt.common.security.ActAsFilter;
 import com.vomatt.common.security.JwtAuthFilter;
 import com.vomatt.common.security.JwtAuthenticationEntryPoint;
 import com.vomatt.common.security.JwtAccessDeniedHandler;
@@ -36,6 +37,7 @@ import static jakarta.servlet.DispatcherType.FORWARD;
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
+    private final ActAsFilter actAsFilter;
     private final RateLimitFilter rateLimitFilter;
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
     private final JwtAccessDeniedHandler accessDeniedHandler;
@@ -98,7 +100,9 @@ public class SecurityConfig {
                         .requestMatchers(SecurityEndpoints.AUTHENTICATED_ADMIN).hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class).build();
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                // Swaps the principal to an official account once the member is authenticated
+                .addFilterAfter(actAsFilter, JwtAuthFilter.class).build();
     }
 
     @Bean
@@ -106,7 +110,7 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(corsAllowedOrigins);
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(Arrays.asList("Content-Type", "Authorization", "Accept"));
+        config.setAllowedHeaders(Arrays.asList("Content-Type", "Authorization", "Accept", ActAsFilter.HEADER));
         // Not CORS-safelisted; the frontend reads it on 429
         config.setExposedHeaders(List.of(HttpHeaders.RETRY_AFTER));
         // Auth is a Bearer header, never a cookie: credentials mode would only matter if a cookie session appeared,

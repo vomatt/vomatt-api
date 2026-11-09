@@ -63,4 +63,17 @@ public final class SecurityEndpoints {
 
     /** Admin endpoints – ADMIN role required (enforced at filter chain level) */
     public static final String[] AUTHENTICATED_ADMIN = { "/api/admin/**" };
+
+    /**
+     * Never reachable while acting as an official account ({@code X-Act-As}, see {@link ActAsFilter}): sign-in, passkeys,
+     * sessions and data export belong to a person, not to the group.
+     */
+    public static final String[] ACT_AS_DENIED = { "/api/auth/**", "/api/users/me/passkeys", "/api/users/me/passkeys/**",
+            "/api/users/me/sessions", "/api/users/me/sessions/**", "/api/users/me/export" };
+
+    /** DELETE-only routes never reachable while acting: account deletion. */
+    public static final String[] ACT_AS_DENIED_DELETE = { "/api/users/*" };
+
+    /** The official account's profile; writes need the OWNER or ADMIN role while acting. */
+    public static final String[] ACT_AS_PROFILE = { "/api/users/me", "/api/users/me/avatar", "/api/users/me/visibility" };
 }

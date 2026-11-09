@@ -1,6 +1,7 @@
 package com.vomatt.comments;
 
 import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.security.ActingMember;
 import com.vomatt.common.constant.ReservedUsernames;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.comments.dto.CreateCommentRequest;
@@ -101,6 +102,7 @@ public class VoteCommentService {
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
 
         VoteComment comment = new VoteComment(vote, user, request.getText());
+        comment.setActedBy(ActingMember.current().map(ActingMember::memberId).orElse(null));
         comment.setMentionedUserIds(resolveMentions(request.getText()));
         if (request.getParentId() != null) {
             comment.setParent(findReplyRoot(request.getParentId(), vote.getId(), userId));

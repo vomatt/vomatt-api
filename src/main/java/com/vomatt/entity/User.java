@@ -114,6 +114,11 @@ public class User extends AuditableEntity {
         return Arrays.asList(roles).contains(UserRole.ADMIN);
     }
 
+    /** An official account: managed by its members through {@code X-Act-As}, never signed in to directly. */
+    public boolean isOfficial() {
+        return Arrays.asList(roles).contains(UserRole.OFFICIAL);
+    }
+
     /**
      * The one email normalization: sign-up / sign-in lookups and email Invitees must agree on it. Trims and lower-cases;
      * a Gmail address (gmail.com / googlemail.com) also loses its {@code +tag} and dots and moves to gmail.com, since

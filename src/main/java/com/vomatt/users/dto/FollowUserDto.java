@@ -17,5 +17,7 @@ public record FollowUserDto(
         @Schema(description = "Whether the caller follows this user; false for the caller's own entry", example = "true")
         boolean isFollowing,
         @Schema(description = "Whether this user follows the caller; false for the caller's own entry", example = "false")
-        boolean followsYou
+        boolean followsYou,
+        @Schema(description = "Whether this is an official account (a group's page, shown with a badge)", example = "false")
+        boolean official
 ) {}

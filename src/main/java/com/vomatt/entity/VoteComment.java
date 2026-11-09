@@ -50,6 +50,10 @@ public class VoteComment extends AuditableEntity {
     @Column(name = "is_deleted")
     private boolean isDeleted = false;
 
+    /** The member who wrote this Comment while acting as the official account {@link #user}; null otherwise. */
+    @Column(name = "acted_by")
+    private UUID actedBy;
+
     /** Users the text @mentions, resolved when it is written or edited; read by the MENTION notification. */
     @JdbcTypeCode(SqlTypes.ARRAY)
     @Column(name = "mentioned_user_ids", nullable = false, columnDefinition = "uuid[]")

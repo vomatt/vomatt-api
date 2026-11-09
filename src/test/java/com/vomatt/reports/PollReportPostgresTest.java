@@ -147,7 +147,7 @@ class PollReportPostgresTest extends PostgresRepositoryTest {
             assertThat(inserted.await(10, TimeUnit.SECONDS)).isTrue();
             // B finds no committed row, generates its own and waits on A's key
             Future<PollReportResponse> b = pool.submit(() -> tx.execute(s -> reportService.getReport(pollId, ownerId)));
-            Thread.sleep(300);
+            assertThat(waitForBlockedInsert()).as("B waits on A's uncommitted row").isTrue();
             release.countDown();
 
             PollReportResponse ra = a.get(10, TimeUnit.SECONDS);
@@ -163,6 +163,19 @@ class PollReportPostgresTest extends PostgresRepositoryTest {
                 em.createNativeQuery("DELETE FROM vomatt.users WHERE id IN (:ids)").setParameter("ids", userIds).executeUpdate();
             });
         }
+    }
+
+    private boolean waitForBlockedInsert() throws InterruptedException {
+        for (int i = 0; i < 100; i++) {
+            Number blocked = tx.execute(s -> (Number) em.createNativeQuery("""
+                    SELECT COUNT(*) FROM pg_stat_activity
+                    WHERE wait_event_type = 'Lock' AND query LIKE '%INSERT INTO vomatt.poll_reports%'""").getSingleResult());
+            if (blocked.intValue() == 1) {
+                return true;
+            }
+            Thread.sleep(50);
+        }
+        return false;
     }
 
     private static void await(CountDownLatch latch) {

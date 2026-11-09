@@ -68,6 +68,10 @@ public class PollReportController {
     private static final String ERR_EXAMPLE = ERR_MESSAGE + "The report is available once the poll has ended and its results are revealed"
             + ERR_CODE + "report.not_ready" + ERR_ERROR + "The report is available once the poll has ended and its results are revealed" + ERR_END;
 
+    private static final String ERR_NOT_PRO = ERR_MESSAGE + "Result reports are available only for Pro polls" + ERR_CODE + "report.not_pro"
+            + ERR_ERROR + "Result reports are available only for Pro polls" + ERR_END;
+    private static final String ERR_NOT_FOUND = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END;
+
     private final PollReportService reportService;
 
     @GetMapping("/{voteId}/report")
@@ -78,6 +82,10 @@ public class PollReportController {
                     + ", \"message\": null, \"errorCode\": null, \"error\": null }")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not the owner (`vote.forbidden`), role may not read reports (`official.role_forbidden`), or not revealed yet (`report.not_ready`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(name = "report.not_ready", value = ERR_EXAMPLE)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Not a Pro poll (`report.not_pro`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(name = "report.not_pro", value = ERR_NOT_PRO)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist or is Deleted (`vote.not_found`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(name = "vote.not_found", value = ERR_NOT_FOUND)))
     public ResponseEntity<ApiResponse<PollReportResponse>> getReport(
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05") @PathVariable String voteId,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -110,6 +118,10 @@ public class PollReportController {
                     """)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not the owner (`vote.forbidden`), role may not read reports (`official.role_forbidden`), or not revealed yet (`report.not_ready`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(name = "report.not_ready", value = ERR_EXAMPLE)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Not a Pro poll (`report.not_pro`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(name = "report.not_pro", value = ERR_NOT_PRO)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist or is Deleted (`vote.not_found`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(name = "vote.not_found", value = ERR_NOT_FOUND)))
     public ResponseEntity<byte[]> getReportCsv(
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05") @PathVariable String voteId,
             @AuthenticationPrincipal UserPrincipal principal) {

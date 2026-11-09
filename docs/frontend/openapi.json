@@ -22396,6 +22396,28 @@
             },
             "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
           },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "vote.not_found" : {
+                    "description" : "vote.not_found",
+                    "value" : {
+                      "data" : null,
+                      "error" : "Poll not found",
+                      "errorCode" : "vote.not_found",
+                      "message" : "Poll not found",
+                      "success" : false
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Poll does not exist or is Deleted (`vote.not_found`)"
+          },
           "429" : {
             "content" : {
               "application/json" : {
@@ -22611,6 +22633,28 @@
               }
             },
             "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "vote.not_found" : {
+                    "description" : "vote.not_found",
+                    "value" : {
+                      "data" : null,
+                      "error" : "Poll not found",
+                      "errorCode" : "vote.not_found",
+                      "message" : "Poll not found",
+                      "success" : false
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Poll does not exist or is Deleted (`vote.not_found`)"
           },
           "429" : {
             "content" : {

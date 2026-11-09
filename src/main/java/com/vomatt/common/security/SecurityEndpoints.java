@@ -65,10 +65,10 @@ public final class SecurityEndpoints {
     public static final String[] AUTHENTICATED_ADMIN = { "/api/admin/**" };
 
     /**
-     * Never reachable while acting as an official account ({@code X-Act-As}, see {@link ActAsFilter}): sign-in, passkeys,
-     * sessions and data export belong to a person, not to the group.
+     * Never reachable while acting as an official account ({@code X-Act-As}, see {@link ActAsFilter}): passkeys, sessions
+     * and data export belong to a person, not to the group. {@link #PUBLIC_AUTH} (sign-in, refresh, logout) ignores the header.
      */
-    public static final String[] ACT_AS_DENIED = { "/api/auth/**", "/api/users/me/passkeys", "/api/users/me/passkeys/**",
+    public static final String[] ACT_AS_DENIED = { "/api/auth/passkey/register/**", "/api/users/me/passkeys", "/api/users/me/passkeys/**",
             "/api/users/me/sessions", "/api/users/me/sessions/**", "/api/users/me/export" };
 
     /** DELETE-only routes never reachable while acting: account deletion. */

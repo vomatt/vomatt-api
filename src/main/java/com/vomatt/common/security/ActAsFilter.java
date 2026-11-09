@@ -36,7 +36,7 @@ import static org.springframework.http.HttpMethod.DELETE;
  * official account and {@link ActingMember} keeps the real member and role. Role rules by route (in
  * {@link SecurityEndpoints}): account and session routes are never reachable this way, the profile routes need
  * OWNER or ADMIN, and any other write needs a role that can publish (ANALYST is read-only); the rest is checked by
- * the services. Without a signed-in caller the header is ignored, so the usual 401 applies.
+ * the services. Without a signed-in caller, and on sign-in, refresh and logout, the header is ignored.
  */
 @Component
 @RequiredArgsConstructor
@@ -49,6 +49,8 @@ public class ActAsFilter extends OncePerRequestFilter {
             Arrays.stream(SecurityEndpoints.ACT_AS_DENIED).map(PathPatternRequestMatcher.withDefaults()::matcher),
             Arrays.stream(SecurityEndpoints.ACT_AS_DENIED_DELETE).map(p -> PathPatternRequestMatcher.withDefaults().matcher(DELETE, p)))
             .map(RequestMatcher.class::cast).toList());
+    private static final RequestMatcher PUBLIC_AUTH = new OrRequestMatcher(Arrays.stream(SecurityEndpoints.PUBLIC_AUTH)
+            .map(PathPatternRequestMatcher.withDefaults()::matcher).map(RequestMatcher.class::cast).toList());
     private static final RequestMatcher PROFILE = new OrRequestMatcher(Arrays.stream(SecurityEndpoints.ACT_AS_PROFILE)
             .map(PathPatternRequestMatcher.withDefaults()::matcher).map(RequestMatcher.class::cast).toList());
 
@@ -60,7 +62,8 @@ public class ActAsFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String header = request.getHeader(HEADER);
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (!StringUtils.hasText(header) || auth == null || !(auth.getPrincipal() instanceof UserPrincipal member)) {
+        if (!StringUtils.hasText(header) || auth == null || !(auth.getPrincipal() instanceof UserPrincipal member)
+                || PUBLIC_AUTH.matches(request)) {
             filterChain.doFilter(request, response);
             return;
         }

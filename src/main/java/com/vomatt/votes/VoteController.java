@@ -585,7 +585,7 @@ public class VoteController {
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen
-            - 403 `vote.ballot.official_not_allowed`: the request acts as an official account (`X-Act-As`); official accounts never vote
+            - 403 `vote.ballot.official_not_allowed`: the request acts as an official account (`X-Act-As`); official accounts never vote (an ANALYST gets `official.role_forbidden` first)
             - 400 `vote.not_allowed`: the Poll is still Scheduled
             - 400 `vote.multiple.not_allowed`: `optionIds` holds more than one ID
             - 404 `vote.option.not_found`: the option ID does not exist
@@ -630,7 +630,7 @@ public class VoteController {
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen
-            - 403 `vote.ballot.official_not_allowed`: the request acts as an official account (`X-Act-As`); official accounts never vote
+            - 403 `vote.ballot.official_not_allowed`: the request acts as an official account (`X-Act-As`); official accounts never vote (an ANALYST gets `official.role_forbidden` first)
             - 400 `vote.not_allowed`: the Poll is still Scheduled
             - 429 `common.rate_limited`: more than 30 Ballot writes (cast, Retract, remove Selection) by the caller within 60 seconds; no `Retry-After`
             - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was recorded, try again
@@ -662,7 +662,7 @@ public class VoteController {
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen
-            - 403 `vote.ballot.official_not_allowed`: the request acts as an official account (`X-Act-As`); official accounts never vote
+            - 403 `vote.ballot.official_not_allowed`: the request acts as an official account (`X-Act-As`); official accounts never vote (an ANALYST gets `official.role_forbidden` first)
             - 400 `vote.not_allowed`: the Poll is still Scheduled
             - 429 `common.rate_limited`: more than 30 Ballot writes (cast, Retract, remove Selection) by the caller within 60 seconds; no `Retry-After`
             - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was recorded, try again

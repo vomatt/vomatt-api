@@ -114,6 +114,16 @@ class ActAsFilterTest {
     }
 
     @Test
+    void shouldIgnoreHeaderWhenLoggingOut() throws Exception {
+        signIn();
+
+        Authentication auth = run(acting("POST", "/api/auth/logout"), new MockHttpServletResponse());
+
+        assertThat(((UserPrincipal) auth.getPrincipal()).userId()).isEqualTo(memberId.toString());
+        verify(repository, never()).findActiveRole(any(), any());
+    }
+
+    @Test
     void shouldAllowAnalystOnlyToRead() throws Exception {
         signIn();
         member(OfficialRole.ANALYST);

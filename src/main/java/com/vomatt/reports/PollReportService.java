@@ -16,6 +16,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.vomatt.common.exception.ApiException;
@@ -84,6 +85,9 @@ public class PollReportService {
         if (!vote.isPro()) {
             throw ApiException.badRequest(MessageKey.REPORT_NOT_PRO);
         }
+        if (vote.isCancelled()) {
+            throw ApiException.badRequest(MessageKey.REPORT_CANCELLED);
+        }
         OffsetDateTime now = OffsetDateTime.now();
         if (vote.isResultsSealedAt(now)) {
             throw ApiException.forbidden(MessageKey.REPORT_NOT_READY);
@@ -96,20 +100,13 @@ public class PollReportService {
         return JSON.readValue(data, PollReportResponse.class);
     }
 
-    /** RetentionJob: snapshots every Ended Pro poll that has none yet. Returns how many were stored. */
-    public int generateMissing(OffsetDateTime now) {
-        int stored = 0;
-        int minCellSize = minCellSize();
-        for (Vote vote : voteRepository.findAllById(reportRepository.findEndedProPollsWithoutReport(now))) {
-            // One bad report must not stop the rest of the retention run; the first read after End retries it.
-            // ponytail: a database error still aborts the shared transaction; give each report its own if that shows up
-            try {
-                stored += store(vote, now, minCellSize) ? 1 : 0;
-            } catch (RuntimeException e) {
-                log.error("Poll report generation failed for {}", vote.getId(), e);
-            }
-        }
-        return stored;
+    /**
+     * RetentionJob: snapshots one Ended Pro poll in its own transaction, so a database error rolls back this report
+     * only, never the retention run. Returns whether this call stored it.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean storeMissing(UUID voteId, OffsetDateTime now) {
+        return voteRepository.findById(voteId).map(vote -> store(vote, now, minCellSize())).orElse(false);
     }
 
     private boolean store(Vote vote, OffsetDateTime now, int minCellSize) {

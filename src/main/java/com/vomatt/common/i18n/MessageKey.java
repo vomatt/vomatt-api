@@ -155,12 +155,14 @@ public enum MessageKey {
     OFFICIAL_ROLES_FIXED("official.roles_fixed"),
     OFFICIAL_INVITEE_NOT_ALLOWED("official.invitee_not_allowed"),
     VOTE_REVEAL_BEFORE_END("vote.reveal_at.before_end"),
+    VOTE_REVEAL_TOO_LATE("vote.reveal_at.too_late"),
     VOTE_BALLOT_ANONYMOUS_NOT_ALLOWED("vote.ballot.anonymous_not_allowed"),
     VOTE_BALLOT_PHONE_VERIFICATION_REQUIRED("vote.ballot.phone_verification_required"),
 
     // === Poll reports ===
     REPORT_NOT_PRO("report.not_pro"),
     REPORT_NOT_READY("report.not_ready"),
+    REPORT_CANCELLED("report.cancelled"),
     ;
 
     private final String code;

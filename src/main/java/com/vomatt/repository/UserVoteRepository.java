@@ -51,13 +51,17 @@ public interface UserVoteRepository extends JpaRepository<UserVote, UUID> {
     /**
      * Seals the Anonymous Ballots of Polls Ended by {@code now}: the option is dropped from the row, so the database
      * can no longer say what an anonymous Participant chose (per-option totals stay in vote_options.vote_count).
-     * Irreversible by design; a Cancelled Poll (end before start) counts as Ended too.
+     * Irreversible by design; a Cancelled Poll (end before start) counts as Ended too. A Pro poll still waiting for
+     * its result report (the condition of {@code PollReportRepository#findEndedProPollsWithoutReport}) is skipped
+     * until the report is stored, so the report counts its Anonymous Ballots by option.
      */
     @Modifying
     @Query(value = """
             UPDATE vomatt.user_votes uv SET option_id = NULL
             WHERE uv.anonymous AND uv.option_id IS NOT NULL
-              AND EXISTS (SELECT 1 FROM vomatt.votes v WHERE v.id = uv.vote_id AND v.end_time <= :now)""",
+              AND EXISTS (SELECT 1 FROM vomatt.votes v WHERE v.id = uv.vote_id AND v.end_time <= :now
+                          AND NOT (v.pro AND v.deleted_at IS NULL AND v.end_time > v.start_time
+                                   AND NOT EXISTS (SELECT 1 FROM vomatt.poll_reports r WHERE r.vote_id = v.id)))""",
             nativeQuery = true)
     int sealAnonymousBallotsOfPollsEndedBy(@Param("now") OffsetDateTime now);
 

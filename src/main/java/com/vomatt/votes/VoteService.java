@@ -450,7 +450,7 @@ public class VoteService {
     private UUID castBallot(String voteId, VoteRequest request, String userId) {
         UUID voteUuid = UUID.fromString(voteId);
         UUID userUuid = UUID.fromString(userId);
-        Vote vote = lockOpenVote(voteUuid, userId);
+        Vote vote = lockOpenVote(voteUuid, userId, true);
 
         if (request.getOptionIds().size() > 1) {
             throw ApiException.badRequest(MessageKey.VOTE_MULTIPLE_NOT_ALLOWED);
@@ -506,7 +506,7 @@ public class VoteService {
         checkBallotRateLimit(userId);
         UUID voteUuid = UUID.fromString(voteId);
         transactionTemplate.execute(s -> {
-            lockOpenVote(voteUuid, userId);
+            lockOpenVote(voteUuid, userId, false);
             userVoteRepository.findByUserIdAndVoteId(UUID.fromString(userId), voteUuid)
                 .ifPresent(this::releaseBallot);
             log.info("ballot.retract vote={}", voteId);
@@ -522,7 +522,7 @@ public class VoteService {
         UUID voteUuid = UUID.fromString(voteId);
         UUID userUuid = UUID.fromString(userId);
         transactionTemplate.execute(s -> {
-            lockOpenVote(voteUuid, userId);
+            lockOpenVote(voteUuid, userId, false);
             userVoteRepository.findByUserIdAndVoteIdAndOptionId(userUuid, voteUuid, UUID.fromString(optionId))
                 .ifPresent(ballot -> {
                     releaseBallot(ballot);
@@ -919,12 +919,7 @@ public class VoteService {
         if (!owned.isOwnedBy(userId)) {
             throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
         }
-        // Acting as an official account, an EDITOR manages only the Polls it published itself (ANALYST none)
-        ActingMember.current()
-            .filter(a -> !a.role().canEditAllPolls() && !a.memberId().equals(owned.getActedBy()))
-            .ifPresent(a -> {
-                throw ApiException.forbidden(MessageKey.OFFICIAL_ROLE_FORBIDDEN);
-            });
+        ActingMember.requireMayEdit(owned.getActedBy());
         return owned;
     }
 
@@ -1025,7 +1020,7 @@ public class VoteService {
      * Ballots can change only while Open; frozen once Ended. Takes the exclusive Poll-row lock and checks the status
      * under it, so a Close or Edit cannot slip in between. The lock also serializes one user's Ballot changes in the Poll.
      */
-    private Vote lockOpenVote(UUID voteId, String userId) {
+    private Vote lockOpenVote(UUID voteId, String userId, boolean selecting) {
         Vote vote = requireAccessible(lockVote(voteId), userId);
         switch (vote.getStatus()) {
             case ENDED -> throw ApiException.badRequest(MessageKey.VOTE_ENDED);
@@ -1033,19 +1028,20 @@ public class VoteService {
             case OPEN -> { }
         }
         // After the status check, so nobody is sent to bind a phone for a Poll they could not vote in anyway
-        requireBallotEligible(vote, userId);
+        requireBallotEligible(vote, userId, selecting);
         return vote;
     }
 
     /**
      * The one check of who may hold a Ballot in a Poll, run by cast, change, Retraction and Selection removal: an
-     * official account never votes, and a Pro poll takes only users with a verified phone number.
+     * official account never votes, and a Pro poll takes a Selection ({@code selecting}: cast or change) only from
+     * users with a verified phone number. Withdrawing one needs no phone, so a user who lost it is never stuck.
      */
-    void requireBallotEligible(Vote vote, String userId) {
+    void requireBallotEligible(Vote vote, String userId, boolean selecting) {
         if (ActingMember.current().isPresent()) {
             throw ApiException.forbidden(MessageKey.VOTE_BALLOT_OFFICIAL_NOT_ALLOWED);
         }
-        if (vote.isPro() && !userRepository.findById(UUID.fromString(userId))
+        if (selecting && vote.isPro() && !userRepository.findById(UUID.fromString(userId))
                 .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND)).isPhoneVerified()) {
             throw ApiException.forbidden(MessageKey.VOTE_BALLOT_PHONE_VERIFICATION_REQUIRED);
         }
@@ -1147,6 +1143,10 @@ public class VoteService {
 
             if (revealAt != null && revealAt.isBefore(request.getEndTime())) {
                 throw ApiException.badRequest(MessageKey.VOTE_REVEAL_BEFORE_END);
+            }
+            // Sealed at most one more max Poll duration past the end
+            if (revealAt != null && revealAt.isAfter(request.getEndTime().plus(maxDuration))) {
+                throw ApiException.badRequest(MessageKey.VOTE_REVEAL_TOO_LATE, maxDuration.toDays());
             }
         }
     }

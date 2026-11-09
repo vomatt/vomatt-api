@@ -113,8 +113,16 @@ class PollReportServiceTest {
     void shouldRefuseWhenActingMemberMayNotReadReports() {
         UUID memberId = UUID.randomUUID();
         act(OfficialRole.EDITOR, UUID.fromString(ownerId), memberId);
-
         assertRefused(ownerId, MessageKey.OFFICIAL_ROLE_FORBIDDEN);
+
+        act(OfficialRole.CHIEF_EDITOR, UUID.fromString(ownerId), memberId);
+        assertRefused(ownerId, MessageKey.OFFICIAL_ROLE_FORBIDDEN);
+    }
+
+    @Test
+    void shouldRefuseWhenProPollWasCancelled() {
+        when(vote.isCancelled()).thenReturn(true);
+        assertRefused(ownerId, MessageKey.REPORT_CANCELLED);
     }
 
     @Test

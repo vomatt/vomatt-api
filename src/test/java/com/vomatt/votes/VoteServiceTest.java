@@ -2178,16 +2178,32 @@ class VoteServiceTest {
         }
 
         @Test
-        void shouldRefuseBallotChangesWhenProPollAndPhoneNotVerified() {
+        void shouldRefuseSelectionWhenProPollAndPhoneNotVerified() {
             vote.setPro(true);
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
 
             assertThatThrownBy(() -> voteService.vote(voteId.toString(), ballotRequest(null), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_BALLOT_PHONE_VERIFICATION_REQUIRED));
-            assertThatThrownBy(() -> voteService.retract(voteId.toString(), userId.toString()))
-                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_BALLOT_PHONE_VERIFICATION_REQUIRED));
             verify(userVoteRepository, never()).saveAndFlush(any());
+        }
+
+        @Test
+        void shouldWithdrawBallotWhenProPollAndPhoneNotVerified() {
+            vote.setPro(true);
+            UUID optionId = UUID.randomUUID();
+            setId(option, optionId);
+            UserVote ballot = new UserVote(user, vote, option);
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(userVoteRepository.findByUserIdAndVoteId(userId, voteId)).thenReturn(Optional.of(ballot));
+            when(userVoteRepository.findByUserIdAndVoteIdAndOptionId(userId, voteId, optionId)).thenReturn(Optional.of(ballot));
+            stubConvertToVoteResponse(vote);
+
+            voteService.retract(voteId.toString(), userId.toString());
+            voteService.removeVote(voteId.toString(), optionId.toString(), userId.toString());
+
+            verify(userVoteRepository, org.mockito.Mockito.times(2)).delete(ballot);
+            verify(userRepository, never()).findById(any());
         }
 
         @Test
@@ -2221,6 +2237,31 @@ class VoteServiceTest {
 
             assertThatThrownBy(() -> voteService.createVote(request, userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_REVEAL_BEFORE_END));
+            verify(voteRepository, never()).save(any());
+        }
+
+        @Test
+        void shouldRejectCreateAndEditWhenRevealAtPastEndPlusMaxDuration() {
+            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
+            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
+            when(voteConfig.getMaxVoteDuration()).thenReturn(Duration.ofDays(30));
+            OffsetDateTime end = OffsetDateTime.now().plusDays(1);
+            CreateVoteRequest request = new CreateVoteRequest();
+            request.setTitle("Test");
+            request.setOptions(List.of(buildOption("A"), buildOption("B")));
+            request.setEndTime(end);
+            request.setRevealAt(end.plusDays(30).plusMinutes(1));
+
+            assertThatThrownBy(() -> voteService.createVote(request, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_REVEAL_TOO_LATE));
+            // Edit keeps the current reveal time when omitted, and checks it against the new end time
+            vote.setStartTime(OffsetDateTime.now().plusHours(1));
+            vote.setEndTime(OffsetDateTime.now().plusDays(40));
+            vote.setRevealAt(OffsetDateTime.now().plusDays(60));
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            request.setRevealAt(null);
+            assertThatThrownBy(() -> voteService.updateVote(voteId.toString(), request, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_REVEAL_TOO_LATE));
             verify(voteRepository, never()).save(any());
         }
 

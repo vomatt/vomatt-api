@@ -35,8 +35,8 @@ import lombok.RequiredArgsConstructor;
 public class PollReportController {
 
     private static final String ACCESS = """
-            **Auth**: required. Readers: the Poll's owner; for a Poll of an official account, members acting as it (`X-Act-As`) whose role may read reports (`OWNER`, `ADMIN`, `ANALYST`; not `EDITOR`)
-            **Precondition**: the Poll is a Pro poll (`pro`), has Ended and its `revealAt` (if set) has passed
+            **Auth**: required. Readers: the Poll's owner; for a Poll of an official account, members acting as it (`X-Act-As`) whose role may read reports (`OWNER`, `ADMIN`, `ANALYST`; not `CHIEF_EDITOR` or `EDITOR`)
+            **Precondition**: the Poll is a Pro poll (`pro`), not Cancelled (it opened before it Ended), has Ended and its `revealAt` (if set) has passed
             """;
     private static final String BEHAVIOR = """
             **Behavior**: the report is a snapshot taken once after the Poll Ended (on the first read, or by the daily job) and never recomputed, \
@@ -50,8 +50,9 @@ public class PollReportController {
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist or is Deleted
             - 403 `vote.forbidden`: the caller is not the Poll's owner
-            - 403 `official.role_forbidden`: acting as the official account with a role that may not read reports (`EDITOR`)
+            - 403 `official.role_forbidden`: acting as the official account with a role that may not read reports (`CHIEF_EDITOR`, `EDITOR`)
             - 400 `report.not_pro`: the Poll is not a Pro poll
+            - 400 `report.cancelled`: the Poll was Cancelled (Ended before it opened); it has no report
             - 403 `report.not_ready`: the Poll has not Ended or its `revealAt` has not passed
             """;
     private static final String EX_REPORT = """
@@ -70,6 +71,8 @@ public class PollReportController {
 
     private static final String ERR_NOT_PRO = ERR_MESSAGE + "Result reports are available only for Pro polls" + ERR_CODE + "report.not_pro"
             + ERR_ERROR + "Result reports are available only for Pro polls" + ERR_END;
+    private static final String ERR_CANCELLED = ERR_MESSAGE + "A cancelled poll has no result report" + ERR_CODE + "report.cancelled"
+            + ERR_ERROR + "A cancelled poll has no result report" + ERR_END;
     private static final String ERR_NOT_FOUND = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END;
 
     private final PollReportService reportService;
@@ -82,8 +85,9 @@ public class PollReportController {
                     + ", \"message\": null, \"errorCode\": null, \"error\": null }")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not the owner (`vote.forbidden`), role may not read reports (`official.role_forbidden`), or not revealed yet (`report.not_ready`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(name = "report.not_ready", value = ERR_EXAMPLE)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Not a Pro poll (`report.not_pro`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(name = "report.not_pro", value = ERR_NOT_PRO)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Not a Pro poll (`report.not_pro`), or Cancelled (`report.cancelled`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = {
+                    @ExampleObject(name = "report.not_pro", value = ERR_NOT_PRO), @ExampleObject(name = "report.cancelled", value = ERR_CANCELLED) }))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist or is Deleted (`vote.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(name = "vote.not_found", value = ERR_NOT_FOUND)))
     public ResponseEntity<ApiResponse<PollReportResponse>> getReport(
@@ -118,8 +122,9 @@ public class PollReportController {
                     """)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not the owner (`vote.forbidden`), role may not read reports (`official.role_forbidden`), or not revealed yet (`report.not_ready`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(name = "report.not_ready", value = ERR_EXAMPLE)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Not a Pro poll (`report.not_pro`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(name = "report.not_pro", value = ERR_NOT_PRO)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Not a Pro poll (`report.not_pro`), or Cancelled (`report.cancelled`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = {
+                    @ExampleObject(name = "report.not_pro", value = ERR_NOT_PRO), @ExampleObject(name = "report.cancelled", value = ERR_CANCELLED) }))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist or is Deleted (`vote.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(name = "vote.not_found", value = ERR_NOT_FOUND)))
     public ResponseEntity<byte[]> getReportCsv(

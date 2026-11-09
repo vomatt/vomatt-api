@@ -1027,12 +1027,13 @@ public class VoteService {
      */
     private Vote lockOpenVote(UUID voteId, String userId) {
         Vote vote = requireAccessible(lockVote(voteId), userId);
-        requireBallotEligible(vote, userId);
         switch (vote.getStatus()) {
             case ENDED -> throw ApiException.badRequest(MessageKey.VOTE_ENDED);
             case SCHEDULED -> throw ApiException.badRequest(MessageKey.VOTE_NOT_ALLOWED);
             case OPEN -> { }
         }
+        // After the status check, so nobody is sent to bind a phone for a Poll they could not vote in anyway
+        requireBallotEligible(vote, userId);
         return vote;
     }
 

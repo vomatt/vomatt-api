@@ -124,7 +124,7 @@ class ActAsFilterTest {
     }
 
     @Test
-    void shouldAllowAnalystOnlyToRead() throws Exception {
+    void shouldAllowOnlyReadsWhenActingAsAnalyst() throws Exception {
         signIn();
         member(OfficialRole.ANALYST);
         assertThat(run(acting("GET", "/api/votes/my"), new MockHttpServletResponse())).isNotNull();

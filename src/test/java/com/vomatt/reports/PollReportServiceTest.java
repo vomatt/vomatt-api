@@ -3,6 +3,7 @@ package com.vomatt.reports;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -82,6 +83,13 @@ class PollReportServiceTest {
     private void assertRefused(String callerId, MessageKey key) {
         assertThatThrownBy(() -> service.getReport(voteId.toString(), callerId))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.getMessageKey()).isEqualTo(key));
+    }
+
+    @Test
+    void shouldKeepThresholdAtTwoWhenConfiguredBelow() {
+        when(lookupService.configInt(any(), anyInt())).thenReturn(1);
+        when(vote.getEndTime()).thenReturn(java.time.OffsetDateTime.parse("2026-11-01T12:00:00+08:00"));
+        assertThat(service.generate(vote, java.time.OffsetDateTime.now()).minCellSize()).isEqualTo(2);
     }
 
     // === Access matrix ===

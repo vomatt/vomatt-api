@@ -151,7 +151,7 @@ class OfficialServiceTest {
     }
 
     @Test
-    void shouldRefuseAddingOfficialAccountAsMember() {
+    void shouldRefuseMemberWhenUserIsOfficialAccount() {
         caller(OWNER);
         when(userRepository.findById(targetId)).thenReturn(Optional.of(
                 User.builder().id(targetId).username("other_official").roles(new String[] { "official" }).build()));
@@ -178,7 +178,7 @@ class OfficialServiceTest {
     }
 
     @Test
-    void shouldAllowReportsOnlyForOwnerAdminAndAnalyst() {
+    void shouldAllowReportsWhenRoleIsOwnerAdminOrAnalyst() {
         for (OfficialRole role : OfficialRole.values()) {
             when(memberRepository.findActiveRole(officialId, callerId)).thenReturn(Optional.of(role));
             assertThat(service.canReadReports(officialId, callerId)).as(role.name()).isEqualTo(role != EDITOR);

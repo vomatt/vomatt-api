@@ -101,7 +101,7 @@ class PollReportPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    void shouldSnapshotAnonymousBallotsBeforeRetentionSealsThem() {
+    void shouldSnapshotAnonymousBallotsWhenRetentionRunsBeforeSealing() {
         User owner = persistUser("rep-ret-owner-" + System.nanoTime());
         List<User> voters = voters("rep-ret-", 5, LocalDate.of(1990, 1, 1));
         voters.forEach(v -> v.setGender(Gender.MALE));

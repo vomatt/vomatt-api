@@ -98,7 +98,13 @@ public class PollReportService {
     public int generateMissing(OffsetDateTime now) {
         int stored = 0;
         for (Vote vote : voteRepository.findAllById(reportRepository.findEndedProPollsWithoutReport(now))) {
-            stored += store(vote, now) ? 1 : 0;
+            // One bad report must not stop the rest of the retention run; the first read after End retries it.
+            // ponytail: a database error still aborts the shared transaction; give each report its own if that shows up
+            try {
+                stored += store(vote, now) ? 1 : 0;
+            } catch (RuntimeException e) {
+                log.error("Poll report generation failed for {}", vote.getId(), e);
+            }
         }
         return stored;
     }
@@ -115,7 +121,8 @@ public class PollReportService {
     PollReportResponse generate(Vote vote, OffsetDateTime now) {
         List<VoteOption> options = voteOptionRepository.findByVoteIdOrderByDisplayOrder(vote.getId());
         List<BallotDemographics> ballots = reportRepository.findBallots(vote.getId());
-        int minCellSize = lookupService.configInt(MIN_CELL_SIZE_KEY, DEFAULT_MIN_CELL_SIZE);
+        // Never below 2: a threshold of 1 would show single voters' choices by age band and gender
+        int minCellSize = Math.max(2, lookupService.configInt(MIN_CELL_SIZE_KEY, DEFAULT_MIN_CELL_SIZE));
         LocalDate endDate = TimeUtil.taipeiBusinessDate(vote.getEndTime());
 
         // A sealed Anonymous Ballot (option NULL) counts in turnout but in no option

@@ -45,7 +45,7 @@ public class AdminMapper {
         return new AdminUserDetail(user.getId().toString(), user.getUsername(), user.getDisplayName(),
                 user.getFirstName(), user.getLastName(), user.getBirthday(), user.getEmail(),
                 user.getPhoneNumber(), user.getAuthMethod(), List.of(user.getRoles()), user.isActive(),
-                user.getLastLoginAt(), user.getPoints(), user.getMembershipLevel(), user.getCreatedAt(),
+                user.getLastLoginAt(), user.getCreatedAt(),
                 pollCount, ballotCount, commentCount, blockingCount, blockedByCount);
     }
 

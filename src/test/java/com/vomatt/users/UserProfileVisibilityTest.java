@@ -68,8 +68,6 @@ class UserProfileVisibilityTest {
                 .displayName("TestDisplay")
                 .bio("Hello world")
                 .location("Taipei")
-                .points(100)
-                .membershipLevel("SILVER")
                 .active(true)
                 .build();
     }
@@ -94,8 +92,6 @@ class UserProfileVisibilityTest {
             @Override public String getFirstName() { return "Test"; }
             @Override public String getLastName() { return "User"; }
             @Override public String getLocation() { return "Taipei"; }
-            @Override public Integer getPoints() { return 100; }
-            @Override public String getMembershipLevel() { return "SILVER"; }
             @Override public Boolean getFollowing() { return false; }
             @Override public Boolean getBlocked() { return false; }
             @Override public Boolean getFollowsViewer() { return false; }
@@ -125,10 +121,10 @@ class UserProfileVisibilityTest {
             MyProfileResponse expectedResponse = new MyProfileResponse(
                     USER_ID, USERNAME, "test@example.com", "0912345678",
                     "Test", "User", BIRTHDAY, "TestDisplay", "Hello world", "bot:boba", "Taipei",
-                    100, "SILVER", true, null,
+                    true, null,
                     JOINED_AT, 5, 10, 7, 12, 3, 2,
                     Map.of("firstName", false, "lastName", false,
-                           "location", false, "points", false, "membershipLevel", false),
+                           "location", false),
                     false
             );
 
@@ -205,7 +201,7 @@ class UserProfileVisibilityTest {
             UserProfileResponse expectedResponse = new UserProfileResponse(
                     USER_ID, USERNAME, "TestDisplay", "Hello world", "bot:boba",
                     JOINED_AT, 5, 10, 3, 2,
-                    null, null, null, null, null, null, null, null, null, null
+                    null, null, null, null, null, null, null, null
             );
 
             when(userRepository.findProfileForViewer(USERNAME, null)).thenReturn(Optional.of(projection));
@@ -224,8 +220,6 @@ class UserProfileVisibilityTest {
             assertThat(result.firstName()).isNull();
             assertThat(result.lastName()).isNull();
             assertThat(result.location()).isNull();
-            assertThat(result.points()).isNull();
-            assertThat(result.membershipLevel()).isNull();
         }
 
         @Test
@@ -252,7 +246,7 @@ class UserProfileVisibilityTest {
             UserProfileResponse expectedResponse = new UserProfileResponse(
                     USER_ID, USERNAME, "TestDisplay", "Hello world", "bot:boba",
                     JOINED_AT, 5, 10, 3, 2,
-                    null, null, "Taipei", null, null, null, null, null, null, null
+                    null, null, "Taipei", null, null, null, null, null
             );
 
             when(userRepository.findProfileForViewer(USERNAME, null)).thenReturn(Optional.of(projection));
@@ -282,13 +276,11 @@ class UserProfileVisibilityTest {
         @DisplayName("should output only visibility=true fields and null for the rest")
         void shouldMaskHiddenFields() {
             UserProfileResponse result = new UserMapper().toPublicProfileResponse(
-                    createTestProjection(), Map.of("location", true, "points", true), null, null, null, null, null);
+                    createTestProjection(), Map.of("location", true), null, null, null, null, null);
 
             assertThat(result.location()).isEqualTo("Taipei");
-            assertThat(result.points()).isEqualTo(100);
             assertThat(result.firstName()).isNull();
             assertThat(result.lastName()).isNull();
-            assertThat(result.membershipLevel()).isNull();
             assertThat(result.joinedAt()).isEqualTo(JOINED_AT);
         }
     }
@@ -362,14 +354,14 @@ class UserProfileVisibilityTest {
 
             // When
             Map<String, Boolean> result = userService.updateVisibility(
-                    USER_ID, Map.of("unknownField", true, "anotherBad", false));
+                    USER_ID, Map.of("unknownField", true, "points", true, "membershipLevel", true));
 
             // Then — unknown fields are not written
             verify(preferenceRepository, never()).save(any(UserPreference.class));
             // all known fields default to false
             assertThat(result).containsEntry("location", false);
             assertThat(result).containsEntry("firstName", false);
-            assertThat(result).doesNotContainKeys("unknownField", "anotherBad");
+            assertThat(result).doesNotContainKeys("unknownField", "points", "membershipLevel");
         }
     }
 
@@ -384,7 +376,6 @@ class UserProfileVisibilityTest {
         void shouldGenerateCorrectPreferenceKey() {
             assertThat(VisibilityField.LOCATION.preferenceKey()).isEqualTo("visibility.location");
             assertThat(VisibilityField.FIRST_NAME.preferenceKey()).isEqualTo("visibility.firstName");
-            assertThat(VisibilityField.MEMBERSHIP_LEVEL.preferenceKey()).isEqualTo("visibility.membershipLevel");
         }
 
         @Test

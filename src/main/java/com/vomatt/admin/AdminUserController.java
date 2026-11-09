@@ -64,8 +64,6 @@ public class AdminUserController {
     private static final String USER_DETAIL_TAIL = """
             ,
                 "lastLoginAt": "2026-10-16T21:04:11+08:00",
-                "points": 120,
-                "membershipLevel": "BASIC",
                 "createdAt": "2026-09-01T10:00:00+08:00",
                 "pollCount": 8,
                 "ballotCount": 35,
@@ -177,7 +175,7 @@ public class AdminUserController {
             description = """
                     **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
                     **Precondition**: caller holds role ADMIN
-                    **Behavior**: returns the account with full contact details, names, birthday, sign-in details, points and counts of Polls created (any Audience, Deleted included), Ballots held, Comments written (deleted included), users this user blocks (`blockingCount`) and users who block them (`blockedByCount`)
+                    **Behavior**: returns the account with full contact details, names, birthday, sign-in details and counts of Polls created (any Audience, Deleted included), Ballots held, Comments written (deleted included), users this user blocks (`blockingCount`) and users who block them (`blockedByCount`)
                     **Side effects**: the lookup is written to the audit log (action `VIEW`, resource `USER`), since it reveals personal data
                     **Errors**:
                     - 400 `common.type_mismatch`: `userId` is not a valid UUID

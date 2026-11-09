@@ -22,8 +22,6 @@ public interface UserProfileProjection {
     String getFirstName();
     String getLastName();
     String getLocation();
-    Integer getPoints();
-    String getMembershipLevel();
     // Viewer relation; false when there is no viewer
     Boolean getFollowing();
     Boolean getBlocked();

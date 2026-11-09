@@ -468,6 +468,22 @@ class RefreshTokenServiceTest {
     }
 
     @Test
+    void shouldRefuseRotationWhenUserIsOfficialAccount() {
+        String oldToken = "official-rotate-token";
+        String userId = UUID.randomUUID().toString();
+        RefreshTokenService.RefreshTokenData data = new RefreshTokenService.RefreshTokenData(
+                userId, List.of("official"), "session-1", false, null, null, null);
+        when(redisService.getOrThrow(GRACE_NS, k(oldToken), RefreshTokenService.RotateResult.class)).thenReturn(null);
+        when(redisService.getOrThrow(NAMESPACE, k(oldToken), RefreshTokenService.RefreshTokenData.class)).thenReturn(data);
+        when(redisService.hGetAllOrThrow(USER_IDX_NS, userId)).thenReturn(Map.of("t1", "session-1"));
+        when(userRepository.findById(UUID.fromString(userId)))
+                .thenReturn(Optional.of(userWithRoles(userId, false, "official")));
+
+        assertThat(service.rotate(oldToken)).isNull();
+        verify(jwtUtil, never()).generateToken(anyString(), any(), anyBoolean(), any());
+    }
+
+    @Test
     void rotate_userNotFound_returnsNullAndRevokesAll() {
         String oldToken = "ghost-rotate-token";
         String userId = UUID.randomUUID().toString();

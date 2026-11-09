@@ -2,6 +2,7 @@ package com.vomatt.entity;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.UUID;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
@@ -51,6 +52,10 @@ public class Vote extends AuditableEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "creator_id")
     private User creator;
+
+    /** The member who published this Poll while acting as the official account {@link #creator}; null otherwise. */
+    @Column(name = "acted_by")
+    private UUID actedBy;
 
     @Column(name = "start_time")
     private OffsetDateTime startTime;

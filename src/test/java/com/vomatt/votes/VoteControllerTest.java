@@ -217,7 +217,7 @@ class VoteControllerTest {
         @Test
         @DisplayName("should return 200 with the owner when the caller is signed out")
         void shouldReturn200WhenSignedOut() throws Exception {
-            when(voteService.getInviteOnlyCreator(voteId, null)).thenReturn(new VoteCreatorResponse("alice", "bot:boba"));
+            when(voteService.getInviteOnlyCreator(voteId, null)).thenReturn(new VoteCreatorResponse("alice", "bot:boba", false));
 
             mockMvc.perform(get("/api/votes/{voteId}/creator", voteId))
                     .andExpect(status().isOk())
@@ -229,7 +229,7 @@ class VoteControllerTest {
         @DisplayName("should pass the signed-in caller so only the owner or an Invitee gets 200")
         void shouldReturn200WhenSignedInCallerIsInvitee() throws Exception {
             authenticate();
-            when(voteService.getInviteOnlyCreator(voteId, USER_ID)).thenReturn(new VoteCreatorResponse("alice", "bot:boba"));
+            when(voteService.getInviteOnlyCreator(voteId, USER_ID)).thenReturn(new VoteCreatorResponse("alice", "bot:boba", false));
 
             mockMvc.perform(get("/api/votes/{voteId}/creator", voteId))
                     .andExpect(status().isOk())

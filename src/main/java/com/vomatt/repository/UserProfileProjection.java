@@ -20,6 +20,7 @@ public interface UserProfileProjection {
     Long getFollowersCount();
     Long getFollowingCount();
     Boolean getActive();
+    String[] getRoles();
     // Extended fields whose visibility can be controlled
     String getFirstName();
     String getLastName();

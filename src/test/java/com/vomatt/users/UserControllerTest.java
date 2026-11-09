@@ -140,7 +140,7 @@ class UserControllerTest {
         signIn("u1");
         when(userService.updateMyProfile(eq("u1"), any())).thenAnswer(inv -> new UserProfileResponse("id-1", "alice", null, null,
                 inv.<com.vomatt.users.dto.UpdateProfileRequest>getArgument(1).getAvatarUrl(), null, 0, 0, 0, 0,
-                null, null, null, null, false, false, false, null, null));
+                null, null, null, null, false, false, false, null, null, false));
 
         for (String kind : BotAvatar.KINDS) {
             mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
@@ -164,7 +164,7 @@ class UserControllerTest {
         signIn("u1");
         when(userService.updateMyProfile(eq("u1"), any())).thenAnswer(inv -> new UserProfileResponse("id-1", "alice", null, null,
                 inv.<com.vomatt.users.dto.UpdateProfileRequest>getArgument(1).getAvatarUrl(), null, 0, 0, 0, 0,
-                null, null, null, null, false, false, false, null, null));
+                null, null, null, null, false, false, false, null, null, false));
 
         mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"avatarUrl\":\"bot:none\"}"))
@@ -192,7 +192,7 @@ class UserControllerTest {
         signIn("u1");
         when(userService.updateMyProfile(eq("u1"), argThat(r -> r.getAvatarUrl() == null && "Al".equals(r.getDisplayName()))))
                 .thenReturn(new UserProfileResponse("id-1", "alice", "Al", null, "bot:boba", null, 0, 0, 0, 0,
-                        null, null, null, null, false, false, false, null, null));
+                        null, null, null, null, false, false, false, null, null, false));
 
         mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON).content("{\"displayName\":\"Al\"}"))
                 .andExpect(status().isOk())
@@ -206,7 +206,7 @@ class UserControllerTest {
         when(userService.updateMyProfile(eq("u1"), argThat(r -> "Alice".equals(r.getFirstName())
                 && "Chen".equals(r.getLastName()) && java.time.LocalDate.of(1995, 4, 12).equals(r.getBirthday()))))
                 .thenReturn(new UserProfileResponse("id-1", "alice", null, null, "bot:boba", null, 0, 0, 0, 0,
-                        "Alice", "Chen", null, null, false, false, false, null, null));
+                        "Alice", "Chen", null, null, false, false, false, null, null, false));
 
         mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"firstName\":\"Alice\",\"lastName\":\"Chen\",\"birthday\":\"1995-04-12\"}"))
@@ -272,11 +272,11 @@ class UserControllerTest {
     @DisplayName("should return only public profile fields when searching users")
     void shouldReturnOnlyPublicFieldsWhenSearchingUsers() throws Exception {
         when(userService.searchUsersByUsername(eq("ali"), isNull(), isNull())).thenReturn(new CursorResponse<>(
-                List.of(new UserDto("0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47", "alice", "Alice", null)), null));
+                List.of(new UserDto("0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47", "alice", "Alice", null, false)), null));
 
         mockMvc.perform(get("/api/users/search").param("username", " ali "))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items[0].*", hasSize(4)))
+                .andExpect(jsonPath("$.data.items[0].*", hasSize(5)))
                 .andExpect(jsonPath("$.data.items[0].username").value("alice"))
                 .andExpect(jsonPath("$.data.items[0].displayName").value("Alice"))
                 .andExpect(jsonPath("$.data.items[0].email").doesNotExist())
@@ -323,7 +323,7 @@ class UserControllerTest {
 
     private static UserProfileResponse profile(Boolean isFollowing, Boolean isBlocked) {
         return new UserProfileResponse("id-1", "alice", null, null, "bot:boba", null, 0, 0, 0, 0,
-                null, null, null, null, isFollowing, isFollowing, isBlocked, null, null);
+                null, null, null, null, isFollowing, isFollowing, isBlocked, null, null, false);
     }
 
     @Test
@@ -371,7 +371,7 @@ class UserControllerTest {
     @DisplayName("should pass cursor, limit and caller through when listing followers and following")
     void shouldPassCursorWhenListingFollowersAndFollowing() throws Exception {
         signIn("u1");
-        FollowUserDto bob = new FollowUserDto("id-2", "bob", "Bob", null, false, true);
+        FollowUserDto bob = new FollowUserDto("id-2", "bob", "Bob", null, false, true, false);
         when(userService.listFollowers("alice", "c1", 10, "u1")).thenReturn(new CursorResponse<>(List.of(bob), "next"));
         when(userService.listFollowing("alice", null, null, "u1")).thenReturn(new CursorResponse<>(List.of(), null));
 
@@ -409,7 +409,7 @@ class UserControllerTest {
         signIn("u1");
         when(userService.getUserProfile("alice", "u1")).thenReturn(new UserProfileResponse("id-1", "alice", null, null,
                 "bot:boba", null, 0, 0, 1204, 0, null, null, null, null, true, false, false,
-                3, List.of(new UserDto("id-2", "jtan", "J Tan", "bot:boba"))));
+                3, List.of(new UserDto("id-2", "jtan", "J Tan", "bot:boba", false)), false));
 
         mockMvc.perform(get("/api/users/alice"))
                 .andExpect(status().isOk())
@@ -434,7 +434,7 @@ class UserControllerTest {
     @DisplayName("should pass cursor, limit and caller through when listing mutual followers")
     void shouldPassCursorWhenListingMutualFollowers() throws Exception {
         signIn("u1");
-        FollowUserDto jtan = new FollowUserDto("id-2", "jtan", "J Tan", "bot:boba", true, false);
+        FollowUserDto jtan = new FollowUserDto("id-2", "jtan", "J Tan", "bot:boba", true, false, false);
         when(userService.listMutualFollowers("alice", "c1", 10, "u1")).thenReturn(new CursorResponse<>(List.of(jtan), "next"));
 
         mockMvc.perform(get("/api/users/alice/mutual-followers").param("cursor", "c1").param("limit", "10"))
@@ -577,7 +577,7 @@ class UserControllerTest {
         signIn("u1");
         when(userService.uploadAvatar(eq("u1"), argThat(f -> f != null && "file".equals(f.getName()))))
                 .thenReturn(new UserProfileResponse("id-1", "alice", null, null, "/api/avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47.jpg",
-                        null, 0, 0, 0, 0, null, null, null, null, false, false, false, null, null));
+                        null, 0, 0, 0, 0, null, null, null, null, false, false, false, null, null, false));
 
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart(
                         org.springframework.http.HttpMethod.PUT, "/api/users/me/avatar")

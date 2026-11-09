@@ -1,5 +1,6 @@
 package com.vomatt.users;
 
+import com.vomatt.common.constant.UserRole;
 import com.vomatt.users.dto.FollowUserDto;
 import com.vomatt.users.dto.MyProfileResponse;
 import com.vomatt.users.dto.UserDto;
@@ -8,6 +9,7 @@ import com.vomatt.entity.User;
 import com.vomatt.repository.UserProfileProjection;
 import org.springframework.stereotype.Component;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -22,7 +24,8 @@ public class UserMapper {
                 user.getId().toString(),
                 user.getUsername(),
                 displayNameVisible ? user.getDisplayName() : null,
-                user.getAvatarUrl()
+                user.getAvatarUrl(),
+                user.isOfficial()
         );
     }
 
@@ -34,7 +37,8 @@ public class UserMapper {
                 displayNameVisible ? user.getDisplayName() : null,
                 user.getAvatarUrl(),
                 isFollowing,
-                followsYou
+                followsYou,
+                user.isOfficial()
         );
     }
 
@@ -68,7 +72,8 @@ public class UserMapper {
                 stats.getFollowersCount().intValue(),
                 stats.getFollowingCount().intValue(),
                 visibilitySettings,
-                anonymousBallotByDefault
+                anonymousBallotByDefault,
+                user.isOfficial()
         );
     }
 
@@ -98,7 +103,8 @@ public class UserMapper {
                 followsYou,
                 isBlocked,
                 mutualFollowersCount,
-                mutualFollowersPreview
+                mutualFollowersPreview,
+                projection.getRoles() != null && Arrays.asList(projection.getRoles()).contains(UserRole.OFFICIAL)
         );
     }
 }

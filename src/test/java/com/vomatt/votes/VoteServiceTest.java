@@ -1723,6 +1723,20 @@ class VoteServiceTest {
         }
 
         @Test
+        void shouldRefuseAddWhenInviteeIsOfficialAccount() {
+            inviteOnly(OffsetDateTime.now().plusDays(1));
+            User official = User.builder().id(UUID.randomUUID()).roles(new String[] { "official" }).build();
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(userRepository.findAllById(Set.of(official.getId()))).thenReturn(List.of(official));
+            InviteesRequest invite = new InviteesRequest();
+            invite.setUserIds(List.of(official.getId()));
+
+            assertThatThrownBy(() -> voteService.addInvitees(voteId.toString(), invite, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.OFFICIAL_INVITEE_NOT_ALLOWED));
+            verify(inviteeRepository, never()).saveAllAndFlush(any());
+        }
+
+        @Test
         @DisplayName("should throw 400 VOTE_INVITEE_IDS_INVALID when an invited user is suspended")
         void shouldRefuseAddWhenUserSuspended() {
             inviteOnly(OffsetDateTime.now().plusDays(1));
@@ -2076,6 +2090,77 @@ class VoteServiceTest {
                     .isInstanceOfSatisfying(ApiException.class,
                             ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_NOT_FOUND));
             verify(userRepository, never()).existsById(any());
+        }
+    }
+
+    // ─── official accounts ────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("acting as an official account")
+    class OfficialAccountTests {
+
+        private final UUID memberId = UUID.randomUUID();
+
+        private void actAs(com.vomatt.entity.OfficialRole role) {
+            var auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(userId.toString(), null, List.of());
+            auth.setDetails(new com.vomatt.common.security.ActingMember(memberId, userId, role));
+            org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
+        }
+
+        @org.junit.jupiter.api.AfterEach
+        void clearContext() {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+
+        @Test
+        void shouldRefuseEveryBallotChangeWhenActingAsOfficial() {
+            actAs(com.vomatt.entity.OfficialRole.OWNER);
+            vote.setActive(true);
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            VoteRequest request = new VoteRequest();
+            request.setOptionIds(List.of(UUID.randomUUID().toString()));
+
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_BALLOT_OFFICIAL_NOT_ALLOWED));
+            assertThatThrownBy(() -> voteService.retract(voteId.toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_BALLOT_OFFICIAL_NOT_ALLOWED));
+            assertThatThrownBy(() -> voteService.removeVote(voteId.toString(), UUID.randomUUID().toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_BALLOT_OFFICIAL_NOT_ALLOWED));
+            verify(userVoteRepository, never()).saveAndFlush(any());
+            verify(userVoteRepository, never()).findByUserIdAndVoteId(any(), any());
+        }
+
+        @Test
+        void shouldRefuseDeleteWhenEditorDidNotPublishPoll() {
+            actAs(com.vomatt.entity.OfficialRole.EDITOR);
+            vote.setActedBy(UUID.randomUUID());
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+
+            assertThatThrownBy(() -> voteService.deleteVote(voteId.toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.OFFICIAL_ROLE_FORBIDDEN));
+            assertThat(vote.getDeletedAt()).isNull();
+        }
+
+        @Test
+        void shouldDeleteWhenEditorPublishedPoll() {
+            actAs(com.vomatt.entity.OfficialRole.EDITOR);
+            vote.setActedBy(memberId);
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+
+            voteService.deleteVote(voteId.toString(), userId.toString());
+
+            assertThat(vote.getDeletedAt()).isNotNull();
+        }
+
+        @Test
+        void shouldDeleteAnyOfficialPollWhenAdmin() {
+            actAs(com.vomatt.entity.OfficialRole.ADMIN);
+            vote.setActedBy(UUID.randomUUID());
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+
+            voteService.deleteVote(voteId.toString(), userId.toString());
+
+            assertThat(vote.getDeletedAt()).isNotNull();
         }
     }
 }

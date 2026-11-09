@@ -134,6 +134,7 @@ public class VoteController {
             **Errors**:
                     - 400 `vote.invitee.not_invite_only`: `inviteeIds`, `inviteeEmails` or `inviteListIds` is not empty but `audience` is not INVITE_ONLY
                     - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended (`inviteeEmails` and `inviteListIds` never cause it)
+                    - 400 `official.invitee_not_allowed`: one of `inviteeIds` is an official account
                     - 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true
                     - 400 `vote.options.min`: fewer than 2 options
                     - 400 `vote.options.max`: more options than the limit (default 10, admin-configurable)
@@ -189,10 +190,12 @@ public class VoteController {
             over the limit the Invitee is still added and only the email is skipped).
             **Errors**:
             - 403 `vote.forbidden`: the caller is not the owner
+            - 403 `official.role_forbidden`: acting as an official account (`X-Act-As`) as an EDITOR on a Poll another member published, or as an ANALYST
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 400 `vote.not_editable`: the Poll is Open or Ended
             - 400 `vote.invitee.not_invite_only`: `inviteeIds`, `inviteeEmails` or `inviteListIds` is not empty but the resulting Audience is not INVITE_ONLY
             - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended (`inviteeEmails` and `inviteListIds` never cause it)
+            - 400 `official.invitee_not_allowed`: one of `inviteeIds` is an official account
             - 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true
             - 400 `vote.options.min`: fewer than 2 options
             - 400 `vote.options.max`: more options than the limit (default 10, admin-configurable)
@@ -584,6 +587,7 @@ public class VoteController {
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen
+            - 403 `vote.ballot.official_not_allowed`: the request acts as an official account (`X-Act-As`); official accounts never vote (an ANALYST gets `official.role_forbidden` first)
             - 400 `vote.not_allowed`: the Poll is still Scheduled
             - 400 `vote.multiple.not_allowed`: `optionIds` holds more than one ID
             - 404 `vote.option.not_found`: the option ID does not exist
@@ -628,6 +632,7 @@ public class VoteController {
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen
+            - 403 `vote.ballot.official_not_allowed`: the request acts as an official account (`X-Act-As`); official accounts never vote (an ANALYST gets `official.role_forbidden` first)
             - 400 `vote.not_allowed`: the Poll is still Scheduled
             - 429 `common.rate_limited`: more than 30 Ballot writes (cast, Retract, remove Selection) by the caller within 60 seconds; no `Retry-After`
             - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was recorded, try again
@@ -659,6 +664,7 @@ public class VoteController {
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen
+            - 403 `vote.ballot.official_not_allowed`: the request acts as an official account (`X-Act-As`); official accounts never vote (an ANALYST gets `official.role_forbidden` first)
             - 400 `vote.not_allowed`: the Poll is still Scheduled
             - 429 `common.rate_limited`: more than 30 Ballot writes (cast, Retract, remove Selection) by the caller within 60 seconds; no `Retry-After`
             - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was recorded, try again
@@ -807,6 +813,7 @@ public class VoteController {
             **Errors**:
             - 400 `vote.delete.window_passed`: the Poll is Open or Ended and the delete window (default 20 minutes, configurable) has passed
             - 403 `vote.forbidden`: the caller is not the owner
+            - 403 `official.role_forbidden`: acting as an official account (`X-Act-As`) as an EDITOR on a Poll another member published, or as an ANALYST
             - 404 `vote.not_found`: Poll does not exist or is already Deleted
             - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was changed, try again
             """)
@@ -845,6 +852,7 @@ public class VoteController {
             - 400 `vote.close.public_not_allowed`: the Poll is Public and Open
             - 400 `vote.close.scheduled`: the Poll is Scheduled; use `DELETE /api/votes/{voteId}` instead
             - 403 `vote.forbidden`: the caller is not the owner
+            - 403 `official.role_forbidden`: acting as an official account (`X-Act-As`) as an EDITOR on a Poll another member published, or as an ANALYST
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was changed, try again
             """)
@@ -892,6 +900,7 @@ public class VoteController {
             **Side effects**: none
             **Errors**:
             - 403 `vote.forbidden`: the caller is not the owner (Invitees included)
+            - 403 `official.role_forbidden`: acting as an official account (`X-Act-As`) as an EDITOR on a Poll another member published, or as an ANALYST
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Invitees of the Poll",
@@ -930,8 +939,10 @@ public class VoteController {
             - 400 `vote.invitee.not_invite_only`: the Poll is not INVITE_ONLY
             - 400 `vote.ended`: the Poll has Ended
             - 400 `vote.invitee.ids_invalid`: one of `userIds` is not an existing user or is suspended (`emails` and `inviteListIds` never cause it)
+            - 400 `official.invitee_not_allowed`: one of `userIds` is an official account
             - 400 `common.validation_failed`: `userIds`, `emails` and `inviteListIds` are all empty, `userIds` / `emails` hold more than 100 entries or `inviteListIds` more than 20, a null element or an invalid address
             - 403 `vote.forbidden`: the caller is not the owner
+            - 403 `official.role_forbidden`: acting as an official account (`X-Act-As`) as an EDITOR on a Poll another member published, or as an ANALYST
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 404 `invite_list.not_found`: one of `inviteListIds` does not exist or belongs to someone else
             - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was changed, try again
@@ -978,6 +989,7 @@ public class VoteController {
             - 400 `vote.invitee.not_invite_only`: the Poll is not INVITE_ONLY
             - 400 `vote.ended`: the Poll has Ended
             - 403 `vote.forbidden`: the caller is not the owner
+            - 403 `official.role_forbidden`: acting as an official account (`X-Act-As`) as an EDITOR on a Poll another member published, or as an ANALYST
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was changed, try again
             """)
@@ -1018,6 +1030,7 @@ public class VoteController {
             - 400 `vote.invitee.not_invite_only`: the Poll is not INVITE_ONLY
             - 400 `vote.ended`: the Poll has Ended
             - 403 `vote.forbidden`: the caller is not the owner
+            - 403 `official.role_forbidden`: acting as an official account (`X-Act-As`) as an EDITOR on a Poll another member published, or as an ANALYST
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was changed, try again
             """)

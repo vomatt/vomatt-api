@@ -297,4 +297,24 @@ class BallotPostgresTest extends PostgresRepositoryTest {
         assertThat(turnout()).isZero();
         assertStoredMatchesActual();
     }
+
+    @Test
+    void shouldCastNamedBallotWhenProPollAndPhoneVerified() {
+        tx.executeWithoutResult(s -> {
+            em.createNativeQuery("UPDATE vomatt.votes SET pro = TRUE, voter_visibility = 'NOBODY', is_anonymous = TRUE WHERE id = :id")
+                    .setParameter("id", poll.getId()).executeUpdate();
+            em.createNativeQuery("UPDATE vomatt.users SET phone_verified_at = now() WHERE id = :id")
+                    .setParameter("id", voter.getId()).executeUpdate();
+            // The voter's default is anonymous; a Pro poll ignores it
+            em.createNativeQuery("INSERT INTO vomatt.user_preferences (id, user_id, preference_key, preference_value) "
+                    + "VALUES (:id, :userId, 'ballot.anonymousByDefault', 'true')")
+                    .setParameter("id", UUID.randomUUID()).setParameter("userId", voter.getId()).executeUpdate();
+        });
+
+        VoteResponse response = cast(voter, optionA);
+
+        assertThat(response.getMyOptionId()).isEqualTo(optionA.toString());
+        assertThat(response.getParticipantCount()).isEqualTo(1);
+        assertThat(storedAnonymous(voter)).isFalse();
+    }
 }

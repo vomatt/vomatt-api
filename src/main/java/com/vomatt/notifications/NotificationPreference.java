@@ -18,7 +18,7 @@ public enum NotificationPreference {
     COMMENTS("comments", true, EnumSet.of(NotificationKind.COMMENT)),
     CLOSING_SOON("closingSoon", false, EnumSet.of(NotificationKind.CLOSING_SOON)),
     MENTIONS("mentions", true, EnumSet.of(NotificationKind.MENTION)),
-    LIKES("likes", true, EnumSet.of(NotificationKind.LIKE));
+    LIKES("likes", true, EnumSet.of(NotificationKind.LIKE, NotificationKind.POLL_LIKE));
 
     public static final String KEY_PREFIX = "notifications.";
 

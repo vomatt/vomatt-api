@@ -26,7 +26,9 @@ public enum NotificationKind {
     /** A Poll the user can cast a Ballot in and has not ends within a day. Source: the Poll. */
     CLOSING_SOON(NotificationCategory.POLL_END),
     /** Someone liked the user's Comment or Reply. Source: the like row. */
-    LIKE(NotificationCategory.LIKE);
+    LIKE(NotificationCategory.LIKE),
+    /** Someone liked the user's Poll. Source: the like row. */
+    POLL_LIKE(NotificationCategory.LIKE);
 
     private final NotificationCategory category;
 

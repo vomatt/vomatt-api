@@ -1,6 +1,7 @@
 package com.vomatt.repository;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -9,12 +10,14 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.vomatt.entity.Vote;
 
 import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
 
 /** List queries live in {@link VoteListRepository}. */
 @Repository
@@ -78,6 +81,54 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
             FROM vomatt.vote_shares s
             WHERE s.vote_id = v.id AND s.user_id = :userId""", nativeQuery = true)
     void decrementShareCountForUserShares(@Param("userId") UUID userId);
+
+    /**
+     * Likes the Poll and adds one to its like count in one statement; idempotent, also under concurrent requests.
+     * Returns 0 when the like already existed, the user does not exist or the Poll is gone or Deleted. The user and
+     * Poll rows are key-share locked, so an account deletion still in flight is waited for and yields 0 rather than a
+     * foreign-key failure; a key-share lock, unlike bookmarks' share lock, lets concurrent likers update the count.
+     */
+    @Modifying
+    @Query(value = """
+            WITH liked AS (
+                INSERT INTO vomatt.vote_likes (id, user_id, vote_id)
+                SELECT :id, :userId, :voteId
+                WHERE EXISTS (SELECT 1 FROM vomatt.users WHERE id = :userId FOR KEY SHARE)
+                  AND EXISTS (SELECT 1 FROM vomatt.votes WHERE id = :voteId AND deleted_at IS NULL FOR KEY SHARE)
+                ON CONFLICT (user_id, vote_id) DO NOTHING
+                RETURNING vote_id)
+            UPDATE vomatt.votes SET like_count = like_count + 1 WHERE id IN (SELECT vote_id FROM liked)""", nativeQuery = true)
+    int insertLikeIfAbsent(@Param("id") UUID id, @Param("userId") UUID userId, @Param("voteId") UUID voteId);
+
+    /** Removes the like and takes one off the like count in one statement; 1 when a like was removed, 0 when there was none. */
+    @Modifying
+    @Query(value = """
+            WITH unliked AS (
+                DELETE FROM vomatt.vote_likes WHERE user_id = :userId AND vote_id = :voteId RETURNING vote_id)
+            UPDATE vomatt.votes SET like_count = like_count - 1 WHERE id IN (SELECT vote_id FROM unliked)""", nativeQuery = true)
+    int deleteLike(@Param("userId") UUID userId, @Param("voteId") UUID voteId);
+
+    /** The like exists and its Poll is not Deleted. */
+    @Query(value = """
+            SELECT EXISTS (SELECT 1 FROM vomatt.vote_likes l JOIN vomatt.votes v ON v.id = l.vote_id
+                           WHERE l.user_id = :userId AND l.vote_id = :voteId AND v.deleted_at IS NULL)""", nativeQuery = true)
+    boolean existsLiveLike(@Param("userId") UUID userId, @Param("voteId") UUID voteId);
+
+    /** Of the given Polls, those the user liked; one query for a page of Polls. */
+    // Names the table it reads: without it, the page's options and tags were no longer batch-fetched but loaded per Poll
+    // (VoteListPostgresTest.shouldUseConstantQueriesPerPage)
+    @QueryHints(@QueryHint(name = "org.hibernate.query.native.spaces", value = "vomatt.vote_likes"))
+    @Query(value = "SELECT l.vote_id FROM vomatt.vote_likes l WHERE l.user_id = :userId AND l.vote_id IN (:voteIds)",
+            nativeQuery = true)
+    List<UUID> findLikedVoteIds(@Param("userId") UUID userId, @Param("voteIds") Collection<UUID> voteIds);
+
+    /** Releases a user's likes from the stored like counts; run before deleting the user (vote_likes cascade). */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = """
+            UPDATE vomatt.votes v SET like_count = v.like_count - 1
+            FROM vomatt.vote_likes l
+            WHERE l.vote_id = v.id AND l.user_id = :userId""", nativeQuery = true)
+    void decrementLikeCountForUserLikes(@Param("userId") UUID userId);
 
     /** Atomic +1 on the Poll's View bucket for the current UTC hour. */
     // ponytail: Views of one Poll serialize on its current-hour row and VoteViewRecorder caps writers at 2, so a hot Poll

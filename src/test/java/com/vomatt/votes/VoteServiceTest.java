@@ -510,6 +510,46 @@ class VoteServiceTest {
         }
     }
 
+    // ─── like / unlike ────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("like / unlike")
+    class LikeTests {
+
+        @Test
+        @DisplayName("should succeed on a repeat like without looking the user up")
+        void shouldSkipUserLookupWhenAlreadyLiked() {
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.insertLikeIfAbsent(any(UUID.class), eq(userId), eq(voteId))).thenReturn(0);
+            when(voteRepository.existsLiveLike(userId, voteId)).thenReturn(true);
+
+            voteService.like(voteId.toString(), userId.toString());
+
+            verify(userRepository, never()).existsById(any());
+            verify(voteRepository, never()).existsByIdAndDeletedAtIsNull(any());
+        }
+
+        @Test
+        @DisplayName("should return vote.not_found when the Poll is Deleted after its lookup")
+        void shouldThrowVoteNotFoundWhenPollDeletedBeforeLikeInsert() {
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.insertLikeIfAbsent(any(UUID.class), eq(userId), eq(voteId))).thenReturn(0);
+            when(voteRepository.existsByIdAndDeletedAtIsNull(voteId)).thenReturn(false);
+
+            assertThatThrownBy(() -> voteService.like(voteId.toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
+        }
+
+        @Test
+        @DisplayName("should delete the caller's like without reading the Poll")
+        void shouldDeleteLikeWhenUnliking() {
+            voteService.unlike(voteId.toString(), userId.toString());
+
+            verify(voteRepository).deleteLike(userId, voteId);
+            verify(voteRepository, never()).findById(any());
+        }
+    }
+
     // ─── bookmark / unbookmark ────────────────────────────────────────────────
 
     @Nested

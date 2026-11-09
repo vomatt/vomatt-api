@@ -14,7 +14,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Schema(description = "One notification of the feed. Which of `actor`, `poll` and `comment` are set depends on `kind`: "
         + "RESULT has `poll`; CANCELLED, INVITATION and CLOSING_SOON have `actor` (the Poll's owner) and `poll`; "
         + "FOLLOWED has `actor` (the new follower); COMMENT and MENTION have `actor` (the author), `poll` and `comment`; "
-        + "LIKE has `actor` (who liked), `poll` and `comment` (your liked Comment)")
+        + "LIKE has `actor` (who liked), `poll` and `comment` (your liked Comment); POLL_LIKE has `actor` (who liked) and `poll` (your liked Poll)")
 public record NotificationResponse(
         @Schema(description = "Notification id, opaque; pass it to `POST /api/notifications/{id}/read`",
                 example = "comment_0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b")
@@ -27,9 +27,10 @@ public record NotificationResponse(
                 + "MENTION: someone @mentioned you in a Comment or Reply that is not already your COMMENT. "
                 + "CLOSING_SOON: a Poll you are invited to, or a Public Poll of someone you follow, ends within 24 hours "
                 + "and you hold no Ballot in it. "
-                + "LIKE: someone liked your Comment or Reply", example = "COMMENT")
+                + "LIKE: someone liked your Comment or Reply. "
+                + "POLL_LIKE: someone liked your Poll", example = "COMMENT")
         NotificationKind kind,
-        @Schema(description = "The tab it is filed under, fixed by `kind`: CONVERSATION (COMMENT, MENTION), LIKE (LIKE), "
+        @Schema(description = "The tab it is filed under, fixed by `kind`: CONVERSATION (COMMENT, MENTION), LIKE (LIKE, POLL_LIKE), "
                 + "POLL_END (RESULT, CANCELLED, CLOSING_SOON), INVITATION (INVITATION), FOLLOW (FOLLOWED). "
                 + "Filter the feed with `GET /api/notifications?category=`", example = "CONVERSATION")
         NotificationCategory category,

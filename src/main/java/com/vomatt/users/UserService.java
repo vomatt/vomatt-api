@@ -127,6 +127,7 @@ public class UserService {
         voteRepository.decrementTurnoutForUserBallots(user.getId());
         voteOptionRepository.decrementForUserBallots(user.getId());
         voteRepository.decrementShareCountForUserShares(user.getId());
+        voteRepository.decrementLikeCountForUserLikes(user.getId());
         auditLogRepository.anonymizeByUserId(userId);
         deleteUploadedAvatarAfterCommit(user.getAvatarUrl());
         userRepository.delete(user);

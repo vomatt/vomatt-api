@@ -37,7 +37,7 @@ Each item's `category` is fixed by its `kind` and maps to a tab:
 | `category` | Kinds |
 |------------|-------|
 | `CONVERSATION` | `COMMENT`, `MENTION` |
-| `LIKE` | `LIKE` |
+| `LIKE` | `LIKE`, `POLL_LIKE` |
 | `POLL_END` | `RESULT`, `CANCELLED`, `CLOSING_SOON` |
 | `INVITATION` | `INVITATION` |
 | `FOLLOW` | `FOLLOWED` |
@@ -52,6 +52,7 @@ Each item's `category` is fixed by its `kind` and maps to a tab:
 | `MENTION` | Someone else wrote `@<your username>` in a Comment or Reply on a Poll you can see. Not listed when the same Comment gives you a `COMMENT` (on your Poll, or a Reply to your live Comment), unless `comments` is off; nor for a Reply in a thread started by a user you blocked | author | yes | `{ id, parentId, excerpt }` | `mentions` |
 | `CLOSING_SOON` | An Open Poll ends within 24 hours, you hold no Ballot, and you are its Invitee or it is a Public Poll of someone you follow. Gone once you vote or it Ends | owner | yes | null | `closingSoon` (off by default) |
 | `LIKE` | Someone else liked your Comment or Reply (Poll and thread visibility as for `COMMENT`). Gone if they unlike; liking again is a new, unread one. Likes given before this release (Flyway V10) start read | who liked | yes | your liked Comment, `{ id, parentId, excerpt }` | `likes` |
+| `POLL_LIKE` | Someone else liked your Poll (`PUT /api/votes/{voteId}/like`). Gone if they unlike; liking again is a new, unread one. Liking your own Poll gives none | who liked | yes | null | `likes` |
 
 - `createdAt` is when it happened: the Poll's end, the Invitation, the follow, the Comment, the like, or 24 hours before the Poll's end for `CLOSING_SOON` (its start if later). Group by day with it.
 - `poll` is `{ id, title, startTime, endTime, status, turnout, myOptionId, winningOptionIds, winningOptionLabels, tie }`. It never carries per-option counts, so a Sealed Poll shows only Turnout ("342 voted so far"). `myOptionId` is your Ballot's option (null without one, or once your Anonymous Ballot of an Ended Poll is sealed). The outcome fields are null until the Poll has Ended; then `winningOptionIds` / `winningOptionLabels` name the option(s) with the most Ballots in display order (`[]` when none named an option, as in a Cancelled Poll) and `tie` says whether there are several. Your Ballot won when `myOptionId` is in `winningOptionIds` (tied when `tie` too). Link to `/poll/{poll.id}`; for `RESULT`, the results page.

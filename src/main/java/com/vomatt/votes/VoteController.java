@@ -393,6 +393,55 @@ public class VoteController {
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 
+    @PutMapping("/{voteId}/like")
+    @CommonApiResponses
+    @Operation(summary = "Like a Poll", description = """
+            **Auth**: required
+            **Precondition**: the caller can see the Poll (any state: Scheduled, Open or Ended); being able to cast a Ballot is not required
+            **Behavior**: likes (hearts) the Poll for the caller: Poll responses carry `likedByMe: true` and `likeCount` grows by one. \
+            Idempotent: liking again succeeds and changes nothing.
+            **Side effects**: unless the caller owns the Poll, its owner gets a POLL_LIKE notification (`GET /api/notifications`); \
+            taking the like back removes it, and liking again gives a new, unread one
+            **Errors**:
+            - 404 `vote.not_found`: Poll does not exist, is Deleted, is INVITE_ONLY and the caller is neither its owner nor an Invitee, \
+            or its owner blocked the caller
+            - 404 `user.not_found`: the signed-in account no longer exists
+            """)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Liked (or already liked)",
+            content = @Content(examples = @ExampleObject(name = "Liked", value = """
+                    {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is hidden from the caller (`vote.not_found`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "vote.not_found", value = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END)))
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> like(
+            @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
+            @PathVariable String voteId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        voteService.like(voteId, principal.userId());
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
+    @DeleteMapping("/{voteId}/like")
+    @CommonApiResponses
+    @Operation(summary = "Remove a like", description = """
+            **Auth**: required
+            **Precondition**: none; the Poll need not be reachable, so a like of a Poll the caller lost access to can still be removed
+            **Behavior**: removes the caller's like, so Poll responses carry `likedByMe: false` and `likeCount` drops by one. \
+            Idempotent: always succeeds, also when there was no like or no such Poll.
+            **Side effects**: the owner's POLL_LIKE notification for this like goes away
+            **Errors**: none beyond the common ones
+            """)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Like removed (or there was none)",
+            content = @Content(examples = @ExampleObject(name = "Removed", value = """
+                    {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> unlike(
+            @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
+            @PathVariable String voteId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        voteService.unlike(voteId, principal.userId());
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
     @DeleteMapping("/{voteId}/bookmark")
     @CommonApiResponses
     @Operation(summary = "Remove a bookmark", description = """

@@ -7,6 +7,8 @@ import com.vomatt.entity.common.AuditableEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
@@ -53,6 +55,10 @@ public class User extends AuditableEntity {
     @Column(name = "phone_number", unique = true, length = 20)
     private String phoneNumber;
 
+    /** When the account proved by SMS OTP that it owns {@link #phoneNumber} (phone sign-up or bind); null = not verified. */
+    @Column(name = "phone_verified_at")
+    private OffsetDateTime phoneVerifiedAt;
+
     @Builder.Default
     @JdbcTypeCode(SqlTypes.ARRAY)
     @Column(name = "roles", nullable = false, columnDefinition = "text[]")
@@ -82,6 +88,11 @@ public class User extends AuditableEntity {
     @Column(name = "birthday")
     private LocalDate birthday;
 
+    /** Null = not provided. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "gender", length = 20)
+    private Gender gender;
+
     @Column(name = "location", length = 100)
     private String location;
 
@@ -94,6 +105,10 @@ public class User extends AuditableEntity {
     @Builder.Default
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<UserPreference> preferences = new HashSet<>();
+
+    public boolean isPhoneVerified() {
+        return phoneVerifiedAt != null;
+    }
 
     public boolean isAdmin() {
         return Arrays.asList(roles).contains(UserRole.ADMIN);

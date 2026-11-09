@@ -1,5 +1,7 @@
 package com.vomatt.repository;
 
+import com.vomatt.entity.Gender;
+
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -22,6 +24,7 @@ public interface UserProfileProjection {
     String getFirstName();
     String getLastName();
     String getLocation();
+    Gender getGender();
     // Viewer relation; false when there is no viewer
     Boolean getFollowing();
     Boolean getBlocked();

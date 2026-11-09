@@ -1,5 +1,6 @@
 package com.vomatt.users.dto;
 
+import com.vomatt.entity.Gender;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDate;
@@ -19,12 +20,17 @@ public record MyProfileResponse(
         String email,
         @Schema(description = "Phone number; null if the account signed up with email only", example = "+886912345678", nullable = true)
         String phoneNumber,
+        @Schema(description = "Whether `phoneNumber` was verified by SMS OTP (phone sign-up or `POST /api/users/me/phone/verify`); "
+                + "false when there is no phone number", example = "true")
+        boolean phoneVerified,
         @Schema(description = "First name; null if not set", example = "Alice", nullable = true)
         String firstName,
         @Schema(description = "Last name; null if not set", example = "Chen", nullable = true)
         String lastName,
         @Schema(description = "Birthday (ISO date); null if not set", example = "1995-04-12", nullable = true)
         LocalDate birthday,
+        @Schema(description = "Gender; null if not provided", example = "FEMALE", nullable = true)
+        Gender gender,
         @Schema(description = "Display name; null if not set", example = "Alice", nullable = true)
         String displayName,
         @Schema(description = "Bio; null if not set", example = "Poll enthusiast", nullable = true)
@@ -56,7 +62,7 @@ public record MyProfileResponse(
         @Schema(description = "Number of users the caller follows; suspended accounts are not counted", example = "8")
         int followingCount,
         @Schema(description = "Field name to visible flag, i.e. what other users see on the public profile; "
-                + "keys: email, firstName, lastName, birthday, location, displayName, bio",
+                + "keys: firstName, lastName, location, displayName, bio, gender",
                 example = "{\"email\": false, \"displayName\": true, \"bio\": true}")
         Map<String, Boolean> visibilitySettings,
         @Schema(description = "Whether Ballots are Anonymous when a Ballot does not say otherwise; false until set", example = "false")

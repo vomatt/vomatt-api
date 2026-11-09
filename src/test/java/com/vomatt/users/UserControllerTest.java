@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -64,6 +65,7 @@ class UserControllerTest {
     @Mock UserService userService;
     @Mock VoteService voteService;
     @Mock PasskeyService passkeyService;
+    @Mock com.vomatt.auth.AuthService authService;
     @Mock RefreshTokenService refreshTokenService;
     @Mock LocalizedMessageService messageService;
     @InjectMocks UserController userController;
@@ -94,12 +96,51 @@ class UserControllerTest {
     }
 
     @Test
+    @DisplayName("should bind the phone for the caller and return their profile when verifying a bind OTP")
+    void shouldBindPhoneWhenVerifyingBindOtp() throws Exception {
+        String userId = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47";
+        signIn(userId);
+
+        mockMvc.perform(post("/api/users/me/phone/verify").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phone\":\"0912345678\",\"code\":\"123456\"}"))
+                .andExpect(status().isOk());
+
+        verify(authService).bindPhone(eq(UUID.fromString(userId)), eq("0912345678"), eq("123456"), any());
+        verify(userService).getMyProfile(userId);
+    }
+
+    @Test
+    @DisplayName("should return 409 user.phone.taken when the number belongs to another account")
+    void shouldReturnConflictWhenBindPhoneTaken() throws Exception {
+        String userId = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47";
+        signIn(userId);
+        when(authService.bindPhone(any(), any(), any(), any())).thenThrow(ApiException.conflict(MessageKey.USER_PHONE_TAKEN));
+
+        mockMvc.perform(post("/api/users/me/phone/verify").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phone\":\"0912345678\",\"code\":\"123456\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("user.phone.taken"));
+    }
+
+    @Test
+    @DisplayName("should send a bind OTP when the phone is present")
+    void shouldSendBindOtpWhenPhonePresent() throws Exception {
+        signIn("u1");
+
+        mockMvc.perform(post("/api/users/me/phone/send-otp").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phone\":\"0912345678\"}"))
+                .andExpect(status().isOk());
+
+        verify(authService).sendPhoneBindOtp(eq("0912345678"), any());
+    }
+
+    @Test
     @DisplayName("should accept every bot kind as avatarUrl when updating profile")
     void shouldAcceptAvatarUrlWhenBotKindKnown() throws Exception {
         signIn("u1");
         when(userService.updateMyProfile(eq("u1"), any())).thenAnswer(inv -> new UserProfileResponse("id-1", "alice", null, null,
                 inv.<com.vomatt.users.dto.UpdateProfileRequest>getArgument(1).getAvatarUrl(), null, 0, 0, 0, 0,
-                null, null, null, false, false, false, null, null));
+                null, null, null, null, false, false, false, null, null));
 
         for (String kind : BotAvatar.KINDS) {
             mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
@@ -123,7 +164,7 @@ class UserControllerTest {
         signIn("u1");
         when(userService.updateMyProfile(eq("u1"), any())).thenAnswer(inv -> new UserProfileResponse("id-1", "alice", null, null,
                 inv.<com.vomatt.users.dto.UpdateProfileRequest>getArgument(1).getAvatarUrl(), null, 0, 0, 0, 0,
-                null, null, null, false, false, false, null, null));
+                null, null, null, null, false, false, false, null, null));
 
         mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"avatarUrl\":\"bot:none\"}"))
@@ -151,7 +192,7 @@ class UserControllerTest {
         signIn("u1");
         when(userService.updateMyProfile(eq("u1"), argThat(r -> r.getAvatarUrl() == null && "Al".equals(r.getDisplayName()))))
                 .thenReturn(new UserProfileResponse("id-1", "alice", "Al", null, "bot:boba", null, 0, 0, 0, 0,
-                        null, null, null, false, false, false, null, null));
+                        null, null, null, null, false, false, false, null, null));
 
         mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON).content("{\"displayName\":\"Al\"}"))
                 .andExpect(status().isOk())
@@ -165,7 +206,7 @@ class UserControllerTest {
         when(userService.updateMyProfile(eq("u1"), argThat(r -> "Alice".equals(r.getFirstName())
                 && "Chen".equals(r.getLastName()) && java.time.LocalDate.of(1995, 4, 12).equals(r.getBirthday()))))
                 .thenReturn(new UserProfileResponse("id-1", "alice", null, null, "bot:boba", null, 0, 0, 0, 0,
-                        "Alice", "Chen", null, false, false, false, null, null));
+                        "Alice", "Chen", null, null, false, false, false, null, null));
 
         mockMvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"firstName\":\"Alice\",\"lastName\":\"Chen\",\"birthday\":\"1995-04-12\"}"))
@@ -282,7 +323,7 @@ class UserControllerTest {
 
     private static UserProfileResponse profile(Boolean isFollowing, Boolean isBlocked) {
         return new UserProfileResponse("id-1", "alice", null, null, "bot:boba", null, 0, 0, 0, 0,
-                null, null, null, isFollowing, isFollowing, isBlocked, null, null);
+                null, null, null, null, isFollowing, isFollowing, isBlocked, null, null);
     }
 
     @Test
@@ -367,7 +408,7 @@ class UserControllerTest {
     void shouldReturnMutualFollowerKeysWhenReadingProfile() throws Exception {
         signIn("u1");
         when(userService.getUserProfile("alice", "u1")).thenReturn(new UserProfileResponse("id-1", "alice", null, null,
-                "bot:boba", null, 0, 0, 1204, 0, null, null, null, true, false, false,
+                "bot:boba", null, 0, 0, 1204, 0, null, null, null, null, true, false, false,
                 3, List.of(new UserDto("id-2", "jtan", "J Tan", "bot:boba"))));
 
         mockMvc.perform(get("/api/users/alice"))
@@ -536,7 +577,7 @@ class UserControllerTest {
         signIn("u1");
         when(userService.uploadAvatar(eq("u1"), argThat(f -> f != null && "file".equals(f.getName()))))
                 .thenReturn(new UserProfileResponse("id-1", "alice", null, null, "/api/avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47.jpg",
-                        null, 0, 0, 0, 0, null, null, null, false, false, false, null, null));
+                        null, 0, 0, 0, 0, null, null, null, null, false, false, false, null, null));
 
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart(
                         org.springframework.http.HttpMethod.PUT, "/api/users/me/avatar")

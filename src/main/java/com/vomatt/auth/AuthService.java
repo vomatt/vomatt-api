@@ -54,6 +54,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
@@ -143,6 +144,8 @@ public class AuthService {
     private static final String OTP_EMAIL_NS = "otp:email";
     private static final String OTP_PHONE_NS = "otp:phone";
     private static final String OTP_ADMIN_EMAIL_NS = "otp:admin-email";
+    /** Binding a phone to a signed-in account: its own namespace, so a bind code never signs in and a sign-in code never binds. */
+    static final String OTP_PHONE_BIND_NS = "otp:phone-bind";
 
     @Value("${otp.ttl-seconds:180}")
     private long otpTtlSeconds;
@@ -173,7 +176,7 @@ public class AuthService {
         if (StringUtils.hasText(email)) {
             sendEmailOtp(User.normalizeEmail(email), code, clientIp);
         } else if (StringUtils.hasText(phone)) {
-            sendPhoneOtp(User.normalizePhone(phone), otpType, code, clientIp);
+            sendPhoneOtp(OTP_PHONE_NS, User.normalizePhone(phone), otpType, code, clientIp);
         } else {
             throw ApiException.badRequest(MessageKey.AUTH_IDENTIFIER_REQUIRED);
         }
@@ -240,23 +243,23 @@ public class AuthService {
         }
     }
 
-    private void sendPhoneOtp(String phone, String otpType, String code, String clientIp) {
+    private void sendPhoneOtp(String namespace, String phone, String otpType, String code, String clientIp) {
         String attemptKey = attemptKey(phone, clientIp);
-        rejectIfLocked(OTP_PHONE_NS, attemptKey);
+        rejectIfLocked(namespace, attemptKey);
 
         // No registration check: as with email, whether the number has an account is told by isNewUser after the
         // code is verified, so this public endpoint cannot be used to find out which numbers are registered
 
         String redisKey = redisKey(phone);
-        acquireResendCooldown(OTP_PHONE_NS, redisKey);
+        acquireResendCooldown(namespace, redisKey);
         DailyQuota quota = DailyQuota.of(redisKey, attemptKey);
-        takeDailyQuota(OTP_PHONE_NS, redisKey, quota, otpDailyLimitPhone);
-        storeOtp(OTP_PHONE_NS, redisKey, quota, attemptKey, new OtpRecord(otpHash(phone, code), otpType, Instant.now(), 0));
+        takeDailyQuota(namespace, redisKey, quota, otpDailyLimitPhone);
+        storeOtp(namespace, redisKey, quota, attemptKey, new OtpRecord(otpHash(phone, code), otpType, Instant.now(), 0));
 
         try {
             smsService.sendOtp(phone, code);
         } catch (Exception ex) {
-            releaseUndeliveredOtp(OTP_PHONE_NS, redisKey, quota);
+            releaseUndeliveredOtp(namespace, redisKey, quota);
             log.warn("Failed to send OTP SMS: {}", ex.getMessage());
             throw ApiException.badRequest(MessageKey.AUTH_SMS_SEND_FAILED);
         }
@@ -338,6 +341,33 @@ public class AuthService {
         consumeOtp(OTP_PHONE_NS, phone, code, clientIp);
         FoundUser found = findOrCreateUserByPhone(phone);
         return buildAuthResponse(found.user(), false, found.created());
+    }
+
+    /**
+     * Bind step 1: sends an SMS OTP for binding {@code phone} to a signed-in account, with the same cooldown, daily limit
+     * and lockouts as the sign-in OTP but its own namespace. Whether the number belongs to another account is told only
+     * at verify, after the code proves ownership, so this cannot be used to find out which numbers are registered.
+     */
+    public void sendPhoneBindOtp(String phone, String clientIp) {
+        sendPhoneOtp(OTP_PHONE_BIND_NS, User.normalizePhone(phone), "bind", generateOtpCode(), clientIp);
+    }
+
+    /**
+     * Bind step 2: consumes the bind OTP, then sets the account's phone number and marks it verified now. A number held
+     * by another account is 409 {@code user.phone.taken}; re-verifying the account's own number only refreshes the time.
+     */
+    public User bindPhone(UUID userId, String phone, String code, String clientIp) {
+        String normalizedPhone = User.normalizePhone(phone);
+        consumeOtp(OTP_PHONE_BIND_NS, normalizedPhone, code, clientIp);
+        if (userRepository.findByPhoneNumber(normalizedPhone).filter(u -> !u.getId().equals(userId)).isPresent()) {
+            throw ApiException.conflict(MessageKey.USER_PHONE_TAKEN);
+        }
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
+        user.setPhoneNumber(normalizedPhone);
+        user.setPhoneVerifiedAt(OffsetDateTime.now());
+        // A concurrent bind of the same number hits the unique constraint here: 409 common.conflict
+        return userRepository.save(user);
     }
 
     private static final int MAX_OTP_ATTEMPTS = 3;
@@ -1123,6 +1153,7 @@ public class AuthService {
         return userRepository.findByPhoneNumber(normalizedPhone).map(u -> new FoundUser(u, false)).orElseGet(() -> {
             User newUser = User.builder()
                     .phoneNumber(normalizedPhone)
+                    .phoneVerifiedAt(OffsetDateTime.now())
                     .username(generateUsername("user"))
                     .authMethod("phone_otp")
                     .avatarUrl(BotAvatar.random())

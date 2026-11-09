@@ -466,6 +466,9 @@ public class UserService {
         if (request.getBirthday() != null) {
             user.setBirthday(request.getBirthday());
         }
+        if (request.getGender() != null) {
+            user.setGender(request.getGender());
+        }
         if (request.getBio() != null) {
             user.setBio(request.getBio());
         }

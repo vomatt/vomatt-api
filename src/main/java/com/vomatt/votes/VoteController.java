@@ -141,6 +141,7 @@ public class VoteController {
                     - 400 `vote.end_time.past`: `endTime` is in the past
                     - 400 `vote.end_time.before_start`: `endTime` is not after `startTime`
                     - 400 `vote.reveal_at.before_end`: `revealAt` is before `endTime`
+                    - 400 `vote.reveal_at.too_late`: `revealAt` is later than `endTime` plus the maximum Poll duration (`vote_max_duration_days`)
                     - 400 `vote.duration.exceeded`: `endTime` is further after the start time than the limit (default 365 days, admin-configurable)
                     - 400 `tag.ids.invalid`: one of `tagIds` does not exist
                     - 400 `common.validation_failed`: a field breaks its size / required rule (first failing field only)
@@ -203,6 +204,7 @@ public class VoteController {
             - 400 `vote.end_time.past`: `endTime` is in the past
             - 400 `vote.end_time.before_start`: `endTime` is not after `startTime`
             - 400 `vote.reveal_at.before_end`: `revealAt` (the one sent, or the current one when omitted) is before `endTime`
+            - 400 `vote.reveal_at.too_late`: `revealAt` (the one sent, or the current one when omitted) is later than `endTime` plus the maximum Poll duration (`vote_max_duration_days`)
             - 400 `vote.duration.exceeded`: `endTime` is further after the start time than the limit (default 365 days, admin-configurable)
             - 400 `tag.ids.invalid`: one of `tagIds` does not exist
             - 400 `common.validation_failed`: a field breaks its size / required rule (first failing field only)
@@ -637,7 +639,6 @@ public class VoteController {
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen
             - 403 `vote.ballot.official_not_allowed`: the request acts as an official account (`X-Act-As`); official accounts never vote (an ANALYST gets `official.role_forbidden` first)
-            - 403 `vote.ballot.phone_verification_required`: the Poll is a Pro poll (`pro`) and the caller has no verified phone number; route them to phone binding
             - 400 `vote.not_allowed`: the Poll is still Scheduled
             - 429 `common.rate_limited`: more than 30 Ballot writes (cast, Retract, remove Selection) by the caller within 60 seconds; no `Retry-After`
             - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was recorded, try again
@@ -670,7 +671,6 @@ public class VoteController {
             - 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller
             - 400 `vote.ended`: the Poll has Ended; Ballots are frozen
             - 403 `vote.ballot.official_not_allowed`: the request acts as an official account (`X-Act-As`); official accounts never vote (an ANALYST gets `official.role_forbidden` first)
-            - 403 `vote.ballot.phone_verification_required`: the Poll is a Pro poll (`pro`) and the caller has no verified phone number; route them to phone binding
             - 400 `vote.not_allowed`: the Poll is still Scheduled
             - 429 `common.rate_limited`: more than 30 Ballot writes (cast, Retract, remove Selection) by the caller within 60 seconds; no `Retry-After`
             - 409 `common.conflict`: the Poll stayed busy with other changes for 3 seconds; nothing was recorded, try again

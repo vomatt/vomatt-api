@@ -217,6 +217,7 @@ public class VoteCommentService {
         if (!comment.canBeEditedBy(userId)) {
             throw ApiException.forbidden(MessageKey.COMMENT_FORBIDDEN);
         }
+        ActingMember.requireMayEdit(comment.getActedBy());
 
         comment.setMentionedUserIds(keptMentions(comment, request.getText()));
         comment.updateContent(request.getText());
@@ -233,6 +234,7 @@ public class VoteCommentService {
         if (!comment.canBeDeletedBy(userId)) {
             throw ApiException.forbidden(MessageKey.COMMENT_FORBIDDEN);
         }
+        ActingMember.requireMayEdit(comment.getActedBy());
 
         comment.softDelete();
         commentRepository.save(comment);

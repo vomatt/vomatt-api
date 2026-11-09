@@ -2,6 +2,7 @@ package com.vomatt.common.retention;
 
 import com.vomatt.common.audit.AuditLogRepository;
 import com.vomatt.reports.PollReportService;
+import com.vomatt.repository.PollReportRepository;
 import com.vomatt.repository.InviteeRepository;
 import com.vomatt.repository.UserVoteRepository;
 import com.vomatt.repository.VoteRepository;
@@ -13,12 +14,14 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 /**
  * The one place data is removed on a schedule (the retention policy in code):
  * <ul>
  *   <li>first, Ended Pro polls without a result report get their snapshot (PollReportService), while their Anonymous
- *       Ballots still hold an option and their unregistered Invitees still count</li>
+ *       Ballots still hold an option and their unregistered Invitees still count; each in its own transaction, so one
+ *       failing report neither stops the run nor gets its Anonymous Ballots sealed (they wait for the report)</li>
  *   <li>audit_logs: 180 days; entries whose actor's account no longer exists are anonymized (the rule of account
  *       deletion, applied again for entries that were written while that deletion was uncommitted)</li>
  *   <li>vote_invitation_emails and vote_invitees without an account: 30 days after their Poll ended</li>
@@ -46,6 +49,7 @@ public class RetentionJob {
     private final UserVoteRepository userVoteRepository;
     private final VoteRepository voteRepository;
     private final PollReportService pollReportService;
+    private final PollReportRepository pollReportRepository;
 
     /** Rows touched by one run; all zero when another instance held the lock. */
     public record Result(int auditLogs, int orphanedAuditActors, int invitationEmails, int unregisteredInvitees, int pollReports,
@@ -65,15 +69,23 @@ public class RetentionJob {
         }
     }
 
-    /** One transaction: lock, then the statements; returns {@link Result#SKIPPED} when the lock is held elsewhere. */
+    /** One transaction (each report in its own, nested inside): lock, then the statements; returns {@link Result#SKIPPED} when the lock is held elsewhere. */
     public Result run(OffsetDateTime now) {
         return transactionTemplate.execute(status -> {
             if (!auditLogRepository.tryAdvisoryXactLock(ADVISORY_LOCK_KEY)) {
                 log.info("retention.run skipped: another instance holds the lock");
                 return Result.SKIPPED;
             }
-            // First: a report counts every Ballot by its option and every Invitee, before sealing and invitee cleanup
-            int pollReports = pollReportService.generateMissing(now);
+            // First: a report counts every Ballot by its option and every Invitee, before sealing and invitee cleanup.
+            // A failed one is retried by the next run or the first read; sealing skips its Poll until then.
+            int pollReports = 0;
+            for (UUID voteId : pollReportRepository.findEndedProPollsWithoutReport(now)) {
+                try {
+                    pollReports += pollReportService.storeMissing(voteId, now) ? 1 : 0;
+                } catch (RuntimeException e) {
+                    log.error("Poll report generation failed for {}", voteId, e);
+                }
+            }
             return new Result(
                     auditLogRepository.deleteCreatedBefore(now.minus(AUDIT_LOG_RETENTION)),
                     auditLogRepository.anonymizeOrphanedActors(),

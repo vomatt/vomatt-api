@@ -77,4 +77,10 @@ public final class SecurityEndpoints {
 
     /** The official account's profile; writes need the OWNER or ADMIN role while acting. */
     public static final String[] ACT_AS_PROFILE = { "/api/users/me", "/api/users/me/avatar", "/api/users/me/visibility" };
+
+    /**
+     * Writes any role may send while acting, ANALYST included: member management (OfficialService authorizes by the
+     * real member's role) and marking the official account's notifications read.
+     */
+    public static final String[] ACT_AS_ANY_ROLE = { "/api/officials/**", "/api/notifications/*/read", "/api/notifications/read-all" };
 }

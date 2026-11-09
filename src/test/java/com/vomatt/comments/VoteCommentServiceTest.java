@@ -137,6 +137,41 @@ class VoteCommentServiceTest {
     }
 
     @Test
+    void shouldLetOnlyAuthorMemberEditWhenActingAsEditorAndAnyCommentWhenChiefEditor() {
+        Vote vote = new Vote();
+        ReflectionTestUtils.setField(vote, "id", voteId);
+        // The principal is the official account (the Comment's author); another member published it
+        VoteComment target = comment(vote, User.builder().id(viewerId).username("official").build(), "theirs");
+        target.setActedBy(UUID.randomUUID());
+        when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(java.util.Optional.of(target));
+        when(voteService.findAccessibleVote(voteId, viewerId.toString())).thenReturn(vote);
+        com.vomatt.comments.dto.UpdateCommentRequest edit = new com.vomatt.comments.dto.UpdateCommentRequest();
+        edit.setText("hijacked");
+        try {
+            actAs(com.vomatt.entity.OfficialRole.EDITOR);
+            assertThatThrownBy(() -> commentService.updateComment(target.getId(), viewerId.toString(), edit))
+                    .isInstanceOfSatisfying(ApiException.class,
+                            ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.OFFICIAL_ROLE_FORBIDDEN));
+            assertThatThrownBy(() -> commentService.deleteComment(target.getId(), viewerId.toString()))
+                    .isInstanceOfSatisfying(ApiException.class,
+                            ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.OFFICIAL_ROLE_FORBIDDEN));
+            assertThat(target.isDeleted()).isFalse();
+
+            actAs(com.vomatt.entity.OfficialRole.CHIEF_EDITOR);
+            commentService.deleteComment(target.getId(), viewerId.toString());
+            assertThat(target.isDeleted()).isTrue();
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+    }
+
+    private void actAs(com.vomatt.entity.OfficialRole role) {
+        var auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(viewerId.toString(), null, List.of());
+        auth.setDetails(new com.vomatt.common.security.ActingMember(UUID.randomUUID(), viewerId, role));
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
+    }
+
+    @Test
     @DisplayName("should return vote.not_found when liking a Comment of a Deleted Poll")
     void shouldThrowWhenLikingCommentOfDeletedPoll() {
         Vote vote = new Vote();

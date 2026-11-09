@@ -2,7 +2,7 @@ package com.vomatt.entity;
 
 /** A member's role in an official account; what each may do while acting as it (see {@code ActAsFilter}). */
 public enum OfficialRole {
-    OWNER, ADMIN, EDITOR, ANALYST;
+    OWNER, ADMIN, CHIEF_EDITOR, EDITOR, ANALYST;
 
     /** Add, remove and change the roles of members (an ADMIN never touches an OWNER nor grants OWNER). */
     public boolean canManageMembers() {
@@ -19,13 +19,13 @@ public enum OfficialRole {
         return this != ANALYST;
     }
 
-    /** Edit or delete any of the official account's Polls; an EDITOR only those it published itself. */
-    public boolean canEditAllPolls() {
-        return this == OWNER || this == ADMIN;
+    /** Edit or delete any of the official account's Polls and Comments; an EDITOR only those it published itself. */
+    public boolean canEditAllContent() {
+        return this == OWNER || this == ADMIN || this == CHIEF_EDITOR;
     }
 
     /** Read the official account's result reports. */
     public boolean canReadReports() {
-        return this != EDITOR;
+        return this == OWNER || this == ADMIN || this == ANALYST;
     }
 }

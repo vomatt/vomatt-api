@@ -64,7 +64,7 @@ public class OfficialController {
 
     private static final String ROLES = """
             Roles: OWNER and ADMIN manage members; an ADMIN never changes or removes an OWNER nor grants OWNER. \
-            EDITOR and ANALYST cannot manage members.""";
+            CHIEF_EDITOR, EDITOR and ANALYST cannot manage members.""";
     private static final String NOT_MEMBER = "- 403 `official.not_member`: the caller is not a member of this official account, or it does not exist or is suspended\n";
     private static final String ROLE_FORBIDDEN = "- 403 `official.role_forbidden`: the caller's role does not allow this change\n";
     private static final String MEMBER_NOT_FOUND = "- 404 `official.member.not_found`: the user is not a member\n";
@@ -224,6 +224,7 @@ public class OfficialController {
             **Errors**:
             - 400 `common.validation_failed`: `userId` missing
             - 403 `official.role_forbidden`: the caller is not an OWNER
+            - 409 `common.conflict`: another member change is in progress; retry
             """ + NOT_MEMBER + MEMBER_NOT_FOUND,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = @ExampleObject(name = "Transfer", value = """

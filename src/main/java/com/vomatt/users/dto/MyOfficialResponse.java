@@ -9,5 +9,5 @@ public record MyOfficialResponse(
         @Schema(description = "Official account's username", example = "sunrise_tower") String username,
         @Schema(description = "Group name", example = "Sunrise Tower Committee", nullable = true) String displayName,
         @Schema(description = "Logo as `bot:<kind>` or `/api/avatars/<id>.jpg`; null if never set", example = "/api/avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d49.jpg", nullable = true) String avatarUrl,
-        @Schema(description = "The caller's role: OWNER, ADMIN, EDITOR or ANALYST", example = "EDITOR") OfficialRole role
+        @Schema(description = "The caller's role: OWNER, ADMIN, CHIEF_EDITOR, EDITOR or ANALYST", example = "EDITOR") OfficialRole role
 ) {}

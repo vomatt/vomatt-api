@@ -10,6 +10,6 @@ import java.util.UUID;
 public record OfficialMemberRequest(
         @Schema(description = "The active user to add", example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47")
         @NotNull UUID userId,
-        @Schema(description = "Role: OWNER, ADMIN, EDITOR or ANALYST; only an OWNER can grant OWNER", example = "EDITOR")
+        @Schema(description = "Role: OWNER, ADMIN, CHIEF_EDITOR, EDITOR or ANALYST; only an OWNER can grant OWNER", example = "EDITOR")
         @NotNull OfficialRole role
 ) {}

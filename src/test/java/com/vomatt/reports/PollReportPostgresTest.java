@@ -1,6 +1,10 @@
 package com.vomatt.reports;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -17,10 +21,13 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.retention.RetentionJob;
 import com.vomatt.common.util.TimeUtil;
 import com.vomatt.entity.Gender;
@@ -41,6 +48,7 @@ import com.vomatt.votes.VoteServiceSlice;
 class PollReportPostgresTest extends PostgresRepositoryTest {
 
     @Autowired PollReportService reportService;
+    @MockitoSpyBean PollReportRepository reportRepository;
     @Autowired RetentionJob retentionJob;
     @Autowired TransactionTemplate tx;
 
@@ -101,23 +109,72 @@ class PollReportPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    void shouldSnapshotAnonymousBallotsWhenRetentionRunsBeforeSealing() {
-        User owner = persistUser("rep-ret-owner-" + System.nanoTime());
-        List<User> voters = voters("rep-ret-", 5, LocalDate.of(1990, 1, 1));
-        voters.forEach(v -> v.setGender(Gender.MALE));
-        Vote poll = endedProPoll(owner, voters);
-        // One pre-Pro Anonymous Ballot
-        em.createNativeQuery("UPDATE vomatt.user_votes SET anonymous = TRUE WHERE id = (SELECT id FROM vomatt.user_votes WHERE vote_id = :id LIMIT 1)")
-                .setParameter("id", poll.getId()).executeUpdate();
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void shouldIsolateFailedReportAndKeepItsAnonymousBallotsWhenRetentionRuns() {
+        List<UUID> userIds = new ArrayList<>();
+        // ok: 5 voters, one of them Anonymous (pre-Pro); failing: its report hits a database error; cancelled: no report
+        List<Vote> polls = tx.execute(s -> {
+            User owner = persistUser("rep-ret-owner-" + System.nanoTime());
+            userIds.add(owner.getId());
+            List<Vote> created = new ArrayList<>();
+            for (String prefix : List.of("rep-ret-ok-", "rep-ret-fail-", "rep-ret-cancel-")) {
+                List<User> voters = voters(prefix, prefix.contains("ok") ? 5 : 1, LocalDate.of(1990, 1, 1));
+                voters.forEach(v -> {
+                    v.setGender(Gender.MALE);
+                    userIds.add(v.getId());
+                });
+                created.add(endedProPoll(owner, voters));
+            }
+            em.createNativeQuery("UPDATE vomatt.user_votes SET anonymous = TRUE WHERE id IN (SELECT DISTINCT ON (vote_id) id FROM vomatt.user_votes WHERE vote_id IN (:ids))")
+                    .setParameter("ids", created.stream().map(Vote::getId).toList()).executeUpdate();
+            em.createNativeQuery("UPDATE vomatt.votes SET start_time = end_time WHERE id = :id")
+                    .setParameter("id", created.get(2).getId()).executeUpdate();
+            return created;
+        });
+        UUID ok = polls.get(0).getId();
+        UUID failing = polls.get(1).getId();
+        UUID cancelled = polls.get(2).getId();
+        String ownerId = userIds.getFirst().toString();
+        // A real database error: aborts the Postgres transaction it runs in
+        doAnswer(inv -> em.createNativeQuery("SELECT 1/0").getSingleResult())
+                .when(reportRepository).insertIfAbsent(eq(failing), any(), any());
+        try {
+            RetentionJob.Result result = retentionJob.run(now);
 
-        RetentionJob.Result result = retentionJob.run(now);
+            assertThat(result.pollReports()).isGreaterThanOrEqualTo(1);
+            assertThat(report(ok)).isPresent();
+            assertThat(report(failing)).isEmpty();
+            assertThat(report(cancelled)).isEmpty();
+            // Sealed once the report holds them; the failed Poll's wait for its report, the Cancelled one's do not
+            assertThat(anonymousOptions(ok)).containsOnlyNulls();
+            assertThat(anonymousOptions(failing)).doesNotContainNull().isNotEmpty();
+            assertThat(anonymousOptions(cancelled)).containsOnlyNulls();
+            PollReportResponse report = tx.execute(s -> reportService.getReport(ok.toString(), ownerId));
+            assertThat(report.options()).extracting(PollReportResponse.OptionCount::count).containsExactly(5, 0);
+            assertThat(report.genders()).containsExactly(new Group("MALE", 5, List.of(5, 0)));
+            assertThatThrownBy(() -> tx.execute(s -> reportService.getReport(cancelled.toString(), ownerId)))
+                    .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.REPORT_CANCELLED));
 
-        assertThat(result.pollReports()).isGreaterThanOrEqualTo(1);
-        assertThat(result.sealedBallots()).isGreaterThanOrEqualTo(1);
-        PollReportResponse report = reportService.getReport(poll.getId().toString(), owner.getId().toString());
-        assertThat(report.options()).extracting(PollReportResponse.OptionCount::count).containsExactly(5, 0);
-        assertThat(report.genders()).containsExactly(new Group("MALE", 5, List.of(5, 0)));
-        assertThat(retentionJob.run(now).pollReports()).isZero();
+            org.mockito.Mockito.reset(reportRepository);
+            assertThat(retentionJob.run(now).pollReports()).isGreaterThanOrEqualTo(1);
+            assertThat(report(failing)).isPresent();
+            assertThat(anonymousOptions(failing)).containsOnlyNulls();
+        } finally {
+            tx.executeWithoutResult(s -> {
+                em.createNativeQuery("DELETE FROM vomatt.votes WHERE id IN (:ids)").setParameter("ids", List.of(ok, failing, cancelled)).executeUpdate();
+                em.createNativeQuery("DELETE FROM vomatt.users WHERE id IN (:ids)").setParameter("ids", userIds).executeUpdate();
+            });
+        }
+    }
+
+    private java.util.Optional<String> report(UUID pollId) {
+        return tx.execute(s -> reportRepository.findData(pollId));
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Object> anonymousOptions(UUID pollId) {
+        return tx.execute(s -> em.createNativeQuery("SELECT option_id FROM vomatt.user_votes WHERE vote_id = :id AND anonymous")
+                .setParameter("id", pollId).getResultList());
     }
 
     @Test

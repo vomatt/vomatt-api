@@ -64,11 +64,12 @@ class OfficialServiceTest {
 
     @Test
     void shouldMatchCapabilityTableWhenCheckingRoles() {
-        assertThat(List.of(OfficialRole.values())).extracting(OfficialRole::canManageMembers).containsExactly(true, true, false, false);
-        assertThat(List.of(OfficialRole.values())).extracting(OfficialRole::canEditProfile).containsExactly(true, true, false, false);
-        assertThat(List.of(OfficialRole.values())).extracting(OfficialRole::canPublish).containsExactly(true, true, true, false);
-        assertThat(List.of(OfficialRole.values())).extracting(OfficialRole::canEditAllPolls).containsExactly(true, true, false, false);
-        assertThat(List.of(OfficialRole.values())).extracting(OfficialRole::canReadReports).containsExactly(true, true, false, true);
+        // OWNER, ADMIN, CHIEF_EDITOR, EDITOR, ANALYST
+        assertThat(List.of(OfficialRole.values())).extracting(OfficialRole::canManageMembers).containsExactly(true, true, false, false, false);
+        assertThat(List.of(OfficialRole.values())).extracting(OfficialRole::canEditProfile).containsExactly(true, true, false, false, false);
+        assertThat(List.of(OfficialRole.values())).extracting(OfficialRole::canPublish).containsExactly(true, true, true, true, false);
+        assertThat(List.of(OfficialRole.values())).extracting(OfficialRole::canEditAllContent).containsExactly(true, true, true, false, false);
+        assertThat(List.of(OfficialRole.values())).extracting(OfficialRole::canReadReports).containsExactly(true, true, false, false, true);
     }
 
     // caller role, target's current role, new role, expected error (blank = allowed)
@@ -77,6 +78,8 @@ class OfficialServiceTest {
             "OWNER, EDITOR, OWNER, ",
             "OWNER, OWNER, EDITOR, ",
             "ADMIN, EDITOR, ANALYST, ",
+            "ADMIN, EDITOR, CHIEF_EDITOR, ",
+            "CHIEF_EDITOR, EDITOR, ANALYST, OFFICIAL_ROLE_FORBIDDEN",
             "ADMIN, EDITOR, OWNER, OFFICIAL_ROLE_FORBIDDEN",
             "ADMIN, OWNER, EDITOR, OFFICIAL_ROLE_FORBIDDEN",
             "EDITOR, ANALYST, EDITOR, OFFICIAL_ROLE_FORBIDDEN",
@@ -177,4 +180,14 @@ class OfficialServiceTest {
                 .satisfies(ex -> assertKey(ex, MessageKey.OFFICIAL_ROLE_FORBIDDEN));
     }
 
+
+    @Test
+    void shouldRefuseTransferWhenOwnerWasDemotedBeforeTheLock() {
+        caller(OWNER);
+        // Read as OWNER, but another OWNER demoted the caller before the OWNER rows were locked
+        when(memberRepository.lockOwnerIds(officialId)).thenReturn(List.of(targetId));
+        assertThatThrownBy(() -> service.transferOwner(officialId, targetId, callerId.toString()))
+                .satisfies(ex -> assertKey(ex, MessageKey.OFFICIAL_ROLE_FORBIDDEN));
+        verify(memberRepository, never()).findByOfficialUserIdAndUserId(any(), any());
+    }
 }

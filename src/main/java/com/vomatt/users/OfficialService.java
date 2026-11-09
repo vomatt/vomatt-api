@@ -112,9 +112,13 @@ public class OfficialService {
         log.info("Official account {}: {} removed {}", officialId, callerId, userId);
     }
 
-    /** OWNER only: the member becomes an OWNER and the caller an ADMIN. Transferring to oneself changes nothing. */
+    /**
+     * OWNER only: the member becomes an OWNER and the caller an ADMIN. Transferring to oneself changes nothing. Takes
+     * the OWNER row lock and checks the caller's role under it, so an OWNER demoted concurrently cannot still transfer.
+     */
     public void transferOwner(UUID officialId, UUID userId, String callerId) {
-        if (requireRole(officialId, callerId) != OWNER) {
+        requireRole(officialId, callerId);
+        if (!lockTimeout.within(() -> memberRepository.lockOwnerIds(officialId)).contains(UUID.fromString(callerId))) {
             throw ApiException.forbidden(MessageKey.OFFICIAL_ROLE_FORBIDDEN);
         }
         OfficialMember target = findMember(officialId, userId);

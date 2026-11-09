@@ -33,8 +33,8 @@ import static org.springframework.http.HttpMethod.DELETE;
  * {@link JwtAuthFilter}; a non-member gets 403 {@code official.not_member}. On success the principal becomes the
  * official account and {@link ActingMember} keeps the real member and role. Role rules by route (in
  * {@link SecurityEndpoints}): account and session routes are never reachable this way, the profile routes need
- * OWNER or ADMIN, and any other write needs a role that can publish (ANALYST is read-only); the rest is checked by
- * the services. Without a signed-in caller, and on sign-in, refresh and logout, the header is ignored.
+ * OWNER or ADMIN, member management and marking notifications read take any role, and any other write needs a
+ * role that can publish (ANALYST is read-only); the rest is checked by the services. Without a signed-in caller, and on sign-in, refresh and logout, the header is ignored.
  */
 @Component
 @RequiredArgsConstructor
@@ -47,6 +47,7 @@ public class ActAsFilter extends OncePerRequestFilter {
                     .map(p -> PathPatternRequestMatcher.withDefaults().matcher(DELETE, p)).map(RequestMatcher.class::cast).toList()));
     private static final RequestMatcher PUBLIC_AUTH = JwtAuthFilter.anyOf(SecurityEndpoints.PUBLIC_AUTH);
     private static final RequestMatcher PROFILE = JwtAuthFilter.anyOf(SecurityEndpoints.ACT_AS_PROFILE);
+    private static final RequestMatcher ANY_ROLE = JwtAuthFilter.anyOf(SecurityEndpoints.ACT_AS_ANY_ROLE);
 
     private final OfficialMemberRepository memberRepository;
     private final SecurityErrorWriter errorWriter;
@@ -87,7 +88,7 @@ public class ActAsFilter extends OncePerRequestFilter {
         if (PROFILE.matches(request)) {
             return JwtAuthFilter.READ_METHODS.contains(request.getMethod()) || role.canEditProfile();
         }
-        return JwtAuthFilter.READ_METHODS.contains(request.getMethod()) || role.canPublish();
+        return JwtAuthFilter.READ_METHODS.contains(request.getMethod()) || ANY_ROLE.matches(request) || role.canPublish();
     }
 
     private static UUID parseUuid(String value) {

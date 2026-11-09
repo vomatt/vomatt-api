@@ -36,12 +36,15 @@ public class PollReportRepository {
                 .executeUpdate() == 1;
     }
 
-    /** Ended, not Deleted Pro polls that have no snapshot yet. */
+    /**
+     * Ended, not Deleted, not Cancelled (end at or before start) Pro polls that have no snapshot yet. The same
+     * condition keeps their Anonymous Ballots unsealed ({@code UserVoteRepository#sealAnonymousBallotsOfPollsEndedBy}).
+     */
     @SuppressWarnings("unchecked")
     public List<UUID> findEndedProPollsWithoutReport(OffsetDateTime now) {
         return em.createNativeQuery("""
                 SELECT v.id FROM vomatt.votes v
-                WHERE v.pro AND v.end_time <= :now AND v.deleted_at IS NULL
+                WHERE v.pro AND v.end_time <= :now AND v.deleted_at IS NULL AND v.end_time > v.start_time
                   AND NOT EXISTS (SELECT 1 FROM vomatt.poll_reports r WHERE r.vote_id = v.id)""", UUID.class)
                 .setParameter("now", now).getResultList();
     }

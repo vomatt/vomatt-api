@@ -153,6 +153,11 @@ public class Vote extends AuditableEntity {
         return VoteStatus.OPEN;
     }
 
+    /** Cancelled: Ended without ever opening (end at or before start). */
+    public boolean isCancelled() {
+        return endTime != null && startTime != null && !endTime.isAfter(startTime);
+    }
+
     /** Delete: allowed while Scheduled, or within {@code window} of posting even when it holds Ballots (ADR 0004). */
     public boolean canDeleteAt(OffsetDateTime now, Duration window) {
         return deletedAt == null

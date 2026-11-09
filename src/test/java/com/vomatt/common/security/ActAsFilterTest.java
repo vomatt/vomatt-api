@@ -136,6 +136,16 @@ class ActAsFilterTest {
     }
 
     @Test
+    void shouldAllowMemberRoutesAndMarkingReadWhenActingAsAnalyst() throws Exception {
+        member(OfficialRole.ANALYST);
+        for (var call : List.of(List.of("DELETE", "/api/officials/" + officialId + "/members/" + memberId),
+                List.of("POST", "/api/notifications/comment_x/read"), List.of("POST", "/api/notifications/read-all"))) {
+            signIn();
+            assertThat(run(acting(call.get(0), call.get(1)), new MockHttpServletResponse())).as(call.toString()).isNotNull();
+        }
+    }
+
+    @Test
     void shouldRefuseProfileEditWhenEditor() throws Exception {
         signIn();
         member(OfficialRole.EDITOR);

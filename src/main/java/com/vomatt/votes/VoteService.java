@@ -267,6 +267,24 @@ public class VoteService {
         UserGuard.requireExists(userRepository, userId);
     }
 
+    /** Likes a Poll the caller can see, in any state (no Ballot needed); idempotent, a repeat keeps the first like. */
+    public void like(String voteId, String userId) {
+        Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
+        UUID userUuid = UUID.fromString(userId);
+        if (voteRepository.insertLikeIfAbsent(UUIDv7Generator.generateId(), userUuid, vote.getId()) > 0) {
+            log.info("User {} liked vote {}", userId, voteId);
+        } else if (!voteRepository.existsLiveLike(userUuid, vote.getId())) {
+            requireLiveVote(vote.getId(), userUuid);
+        }
+    }
+
+    /** Removes the caller's like; idempotent, and also for a Poll they can no longer reach. */
+    public void unlike(String voteId, String userId) {
+        if (voteRepository.deleteLike(UUID.fromString(userId), UUID.fromString(voteId)) > 0) {
+            log.info("User {} removed like on vote {}", userId, voteId);
+        }
+    }
+
     /** Removes the caller's bookmark; idempotent, and also for a Poll they can no longer reach. */
     public void unbookmark(String voteId, String userId) {
         if (bookmarkRepository.deleteByUserIdAndVoteId(UUID.fromString(userId), UUID.fromString(voteId)) > 0) {
@@ -938,6 +956,7 @@ public class VoteService {
                 .collect(Collectors.toMap(IdCount::getId, IdCount::getCount));
         // Read only when the page holds the caller's own Polls (the only ones that get deletable)
         Duration deleteWindow = votes.stream().anyMatch(v -> v.isOwnedBy(userId)) ? deleteWindow() : null;
+        Set<UUID> liked = userId == null ? Set.of() : Set.copyOf(voteRepository.findLikedVoteIds(UUID.fromString(userId), ids));
         return votes.stream().map(vote -> {
             VoteResponse response = voteMapper.toResponse(vote, sortedOptions(vote));
             BallotSelection mine = selections.get(vote.getId());
@@ -948,6 +967,7 @@ public class VoteService {
             if (userId != null) {
                 response.setBookmarked(bookmarked.contains(vote.getId()));
             }
+            response.setLikedByMe(liked.contains(vote.getId()));
             if (vote.getAudience() == Audience.INVITE_ONLY) {
                 response.setInviteeCount(inviteeCounts.getOrDefault(vote.getId(), 0L));
             }

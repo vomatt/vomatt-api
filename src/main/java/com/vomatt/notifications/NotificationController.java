@@ -92,7 +92,9 @@ public class NotificationController {
             or it is a Public Poll of a user the caller follows. Gone once the caller casts a Ballot or the Poll Ends. Off by default
             - LIKE: someone else liked the caller's Comment or Reply, on a Poll the caller can see and not in a thread started by a user \
             the caller blocked (as COMMENT). Gone if the like is taken back; liking again is a new, unread LIKE
-            Each kind falls in one `category`: CONVERSATION (COMMENT, MENTION), LIKE (LIKE), POLL_END (RESULT, CANCELLED, CLOSING_SOON), \
+            - POLL_LIKE: someone else liked the caller's Poll (`PUT /api/votes/{voteId}/like`). Gone if the like is taken back; \
+            liking again is a new, unread POLL_LIKE
+            Each kind falls in one `category`: CONVERSATION (COMMENT, MENTION), LIKE (LIKE, POLL_LIKE), POLL_END (RESULT, CANCELLED, CLOSING_SOON), \
             INVITATION (INVITATION), FOLLOW (FOLLOWED). With `category`, only that category is listed; pass the same `category` with \
             every page.
             Kinds switched off in the caller's preferences are left out (FOLLOWED cannot be switched off). Nothing from a suspended user, \

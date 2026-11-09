@@ -84,6 +84,14 @@ public class VoteResponse {
             + "repeat shares by the same user count once. Signed-out shares are not counted", example = "18")
     private long shareCount;
 
+    @Schema(description = "Number of users who liked the Poll (`PUT /api/votes/{voteId}/like`). Visible at all times, also while the results are Sealed",
+            example = "25")
+    private long likeCount;
+
+    @Schema(description = "Whether the caller liked the Poll (`PUT /api/votes/{voteId}/like`); false when the caller is not signed in "
+            + "and in admin views", example = "false")
+    private boolean likedByMe;
+
     @Schema(description = "Who may see which option each Participant chose once the Poll has Ended: NOBODY, OWNER or SIGNED_IN (anyone who can see the Poll). "
             + "Visible at all times so Participants know it before casting a Ballot; fixed once the Poll is Open", example = "OWNER")
     private VoterVisibility voterVisibility;

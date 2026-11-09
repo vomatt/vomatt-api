@@ -9,5 +9,5 @@ public record NotificationPreferencesResponse(
         @Schema(description = "COMMENT; default true", example = "true") boolean comments,
         @Schema(description = "CLOSING_SOON; default false", example = "false") boolean closingSoon,
         @Schema(description = "MENTION; default true", example = "true") boolean mentions,
-        @Schema(description = "LIKE; default true", example = "true") boolean likes
+        @Schema(description = "LIKE and POLL_LIKE; default true", example = "true") boolean likes
 ) {}

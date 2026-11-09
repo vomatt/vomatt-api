@@ -138,7 +138,13 @@ public class NotificationRepository {
                     FROM vomatt.vote_comments c
                     JOIN vomatt.comment_likes l ON l.comment_id = c.id
                     JOIN vomatt.votes v ON v.id = c.vote_id
-                    WHERE c.user_id = :userId AND c.is_deleted = FALSE AND l.user_id <> :userId""" + IN_VISIBLE_THREAD));
+                    WHERE c.user_id = :userId AND c.is_deleted = FALSE AND l.user_id <> :userId""" + IN_VISIBLE_THREAD,
+            // Others' likes on the user's Polls. The owner always sees their Poll, so only Deleted ones are left out; an
+            // unlike deletes the row, so a re-like is a new one
+            NotificationKind.POLL_LIKE, select(NotificationKind.POLL_LIKE, "l.id", "l.created_at", "l.user_id", "v.id", NONE) + """
+                    FROM vomatt.votes v
+                    JOIN vomatt.vote_likes l ON l.vote_id = v.id
+                    WHERE v.creator_id = :userId AND v.deleted_at IS NULL AND l.user_id <> :userId"""));
 
     // Inside each branch, before its LIMIT: nothing from a suspended user, nor from someone the user blocked or who
     // blocked the user

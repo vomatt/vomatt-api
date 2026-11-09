@@ -224,6 +224,7 @@ public class OfficialController {
             **Errors**:
             - 400 `common.validation_failed`: `userId` missing
             - 403 `official.role_forbidden`: the caller is not an OWNER
+            - 409 `common.conflict`: another member change is in progress; retry
             """ + NOT_MEMBER + MEMBER_NOT_FOUND,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = @ExampleObject(name = "Transfer", value = """

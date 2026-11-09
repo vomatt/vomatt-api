@@ -154,6 +154,7 @@ class ActAsFilterTest {
         member(OfficialRole.OWNER);
         for (var call : List.of(List.of("POST", "/api/auth/passkey/register/options"), List.of("GET", "/api/users/me/sessions"),
                 List.of("DELETE", "/api/users/me/passkeys/x"), List.of("GET", "/api/users/me/export"),
+                List.of("POST", "/api/users/me/phone/send-otp"), List.of("POST", "/api/users/me/phone/verify"),
                 List.of("DELETE", "/api/users/" + officialId))) {
             signIn();
             MockHttpServletResponse response = new MockHttpServletResponse();

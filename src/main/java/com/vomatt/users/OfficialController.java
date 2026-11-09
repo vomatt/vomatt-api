@@ -190,9 +190,9 @@ public class OfficialController {
     @Auditable(action = "REMOVE_MEMBER", resourceType = "OFFICIAL", resourceIdIndex = 0)
     @CommonApiResponses
     @Operation(summary = "Remove an official account member", description = """
-            **Auth**: required (OWNER or ADMIN)
+            **Auth**: required (OWNER or ADMIN; any member may remove themself)
             **Precondition**: the user is a member
-            **Behavior**: removes the member. Polls and Comments they published as the account stay, still naming them in `acted_by`. \
+            **Behavior**: removes the member; a member naming their own id leaves, whatever their role. Polls and Comments they published as the account stay, still naming them in `acted_by`. \
             """ + ROLES + """
 
             **Side effects**: the action is audit-logged.

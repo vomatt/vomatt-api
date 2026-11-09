@@ -1723,6 +1723,20 @@ class VoteServiceTest {
         }
 
         @Test
+        void shouldRefuseAddWhenInviteeIsOfficialAccount() {
+            inviteOnly(OffsetDateTime.now().plusDays(1));
+            User official = User.builder().id(UUID.randomUUID()).roles(new String[] { "official" }).build();
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(userRepository.findAllById(Set.of(official.getId()))).thenReturn(List.of(official));
+            InviteesRequest invite = new InviteesRequest();
+            invite.setUserIds(List.of(official.getId()));
+
+            assertThatThrownBy(() -> voteService.addInvitees(voteId.toString(), invite, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.OFFICIAL_INVITEE_NOT_ALLOWED));
+            verify(inviteeRepository, never()).saveAllAndFlush(any());
+        }
+
+        @Test
         @DisplayName("should throw 400 VOTE_INVITEE_IDS_INVALID when an invited user is suspended")
         void shouldRefuseAddWhenUserSuspended() {
             inviteOnly(OffsetDateTime.now().plusDays(1));

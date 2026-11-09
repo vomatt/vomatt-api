@@ -153,6 +153,7 @@ public enum MessageKey {
     OFFICIAL_MEMBER_INVALID("official.member.invalid"),
     OFFICIAL_LAST_OWNER("official.last_owner"),
     OFFICIAL_ROLES_FIXED("official.roles_fixed"),
+    OFFICIAL_INVITEE_NOT_ALLOWED("official.invitee_not_allowed"),
     ;
 
     private final String code;

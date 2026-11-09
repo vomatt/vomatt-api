@@ -99,6 +99,27 @@ class OfficialServiceTest {
     }
 
     @Test
+    void shouldLetMemberLeaveWhenAnalystRemovesThemself() {
+        when(memberRepository.findActiveRole(officialId, targetId)).thenReturn(Optional.of(ANALYST));
+        OfficialMember self = target(ANALYST);
+
+        service.removeMember(officialId, targetId, targetId.toString());
+
+        verify(memberRepository).delete(self);
+    }
+
+    @Test
+    void shouldReturn409WhenLastOwnerLeaves() {
+        when(memberRepository.findActiveRole(officialId, targetId)).thenReturn(Optional.of(OWNER));
+        target(OWNER);
+        when(memberRepository.lockOwnerIds(officialId)).thenReturn(List.of(targetId));
+
+        assertThatThrownBy(() -> service.removeMember(officialId, targetId, targetId.toString()))
+                .satisfies(ex -> assertKey(ex, MessageKey.OFFICIAL_LAST_OWNER));
+        verify(memberRepository, never()).delete(any());
+    }
+
+    @Test
     void shouldRefuseRemovingOwnerWhenCallerIsAdmin() {
         caller(ADMIN);
         target(OWNER);

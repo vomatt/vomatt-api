@@ -97,9 +97,14 @@ public class OfficialService {
         return toResponse(member, userRepository.getReferenceById(userId));
     }
 
+    /** OWNER or ADMIN removes a member; any member may leave on their own. The last OWNER can do neither. */
     public void removeMember(UUID officialId, UUID userId, String callerId) {
+        boolean leaving = userId.toString().equals(callerId);
+        OfficialRole caller = leaving ? requireRole(officialId, callerId) : requireManager(officialId, callerId);
         OfficialMember member = findMember(officialId, userId);
-        requireTouch(requireManager(officialId, callerId), member);
+        if (!leaving) {
+            requireTouch(caller, member);
+        }
         if (member.getRole() == OWNER) {
             requireAnotherOwner(officialId, userId);
         }

@@ -729,6 +729,10 @@ public class VoteService {
         if (users.size() != ids.size()) {
             throw ApiException.badRequest(MessageKey.VOTE_INVITEE_IDS_INVALID);
         }
+        // An official account never votes, so as an Invitee it would only keep the Poll from auto-ending
+        if (users.stream().anyMatch(User::isOfficial)) {
+            throw ApiException.badRequest(MessageKey.OFFICIAL_INVITEE_NOT_ALLOWED);
+        }
         List<Invitee> invited = inviteeRepository.findByVoteId(vote.getId());
         Set<UUID> invitedById = invited.stream().filter(i -> i.getEmail() == null)
             .map(i -> i.getUser().getId()).collect(Collectors.toCollection(HashSet::new));

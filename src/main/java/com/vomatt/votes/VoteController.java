@@ -134,6 +134,7 @@ public class VoteController {
             **Errors**:
                     - 400 `vote.invitee.not_invite_only`: `inviteeIds`, `inviteeEmails` or `inviteListIds` is not empty but `audience` is not INVITE_ONLY
                     - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended (`inviteeEmails` and `inviteListIds` never cause it)
+                    - 400 `official.invitee_not_allowed`: one of `inviteeIds` is an official account
                     - 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true
                     - 400 `vote.options.min`: fewer than 2 options
                     - 400 `vote.options.max`: more options than the limit (default 10, admin-configurable)
@@ -194,6 +195,7 @@ public class VoteController {
             - 400 `vote.not_editable`: the Poll is Open or Ended
             - 400 `vote.invitee.not_invite_only`: `inviteeIds`, `inviteeEmails` or `inviteListIds` is not empty but the resulting Audience is not INVITE_ONLY
             - 400 `vote.invitee.ids_invalid`: one of `inviteeIds` is not an existing user or is suspended (`inviteeEmails` and `inviteListIds` never cause it)
+            - 400 `official.invitee_not_allowed`: one of `inviteeIds` is an official account
             - 400 `vote.multiple.not_allowed`: `allowMultipleChoices` is true
             - 400 `vote.options.min`: fewer than 2 options
             - 400 `vote.options.max`: more options than the limit (default 10, admin-configurable)
@@ -937,6 +939,7 @@ public class VoteController {
             - 400 `vote.invitee.not_invite_only`: the Poll is not INVITE_ONLY
             - 400 `vote.ended`: the Poll has Ended
             - 400 `vote.invitee.ids_invalid`: one of `userIds` is not an existing user or is suspended (`emails` and `inviteListIds` never cause it)
+            - 400 `official.invitee_not_allowed`: one of `userIds` is an official account
             - 400 `common.validation_failed`: `userIds`, `emails` and `inviteListIds` are all empty, `userIds` / `emails` hold more than 100 entries or `inviteListIds` more than 20, a null element or an invalid address
             - 403 `vote.forbidden`: the caller is not the owner
             - 403 `official.role_forbidden`: acting as an official account (`X-Act-As`) as an EDITOR on a Poll another member published, or as an ANALYST

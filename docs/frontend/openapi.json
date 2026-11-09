@@ -2021,6 +2021,38 @@
         },
         "type" : "object"
       },
+      "ApiResponsePollReportResponse" : {
+        "description" : "Envelope of every API response, success or error",
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/PollReportResponse"
+          },
+          "error" : {
+            "description" : "Legacy duplicate of `message` on errors; null on success. Use `message` instead",
+            "example" : "Poll not found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "errorCode" : {
+            "description" : "Stable machine-readable error code (lowercase, dot-separated); branch on this, not on `message`. Null on success",
+            "example" : "vote.not_found",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "message" : {
+            "description" : "Localized text following Accept-Language. On success it is usually null, except operations that attach a toast-ready text; on error it is the error message",
+            "example" : "Operation completed",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "success" : {
+            "description" : "true on success, false on error",
+            "example" : true,
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseSimpleResultResponse" : {
         "description" : "Envelope of every API response, success or error",
         "properties" : {
@@ -3361,6 +3393,34 @@
         "required" : [ "idToken" ],
         "type" : "object"
       },
+      "Group" : {
+        "description" : "One breakdown group. Every group under `minCellSize` voters is merged into `MERGED`; when that is still under it, the next smallest groups join it until it reaches it. If even all voters together are under it, `MERGED` has null `voters` and `counts`",
+        "properties" : {
+          "counts" : {
+            "description" : "Ballots per option, in `options` order; null when suppressed",
+            "items" : {
+              "description" : "Ballots per option, in `options` order; null when suppressed",
+              "format" : "int32",
+              "nullable" : true,
+              "type" : "integer"
+            },
+            "nullable" : true,
+            "type" : "array"
+          },
+          "group" : {
+            "description" : "Group key",
+            "example" : "18-29",
+            "type" : "string"
+          },
+          "voters" : {
+            "description" : "Voters in the group; null when suppressed",
+            "format" : "int32",
+            "nullable" : true,
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "InviteListMemberResponse" : {
         "description" : "A member of an Invite List: a user added by ID, or an email address (never revealing whether it belongs to an account)",
         "nullable" : true,
@@ -4030,6 +4090,22 @@
           }
         },
         "required" : [ "role" ],
+        "type" : "object"
+      },
+      "OptionCount" : {
+        "description" : "One option's Ballot count",
+        "properties" : {
+          "count" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "optionId" : {
+            "type" : "string"
+          },
+          "text" : {
+            "type" : "string"
+          }
+        },
         "type" : "object"
       },
       "PageResponseAdminCommentReportResponse" : {
@@ -4792,6 +4868,58 @@
         },
         "type" : "object"
       },
+      "PollReportResponse" : {
+        "description" : "Result report of an Ended Pro poll: a snapshot taken once after the Poll Ended, aggregates only (no user ids or names)",
+        "nullable" : true,
+        "properties" : {
+          "ageBands" : {
+            "description" : "Ballots by the voter's age at the Poll's end time (Asia/Taipei): `UNDER_18`, `18-29`, `30-39`, `40-49`, `50-59`, `60+`, `NOT_PROVIDED`, then `MERGED`. Groups without voters are left out",
+            "items" : {
+              "$ref" : "#/components/schemas/Group"
+            },
+            "type" : "array"
+          },
+          "genders" : {
+            "description" : "Ballots by gender: `MALE`, `FEMALE`, `OTHER`, `UNDISCLOSED`, `NOT_PROVIDED`, then `MERGED`. Groups without voters are left out",
+            "items" : {
+              "$ref" : "#/components/schemas/Group"
+            },
+            "type" : "array"
+          },
+          "generatedAt" : {
+            "description" : "When the snapshot was taken; later reads return the same snapshot",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "minCellSize" : {
+            "description" : "Smallest group shown in a breakdown (`report_min_cell_size` at generation time)",
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "options" : {
+            "description" : "Every option in display order with its Ballot count; `counts` in each breakdown group follow this order",
+            "items" : {
+              "$ref" : "#/components/schemas/OptionCount"
+            },
+            "type" : "array"
+          },
+          "timeline" : {
+            "$ref" : "#/components/schemas/Timeline"
+          },
+          "title" : {
+            "description" : "Poll title",
+            "type" : "string"
+          },
+          "turnout" : {
+            "$ref" : "#/components/schemas/Turnout"
+          },
+          "voteId" : {
+            "description" : "Poll ID",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "PollSummary" : {
         "description" : "The Poll a notification is about. Carries no per-option counts; the outcome fields are null until the Poll has Ended, so Sealed results stay hidden",
         "nullable" : true,
@@ -5086,6 +5214,55 @@
           "tagId" : {
             "example" : "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70",
             "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "Timeline" : {
+        "description" : "Poll timeline",
+        "properties" : {
+          "closedAt" : {
+            "description" : "When the Poll Ended (`endTime`)",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "createdAt" : {
+            "description" : "When the Poll was created",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "openedAt" : {
+            "description" : "When the Poll opened (`startTime`)",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "revealedAt" : {
+            "description" : "When results were revealed (`revealAt`, or `endTime` when unset)",
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "Turnout" : {
+        "description" : "Turnout",
+        "properties" : {
+          "ballots" : {
+            "description" : "Ballots cast",
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "invitees" : {
+            "description" : "Invitees of an INVITE_ONLY Poll; null for other Audiences",
+            "format" : "int32",
+            "nullable" : true,
+            "type" : "integer"
+          },
+          "rate" : {
+            "description" : "`ballots / invitees` (0-1); null unless INVITE_ONLY with Invitees",
+            "format" : "double",
+            "nullable" : true,
+            "type" : "number"
           }
         },
         "type" : "object"
@@ -22099,6 +22276,141 @@
       }
     },
     "/api/votes/{voteId}/report" : {
+      "get" : {
+        "description" : "**Auth**: required. Readers: the Poll's owner; for a Poll of an official account, members acting as it (`X-Act-As`) whose role may read reports (`OWNER`, `ADMIN`, `ANALYST`; not `EDITOR`)\n**Precondition**: the Poll is a Pro poll (`pro`), has Ended and its `revealAt` (if set) has passed\n**Behavior**: the report is a snapshot taken once after the Poll Ended (on the first read, or by the daily job) and never recomputed, so later profile changes do not move it; `generatedAt` tells when it was taken. Age is the voter's age at the Poll's end time (Asia/Taipei) from their birthday. Small-cell suppression per breakdown: every group with fewer voters than `minCellSize` (admin `config` lookup `report_min_cell_size`, default 5) is merged into `MERGED`; while `MERGED` is still smaller, the next smallest groups join it, and if all voters together are fewer, `MERGED` has null `voters` and `counts`. Option totals are not suppressed. Pre-Pro Anonymous Ballots count like any Ballot; no user id or name appears.\n**Side effects**: the first read after the Poll Ended stores the snapshot\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist or is Deleted\n- 403 `vote.forbidden`: the caller is not the Poll's owner\n- 403 `official.role_forbidden`: acting as the official account with a role that may not read reports (`EDITOR`)\n- 400 `report.not_pro`: the Poll is not a Pro poll\n- 403 `report.not_ready`: the Poll has not Ended or its `revealAt` has not passed\n",
+        "operationId" : "getReport",
+        "parameters" : [ {
+          "description" : "Poll ID",
+          "example" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05",
+          "in" : "path",
+          "name" : "voteId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "Report" : {
+                    "description" : "Report",
+                    "value" : {
+                      "data" : {
+                        "ageBands" : [ {
+                          "counts" : [ 5, 3 ],
+                          "group" : "30-39",
+                          "voters" : 8
+                        }, {
+                          "counts" : [ 6, 4 ],
+                          "group" : "40-49",
+                          "voters" : 10
+                        }, {
+                          "counts" : [ 4, 2 ],
+                          "group" : "MERGED",
+                          "voters" : 6
+                        } ],
+                        "genders" : [ {
+                          "counts" : [ 7, 4 ],
+                          "group" : "MALE",
+                          "voters" : 11
+                        }, {
+                          "counts" : [ 5, 4 ],
+                          "group" : "FEMALE",
+                          "voters" : 9
+                        }, {
+                          "counts" : null,
+                          "group" : "MERGED",
+                          "voters" : null
+                        } ],
+                        "generatedAt" : "2026-10-20T04:30:00Z",
+                        "minCellSize" : 5,
+                        "options" : [ {
+                          "count" : 15,
+                          "optionId" : "0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813",
+                          "text" : "Yes"
+                        }, {
+                          "count" : 9,
+                          "optionId" : "0199f2a4-8d12-7f60-9b17-2a4c8e0d5f39",
+                          "text" : "No"
+                        } ],
+                        "timeline" : {
+                          "closedAt" : "2026-10-19T01:00:00Z",
+                          "createdAt" : "2026-10-09T07:20:31Z",
+                          "openedAt" : "2026-10-12T01:00:00Z",
+                          "revealedAt" : "2026-10-19T01:00:00Z"
+                        },
+                        "title" : "Renovate the lobby this year?",
+                        "turnout" : {
+                          "ballots" : 24,
+                          "invitees" : 30,
+                          "rate" : 0.8
+                        },
+                        "voteId" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05"
+                      },
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePollReportResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Get the result report of a Pro poll",
+        "tags" : [ "Poll report" ]
+      },
       "post" : {
         "description" : "**Auth**: required\n**Precondition**: the caller can reach the Poll (any state: Scheduled, Open or Ended) and did not create it\n**Behavior**: records the report for moderators with `reason` (SPAM, HARASSMENT, HATE, MISINFORMATION or OTHER) and an optional `note` (max 500 characters; blank is stored as none). Idempotent: reporting the same Poll again succeeds and keeps the first report. The owner is not told, and the Poll stays visible until a moderator acts\n**Side effects**: the report is listed in `GET /api/admin/vote-reports` and written to the audit log\n**Errors**:\n- 400 `vote.report.self`: the caller created the Poll\n- 400 `common.validation_failed`: `reason` missing, or `note` over 500 characters\n- 400 `common.bad_request`: `reason` is not one of the values above\n- 404 `vote.not_found`: Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller\n- 404 `user.not_found`: signed-in user no longer exists\n",
         "operationId" : "report",
@@ -22234,6 +22546,86 @@
         },
         "summary" : "Report a Poll",
         "tags" : [ "Vote" ]
+      }
+    },
+    "/api/votes/{voteId}/report.csv" : {
+      "get" : {
+        "description" : "**Auth**: required. Readers: the Poll's owner; for a Poll of an official account, members acting as it (`X-Act-As`) whose role may read reports (`OWNER`, `ADMIN`, `ANALYST`; not `EDITOR`)\n**Precondition**: the Poll is a Pro poll (`pro`), has Ended and its `revealAt` (if set) has passed\n**Behavior**: the same snapshot as `GET /api/votes/{voteId}/report`, as a CSV download for Excel (`text/csv`, UTF-8 with a BOM, CRLF, `Content-Disposition: attachment`). This route alone answers without the `ApiResponse` wrapper; errors are still the JSON `ApiResponse`, so send `Accept: */*` (or include `application/json`). Rows: Poll, Poll ID, Generated at, Created at, Opened at, Closed at, Revealed at, Ballots, Invitees, Turnout rate, Minimum group size; then a blank line and `Option,Ballots` rows; then `Age band,Voters,<option>...` and `Gender,Voters,<option>...` sections (suppressed cells empty). Text starting with `=`, `+`, `-` or `@` gets a leading `'`.\n**Side effects**: the first read after the Poll Ended stores the snapshot\n**Errors**:\n- 404 `vote.not_found`: Poll does not exist or is Deleted\n- 403 `vote.forbidden`: the caller is not the Poll's owner\n- 403 `official.role_forbidden`: acting as the official account with a role that may not read reports (`EDITOR`)\n- 400 `report.not_pro`: the Poll is not a Pro poll\n- 403 `report.not_ready`: the Poll has not Ended or its `revealAt` has not passed\n",
+        "operationId" : "getReportCsv",
+        "parameters" : [ {
+          "description" : "Poll ID",
+          "example" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05",
+          "in" : "path",
+          "name" : "voteId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "text/csv" : {
+                "examples" : {
+                  "Report" : {
+                    "description" : "Report",
+                    "value" : "Poll,Renovate the lobby this year?\r\nPoll ID,0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05\r\nGenerated at,2026-10-20T04:30Z\r\n...\r\nOption,Ballots\r\nYes,15\r\nNo,9\r\n\r\nAge band,Voters,Yes,No\r\n30-39,8,5,3\r\nMERGED,,,\r\n"
+                  }
+                },
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Download the result report of a Pro poll as CSV",
+        "tags" : [ "Poll report" ]
       }
     },
     "/api/votes/{voteId}/results" : {
@@ -23177,6 +23569,9 @@
   }, {
     "description" : "The notification feed: Poll results, Invitations, follows, Comments, mentions, likes and closing-soon reminders, derived when read (no push, no email). Each falls in one category (tab) the feed and the unread count can be filtered by. Kinds can be switched off with `/api/users/me/notification-preferences`",
     "name" : "Notification"
+  }, {
+    "description" : "Result report of an Ended Pro poll: turnout, results, breakdowns by age band and gender, no names",
+    "name" : "Poll report"
   }, {
     "description" : "Comments and Replies on a Poll (path segment `votes` = Poll)",
     "name" : "Vote Comment"

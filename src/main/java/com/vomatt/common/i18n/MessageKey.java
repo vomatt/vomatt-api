@@ -157,6 +157,10 @@ public enum MessageKey {
     VOTE_REVEAL_BEFORE_END("vote.reveal_at.before_end"),
     VOTE_BALLOT_ANONYMOUS_NOT_ALLOWED("vote.ballot.anonymous_not_allowed"),
     VOTE_BALLOT_PHONE_VERIFICATION_REQUIRED("vote.ballot.phone_verification_required"),
+
+    // === Poll reports ===
+    REPORT_NOT_PRO("report.not_pro"),
+    REPORT_NOT_READY("report.not_ready"),
     ;
 
     private final String code;

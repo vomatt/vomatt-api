@@ -1,6 +1,7 @@
 package com.vomatt.common.retention;
 
 import com.vomatt.common.audit.AuditLogRepository;
+import com.vomatt.reports.PollReportService;
 import com.vomatt.repository.InviteeRepository;
 import com.vomatt.repository.UserVoteRepository;
 import com.vomatt.repository.VoteRepository;
@@ -16,6 +17,8 @@ import java.time.OffsetDateTime;
 /**
  * The one place data is removed on a schedule (the retention policy in code):
  * <ul>
+ *   <li>first, Ended Pro polls without a result report get their snapshot (PollReportService), while their Anonymous
+ *       Ballots still hold an option and their unregistered Invitees still count</li>
  *   <li>audit_logs: 180 days; entries whose actor's account no longer exists are anonymized (the rule of account
  *       deletion, applied again for entries that were written while that deletion was uncommitted)</li>
  *   <li>vote_invitation_emails and vote_invitees without an account: 30 days after their Poll ended</li>
@@ -42,19 +45,20 @@ public class RetentionJob {
     private final InviteeRepository inviteeRepository;
     private final UserVoteRepository userVoteRepository;
     private final VoteRepository voteRepository;
+    private final PollReportService pollReportService;
 
     /** Rows touched by one run; all zero when another instance held the lock. */
-    public record Result(int auditLogs, int orphanedAuditActors, int invitationEmails, int unregisteredInvitees, int sealedBallots,
-            int viewHours) {
-        static final Result SKIPPED = new Result(0, 0, 0, 0, 0, 0);
+    public record Result(int auditLogs, int orphanedAuditActors, int invitationEmails, int unregisteredInvitees, int pollReports,
+            int sealedBallots, int viewHours) {
+        static final Result SKIPPED = new Result(0, 0, 0, 0, 0, 0, 0);
     }
 
     @Scheduled(cron = "${app.retention.cron:0 30 4 * * *}", zone = "UTC")
     public void runDaily() {
         try {
             Result result = run(OffsetDateTime.now());
-            log.info("retention.run audit_logs={} orphaned_audit_actors={} invitation_emails={} unregistered_invitees={} sealed_ballots={} view_hours={}",
-                    result.auditLogs(), result.orphanedAuditActors(), result.invitationEmails(), result.unregisteredInvitees(),
+            log.info("retention.run audit_logs={} orphaned_audit_actors={} invitation_emails={} unregistered_invitees={} poll_reports={} sealed_ballots={} view_hours={}",
+                    result.auditLogs(), result.orphanedAuditActors(), result.invitationEmails(), result.unregisteredInvitees(), result.pollReports(),
                     result.sealedBallots(), result.viewHours());
         } catch (RuntimeException e) {
             log.error("retention.run failed", e);
@@ -68,11 +72,14 @@ public class RetentionJob {
                 log.info("retention.run skipped: another instance holds the lock");
                 return Result.SKIPPED;
             }
+            // First: a report counts every Ballot by its option and every Invitee, before sealing and invitee cleanup
+            int pollReports = pollReportService.generateMissing(now);
             return new Result(
                     auditLogRepository.deleteCreatedBefore(now.minus(AUDIT_LOG_RETENTION)),
                     auditLogRepository.anonymizeOrphanedActors(),
                     inviteeRepository.deleteInvitationEmailsOfPollsEndedBefore(now.minus(UNREGISTERED_INVITEE_RETENTION)),
                     inviteeRepository.deleteUnregisteredOfPollsEndedBefore(now.minus(UNREGISTERED_INVITEE_RETENTION)),
+                    pollReports,
                     userVoteRepository.sealAnonymousBallotsOfPollsEndedBy(now),
                     voteRepository.deleteViewHoursBefore(now.minus(VIEW_HOUR_RETENTION)));
         });

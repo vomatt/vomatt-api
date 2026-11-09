@@ -86,7 +86,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `vote.multiple.not_allowed` | 400 | 此投票不允許複選 | Multiple choices not allowed for this vote | Show message so the user can fix the input | VoteService |
 | `vote.end_time.past` | 400 | 結束時間不可早於現在 | End time cannot be in the past | Show message so the user can fix the input | VoteService |
 | `vote.end_time.before_start` | 400 | 結束時間不可早於開始時間 | End time cannot be before start time | Show message so the user can fix the input | VoteService |
-| `vote.forbidden` | 403 | 只有投票建立者可執行此操作 | Only the vote creator can perform this action | Show a permission-denied notice | VoteService |
+| `vote.forbidden` | 403 | 只有投票建立者可執行此操作 | Only the vote creator can perform this action | Show a permission-denied notice | PollReportService, VoteService |
 | `vote.delete.window_passed` | 400 | 投票發布超過 {0} 分鐘後，只有尚未開始的投票可以刪除 | A Poll can only be deleted while it is scheduled or within {0} minutes of posting | Show message so the user can fix the input | VoteService |
 | `vote.close.public_not_allowed` | 400 | 公開投票不可提早結束，會持續到截止時間 | A Public Poll cannot be closed early; it runs until its deadline | Show message so the user can fix the input | Vote |
 | `vote.close.scheduled` | 400 | 尚未開始的投票無法結束，請改為刪除 | A scheduled Poll cannot be closed; delete it instead | Show message so the user can fix the input | Vote |
@@ -118,7 +118,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.official_sign_in_not_allowed` | 403 | 官方帳號無法登入，請以成員身分登入後切換 | Official accounts cannot sign in; sign in as a member and switch to the account | Show a permission-denied notice | AuthService |
 | `vote.ballot.official_not_allowed` | 403 | 官方帳號不能投票 | Official accounts cannot vote | Show a permission-denied notice | VoteService |
 | `official.not_member` | 403 | 你不是此官方帳號的成員 | You are not a member of this official account | Show a permission-denied notice | ActAsFilter, OfficialService |
-| `official.role_forbidden` | 403 | 你在此官方帳號的角色無權執行此操作 | Your role in this official account does not allow this action | Show a permission-denied notice | ActAsFilter, OfficialService, VoteService |
+| `official.role_forbidden` | 403 | 你在此官方帳號的角色無權執行此操作 | Your role in this official account does not allow this action | Show a permission-denied notice | ActAsFilter, OfficialService, PollReportService, VoteService |
 | `official.member.not_found` | 404 | 此用戶不是該官方帳號的成員 | This user is not a member of the official account | Show resource not found | OfficialService |
 | `official.member.exists` | 409 | 此用戶已是該官方帳號的成員 | This user is already a member of the official account | Show message (resource state conflict) | OfficialService |
 | `official.member.invalid` | 400 | 此用戶無法成為官方帳號成員 | This user cannot become a member of an official account | Show message so the user can fix the input | OfficialService |
@@ -128,6 +128,8 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `vote.reveal_at.before_end` | 400 | 公布結果時間不可早於結束時間 | Reveal time cannot be before the end time | Show message so the user can fix the input | VoteService |
 | `vote.ballot.anonymous_not_allowed` | 400 | Pro 投票不接受匿名投票 | Anonymous ballots are not allowed in a Pro poll | Show message so the user can fix the input | VoteService |
 | `vote.ballot.phone_verification_required` | 403 | 請先驗證手機號碼才能參與此投票 | Verify your phone number to vote in this poll | Show a permission-denied notice | VoteService |
+| `report.not_pro` | 400 | 只有 Pro 投票提供結果報告 | Result reports are available only for Pro polls | Show message so the user can fix the input | PollReportService |
+| `report.not_ready` | 403 | 投票結束並公布結果後才能查看報告 | The report is available once the poll has ended and its results are revealed | Show a permission-denied notice | PollReportService |
 
 ## Success messages and others
 

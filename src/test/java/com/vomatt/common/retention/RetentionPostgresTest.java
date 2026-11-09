@@ -17,7 +17,8 @@ import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
 import com.vomatt.repository.PostgresRepositoryTest;
 
-@Import(RetentionJob.class)
+@Import({ RetentionJob.class, com.vomatt.reports.PollReportService.class, com.vomatt.repository.PollReportRepository.class,
+        com.vomatt.votes.VoteServiceSlice.class, com.vomatt.users.OfficialService.class, com.vomatt.users.UserMapper.class })
 @DisplayName("RetentionJob (Postgres)")
 class RetentionPostgresTest extends PostgresRepositoryTest {
 

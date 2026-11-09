@@ -78,22 +78,26 @@ public class NotificationRepository {
         return (kind == NotificationKind.MENTION ? NotificationKind.COMMENT : kind).name();
     }
 
+    // When a Poll's results unseal (Vote.isResultsSealed); GREATEST skips a null reveal_at
+    private static final String RESULT_AT = "GREATEST(v.end_time, v.reveal_at)";
+
     // Branches bind :userId, and :now and :soon where they use them. A row's created_at does not change while it is
     // listed and is at most :now when it joins the feed, which keeps the (created_at, source_id) keyset sound
     private static final Map<NotificationKind, String> BRANCHES = new EnumMap<>(Map.of(
             // Ended Polls the user owns, holds a Ballot in, is invited to or bookmarked before they Ended, once each (the
             // arms' rows are equal, so UNION merges them); Polls Cancelled before they opened are CANCELLED. A bookmarked
             // Invite-only Poll counts only through ownership or invitation, so a removed Invitee's bookmark gives nothing.
-            // A Poll that Ended with Turnout 0 has no result to announce, so it gives no RESULT
-            NotificationKind.RESULT, select(NotificationKind.RESULT, "v.id", "v.end_time", NONE, "v.id", NONE) + """
+            // A Poll that Ended with Turnout 0 has no result to announce, so it gives no RESULT. It arrives once the results
+            // unseal (RESULT_AT: the reveal time when set, which is fixed once the Poll is Open and never before its end)
+            NotificationKind.RESULT, select(NotificationKind.RESULT, "v.id", RESULT_AT, NONE, "v.id", NONE) + """
                     FROM vomatt.votes v
-                    WHERE v.deleted_at IS NULL AND v.end_time <= :now AND v.end_time > v.start_time AND v.turnout > 0 AND v.id IN %s
+                    WHERE v.deleted_at IS NULL AND %s <= :now AND v.end_time > v.start_time AND v.turnout > 0 AND v.id IN %s
                     UNION
-                    """.formatted(VoteListRepository.MY_POLL_IDS)
-                    + select(NotificationKind.RESULT, "v.id", "v.end_time", NONE, "v.id", NONE) + """
+                    """.formatted(RESULT_AT, VoteListRepository.MY_POLL_IDS)
+                    + select(NotificationKind.RESULT, "v.id", RESULT_AT, NONE, "v.id", NONE) + """
                     FROM vomatt.vote_bookmarks bm JOIN vomatt.votes v ON v.id = bm.vote_id
                     WHERE bm.user_id = :userId AND bm.created_at < v.end_time AND v.audience <> 'INVITE_ONLY'
-                      AND v.deleted_at IS NULL AND v.end_time <= :now AND v.end_time > v.start_time AND v.turnout > 0""",
+                      AND v.deleted_at IS NULL AND %s <= :now AND v.end_time > v.start_time AND v.turnout > 0""".formatted(RESULT_AT),
             // Once per Poll, however many Invitee rows (by ID and by address) the user has there
             NotificationKind.CANCELLED, select(NotificationKind.CANCELLED, "v.id", "v.end_time", "v.creator_id", "v.id", NONE) + """
                     FROM vomatt.votes v

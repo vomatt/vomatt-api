@@ -125,6 +125,9 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `official.last_owner` | 409 | 官方帳號至少需保留一位擁有者 | An official account must keep at least one owner | Show message (resource state conflict) | OfficialService, UserService |
 | `official.roles_fixed` | 400 | 官方帳號的角色不能變更 | The roles of an official account cannot be changed | Show message so the user can fix the input | AdminUserService |
 | `official.invitee_not_allowed` | 400 | 官方帳號不能被邀請投票或加入邀請名單 | An official account cannot be invited to a poll or added to an invite list | Show message so the user can fix the input | InviteListService, VoteService |
+| `vote.reveal_at.before_end` | 400 | 公布結果時間不可早於結束時間 | Reveal time cannot be before the end time | Show message so the user can fix the input | VoteService |
+| `vote.ballot.anonymous_not_allowed` | 400 | Pro 投票不接受匿名投票 | Anonymous ballots are not allowed in a Pro poll | Show message so the user can fix the input | VoteService |
+| `vote.ballot.phone_verification_required` | 403 | 請先驗證手機號碼才能參與此投票 | Verify your phone number to vote in this poll | Show a permission-denied notice | VoteService |
 
 ## Success messages and others
 

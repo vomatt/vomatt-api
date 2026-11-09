@@ -2,6 +2,7 @@ package com.vomatt.users.dto;
 
 import com.vomatt.common.constant.ReservedUsernames;
 import com.vomatt.users.BotAvatar; 
+import com.vomatt.entity.Gender;
 import io.swagger.v3.oas.annotations.media.Schema;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.vomatt.common.util.TimeUtil;
@@ -44,6 +45,11 @@ public class UpdateProfileRequest {
     @Schema(description = "New birthday as an ISO date (yyyy-MM-dd), from 1900-01-01 to yesterday in Asia/Taipei; null or omitted keeps the current value. "
             + "Cannot be cleared once set", example = "1995-04-12", nullable = true)
     private LocalDate birthday;
+
+    @Schema(description = "New gender, used only in aggregate Poll result breakdowns and shown on the public profile only when "
+            + "made visible (`gender` visibility, hidden by default); null or omitted keeps the current value. Cannot be cleared once set "
+            + "(send UNDISCLOSED instead)", example = "FEMALE", nullable = true)
+    private Gender gender;
 
     @Schema(description = "New bio (max 500 characters); null or omitted keeps the current value",
             example = "Poll enthusiast", maxLength = 500, nullable = true)

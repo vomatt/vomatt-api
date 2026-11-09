@@ -2465,6 +2465,19 @@
         },
         "type" : "object"
       },
+      "BindPhoneSendOtpRequest" : {
+        "description" : "Request to send an SMS OTP for binding a phone number to the caller's account",
+        "properties" : {
+          "phone" : {
+            "description" : "Phone number: a Taiwan mobile number (09xxxxxxxx) or E.164 (+ country code and number). Spaces, '-', '(' and ')' are ignored; stored and matched as E.164",
+            "example" : "0912345678",
+            "minLength" : 1,
+            "type" : "string"
+          }
+        },
+        "required" : [ "phone" ],
+        "type" : "object"
+      },
       "BookmarkExport" : {
         "description" : "A Poll the caller bookmarked",
         "properties" : {
@@ -3542,6 +3555,13 @@
             "format" : "int32",
             "type" : "integer"
           },
+          "gender" : {
+            "description" : "Gender; null if not provided",
+            "enum" : [ "MALE", "FEMALE", "OTHER", "UNDISCLOSED" ],
+            "example" : "FEMALE",
+            "nullable" : true,
+            "type" : "string"
+          },
           "id" : {
             "description" : "User id (UUIDv7)",
             "example" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
@@ -3578,6 +3598,11 @@
             "nullable" : true,
             "type" : "string"
           },
+          "phoneVerified" : {
+            "description" : "Whether `phoneNumber` was verified by SMS OTP (phone sign-up or `POST /api/users/me/phone/verify`); false when there is no phone number",
+            "example" : true,
+            "type" : "boolean"
+          },
           "totalPolls" : {
             "description" : "Number of Polls the user created that have opened (Open and Ended; Scheduled and Cancelled-before-opening excluded)",
             "example" : 4,
@@ -3597,11 +3622,11 @@
           },
           "visibilitySettings" : {
             "additionalProperties" : {
-              "description" : "Field name to visible flag, i.e. what other users see on the public profile; keys: email, firstName, lastName, birthday, location, displayName, bio",
+              "description" : "Field name to visible flag, i.e. what other users see on the public profile; keys: firstName, lastName, location, displayName, bio, gender",
               "example" : false,
               "type" : "boolean"
             },
-            "description" : "Field name to visible flag, i.e. what other users see on the public profile; keys: email, firstName, lastName, birthday, location, displayName, bio",
+            "description" : "Field name to visible flag, i.e. what other users see on the public profile; keys: firstName, lastName, location, displayName, bio, gender",
             "example" : {
               "bio" : true,
               "displayName" : true,
@@ -4990,6 +5015,13 @@
             "nullable" : true,
             "type" : "string"
           },
+          "gender" : {
+            "description" : "New gender, used only in aggregate Poll result breakdowns and shown on the public profile only when made visible (`gender` visibility, hidden by default); null or omitted keeps the current value. Cannot be cleared once set (send UNDISCLOSED instead)",
+            "enum" : [ "MALE", "FEMALE", "OTHER", "UNDISCLOSED" ],
+            "example" : "FEMALE",
+            "nullable" : true,
+            "type" : "string"
+          },
           "lastName" : {
             "description" : "New last name (max 50 characters, surrounding whitespace removed); null or omitted keeps the current value",
             "example" : "Chen",
@@ -5070,11 +5102,11 @@
         "properties" : {
           "visibility" : {
             "additionalProperties" : {
-              "description" : "Field name to visible flag. Allowed keys: firstName, lastName, location, displayName, bio. Omitted fields keep their current setting; unknown keys (including email and birthday, which are never public) are ignored",
+              "description" : "Field name to visible flag. Allowed keys: firstName, lastName, location, displayName, bio, gender. Omitted fields keep their current setting; unknown keys (including email and birthday, which are never public) are ignored",
               "example" : false,
               "type" : "boolean"
             },
-            "description" : "Field name to visible flag. Allowed keys: firstName, lastName, location, displayName, bio. Omitted fields keep their current setting; unknown keys (including email and birthday, which are never public) are ignored",
+            "description" : "Field name to visible flag. Allowed keys: firstName, lastName, location, displayName, bio, gender. Omitted fields keep their current setting; unknown keys (including email and birthday, which are never public) are ignored",
             "example" : {
               "firstName" : true,
               "location" : false
@@ -5295,6 +5327,13 @@
             "example" : true,
             "nullable" : true,
             "type" : "boolean"
+          },
+          "gender" : {
+            "description" : "Gender; null when hidden (default) or not provided",
+            "enum" : [ "MALE", "FEMALE", "OTHER", "UNDISCLOSED" ],
+            "example" : "FEMALE",
+            "nullable" : true,
+            "type" : "string"
           },
           "id" : {
             "description" : "User id",
@@ -14428,12 +14467,14 @@
                     "firstName" : "Alice",
                     "followersCount" : 12,
                     "followingCount" : 8,
+                    "gender" : "FEMALE",
                     "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
                     "joinedAt" : "2026-08-01T10:00:00+08:00",
                     "lastLoginAt" : "2026-10-09T09:15:00+08:00",
                     "lastName" : "Chen",
                     "location" : "Taipei",
                     "phoneNumber" : null,
+                    "phoneVerified" : false,
                     "totalPolls" : 4,
                     "totalVotes" : 17,
                     "username" : "alice",
@@ -14441,6 +14482,7 @@
                       "bio" : true,
                       "displayName" : true,
                       "firstName" : false,
+                      "gender" : false,
                       "lastName" : false,
                       "location" : false
                     }
@@ -14523,7 +14565,7 @@
         "tags" : [ "User" ]
       },
       "patch" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: updates `username`, `displayName`, `firstName`, `lastName`, `birthday`, `bio`, `avatarUrl` and/or `anonymousBallotByDefault` (the default for Ballots that omit `anonymous`; existing Ballots are unchanged). `avatarUrl` must be `bot:<kind>` with one of the bot cast kinds, or `bot:none` for no character; an uploaded image is set only through `PUT /api/users/me/avatar`, and switching to a bot avatar deletes the uploaded image once the change commits. `firstName` and `lastName` are stored without surrounding whitespace, and a blank value clears them. `birthday` is an ISO date (`yyyy-MM-dd`) from 1900-01-01 to yesterday in Asia/Taipei. Sending the current `username` is a no-op, except that an older account holding a reserved name gets 400 (omit `username` when unchanged). A field that is omitted or `null` is left unchanged (`null` cannot be used to clear a value; send an empty string instead, except `avatarUrl` and `birthday`, which cannot be cleared). Returns the caller's profile after the update: optional fields the caller explicitly hid are `null`, fields whose visibility was never set are shown.\n**Side effects**: persists the new values; after a `username` change the old public profile path returns 404\n**Errors**:\n- 400 `common.validation_failed`: `username` is not 3-50 characters of [a-z0-9_] or is a reserved name (see the `username` schema), `displayName` exceeds 100 characters, `firstName` or `lastName` exceeds 50 characters, `birthday` is before 1900-01-01 or not before today (Asia/Taipei), `bio` exceeds 500 characters, or `avatarUrl` is not a known `bot:<kind>` or `bot:none`\n- 400 `common.bad_request`: `birthday` is not a valid `yyyy-MM-dd` date\n- 404 `user.not_found`: the account no longer exists\n- 409 `user.username.taken`: another account already uses `username`",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: updates `username`, `displayName`, `firstName`, `lastName`, `birthday`, `gender`, `bio`, `avatarUrl` and/or `anonymousBallotByDefault` (the default for Ballots that omit `anonymous`; existing Ballots are unchanged). `avatarUrl` must be `bot:<kind>` with one of the bot cast kinds, or `bot:none` for no character; an uploaded image is set only through `PUT /api/users/me/avatar`, and switching to a bot avatar deletes the uploaded image once the change commits. `firstName` and `lastName` are stored without surrounding whitespace, and a blank value clears them. `birthday` is an ISO date (`yyyy-MM-dd`) from 1900-01-01 to yesterday in Asia/Taipei. `gender` is one of `MALE`, `FEMALE`, `OTHER`, `UNDISCLOSED` (hidden on the public profile unless made visible). Sending the current `username` is a no-op, except that an older account holding a reserved name gets 400 (omit `username` when unchanged). A field that is omitted or `null` is left unchanged (`null` cannot be used to clear a value; send an empty string instead, except `avatarUrl`, `birthday` and `gender`, which cannot be cleared). Returns the caller's profile after the update: optional fields the caller explicitly hid are `null`, fields whose visibility was never set are shown.\n**Side effects**: persists the new values; after a `username` change the old public profile path returns 404\n**Errors**:\n- 400 `common.validation_failed`: `username` is not 3-50 characters of [a-z0-9_] or is a reserved name (see the `username` schema), `displayName` exceeds 100 characters, `firstName` or `lastName` exceeds 50 characters, `birthday` is before 1900-01-01 or not before today (Asia/Taipei), `bio` exceeds 500 characters, or `avatarUrl` is not a known `bot:<kind>` or `bot:none`\n- 400 `common.bad_request`: `birthday` is not a valid `yyyy-MM-dd` date, or `gender` is not one of the allowed values\n- 404 `user.not_found`: the account no longer exists\n- 409 `user.username.taken`: another account already uses `username`",
         "operationId" : "updateMyProfile",
         "requestBody" : {
           "content" : {
@@ -14545,6 +14587,7 @@
                     "bio" : "Poll enthusiast",
                     "displayName" : "Alice C.",
                     "firstName" : "Alice",
+                    "gender" : null,
                     "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
                     "isBlocked" : false,
                     "isFollowing" : false,
@@ -14680,6 +14723,7 @@
                     "bio" : "Poll enthusiast",
                     "displayName" : "Alice C.",
                     "firstName" : "Alice",
+                    "gender" : null,
                     "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
                     "isBlocked" : false,
                     "isFollowing" : false,
@@ -15130,12 +15174,14 @@
                       "firstName" : "Alice",
                       "followersCount" : 0,
                       "followingCount" : 1,
+                      "gender" : "FEMALE",
                       "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
                       "joinedAt" : "2026-08-01T10:00:00+08:00",
                       "lastLoginAt" : "2026-10-09T09:15:00+08:00",
                       "lastName" : "Chen",
                       "location" : "Taipei",
                       "phoneNumber" : null,
+                      "phoneVerified" : false,
                       "totalPolls" : 1,
                       "totalVotes" : 1,
                       "username" : "alice",
@@ -15143,6 +15189,7 @@
                         "bio" : true,
                         "displayName" : true,
                         "firstName" : false,
+                        "gender" : false,
                         "lastName" : false,
                         "location" : true
                       }
@@ -15868,6 +15915,243 @@
         "tags" : [ "User" ]
       }
     },
+    "/api/users/me/phone/send-otp" : {
+      "post" : {
+        "description" : "**Auth**: required\n**Precondition**: none; a number already used by another account gets the same response, which is told only by `POST /api/users/me/phone/verify`\n**Behavior**: normalizes the number to E.164 (`0912345678` and `+886912345678` are the same number), generates a 6-digit OTP, stores it with a TTL (default 180 s) and sends it by SMS. The code only binds a phone (`POST /api/users/me/phone/verify`); it cannot sign in, and a sign-in code from `POST /api/auth/phone/send-otp` cannot bind\n**Side effects**: sends an SMS; replaces any previous bind OTP for this number. A resend is refused during the cooldown (default 180 s), and each IP can request at most 5 bind OTPs for one number per UTC day, and all IPs together 15\n**Errors**:\n- 400 `auth.phone.invalid`: the number is neither a Taiwan mobile number (`09` + 8 digits) nor `+` country code and number (8-15 digits)\n- 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left\n- 400 `auth.sms.send_failed`: the SMS provider rejected the message; the OTP is dropped and a resend is allowed after 30 s\n- 401 `auth.otp.too_many_attempts`: binding this number is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours)\n- 429 `auth.otp.daily_limit`: 5 bind OTPs were already requested for this number from this IP today (UTC), or 15 from all IPs",
+        "operationId" : "sendPhoneBindOtp",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "example" : {
+                "phone" : "0912345678"
+              },
+              "schema" : {
+                "$ref" : "#/components/schemas/BindPhoneSendOtpRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : {
+                    "success" : true
+                  },
+                  "error" : null,
+                  "errorCode" : null,
+                  "message" : null,
+                  "success" : true
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseSimpleResultResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Send phone bind OTP",
+        "tags" : [ "User" ]
+      }
+    },
+    "/api/users/me/phone/verify" : {
+      "post" : {
+        "description" : "**Auth**: required\n**Precondition**: a bind OTP was sent to this number via `POST /api/users/me/phone/send-otp` and has not expired\n**Behavior**: normalizes the number to E.164 like send-otp, consumes the OTP, then sets the caller's `phoneNumber` to it and marks it verified. Binding a different number replaces the old one, verified by this OTP; re-verifying the current number only refreshes its verification. Returns the caller's profile as `GET /api/users/me` does, with `phoneVerified` true\n**Side effects**: the OTP is consumed on success (also when the number turns out to be taken). Wrong codes are counted per number and client IP as on sign-in: the 3rd wrong code locks binding this number for the caller's IP (5 minutes, doubling up to 24 hours), and one OTP allows 10 guesses in total across all IPs. Once bound, the number also signs in to this account through `POST /api/auth/phone/verify-otp`\n**Errors**:\n- 400 `auth.phone.invalid`: the number is not in a supported format (see send-otp)\n- 401 `auth.otp.invalid_or_expired`: no bind OTP exists for this number (never sent, expired, already used, or its 10 guesses are used up)\n- 401 `auth.invalid_otp`: the code is wrong\n- 401 `auth.otp.too_many_attempts`: 3rd wrong code, or binding this number is locked for the caller's IP\n- 404 `user.not_found`: the account no longer exists\n- 409 `user.phone.taken`: another account already uses this number\n- 409 `common.conflict`: another account bound the same number at the same moment",
+        "operationId" : "verifyPhoneBind",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "example" : {
+                "code" : "123456",
+                "phone" : "0912345678"
+              },
+              "schema" : {
+                "$ref" : "#/components/schemas/PhoneVerifyOtpRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : {
+                    "active" : true,
+                    "anonymousBallotByDefault" : false,
+                    "avatarUrl" : "bot:boba",
+                    "bio" : "Poll enthusiast",
+                    "birthday" : "1995-04-12",
+                    "createdPollCount" : 6,
+                    "displayName" : "Alice",
+                    "email" : "alice@example.com",
+                    "firstName" : "Alice",
+                    "followersCount" : 12,
+                    "followingCount" : 8,
+                    "gender" : "FEMALE",
+                    "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
+                    "joinedAt" : "2026-08-01T10:00:00+08:00",
+                    "lastLoginAt" : "2026-10-09T09:15:00+08:00",
+                    "lastName" : "Chen",
+                    "location" : "Taipei",
+                    "phoneNumber" : "+886912345678",
+                    "phoneVerified" : true,
+                    "totalPolls" : 4,
+                    "totalVotes" : 17,
+                    "username" : "alice",
+                    "visibilitySettings" : {
+                      "bio" : true,
+                      "displayName" : true,
+                      "firstName" : false,
+                      "gender" : false,
+                      "lastName" : false,
+                      "location" : false
+                    },
+                    "votedPollCount" : 21
+                  },
+                  "error" : null,
+                  "errorCode" : null,
+                  "message" : null,
+                  "success" : true
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseMyProfileResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : null,
+                  "error" : "User not found",
+                  "errorCode" : "user.not_found",
+                  "message" : "User not found",
+                  "success" : false
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Account no longer exists (errorCode `user.not_found`)"
+          },
+          "409" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : null,
+                  "error" : "Phone number already in use",
+                  "errorCode" : "user.phone.taken",
+                  "message" : "Phone number already in use",
+                  "success" : false
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Number already used by another account (errorCode `user.phone.taken`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Verify phone bind OTP",
+        "tags" : [ "User" ]
+      }
+    },
     "/api/users/me/sessions" : {
       "delete" : {
         "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: ends every session of the caller except the calling one, at once, like `DELETE /api/users/me/sessions/{sessionId}` on each. Succeeds when there is nothing else to sign out\n**Side effects**: the sign-out is written to the audit log\n**Errors**:\n- 400 `common.bad_request`: `scope` is not `others`\n- 400 `common.missing_param`: `scope` is missing",
@@ -16163,6 +16447,7 @@
                     "bio" : true,
                     "displayName" : true,
                     "firstName" : true,
+                    "gender" : false,
                     "lastName" : true,
                     "location" : false
                   },
@@ -16460,7 +16745,7 @@
     },
     "/api/users/{username}" : {
       "get" : {
-        "description" : "**Auth**: public; optional login fills `isFollowing`, `followsYou`, `isBlocked`, `mutualFollowersCount` and `mutualFollowersPreview`. An invalid or expired token is treated as signed out\n**Precondition**: none\n**Behavior**: returns the public view of a user. `isFollowing` / `isBlocked` say whether the caller follows / has blocked the user, and `followsYou` whether the user follows the caller: `null` when signed out, `false` on the caller's own profile. `mutualFollowersCount` counts the users in `GET /api/users/{username}/mutual-followers` (this user's followers whom the caller follows) and `mutualFollowersPreview` holds the first 3 of them (most recently followed first; `[]` when there are none): both `null` when signed out and on the caller's own profile. `followersCount` / `followingCount` count the users in `GET /api/users/{username}/followers` / `/following` (suspended accounts left out, blocks not filtered). Profile fields do not depend on the caller. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` (Public, non-Deleted Polls only) are always present (`avatarUrl` is `null` when never set). Every optional field is `null` unless the owner made it visible: `displayName` and `bio` are visible by default, `firstName`, `lastName` and `location` are hidden by default; email and birthday are never returned. `totalPolls` counts only Polls that have opened (Open and Ended), matching `GET /api/users/{username}/votes`.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended",
+        "description" : "**Auth**: public; optional login fills `isFollowing`, `followsYou`, `isBlocked`, `mutualFollowersCount` and `mutualFollowersPreview`. An invalid or expired token is treated as signed out\n**Precondition**: none\n**Behavior**: returns the public view of a user. `isFollowing` / `isBlocked` say whether the caller follows / has blocked the user, and `followsYou` whether the user follows the caller: `null` when signed out, `false` on the caller's own profile. `mutualFollowersCount` counts the users in `GET /api/users/{username}/mutual-followers` (this user's followers whom the caller follows) and `mutualFollowersPreview` holds the first 3 of them (most recently followed first; `[]` when there are none): both `null` when signed out and on the caller's own profile. `followersCount` / `followingCount` count the users in `GET /api/users/{username}/followers` / `/following` (suspended accounts left out, blocks not filtered). Profile fields do not depend on the caller. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` (Public, non-Deleted Polls only) are always present (`avatarUrl` is `null` when never set). Every optional field is `null` unless the owner made it visible: `displayName` and `bio` are visible by default, `firstName`, `lastName`, `location` and `gender` are hidden by default; email, phone number and birthday are never returned. `totalPolls` counts only Polls that have opened (Open and Ended), matching `GET /api/users/{username}/votes`.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: no user has this username, or the user is suspended",
         "operationId" : "getUserProfile",
         "parameters" : [ {
           "description" : "Username of the user to look up",
@@ -16485,6 +16770,7 @@
                     "followersCount" : 12,
                     "followingCount" : 8,
                     "followsYou" : true,
+                    "gender" : null,
                     "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
                     "isBlocked" : false,
                     "isFollowing" : true,

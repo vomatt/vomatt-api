@@ -67,8 +67,9 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.passkey.admin_scope_required` | 403 | 此 Passkey 不能登入管理後台，請先用 email 驗證碼登入，再到管理後台重新註冊 Passkey | This passkey cannot sign in to the admin console. Sign in with an email code, then register a passkey from the admin console | Show a permission-denied notice | PasskeyService |
 | `auth.session_revoked` | 401 | 此裝置已被登出，請重新登入 | This device has been signed out. Please sign in again | See [auth-flow.md](auth-flow.md) | JwtAuthFilter |
 | `auth.session_not_found` | 404 | 找不到此登入裝置 | Signed-in device not found | Show resource not found | UserController |
-| `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | AdminUserService, FeedbackService, InviteListService, JwtAuthFilter, NotificationService, PasskeyService, UserGuard, UserService, VoteCommentService, VoteService |
+| `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | AdminUserService, AuthService, FeedbackService, InviteListService, JwtAuthFilter, NotificationService, PasskeyService, UserGuard, UserService, VoteCommentService, VoteService |
 | `user.username.taken` | 409 | 使用者名稱已被使用 | Username already taken | Show message (resource state conflict) | UserService |
+| `user.phone.taken` | 409 | 手機號碼已被使用 | Phone number already in use | Show message (resource state conflict) | AuthService |
 | `user.delete.forbidden` | 403 | 只能刪除自己的帳號 | You can only delete your own account | Show a permission-denied notice | UserService |
 | `user.follow.blocked` | 400 | 不能追蹤已封鎖的使用者，請先解除封鎖 | You cannot follow a user you blocked; unblock them first | Show message so the user can fix the input | UserService |
 | `user.avatar.unsupported_image` | 400 | 不支援的圖片：請上傳 4000 萬像素以內的 JPEG、PNG、GIF 或 BMP | Unsupported image: upload a JPEG, PNG, GIF or BMP of at most 40 megapixels | Show message so the user can fix the input | AvatarImage |
@@ -137,6 +138,5 @@ Keys not found on any error path (mostly success-response `message` values, e.g.
 | `user.update.success` | 用戶資料已更新 | User profile updated |  |
 | `user.profile.not_found` | 找不到此用戶的個人資料 | User profile not found |  |
 | `user.email.taken` | Email 已被使用 | Email already in use |  |
-| `user.phone.taken` | 手機號碼已被使用 | Phone number already in use |  |
 | `user.block.self` | 不能封鎖自己 | You cannot block yourself | UserService |
 | `user.follow.self` | 不能追蹤自己 | You cannot follow yourself | UserService |

@@ -92,6 +92,7 @@ class UserProfileVisibilityTest {
             @Override public String getFirstName() { return "Test"; }
             @Override public String getLastName() { return "User"; }
             @Override public String getLocation() { return "Taipei"; }
+            @Override public com.vomatt.entity.Gender getGender() { return com.vomatt.entity.Gender.FEMALE; }
             @Override public Boolean getFollowing() { return false; }
             @Override public Boolean getBlocked() { return false; }
             @Override public Boolean getFollowsViewer() { return false; }
@@ -119,8 +120,8 @@ class UserProfileVisibilityTest {
             User user = createTestUser();
             UserProfileProjection projection = createTestProjection();
             MyProfileResponse expectedResponse = new MyProfileResponse(
-                    USER_ID, USERNAME, "test@example.com", "0912345678",
-                    "Test", "User", BIRTHDAY, "TestDisplay", "Hello world", "bot:boba", "Taipei",
+                    USER_ID, USERNAME, "test@example.com", "0912345678", true,
+                    "Test", "User", BIRTHDAY, null, "TestDisplay", "Hello world", "bot:boba", "Taipei",
                     true, null,
                     JOINED_AT, 5, 10, 7, 12, 3, 2,
                     Map.of("firstName", false, "lastName", false,
@@ -201,7 +202,7 @@ class UserProfileVisibilityTest {
             UserProfileResponse expectedResponse = new UserProfileResponse(
                     USER_ID, USERNAME, "TestDisplay", "Hello world", "bot:boba",
                     JOINED_AT, 5, 10, 3, 2,
-                    null, null, null, null, null, null, null, null
+                    null, null, null, null, null, null, null, null, null
             );
 
             when(userRepository.findProfileForViewer(USERNAME, null)).thenReturn(Optional.of(projection));
@@ -246,7 +247,7 @@ class UserProfileVisibilityTest {
             UserProfileResponse expectedResponse = new UserProfileResponse(
                     USER_ID, USERNAME, "TestDisplay", "Hello world", "bot:boba",
                     JOINED_AT, 5, 10, 3, 2,
-                    null, null, "Taipei", null, null, null, null, null
+                    null, null, "Taipei", null, null, null, null, null, null
             );
 
             when(userRepository.findProfileForViewer(USERNAME, null)).thenReturn(Optional.of(projection));
@@ -281,7 +282,17 @@ class UserProfileVisibilityTest {
             assertThat(result.location()).isEqualTo("Taipei");
             assertThat(result.firstName()).isNull();
             assertThat(result.lastName()).isNull();
+            assertThat(result.gender()).isNull();
             assertThat(result.joinedAt()).isEqualTo(JOINED_AT);
+        }
+
+        @Test
+        @DisplayName("should show gender only when the owner made it visible")
+        void shouldShowGenderWhenMadeVisible() {
+            UserProfileResponse result = new UserMapper().toPublicProfileResponse(
+                    createTestProjection(), Map.of("gender", true), null, null, null, null, null);
+
+            assertThat(result.gender()).isEqualTo(com.vomatt.entity.Gender.FEMALE);
         }
     }
 

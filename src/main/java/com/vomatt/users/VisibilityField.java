@@ -15,7 +15,8 @@ public enum VisibilityField {
     LAST_NAME("lastName", false),
     LOCATION("location", false),
     DISPLAY_NAME("displayName", true),
-    BIO("bio", true);
+    BIO("bio", true),
+    GENDER("gender", false);
 
     private final String fieldName;
     private final boolean visibleByDefault;

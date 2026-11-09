@@ -1325,6 +1325,7 @@ class AuthServiceTest {
         User result = authService.findOrCreateUserByPhone("0912345678").user();
 
         assertThat(result.getPhoneNumber()).isEqualTo("+886912345678");
+        assertThat(result.isPhoneVerified()).isTrue();
         assertThat(result.getEmail()).isNull();
         assertThat(result.getUsername()).matches("user_\\d{4}");
         assertThat(result.getDisplayName()).isNull();
@@ -1355,6 +1356,70 @@ class AuthServiceTest {
         assertThat(response.user().id()).isEqualTo(existing.getId().toString());
         assertThat(response.user().phoneNumber()).isEqualTo("+886912345678");
         assertThat(authService.findOrCreateUserByPhone("0912345678").user()).isSameAs(existing);
+    }
+
+    // ── Phone bind ──────────────────────────────────────────────────────────────────
+
+    /** Sends a bind OTP for +886912345678 and arms Redis so verify reads it back; returns the delivered code. */
+    private String sendBindOtp() {
+        authService.sendPhoneBindOtp("0912345678", IP);
+        OtpRecord sent = storedOtp("otp:phone-bind", k("+886912345678"));
+        org.mockito.ArgumentCaptor<String> code = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(smsService).sendOtp(eq("+886912345678"), code.capture());
+        lenient().when(redisService.get(eq("otp:phone-bind"), eq(k("+886912345678")), eq(OtpRecord.class))).thenReturn(sent);
+        lenient().when(redisService.getAndDelete("otp:phone-bind", k("+886912345678"), OtpRecord.class)).thenReturn(sent);
+        return code.getValue();
+    }
+
+    @Test
+    void shouldBindPhoneAndMarkVerifiedWhenBindOtpIsCorrect() {
+        User me = User.builder().id(UUID.randomUUID()).email("me@example.com").build();
+        when(userRepository.findByPhoneNumber("+886912345678")).thenReturn(Optional.empty());
+        when(userRepository.findById(me.getId())).thenReturn(Optional.of(me));
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        String code = sendBindOtp();
+
+        User bound = authService.bindPhone(me.getId(), "+886912345678", code, IP);
+
+        assertThat(bound.getPhoneNumber()).isEqualTo("+886912345678");
+        assertThat(bound.isPhoneVerified()).isTrue();
+    }
+
+    @Test
+    void shouldRejectBindWhenPhoneBelongsToAnotherAccount() {
+        User other = User.builder().id(UUID.randomUUID()).phoneNumber("+886912345678").build();
+        when(userRepository.findByPhoneNumber("+886912345678")).thenReturn(Optional.of(other));
+        String code = sendBindOtp();
+
+        assertThatThrownBy(() -> authService.bindPhone(UUID.randomUUID(), "0912345678", code, IP))
+                .isInstanceOfSatisfying(ApiException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(org.springframework.http.HttpStatus.CONFLICT);
+                    assertThat(ex.getMessageKey()).isEqualTo(MessageKey.USER_PHONE_TAKEN);
+                });
+        verify(userRepository, org.mockito.Mockito.never()).save(any());
+    }
+
+    @Test
+    void shouldRejectBindWhenOnlyASignInOtpWasSent() {
+        // A sign-in OTP lives in otp:phone; bind reads otp:phone-bind only, so the code finds nothing there
+        authService.sendOtp(null, "0912345678", "login", IP);
+        org.mockito.ArgumentCaptor<String> code = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(smsService).sendOtp(eq("+886912345678"), code.capture());
+
+        assertThatThrownBy(() -> authService.bindPhone(UUID.randomUUID(), "0912345678", code.getValue(), IP))
+                .isInstanceOfSatisfying(ApiException.class, ex ->
+                        assertThat(ex.getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_INVALID_OR_EXPIRED));
+        verify(redisService).get("otp:phone-bind", k("+886912345678"), OtpRecord.class);
+    }
+
+    @Test
+    void shouldRejectSignInWhenOnlyABindOtpWasSent() {
+        String code = sendBindOtp();
+
+        assertThatThrownBy(() -> authService.verifyOtp(null, "0912345678", code, IP))
+                .isInstanceOfSatisfying(ApiException.class, ex ->
+                        assertThat(ex.getMessageKey()).isEqualTo(MessageKey.AUTH_OTP_INVALID_OR_EXPIRED));
+        verify(userRepository, org.mockito.Mockito.never()).save(any());
     }
 
     // ── buildAuthResponse: active=false (suspended) check ───────────────────────────

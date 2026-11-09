@@ -510,6 +510,46 @@ class VoteServiceTest {
         }
     }
 
+    // ─── like / unlike ────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("like / unlike")
+    class LikeTests {
+
+        @Test
+        @DisplayName("should succeed on a repeat like without looking the user up")
+        void shouldSkipUserLookupWhenAlreadyLiked() {
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.insertLikeIfAbsent(any(UUID.class), eq(userId), eq(voteId))).thenReturn(0);
+            when(voteRepository.existsLiveLike(userId, voteId)).thenReturn(true);
+
+            voteService.like(voteId.toString(), userId.toString());
+
+            verify(userRepository, never()).existsById(any());
+            verify(voteRepository, never()).existsByIdAndDeletedAtIsNull(any());
+        }
+
+        @Test
+        @DisplayName("should return vote.not_found when the Poll is Deleted after its lookup")
+        void shouldThrowVoteNotFoundWhenPollDeletedBeforeLikeInsert() {
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+            when(voteRepository.insertLikeIfAbsent(any(UUID.class), eq(userId), eq(voteId))).thenReturn(0);
+            when(voteRepository.existsByIdAndDeletedAtIsNull(voteId)).thenReturn(false);
+
+            assertThatThrownBy(() -> voteService.like(voteId.toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.NOT_FOUND, MessageKey.VOTE_NOT_FOUND));
+        }
+
+        @Test
+        @DisplayName("should delete the caller's like without reading the Poll")
+        void shouldDeleteLikeWhenUnliking() {
+            voteService.unlike(voteId.toString(), userId.toString());
+
+            verify(voteRepository).deleteLike(userId, voteId);
+            verify(voteRepository, never()).findById(any());
+        }
+    }
+
     // ─── bookmark / unbookmark ────────────────────────────────────────────────
 
     @Nested
@@ -1683,6 +1723,20 @@ class VoteServiceTest {
         }
 
         @Test
+        void shouldRefuseAddWhenInviteeIsOfficialAccount() {
+            inviteOnly(OffsetDateTime.now().plusDays(1));
+            User official = User.builder().id(UUID.randomUUID()).roles(new String[] { "official" }).build();
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(userRepository.findAllById(Set.of(official.getId()))).thenReturn(List.of(official));
+            InviteesRequest invite = new InviteesRequest();
+            invite.setUserIds(List.of(official.getId()));
+
+            assertThatThrownBy(() -> voteService.addInvitees(voteId.toString(), invite, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.OFFICIAL_INVITEE_NOT_ALLOWED));
+            verify(inviteeRepository, never()).saveAllAndFlush(any());
+        }
+
+        @Test
         @DisplayName("should throw 400 VOTE_INVITEE_IDS_INVALID when an invited user is suspended")
         void shouldRefuseAddWhenUserSuspended() {
             inviteOnly(OffsetDateTime.now().plusDays(1));
@@ -2036,6 +2090,192 @@ class VoteServiceTest {
                     .isInstanceOfSatisfying(ApiException.class,
                             ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.VOTE_NOT_FOUND));
             verify(userRepository, never()).existsById(any());
+        }
+    }
+
+    // ─── official accounts ────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("acting as an official account")
+    class OfficialAccountTests {
+
+        private final UUID memberId = UUID.randomUUID();
+
+        private void actAs(com.vomatt.entity.OfficialRole role) {
+            var auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(userId.toString(), null, List.of());
+            auth.setDetails(new com.vomatt.common.security.ActingMember(memberId, userId, role));
+            org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
+        }
+
+        @org.junit.jupiter.api.AfterEach
+        void clearContext() {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+
+        @Test
+        void shouldRefuseEveryBallotChangeWhenActingAsOfficial() {
+            actAs(com.vomatt.entity.OfficialRole.OWNER);
+            vote.setActive(true);
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            VoteRequest request = new VoteRequest();
+            request.setOptionIds(List.of(UUID.randomUUID().toString()));
+
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_BALLOT_OFFICIAL_NOT_ALLOWED));
+            assertThatThrownBy(() -> voteService.retract(voteId.toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_BALLOT_OFFICIAL_NOT_ALLOWED));
+            assertThatThrownBy(() -> voteService.removeVote(voteId.toString(), UUID.randomUUID().toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_BALLOT_OFFICIAL_NOT_ALLOWED));
+            verify(userVoteRepository, never()).saveAndFlush(any());
+            verify(userVoteRepository, never()).findByUserIdAndVoteId(any(), any());
+        }
+
+        @Test
+        void shouldRefuseDeleteWhenEditorDidNotPublishPoll() {
+            actAs(com.vomatt.entity.OfficialRole.EDITOR);
+            vote.setActedBy(UUID.randomUUID());
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+
+            assertThatThrownBy(() -> voteService.deleteVote(voteId.toString(), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.OFFICIAL_ROLE_FORBIDDEN));
+            assertThat(vote.getDeletedAt()).isNull();
+        }
+
+        @Test
+        void shouldDeleteWhenEditorPublishedPoll() {
+            actAs(com.vomatt.entity.OfficialRole.EDITOR);
+            vote.setActedBy(memberId);
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+
+            voteService.deleteVote(voteId.toString(), userId.toString());
+
+            assertThat(vote.getDeletedAt()).isNotNull();
+        }
+
+        @Test
+        void shouldDeleteAnyOfficialPollWhenAdmin() {
+            actAs(com.vomatt.entity.OfficialRole.ADMIN);
+            vote.setActedBy(UUID.randomUUID());
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+
+            voteService.deleteVote(voteId.toString(), userId.toString());
+
+            assertThat(vote.getDeletedAt()).isNotNull();
+        }
+    }
+
+    // ─── Pro polls ────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("Pro poll")
+    class ProPollTests {
+
+        private VoteRequest ballotRequest(Boolean anonymous) {
+            VoteRequest request = new VoteRequest();
+            request.setOptionIds(List.of(UUID.randomUUID().toString()));
+            request.setAnonymous(anonymous);
+            return request;
+        }
+
+        @Test
+        void shouldRefuseSelectionWhenProPollAndPhoneNotVerified() {
+            vote.setPro(true);
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), ballotRequest(null), userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_BALLOT_PHONE_VERIFICATION_REQUIRED));
+            verify(userVoteRepository, never()).saveAndFlush(any());
+        }
+
+        @Test
+        void shouldWithdrawBallotWhenProPollAndPhoneNotVerified() {
+            vote.setPro(true);
+            UUID optionId = UUID.randomUUID();
+            setId(option, optionId);
+            UserVote ballot = new UserVote(user, vote, option);
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(userVoteRepository.findByUserIdAndVoteId(userId, voteId)).thenReturn(Optional.of(ballot));
+            when(userVoteRepository.findByUserIdAndVoteIdAndOptionId(userId, voteId, optionId)).thenReturn(Optional.of(ballot));
+            stubConvertToVoteResponse(vote);
+
+            voteService.retract(voteId.toString(), userId.toString());
+            voteService.removeVote(voteId.toString(), optionId.toString(), userId.toString());
+
+            verify(userVoteRepository, org.mockito.Mockito.times(2)).delete(ballot);
+            verify(userRepository, never()).findById(any());
+        }
+
+        @Test
+        void shouldRefuseAnonymousBallotWhenProPoll() {
+            vote.setPro(true);
+            user.setPhoneVerifiedAt(OffsetDateTime.now().minusDays(1));
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+            UUID optionId = UUID.randomUUID();
+            setId(option, optionId);
+            when(voteOptionRepository.findById(optionId)).thenReturn(Optional.of(option));
+            VoteRequest request = ballotRequest(true);
+            request.setOptionIds(List.of(optionId.toString()));
+
+            assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_BALLOT_ANONYMOUS_NOT_ALLOWED));
+            verify(userVoteRepository, never()).saveAndFlush(any());
+        }
+
+        @Test
+        void shouldRejectCreateWhenRevealAtBeforeEndTime() {
+            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
+            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
+            when(voteConfig.getMaxVoteDuration()).thenReturn(Duration.ofDays(365));
+            OffsetDateTime end = OffsetDateTime.now().plusDays(1);
+            CreateVoteRequest request = new CreateVoteRequest();
+            request.setTitle("Test");
+            request.setOptions(List.of(buildOption("A"), buildOption("B")));
+            request.setEndTime(end);
+            request.setRevealAt(end.minusMinutes(1));
+
+            assertThatThrownBy(() -> voteService.createVote(request, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_REVEAL_BEFORE_END));
+            verify(voteRepository, never()).save(any());
+        }
+
+        @Test
+        void shouldRejectCreateAndEditWhenRevealAtPastEndPlusMaxDuration() {
+            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
+            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
+            when(voteConfig.getMaxVoteDuration()).thenReturn(Duration.ofDays(30));
+            OffsetDateTime end = OffsetDateTime.now().plusDays(1);
+            CreateVoteRequest request = new CreateVoteRequest();
+            request.setTitle("Test");
+            request.setOptions(List.of(buildOption("A"), buildOption("B")));
+            request.setEndTime(end);
+            request.setRevealAt(end.plusDays(30).plusMinutes(1));
+
+            assertThatThrownBy(() -> voteService.createVote(request, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_REVEAL_TOO_LATE));
+            // Edit keeps the current reveal time when omitted, and checks it against the new end time
+            vote.setStartTime(OffsetDateTime.now().plusHours(1));
+            vote.setEndTime(OffsetDateTime.now().plusDays(40));
+            vote.setRevealAt(OffsetDateTime.now().plusDays(60));
+            when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
+            request.setRevealAt(null);
+            assertThatThrownBy(() -> voteService.updateVote(voteId.toString(), request, userId.toString()))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_REVEAL_TOO_LATE));
+            verify(voteRepository, never()).save(any());
+        }
+
+        @Test
+        void shouldSealResultsWhenEndedBeforeRevealAt() {
+            vote.setStartTime(OffsetDateTime.now().minusDays(2));
+            vote.scheduleEnd(OffsetDateTime.now().minusDays(1));
+            vote.setRevealAt(OffsetDateTime.now().plusHours(1));
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+
+            assertThatThrownBy(() -> voteService.getVoteResults(voteId.toString(), null))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_RESULTS_SEALED));
+            assertThatThrownBy(() -> voteService.getVoters(voteId.toString(), userId.toString(), null, null))
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_RESULTS_SEALED));
         }
     }
 }

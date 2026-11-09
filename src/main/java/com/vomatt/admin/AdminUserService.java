@@ -115,6 +115,10 @@ public class AdminUserService {
 
     public AdminUserDetail updateRoles(UUID userId, List<String> roles, String actorId) {
         User user = findUser(userId);
+        // Roles would overwrite 'official', which no request can grant back
+        if (user.isOfficial()) {
+            throw ApiException.badRequest(MessageKey.OFFICIAL_ROLES_FIXED);
+        }
         // Unchanged role set: nothing to write and no reason to sign the user out
         if (Set.copyOf(roles).equals(Set.copyOf(Arrays.asList(user.getRoles())))) {
             return detail(user);

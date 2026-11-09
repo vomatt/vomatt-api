@@ -35,6 +35,9 @@ public class VoteResponse {
             example = "bot:boba", nullable = true)
     private String creatorAvatarUrl;
 
+    @Schema(description = "Whether the owner is an official account (a group's page, shown with a badge)", example = "false")
+    private boolean creatorOfficial;
+
     @Schema(description = "When the Poll opens (or opened)", example = "2026-10-12T09:00:00+08:00")
     private OffsetDateTime startTime;
 
@@ -84,9 +87,26 @@ public class VoteResponse {
             + "repeat shares by the same user count once. Signed-out shares are not counted", example = "18")
     private long shareCount;
 
+    @Schema(description = "Number of users who liked the Poll (`PUT /api/votes/{voteId}/like`). Visible at all times, also while the results are Sealed",
+            example = "25")
+    private long likeCount;
+
+    @Schema(description = "Whether the caller liked the Poll (`PUT /api/votes/{voteId}/like`); false when the caller is not signed in "
+            + "and in admin views", example = "false")
+    private boolean likedByMe;
+
     @Schema(description = "Who may see which option each Participant chose once the Poll has Ended: NOBODY, OWNER or SIGNED_IN (anyone who can see the Poll). "
-            + "Visible at all times so Participants know it before casting a Ballot; fixed once the Poll is Open", example = "OWNER")
+            + "Visible at all times so Participants know it before casting a Ballot; fixed once the Poll is Open, except that an admin "
+            + "turning Pro on sets NOBODY. Always NOBODY on a Pro poll", example = "OWNER")
     private VoterVisibility voterVisibility;
+
+    @Schema(description = "Pro poll (set by an admin): only users with a verified phone number can cast a Ballot "
+            + "(403 `vote.ballot.phone_verification_required` otherwise), Voter Visibility is NOBODY and Anonymous Ballots are refused", example = "false")
+    private boolean pro;
+
+    @Schema(description = "When the results unseal (ISO-8601 with offset); null when they unseal as the Poll Ends. Until then per-option "
+            + "counts stay null even after the Poll has Ended; Turnout stays visible", example = "2026-10-20T09:00:00+08:00", nullable = true)
+    private OffsetDateTime revealAt;
 
     @Schema(description = "Who can reach the Poll: PUBLIC (listed in Feed / Explore / Search and the owner's profile), UNLISTED "
             + "(reachable only through its link) or INVITE_ONLY (only the owner and its Invitees). Fixed once the Poll is Open", example = "PUBLIC")
@@ -138,8 +158,8 @@ public class VoteResponse {
         @Schema(description = "When the option was created", example = "2026-10-09T15:20:31+08:00")
         private OffsetDateTime createdAt;
 
-        @Schema(description = "Number of Ballots that chose this option. Null while the Poll has not Ended (Sealed), for everyone including the owner; "
-                + "a number once it has Ended", example = "27", nullable = true)
+        @Schema(description = "Number of Ballots that chose this option. Null while Sealed (the Poll has not Ended, or `revealAt` has not "
+                + "passed), for everyone including the owner; a number once unsealed", example = "27", nullable = true)
         private Long votes;
     }
 }

@@ -79,6 +79,18 @@ class UserProfilePostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should return gender in the profile projection")
+    void shouldReturnGenderWhenSet() {
+        User owner = persistUser("pg-" + System.nanoTime());
+        owner.setGender(com.vomatt.entity.Gender.FEMALE);
+        em.flush();
+        em.clear();
+
+        assertThat(userRepository.findProfileByUsername(owner.getUsername()).orElseThrow().getGender())
+                .isEqualTo(com.vomatt.entity.Gender.FEMALE);
+    }
+
+    @Test
     @DisplayName("should report active=false when user is suspended")
     void shouldReportSuspendedUser() {
         User owner = persistUser("ps-" + System.nanoTime());

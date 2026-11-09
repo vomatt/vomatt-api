@@ -71,6 +71,23 @@ public class AdminVoteService {
         return toResponse(vote);
     }
 
+    /**
+     * Turns Pro on or off, in any status. On sets Voter Visibility NOBODY; Anonymous Ballots already cast stay as they
+     * are. Off keeps the Voter Visibility. A Deleted Poll is frozen: restore it first.
+     */
+    public AdminVoteResponse setPro(UUID voteId, boolean pro, String actorId) {
+        Vote vote = lockVote(voteId);
+        if (vote.getDeletedAt() != null) {
+            throw ApiException.notFound(MessageKey.VOTE_NOT_FOUND);
+        }
+        vote.setPro(pro);
+        vote.applyProRules();
+        // Flushed now so @PreUpdate stamps updated_at before the response is built from this Poll
+        voteRepository.saveAndFlush(vote);
+        log.info("Vote {} set pro={} by admin {}", voteId, pro, actorId);
+        return toResponse(vote);
+    }
+
     /** Delete regardless of the owner's delete window; idempotent. Tags stop counting the Poll, as on the owner's Delete. */
     public void deleteVote(UUID voteId, String actorId) {
         voteService.softDelete(lockVote(voteId), OffsetDateTime.now());

@@ -4,7 +4,7 @@ package com.vomatt.entity;
 public enum NotificationCategory {
     /** Comments, Replies and @mentions: COMMENT, MENTION. */
     CONVERSATION,
-    /** Likes on the user's Comments: LIKE. */
+    /** Likes on the user's Comments and Polls: LIKE, POLL_LIKE. */
     LIKE,
     /** A Poll Ended, was Cancelled or ends soon: RESULT, CANCELLED, CLOSING_SOON. */
     POLL_END,

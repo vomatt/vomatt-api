@@ -217,7 +217,7 @@ class VoteControllerTest {
         @Test
         @DisplayName("should return 200 with the owner when the caller is signed out")
         void shouldReturn200WhenSignedOut() throws Exception {
-            when(voteService.getInviteOnlyCreator(voteId, null)).thenReturn(new VoteCreatorResponse("alice", "bot:boba"));
+            when(voteService.getInviteOnlyCreator(voteId, null)).thenReturn(new VoteCreatorResponse("alice", "bot:boba", false));
 
             mockMvc.perform(get("/api/votes/{voteId}/creator", voteId))
                     .andExpect(status().isOk())
@@ -229,7 +229,7 @@ class VoteControllerTest {
         @DisplayName("should pass the signed-in caller so only the owner or an Invitee gets 200")
         void shouldReturn200WhenSignedInCallerIsInvitee() throws Exception {
             authenticate();
-            when(voteService.getInviteOnlyCreator(voteId, USER_ID)).thenReturn(new VoteCreatorResponse("alice", "bot:boba"));
+            when(voteService.getInviteOnlyCreator(voteId, USER_ID)).thenReturn(new VoteCreatorResponse("alice", "bot:boba", false));
 
             mockMvc.perform(get("/api/votes/{voteId}/creator", voteId))
                     .andExpect(status().isOk())
@@ -723,6 +723,35 @@ class VoteControllerTest {
     }
 
     // ─── Bookmarks ────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("PUT / DELETE /api/votes/{voteId}/like")
+    class LikeTests {
+
+        private final String voteId = UUID.randomUUID().toString();
+
+        @Test
+        @DisplayName("should require sign-in for both like routes")
+        void shouldRequireSignInWhenLiking() {
+            assertThat(isPublic("PUT", "/api/votes/" + voteId + "/like")).isFalse();
+            assertThat(isPublic("DELETE", "/api/votes/" + voteId + "/like")).isFalse();
+        }
+
+        @Test
+        @DisplayName("should return 200 and like, then unlike, for the caller")
+        void shouldLikeAndUnlikeWhenAuthenticated() throws Exception {
+            authenticate();
+
+            mockMvc.perform(put("/api/votes/{voteId}/like", voteId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.success").value(true));
+            mockMvc.perform(delete("/api/votes/{voteId}/like", voteId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.success").value(true));
+            verify(voteService).like(voteId, USER_ID);
+            verify(voteService).unlike(voteId, USER_ID);
+        }
+    }
 
     @Nested
     @DisplayName("PUT / DELETE /api/votes/{voteId}/bookmark, GET /api/votes/bookmarked")

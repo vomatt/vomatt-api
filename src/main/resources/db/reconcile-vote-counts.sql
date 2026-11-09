@@ -1,6 +1,6 @@
 -- =============================================================================
--- Option vote count and Turnout reconciliation (run manually; not part of startup)
--- vote_options.vote_count and votes.turnout are atomically incremented/decremented by the application; this file checks and fixes drift from the actual user_votes row count.
+-- Option vote count, Turnout and like count reconciliation (run manually; not part of startup)
+-- vote_options.vote_count, votes.turnout and votes.like_count are atomically incremented/decremented by the application; this file checks and fixes drift from the actual user_votes / vote_likes row count.
 -- =============================================================================
 
 -- Only Polls that have not Ended are checked: an Ended Poll's result is frozen as it closed. RetentionJob seals its
@@ -41,3 +41,20 @@ FROM (SELECT v2.id, COUNT(uv.id) AS actual
       WHERE v2.end_time > now()
       GROUP BY v2.id) c
 WHERE c.id = v.id AND v.turnout <> c.actual;
+
+-- Likes are not frozen when a Poll Ends (account deletion releases them from every Poll), so every Poll is checked.
+-- 5) Check: Polls whose stored like count (votes.like_count) differs from the actual like count (should normally return 0 rows)
+SELECT v.id AS vote_id, v.like_count AS stored, COUNT(l.vote_id) AS actual
+FROM vomatt.votes v
+LEFT JOIN vomatt.vote_likes l ON l.vote_id = v.id
+GROUP BY v.id
+HAVING v.like_count <> COUNT(l.vote_id);
+
+-- 6) Fix: overwrite the like count with the actual count
+UPDATE vomatt.votes v
+SET like_count = c.actual
+FROM (SELECT v2.id, COUNT(l.vote_id) AS actual
+      FROM vomatt.votes v2
+      LEFT JOIN vomatt.vote_likes l ON l.vote_id = v2.id
+      GROUP BY v2.id) c
+WHERE c.id = v.id AND v.like_count <> c.actual;

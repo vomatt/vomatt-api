@@ -15,7 +15,7 @@ class SecurityConfigTest {
 
     @Test
     void shouldExposeRetryAfterWhenServingCrossOriginResponses() {
-        SecurityConfig securityConfig = new SecurityConfig(null, null, null, null, new MockEnvironment());
+        SecurityConfig securityConfig = new SecurityConfig(null, null, null, null, null, new MockEnvironment());
         ReflectionTestUtils.setField(securityConfig, "corsAllowedOrigins", List.of("https://app.example.com"));
 
         CorsConfiguration cors = securityConfig.corsConfigurationSource()
@@ -30,31 +30,31 @@ class SecurityConfigTest {
     void shouldFailStartupWhenProdHasNoTrustedProxies() {
         MockEnvironment prod = new MockEnvironment();
         prod.setActiveProfiles("prod");
-        SecurityConfig securityConfig = new SecurityConfig(null, null, null, null, prod);
+        SecurityConfig securityConfig = new SecurityConfig(null, null, null, null, null, prod);
 
         assertThatThrownBy(() -> securityConfig.setTrustedProxies(" "))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("TRUSTED_PROXIES");
         // Outside prod the blank value keeps the default list
-        new SecurityConfig(null, null, null, null, new MockEnvironment()).setTrustedProxies("");
+        new SecurityConfig(null, null, null, null, null, new MockEnvironment()).setTrustedProxies("");
     }
 
     @Test
     void shouldFailStartupWhenProdHasNoClientIpSecret() {
         MockEnvironment prod = new MockEnvironment();
         prod.setActiveProfiles("prod");
-        SecurityConfig securityConfig = new SecurityConfig(null, null, null, null, prod);
+        SecurityConfig securityConfig = new SecurityConfig(null, null, null, null, null, prod);
 
         assertThatThrownBy(() -> securityConfig.setClientIpSecret(" "))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("CLIENT_IP_SECRET");
         // Outside prod the blank value ignores the client IP header
-        new SecurityConfig(null, null, null, null, new MockEnvironment()).setClientIpSecret("");
+        new SecurityConfig(null, null, null, null, null, new MockEnvironment()).setClientIpSecret("");
     }
 
     @Test
     void shouldFailStartupWhenClientIpSecretIsShortAfterTrimming() {
-        SecurityConfig securityConfig = new SecurityConfig(null, null, null, null, new MockEnvironment());
+        SecurityConfig securityConfig = new SecurityConfig(null, null, null, null, null, new MockEnvironment());
 
         assertThatThrownBy(() -> securityConfig.setClientIpSecret("short-secret" + " ".repeat(30)))
                 .isInstanceOf(IllegalStateException.class)

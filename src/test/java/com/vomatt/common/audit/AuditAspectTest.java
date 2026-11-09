@@ -50,7 +50,8 @@ class AuditAspectTest {
     void shouldPassActorAndResourceThroughControllerWhenDeletingAccounts() {
         com.vomatt.users.UserService userService = mock(com.vomatt.users.UserService.class);
         com.vomatt.users.UserController proxied = proxied(new com.vomatt.users.UserController(userService, mock(com.vomatt.votes.VoteService.class),
-                mock(com.vomatt.auth.PasskeyService.class), mock(com.vomatt.common.security.RefreshTokenService.class)));
+                mock(com.vomatt.auth.PasskeyService.class), mock(com.vomatt.auth.AuthService.class),
+                mock(com.vomatt.common.security.RefreshTokenService.class)));
         java.util.UUID self = java.util.UUID.randomUUID();
         java.util.UUID other = java.util.UUID.randomUUID();
         signIn(self, "alice");
@@ -121,5 +122,24 @@ class AuditAspectTest {
 
         verify(auditService).logFailedAction(any(), any(), any(), any(), any(), any(), org.mockito.ArgumentMatchers.eq("spam"));
         verify(auditService).logFailedAction(any(), any(), any(), any(), any(), any(), org.mockito.ArgumentMatchers.eq("admin,user"));
+    }
+
+    @Test
+    void shouldRecordRealMemberAndOfficialWhenActingAsOfficial() {
+        java.util.UUID memberId = java.util.UUID.randomUUID();
+        java.util.UUID officialId = java.util.UUID.randomUUID();
+        var auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                new com.vomatt.common.security.UserPrincipal(officialId.toString(), java.util.List.of("official"), "s1"), null, java.util.List.of());
+        auth.setDetails(new com.vomatt.common.security.ActingMember(memberId, officialId, com.vomatt.entity.OfficialRole.EDITOR));
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
+        try {
+            aspect.logSuccessfulAction(joinPoint, auditable);
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+
+        verify(auditService).logAction(org.mockito.ArgumentMatchers.eq(memberId.toString()), org.mockito.ArgumentMatchers.eq("CAST_BALLOT"),
+                org.mockito.ArgumentMatchers.eq("VOTE"), org.mockito.ArgumentMatchers.isNull(), any(), any(), any(), any(),
+                org.mockito.ArgumentMatchers.eq("actingAs=" + officialId));
     }
 }

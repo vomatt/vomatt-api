@@ -2,6 +2,7 @@ package com.vomatt.entity;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.UUID;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
@@ -52,6 +53,10 @@ public class Vote extends AuditableEntity {
     @JoinColumn(name = "creator_id")
     private User creator;
 
+    /** The member who published this Poll while acting as the official account {@link #creator}; null otherwise. */
+    @Column(name = "acted_by")
+    private UUID actedBy;
+
     @Column(name = "start_time")
     private OffsetDateTime startTime;
 
@@ -75,6 +80,10 @@ public class Vote extends AuditableEntity {
     @Column(name = "share_count", insertable = false, updatable = false)
     private int shareCount;
 
+    /** Likes (hearts); written only by atomic SQL increments in {@code VoteRepository}, never by the entity. */
+    @Column(name = "like_count", insertable = false, updatable = false)
+    private int likeCount;
+
     @Column(name = "is_active")
     private boolean isActive = true;
 
@@ -94,6 +103,14 @@ public class Vote extends AuditableEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "voter_visibility", nullable = false)
     private VoterVisibility voterVisibility = VoterVisibility.OWNER;
+
+    /** Pro poll (set by an admin): only phone-verified users vote, Voter Visibility is NOBODY, no Anonymous Ballot. */
+    @Column(name = "pro", nullable = false)
+    private boolean pro;
+
+    /** Results stay Sealed until then even once Ended; null = unsealed when the Poll Ends. Never before the end time. */
+    @Column(name = "reveal_at")
+    private OffsetDateTime revealAt;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "vote_type", nullable = false)
@@ -134,6 +151,11 @@ public class Vote extends AuditableEntity {
         if (endTime != null && !now.isBefore(endTime)) return VoteStatus.ENDED;
         if (startTime != null && now.isBefore(startTime)) return VoteStatus.SCHEDULED;
         return VoteStatus.OPEN;
+    }
+
+    /** Cancelled: Ended without ever opening (end at or before start). */
+    public boolean isCancelled() {
+        return endTime != null && startTime != null && !endTime.isAfter(startTime);
     }
 
     /** Delete: allowed while Scheduled, or within {@code window} of posting even when it holds Ballots (ADR 0004). */
@@ -190,9 +212,26 @@ public class Vote extends AuditableEntity {
         return getStatus() == VoteStatus.OPEN;
     }
 
-    /** Sealed: nobody, including the owner, sees per-option counts or Support until the Poll has Ended. */
+    /** Sealed: nobody, including the owner, sees per-option counts or Support until the Poll has Ended and its reveal time (if any) passed. */
     public boolean isResultsSealed() {
-        return getStatus() != VoteStatus.ENDED;
+        return isResultsSealedAt(OffsetDateTime.now());
+    }
+
+    public boolean isResultsSealedAt(OffsetDateTime now) {
+        return statusAt(now) != VoteStatus.ENDED || now.isBefore(resultsRevealAt());
+    }
+
+    /** When the results unseal: the reveal time when set, else the end time (mirrored in SQL by NotificationRepository). */
+    public OffsetDateTime resultsRevealAt() {
+        return revealAt != null ? revealAt : endTime;
+    }
+
+    /** Pro forces Voter Visibility NOBODY (and the legacy is_anonymous mirror); turning Pro off keeps it. */
+    public void applyProRules() {
+        if (pro) {
+            voterVisibility = VoterVisibility.NOBODY;
+            isAnonymous = true;
+        }
     }
 
     public void addTag(Tag tag) {

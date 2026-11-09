@@ -32,7 +32,8 @@ public final class SecurityEndpoints {
      * they are listed here explicitly as a second line of defense and matched before {@link #PUBLIC_GET}.
      */
     public static final String[] AUTHENTICATED_VOTES = { "/api/votes/my", "/api/votes/following", "/api/votes/bookmarked", "/api/votes/*/my-vote-status",
-            "/api/votes/*/bookmark", "/api/votes/*/voters", "/api/votes/*/invitees", "/api/votes/*/invitees/*" };
+            "/api/votes/*/bookmark", "/api/votes/*/like", "/api/votes/*/voters", "/api/votes/*/invitees", "/api/votes/*/invitees/*",
+            "/api/votes/*/report", "/api/votes/*/report.csv" };
 
     /**
      * Poll ID (UUID) path segment. Matching only UUIDs means named sub-paths like {@code /api/votes/my} are never permitted by the public rules,
@@ -63,4 +64,23 @@ public final class SecurityEndpoints {
 
     /** Admin endpoints – ADMIN role required (enforced at filter chain level) */
     public static final String[] AUTHENTICATED_ADMIN = { "/api/admin/**" };
+
+    /**
+     * Never reachable while acting as an official account ({@code X-Act-As}, see {@link ActAsFilter}): passkeys, sessions,
+     * data export and phone binding belong to a person, not to the group (an official account is never phone-verified). {@link #PUBLIC_AUTH} (sign-in, refresh, logout) ignores the header.
+     */
+    public static final String[] ACT_AS_DENIED = { "/api/auth/passkey/register/**", "/api/users/me/passkeys", "/api/users/me/passkeys/**",
+            "/api/users/me/sessions", "/api/users/me/sessions/**", "/api/users/me/export", "/api/users/me/phone/**" };
+
+    /** DELETE-only routes never reachable while acting: account deletion. */
+    public static final String[] ACT_AS_DENIED_DELETE = { "/api/users/*" };
+
+    /** The official account's profile; writes need the OWNER or ADMIN role while acting. */
+    public static final String[] ACT_AS_PROFILE = { "/api/users/me", "/api/users/me/avatar", "/api/users/me/visibility" };
+
+    /**
+     * Writes any role may send while acting, ANALYST included: member management (OfficialService authorizes by the
+     * real member's role) and marking the official account's notifications read.
+     */
+    public static final String[] ACT_AS_ANY_ROLE = { "/api/officials/**", "/api/notifications/*/read", "/api/notifications/read-all" };
 }

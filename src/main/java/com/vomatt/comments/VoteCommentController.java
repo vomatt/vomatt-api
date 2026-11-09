@@ -345,6 +345,7 @@ public class VoteCommentController {
                     **Side effects**: `updatedAt` moves forward, so `edited` becomes true (it is derived: `updatedAt` after `createdAt`, and never true for a deleted placeholder). Likes are kept. An edit can only remove mentions: a mentioned user whose current `@<username>` the new text no longer holds loses their MENTION, and a handle the edit adds mentions nobody (no notifying people after the fact, nor retargeting a mention to whoever took a renamed user's handle)
                     **Errors**:
                     - 403 `comment.forbidden`: the caller is not the author
+                    - 403 `official.role_forbidden`: acting as an official account (`X-Act-As`) as an EDITOR on a Comment another member posted, or as an ANALYST
                     - 404 `comment.not_found`: Comment does not exist or is deleted
                     - 404 `vote.not_found`: the Comment's Poll is Deleted, or its owner blocked the caller
                     """,
@@ -401,6 +402,7 @@ public class VoteCommentController {
                     **Side effects**: the Comment can no longer be edited or liked. Responds with an empty success body (`{ "success": true }`)
                     **Errors**:
                     - 403 `comment.forbidden`: the caller is not the author
+                    - 403 `official.role_forbidden`: acting as an official account (`X-Act-As`) as an EDITOR on a Comment another member posted, or as an ANALYST
                     - 404 `comment.not_found`: Comment does not exist or is already deleted
                     - 404 `vote.not_found`: the Comment's Poll is Deleted, or its owner blocked the caller
                     """)

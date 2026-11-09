@@ -35,7 +35,7 @@ import java.util.stream.Collectors;
 public class JwtAuthFilter extends OncePerRequestFilter {
     public static final String AUTH_ERROR_ATTR = JwtAuthFilter.class.getName() + ".authError";
 
-    private static final Set<String> READ_METHODS = Set.of("GET", "HEAD", "OPTIONS");
+    static final Set<String> READ_METHODS = Set.of("GET", "HEAD", "OPTIONS");
     private static final RequestMatcher ADMIN_PATHS = anyOf(SecurityEndpoints.AUTHENTICATED_ADMIN);
     private static final RequestMatcher PUBLIC_AUTH_PATHS = anyOf(SecurityEndpoints.PUBLIC_AUTH);
 
@@ -120,7 +120,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
     }
 
-    private static RequestMatcher anyOf(String[] patterns) {
+    static RequestMatcher anyOf(String[] patterns) {
         return new OrRequestMatcher(Arrays.stream(patterns)
                 .map(PathPatternRequestMatcher.withDefaults()::matcher).map(RequestMatcher.class::cast).toList());
     }

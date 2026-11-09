@@ -3,6 +3,7 @@ package com.vomatt.admin;
 import java.util.UUID;
 
 import com.vomatt.admin.dto.AdminVoteResponse;
+import com.vomatt.admin.dto.SetProRequest;
 import com.vomatt.common.annotation.CommonApiResponses;
 import com.vomatt.common.audit.Auditable;
 import com.vomatt.common.config.OpenAPIConfig;
@@ -17,6 +18,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -26,6 +28,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -169,7 +172,7 @@ public class AdminVoteController {
             description = """
                     **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
                     **Precondition**: the Poll exists, is not Deleted, and is Open with Audience UNLISTED or INVITE_ONLY, the same rules as the owner's Close (to take down a Public or Scheduled Poll, Delete it)
-                    **Behavior**: Closes the Poll for its owner: it Ends now and keeps its Deadline. An Ended Poll is left as is (idempotent). Returns the Poll, whose results are now unsealed
+                    **Behavior**: Closes the Poll for its owner: it Ends now and keeps its Deadline. An Ended Poll is left as is (idempotent). Returns the Poll, whose results are now unsealed unless its `revealAt` is still ahead
                     **Side effects**: Participants see the Poll Ended in their notifications. Written to the audit log
                     **Errors**:
                     - 400 `common.type_mismatch`: `voteId` is not a valid UUID
@@ -214,6 +217,43 @@ public class AdminVoteController {
             @Parameter(description = "Poll ID (UUIDv7)", required = true) @PathVariable UUID voteId,
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(adminVoteService.closeVote(voteId, principal.userId())));
+    }
+
+    @PutMapping("/{voteId}/pro")
+    @Auditable(action = "SET_PRO", resourceType = "VOTE", resourceIdIndex = 0, detailsIndex = 1)
+    @CommonApiResponses
+    @Operation(summary = "Set Pro Poll",
+            description = """
+                    **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
+                    **Precondition**: the Poll exists and is not Deleted; any status
+                    **Behavior**: turns Pro on or off (idempotent). A Pro poll takes Ballots only from users with a verified phone number, refuses Anonymous Ballots and has Voter Visibility NOBODY. Turning Pro on sets Voter Visibility to NOBODY (and the deprecated `anonymous` to true); Anonymous Ballots already cast stay as they are, and Ballots already cast by users without a verified phone number are kept but cannot be changed or retracted until they verify one. Turning Pro off keeps the Voter Visibility. Returns the Poll
+                    **Side effects**: Written to the audit log (action `SET_PRO`, details `pro=true` / `pro=false`)
+                    **Errors**:
+                    - 400 `common.type_mismatch`: `voteId` is not a valid UUID
+                    - 400 `common.validation_failed`: `pro` is missing
+                    - 404 `vote.not_found`: no Poll with this ID, or the Poll is Deleted (Restore it first)
+                    - 409 `common.conflict`: the Poll is busy; retry""")
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true,
+            content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "ProOn", value = """
+                    { "pro": true }""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Pro set",
+            content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "ProSet", value = """
+                    {
+                      "success": true,
+                      "data": """ + ADMIN_VOTE_DATA + """
+                    ,
+                      "message": null,
+                      "errorCode": null,
+                      "error": null
+                    }""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll not found (`vote.not_found`)",
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "VoteNotFound", value = VOTE_NOT_FOUND_EXAMPLE)))
+    public ResponseEntity<ApiResponse<AdminVoteResponse>> setPro(
+            @Parameter(description = "Poll ID (UUIDv7)", required = true) @PathVariable UUID voteId,
+            @Valid @RequestBody SetProRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(adminVoteService.setPro(voteId, request.pro(), principal.userId())));
     }
 
     @DeleteMapping("/{voteId}")

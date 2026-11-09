@@ -17,7 +17,7 @@ import java.util.List;
 public class VoteMapper {
 
     /**
-     * The single sealing point: while a Poll has not Ended, per-option counts stay null so no endpoint
+     * The single sealing point: while a Poll has not Ended or its reveal time has not passed, per-option counts stay null so no endpoint
      * can leak them. Turnout ({@code participantCount}) is always present. Counts come from the stored
      * option counts and the stored Turnout (the Top sort key), so no Ballot rows are loaded.
      */
@@ -30,6 +30,7 @@ public class VoteMapper {
         response.setCreatorId(vote.getCreator().getId().toString());
         response.setCreatorUsername(vote.getCreator().getUsername());
         response.setCreatorAvatarUrl(vote.getCreator().getAvatarUrl());
+        response.setCreatorOfficial(vote.getCreator().isOfficial());
         response.setStartTime(vote.getStartTime());
         response.setEndTime(vote.getEndTime());
         response.setDeadline(vote.getDeadline());
@@ -37,12 +38,15 @@ public class VoteMapper {
         response.setAllowMultipleChoices(vote.isAllowMultipleChoices());
         response.setAnonymous(vote.getVoterVisibility() == VoterVisibility.NOBODY);
         response.setVoterVisibility(vote.getVoterVisibility());
+        response.setPro(vote.isPro());
+        response.setRevealAt(vote.getRevealAt());
         response.setAudience(vote.getAudience());
         response.setCreatedAt(vote.getCreatedAt());
         response.setUpdatedAt(vote.getUpdatedAt());
         response.setTotalVotes(vote.getTurnout());
         response.setParticipantCount(vote.getTurnout());
         response.setShareCount(vote.getShareCount());
+        response.setLikeCount(vote.getLikeCount());
         response.setVotingActive(vote.isVotingActive());
         response.setOptions(options.stream()
                 .map(opt -> toOptionResponse(opt, sealed))
@@ -89,6 +93,7 @@ public class VoteMapper {
         response.setCreatorId(vote.getCreator().getId().toString());
         response.setCreatorUsername(vote.getCreator().getUsername());
         response.setCreatorAvatarUrl(vote.getCreator().getAvatarUrl());
+        response.setCreatorOfficial(vote.getCreator().isOfficial());
         response.setStartTime(vote.getStartTime());
         response.setEndTime(vote.getEndTime());
         response.setDeadline(vote.getDeadline());

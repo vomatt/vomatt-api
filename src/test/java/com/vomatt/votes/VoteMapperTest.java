@@ -93,4 +93,29 @@ class VoteMapperTest {
         assertThat(results.getOptions()).extracting(VoteResultResponse.VoteOptionResultResponse::getPercentage)
                 .containsExactly(75.0, 25.0);
     }
+
+    @Test
+    @DisplayName("should keep option counts and winners Sealed after the Poll Ended until its reveal time, Turnout visible")
+    void shouldSealResultsWhenEndedBeforeRevealAt() {
+        Vote vote = poll(now.minusDays(2), now.minusDays(1), 4);
+        vote.setRevealAt(now.plusHours(1));
+        vote.setPro(true);
+        VoteResponse response = mapper.toResponse(vote, List.of(option("A", 3), option("B", 1)));
+
+        assertThat(response.getOptions()).extracting(VoteResponse.VoteOptionResponse::getVotes).containsOnlyNulls();
+        assertThat(response.getParticipantCount()).isEqualTo(4);
+        assertThat(response.isPro()).isTrue();
+        assertThat(response.getRevealAt()).isEqualTo(vote.getRevealAt());
+        assertThat(mapper.toWinners(vote)).isNull();
+    }
+
+    @Test
+    @DisplayName("should show option counts once the reveal time passed")
+    void shouldUnsealResultsWhenRevealAtPassed() {
+        Vote vote = poll(now.minusDays(2), now.minusDays(1), 4);
+        vote.setRevealAt(now.minusHours(1));
+        VoteResponse response = mapper.toResponse(vote, List.of(option("A", 3), option("B", 1)));
+
+        assertThat(response.getOptions()).extracting(VoteResponse.VoteOptionResponse::getVotes).containsExactly(3L, 1L);
+    }
 }

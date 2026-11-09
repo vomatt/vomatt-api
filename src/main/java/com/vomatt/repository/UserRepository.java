@@ -100,8 +100,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
      */
     @Query("SELECT u.id AS id, u.username AS username, u.displayName AS displayName, u.bio AS bio, u.avatarUrl AS avatarUrl, " +
            "u.createdAt AS createdAt, u.firstName AS firstName, " +
-           "u.lastName AS lastName, u.location AS location, u.points AS points, " +
-           "u.membershipLevel AS membershipLevel, u.active AS active, " +
+           "u.lastName AS lastName, u.location AS location, u.gender AS gender, u.active AS active, u.roles AS roles, " +
            "(SELECT COUNT(v) FROM Vote v WHERE v.creator.id = u.id AND v.startTime <= CURRENT_TIMESTAMP " +
            "AND v.endTime > v.startTime AND v.deletedAt IS NULL AND v.audience = com.vomatt.entity.Audience.PUBLIC) AS totalPolls, " +
            "(SELECT COUNT(uv) FROM UserVote uv WHERE uv.user.id = u.id AND uv.vote.deletedAt IS NULL " +

@@ -2,6 +2,7 @@ package com.vomatt.votes;
 
 import com.vomatt.lookups.LookupService;
 import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.security.ActingMember;
 import com.vomatt.common.util.AfterCommit;
 import com.vomatt.common.util.TextUtil;
 import com.vomatt.common.util.UUIDv7Generator;
@@ -121,7 +122,7 @@ public class VoteService {
     private int invitationDailyLimit;
 
     public VoteResponse createVote(CreateVoteRequest request, String creatorId) {
-        validateCreateVoteRequest(request, request.getStartTime());
+        validateCreateVoteRequest(request, request.getStartTime(), request.getRevealAt());
         validateInviteeIds(request, request.getAudience());
 
         User creator = userRepository.findById(UUID.fromString(creatorId))
@@ -129,7 +130,9 @@ public class VoteService {
         InviteListService.Members inviteLists = inviteListService.expand(orEmpty(request.getInviteListIds()), creator.getId());
 
         Vote vote = new Vote(request.getTitle(), request.getDescription(), creator, request.getEndTime());
+        vote.setActedBy(ActingMember.current().map(ActingMember::memberId).orElse(null));
         vote.setStartTime(request.getStartTime() != null ? request.getStartTime() : OffsetDateTime.now());
+        vote.setRevealAt(request.getRevealAt());
         applyVoterVisibility(vote, request);
         if (request.getAudience() != null) {
             vote.setAudience(request.getAudience());
@@ -163,7 +166,9 @@ public class VoteService {
         }
         // An omitted start time keeps the scheduled one; create's "now" default would open the Poll on edit
         OffsetDateTime startTime = request.getStartTime() != null ? request.getStartTime() : vote.getStartTime();
-        validateCreateVoteRequest(request, startTime);
+        // Like the start time, an omitted reveal time keeps the current one, so an edit never unseals by omission
+        OffsetDateTime revealAt = request.getRevealAt() != null ? request.getRevealAt() : vote.getRevealAt();
+        validateCreateVoteRequest(request, startTime, revealAt);
         Audience oldAudience = vote.getAudience();
         Audience audience = request.getAudience() != null ? request.getAudience() : oldAudience;
         validateInviteeIds(request, audience);
@@ -173,6 +178,7 @@ public class VoteService {
         vote.setDescription(request.getDescription());
         vote.setStartTime(startTime);
         vote.scheduleEnd(request.getEndTime());
+        vote.setRevealAt(revealAt);
         applyVoterVisibility(vote, request);
 
         Set<UUID> oldTagIds = countedTagIds(vote);
@@ -267,6 +273,24 @@ public class VoteService {
         UserGuard.requireExists(userRepository, userId);
     }
 
+    /** Likes a Poll the caller can see, in any state (no Ballot needed); idempotent, a repeat keeps the first like. */
+    public void like(String voteId, String userId) {
+        Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
+        UUID userUuid = UUID.fromString(userId);
+        if (voteRepository.insertLikeIfAbsent(UUIDv7Generator.generateId(), userUuid, vote.getId()) > 0) {
+            log.info("User {} liked vote {}", userId, voteId);
+        } else if (!voteRepository.existsLiveLike(userUuid, vote.getId())) {
+            requireLiveVote(vote.getId(), userUuid);
+        }
+    }
+
+    /** Removes the caller's like; idempotent, and also for a Poll they can no longer reach. */
+    public void unlike(String voteId, String userId) {
+        if (voteRepository.deleteLike(UUID.fromString(userId), UUID.fromString(voteId)) > 0) {
+            log.info("User {} removed like on vote {}", userId, voteId);
+        }
+    }
+
     /** Removes the caller's bookmark; idempotent, and also for a Poll they can no longer reach. */
     public void unbookmark(String voteId, String userId) {
         if (bookmarkRepository.deleteByUserIdAndVoteId(UUID.fromString(userId), UUID.fromString(voteId)) > 0) {
@@ -319,7 +343,7 @@ public class VoteService {
                 || inviteeRepository.existsByVoteIdAndUserId(v.getId(), UUID.fromString(viewerId)))
             .map(Vote::getCreator)
             .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
-        return new VoteCreatorResponse(creator.getUsername(), creator.getAvatarUrl());
+        return new VoteCreatorResponse(creator.getUsername(), creator.getAvatarUrl(), creator.isOfficial());
     }
 
     /**
@@ -426,7 +450,7 @@ public class VoteService {
     private UUID castBallot(String voteId, VoteRequest request, String userId) {
         UUID voteUuid = UUID.fromString(voteId);
         UUID userUuid = UUID.fromString(userId);
-        Vote vote = lockOpenVote(voteUuid, userId);
+        Vote vote = lockOpenVote(voteUuid, userId, true);
 
         if (request.getOptionIds().size() > 1) {
             throw ApiException.badRequest(MessageKey.VOTE_MULTIPLE_NOT_ALLOWED);
@@ -442,9 +466,14 @@ public class VoteService {
             .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
 
         Optional<UserVote> previous = userVoteRepository.findByUserIdAndVoteId(userUuid, voteUuid);
-        // An omitted flag keeps the current Ballot's, so a client that does not resend it never unmasks the user
+        // A Pro poll names nobody anyway, so it takes no new Anonymous Ballot; one cast before Pro was on stays as is
+        if (vote.isPro() && Boolean.TRUE.equals(request.getAnonymous())) {
+            throw ApiException.badRequest(MessageKey.VOTE_BALLOT_ANONYMOUS_NOT_ALLOWED);
+        }
+        // An omitted flag keeps the current Ballot's, so a client that does not resend it never unmasks the user.
+        // A first Ballot uses the user's default, except on a Pro poll
         boolean anonymous = request.getAnonymous() != null ? request.getAnonymous()
-            : previous.map(UserVote::isAnonymous).orElseGet(() -> preferenceRepository.anonymousBallotByDefault(userUuid));
+            : previous.map(UserVote::isAnonymous).orElseGet(() -> !vote.isPro() && preferenceRepository.anonymousBallotByDefault(userUuid));
         boolean unchanged = previous.filter(b -> b.getOption().getId().equals(optionUuid)).isPresent();
         if (unchanged) {
             if (previous.get().isAnonymous() != anonymous) {
@@ -477,7 +506,7 @@ public class VoteService {
         checkBallotRateLimit(userId);
         UUID voteUuid = UUID.fromString(voteId);
         transactionTemplate.execute(s -> {
-            lockOpenVote(voteUuid, userId);
+            lockOpenVote(voteUuid, userId, false);
             userVoteRepository.findByUserIdAndVoteId(UUID.fromString(userId), voteUuid)
                 .ifPresent(this::releaseBallot);
             log.info("ballot.retract vote={}", voteId);
@@ -493,7 +522,7 @@ public class VoteService {
         UUID voteUuid = UUID.fromString(voteId);
         UUID userUuid = UUID.fromString(userId);
         transactionTemplate.execute(s -> {
-            lockOpenVote(voteUuid, userId);
+            lockOpenVote(voteUuid, userId, false);
             userVoteRepository.findByUserIdAndVoteIdAndOptionId(userUuid, voteUuid, UUID.fromString(optionId))
                 .ifPresent(ballot -> {
                     releaseBallot(ballot);
@@ -709,6 +738,10 @@ public class VoteService {
         if (users.size() != ids.size()) {
             throw ApiException.badRequest(MessageKey.VOTE_INVITEE_IDS_INVALID);
         }
+        // An official account never votes, so as an Invitee it would only keep the Poll from auto-ending
+        if (users.stream().anyMatch(User::isOfficial)) {
+            throw ApiException.badRequest(MessageKey.OFFICIAL_INVITEE_NOT_ALLOWED);
+        }
         List<Invitee> invited = inviteeRepository.findByVoteId(vote.getId());
         Set<UUID> invitedById = invited.stream().filter(i -> i.getEmail() == null)
             .map(i -> i.getUser().getId()).collect(Collectors.toCollection(HashSet::new));
@@ -820,9 +853,11 @@ public class VoteService {
     }
 
     // is_anonymous mirrors NOBODY so the legacy column never disagrees with Voter Visibility
+    // A Pro poll silently stays NOBODY whatever the request asks
     private static void applyVoterVisibility(Vote vote, CreateVoteRequest request) {
         vote.setVoterVisibility(request.resolveVoterVisibility(vote.getVoterVisibility()));
         vote.setAnonymous(vote.getVoterVisibility() == VoterVisibility.NOBODY);
+        vote.applyProRules();
     }
 
     private static <T> List<T> orEmpty(List<T> list) {
@@ -884,6 +919,7 @@ public class VoteService {
         if (!owned.isOwnedBy(userId)) {
             throw ApiException.forbidden(MessageKey.VOTE_FORBIDDEN);
         }
+        ActingMember.requireMayEdit(owned.getActedBy());
         return owned;
     }
 
@@ -938,6 +974,7 @@ public class VoteService {
                 .collect(Collectors.toMap(IdCount::getId, IdCount::getCount));
         // Read only when the page holds the caller's own Polls (the only ones that get deletable)
         Duration deleteWindow = votes.stream().anyMatch(v -> v.isOwnedBy(userId)) ? deleteWindow() : null;
+        Set<UUID> liked = userId == null ? Set.of() : Set.copyOf(voteRepository.findLikedVoteIds(UUID.fromString(userId), ids));
         return votes.stream().map(vote -> {
             VoteResponse response = voteMapper.toResponse(vote, sortedOptions(vote));
             BallotSelection mine = selections.get(vote.getId());
@@ -948,6 +985,7 @@ public class VoteService {
             if (userId != null) {
                 response.setBookmarked(bookmarked.contains(vote.getId()));
             }
+            response.setLikedByMe(liked.contains(vote.getId()));
             if (vote.getAudience() == Audience.INVITE_ONLY) {
                 response.setInviteeCount(inviteeCounts.getOrDefault(vote.getId(), 0L));
             }
@@ -982,14 +1020,31 @@ public class VoteService {
      * Ballots can change only while Open; frozen once Ended. Takes the exclusive Poll-row lock and checks the status
      * under it, so a Close or Edit cannot slip in between. The lock also serializes one user's Ballot changes in the Poll.
      */
-    private Vote lockOpenVote(UUID voteId, String userId) {
+    private Vote lockOpenVote(UUID voteId, String userId, boolean selecting) {
         Vote vote = requireAccessible(lockVote(voteId), userId);
         switch (vote.getStatus()) {
             case ENDED -> throw ApiException.badRequest(MessageKey.VOTE_ENDED);
             case SCHEDULED -> throw ApiException.badRequest(MessageKey.VOTE_NOT_ALLOWED);
             case OPEN -> { }
         }
+        // After the status check, so nobody is sent to bind a phone for a Poll they could not vote in anyway
+        requireBallotEligible(vote, userId, selecting);
         return vote;
+    }
+
+    /**
+     * The one check of who may hold a Ballot in a Poll, run by cast, change, Retraction and Selection removal: an
+     * official account never votes, and a Pro poll takes a Selection ({@code selecting}: cast or change) only from
+     * users with a verified phone number. Withdrawing one needs no phone, so a user who lost it is never stuck.
+     */
+    void requireBallotEligible(Vote vote, String userId, boolean selecting) {
+        if (ActingMember.current().isPresent()) {
+            throw ApiException.forbidden(MessageKey.VOTE_BALLOT_OFFICIAL_NOT_ALLOWED);
+        }
+        if (selecting && vote.isPro() && !userRepository.findById(UUID.fromString(userId))
+                .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND)).isPhoneVerified()) {
+            throw ApiException.forbidden(MessageKey.VOTE_BALLOT_PHONE_VERIFICATION_REQUIRED);
+        }
     }
 
     // Deletes the Ballot row and returns the option whose count must be released
@@ -1053,8 +1108,8 @@ public class VoteService {
         }
     }
 
-    // startTime null means the Poll opens now
-    private void validateCreateVoteRequest(CreateVoteRequest request, OffsetDateTime startTime) {
+    // startTime null means the Poll opens now; revealAt null means results unseal when the Poll Ends
+    private void validateCreateVoteRequest(CreateVoteRequest request, OffsetDateTime startTime, OffsetDateTime revealAt) {
         if (request.isAllowMultipleChoices()) {
             throw ApiException.badRequest(MessageKey.VOTE_MULTIPLE_NOT_ALLOWED);
         }
@@ -1084,6 +1139,14 @@ public class VoteService {
             OffsetDateTime maxEndTime = (startTime != null ? startTime : OffsetDateTime.now()).plus(maxDuration);
             if (request.getEndTime().isAfter(maxEndTime)) {
                 throw ApiException.badRequest(MessageKey.VOTE_DURATION_EXCEEDED, maxDuration.toDays());
+            }
+
+            if (revealAt != null && revealAt.isBefore(request.getEndTime())) {
+                throw ApiException.badRequest(MessageKey.VOTE_REVEAL_BEFORE_END);
+            }
+            // Sealed at most one more max Poll duration past the end
+            if (revealAt != null && revealAt.isAfter(request.getEndTime().plus(maxDuration))) {
+                throw ApiException.badRequest(MessageKey.VOTE_REVEAL_TOO_LATE, maxDuration.toDays());
             }
         }
     }

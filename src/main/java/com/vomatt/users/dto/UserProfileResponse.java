@@ -1,5 +1,6 @@
 package com.vomatt.users.dto;
 
+import com.vomatt.entity.Gender;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.OffsetDateTime;
@@ -35,10 +36,8 @@ public record UserProfileResponse(
         String lastName,
         @Schema(description = "Location; null when hidden (default) or not set", example = "Taipei", nullable = true)
         String location,
-        @Schema(description = "Points; null when hidden (default)", example = "120", nullable = true)
-        Integer points,
-        @Schema(description = "Membership level; null when hidden (default) or not set", example = "basic", nullable = true)
-        String membershipLevel,
+        @Schema(description = "Gender; null when hidden (default) or not provided", example = "FEMALE", nullable = true)
+        Gender gender,
         // viewer relation: null for a signed-out caller, false on the caller's own profile
         @Schema(description = "Whether the caller follows this user; null when signed out, false on the caller's own profile",
                 example = "false", nullable = true)
@@ -55,5 +54,7 @@ public record UserProfileResponse(
         Integer mutualFollowersCount,
         @Schema(description = "First 3 of those mutual followers, most recently followed first; empty when there are none, "
                 + "null when signed out and on the caller's own profile", nullable = true)
-        List<UserDto> mutualFollowersPreview
+        List<UserDto> mutualFollowersPreview,
+        @Schema(description = "Whether this is an official account (a group's page, shown with a badge)", example = "false")
+        boolean official
 ) {}

@@ -1,0 +1,13 @@
+package com.vomatt.users.dto;
+
+import com.vomatt.entity.OfficialRole;
+import io.swagger.v3.oas.annotations.media.Schema;
+
+@Schema(description = "An official account the caller belongs to, for the account switcher")
+public record MyOfficialResponse(
+        @Schema(description = "Official account's user id; send it as `X-Act-As` to act as the account", example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48") String officialId,
+        @Schema(description = "Official account's username", example = "sunrise_tower") String username,
+        @Schema(description = "Group name", example = "Sunrise Tower Committee", nullable = true) String displayName,
+        @Schema(description = "Logo as `bot:<kind>` or `/api/avatars/<id>.jpg`; null if never set", example = "/api/avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d49.jpg", nullable = true) String avatarUrl,
+        @Schema(description = "The caller's role: OWNER, ADMIN, CHIEF_EDITOR, EDITOR or ANALYST", example = "EDITOR") OfficialRole role
+) {}

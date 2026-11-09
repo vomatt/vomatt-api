@@ -136,6 +136,17 @@ class InviteListServiceTest {
     }
 
     @Test
+    void shouldRejectAddWhenMemberIsOfficialAccount() {
+        lockInviteList();
+        User official = User.builder().id(UUID.randomUUID()).roles(new String[] { "official" }).build();
+        when(userRepository.findAllById(Set.of(official.getId()))).thenReturn(List.of(official));
+
+        assertThatThrownBy(() -> inviteListService.addMembers(inviteListId.toString(),
+                members(List.of(official.getId()), null), ownerId.toString()))
+                .satisfies(ex -> assertApiException(ex, MessageKey.OFFICIAL_INVITEE_NOT_ALLOWED));
+    }
+
+    @Test
     @DisplayName("should throw 400 INVITE_LIST_MEMBER_IDS_INVALID when a user by ID is suspended or unknown")
     void shouldRejectAddWhenUserSuspended() {
         lockInviteList();

@@ -225,7 +225,8 @@ public class RefreshTokenService {
         // Do not trust the stale roles in the refresh token (they may have been revoked) or ignore the ban status; otherwise a user stripped of ADMIN /
         // a banned user could keep going for 30 days via rotation. Reload from the DB for the latest roles / isBanned.
         User user = userRepository.findById(UUID.fromString(data.userId())).orElse(null);
-        if (user == null || !user.isActive()) {
+        // An official account never holds a session of its own (see AuthService#buildAuthResponse)
+        if (user == null || !user.isActive() || user.isOfficial()) {
             // Account missing or banned -> revoke all of the user's sessions and return null so the caller returns 401
             log.warn("Refresh rotation rejected (user missing or banned), revoking all sessions for userId={}",
                     data.userId());

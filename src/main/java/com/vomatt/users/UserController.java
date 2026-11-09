@@ -1,6 +1,11 @@
 package com.vomatt.users;
 
+import com.vomatt.auth.AuthService;
 import com.vomatt.auth.PasskeyService;
+import com.vomatt.auth.dto.PhoneVerifyOtpRequest;
+import com.vomatt.common.util.ClientIpResolver;
+import com.vomatt.users.dto.BindPhoneSendOtpRequest;
+import jakarta.servlet.http.HttpServletRequest;
 import com.vomatt.auth.dto.PasskeyResponse;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
@@ -54,13 +59,14 @@ public class UserController {
     private final UserService userService;
     private final VoteService voteService;
     private final PasskeyService passkeyService;
+    private final AuthService authService;
     private final RefreshTokenService refreshTokenService;
 
     @GetMapping("/me")
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":null,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","points":120,"membershipLevel":"basic","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"followersCount":12,"followingCount":8,"visibilitySettings":{"firstName":false,"lastName":false,"location":false,"points":false,"displayName":true,"bio":true,"membershipLevel":false},"anonymousBallotByDefault":false},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":null,"phoneVerified":false,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","gender":"FEMALE","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"followersCount":12,"followingCount":8,"visibilitySettings":{"firstName":false,"lastName":false,"location":false,"displayName":true,"bio":true,"gender":false},"anonymousBallotByDefault":false},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
@@ -87,7 +93,7 @@ public class UserController {
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"exportedAt":"2026-10-23T10:00:00+08:00","profile":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":null,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","points":120,"membershipLevel":"basic","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":1,"totalVotes":1,"followersCount":0,"followingCount":1,"visibilitySettings":{"firstName":false,"lastName":false,"location":true,"points":false,"displayName":true,"bio":true,"membershipLevel":false},"anonymousBallotByDefault":false},"preferences":{"visibility.location":"true"},"polls":[{"id":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","title":"Lunch?","description":null,"audience":"PUBLIC","startTime":"2026-10-01T12:00:00+08:00","endTime":"2026-10-08T12:00:00+08:00","createdAt":"2026-10-01T12:00:00+08:00","deleted":false,"options":["Ramen","Sushi"]}],"comments":[{"id":"0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b","voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","text":"Ramen!","createdAt":"2026-10-02T09:00:00+08:00"}],"ballots":[{"voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","voteTitle":"Lunch?","optionId":"0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813","optionText":"Ramen","anonymous":false,"castAt":"2026-10-02T08:30:00+08:00"}],"feedback":[{"id":"0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70","content":"Please add dark mode.","createdAt":"2026-10-03T10:00:00+08:00"}],"following":[{"userId":"0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f","username":"bob","since":"2026-10-04T10:00:00+08:00"}],"blocking":[]},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"exportedAt":"2026-10-23T10:00:00+08:00","profile":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":null,"phoneVerified":false,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","gender":"FEMALE","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":1,"totalVotes":1,"followersCount":0,"followingCount":1,"visibilitySettings":{"firstName":false,"lastName":false,"location":true,"displayName":true,"bio":true,"gender":false},"anonymousBallotByDefault":false},"preferences":{"visibility.location":"true"},"polls":[{"id":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","title":"Lunch?","description":null,"audience":"PUBLIC","startTime":"2026-10-01T12:00:00+08:00","endTime":"2026-10-08T12:00:00+08:00","createdAt":"2026-10-01T12:00:00+08:00","deleted":false,"options":["Ramen","Sushi"]}],"comments":[{"id":"0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b","voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","text":"Ramen!","createdAt":"2026-10-02T09:00:00+08:00"}],"ballots":[{"voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","voteTitle":"Lunch?","optionId":"0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813","optionText":"Ramen","anonymous":false,"castAt":"2026-10-02T08:30:00+08:00"}],"feedback":[{"id":"0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70","content":"Please add dark mode.","createdAt":"2026-10-03T10:00:00+08:00"}],"following":[{"userId":"0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f","username":"bob","since":"2026-10-04T10:00:00+08:00"}],"blocking":[]},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "Already exported today (`common.rate_limited`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
@@ -111,7 +117,7 @@ public class UserController {
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"firstName":true,"lastName":true,"location":false,"points":false,"displayName":true,"bio":true,"membershipLevel":false},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"firstName":true,"lastName":true,"location":false,"displayName":true,"bio":true,"gender":false},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
@@ -137,7 +143,7 @@ public class UserController {
     @PublicApiResponse
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"followersCount":12,"followingCount":8,"firstName":"Alice","lastName":null,"location":null,"points":null,"membershipLevel":null,"isFollowing":true,"followsYou":true,"isBlocked":false,"mutualFollowersCount":3,"mutualFollowersPreview":[{"id":"0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f","username":"jtan","displayName":"J Tan","avatarUrl":"bot:boba"},{"id":"0199c1a3-1a2b-7c3d-8e4f-5a6b7c8d9e0f","username":"mia","displayName":null,"avatarUrl":"bot:pip"},{"id":"0199c1a3-2b3c-7d4e-9f5a-6b7c8d9e0f1a","username":"ken","displayName":"Ken","avatarUrl":null}]},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"followersCount":12,"followingCount":8,"firstName":"Alice","lastName":null,"location":null,"gender":null,"isFollowing":true,"followsYou":true,"isBlocked":false,"mutualFollowersCount":3,"mutualFollowersPreview":[{"id":"0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f","username":"jtan","displayName":"J Tan","avatarUrl":"bot:boba"},{"id":"0199c1a3-1a2b-7c3d-8e4f-5a6b7c8d9e0f","username":"mia","displayName":null,"avatarUrl":"bot:pip"},{"id":"0199c1a3-2b3c-7d4e-9f5a-6b7c8d9e0f1a","username":"ken","displayName":"Ken","avatarUrl":null}]},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No user with this username (errorCode `user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
@@ -153,7 +159,7 @@ public class UserController {
             (suspended accounts left out, blocks not filtered). Profile fields do not depend on the caller. `username`, `avatarUrl`, `joinedAt`, `totalPolls` and `totalVotes` (Public, non-Deleted Polls only) are always present \
             (`avatarUrl` is `null` when never set). \
             Every optional field is `null` unless the owner made it visible: `displayName` and `bio` are visible by default, \
-            `firstName`, `lastName`, `location`, `points` and `membershipLevel` are hidden by default; email and birthday are never returned. \
+            `firstName`, `lastName`, `location` and `gender` are hidden by default; email, phone number and birthday are never returned. \
             `totalPolls` counts only Polls that have opened (Open and Ended), matching `GET /api/users/{username}/votes`.
             **Side effects**: none
             **Errors**:
@@ -285,7 +291,7 @@ public class UserController {
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice C.","bio":"Poll enthusiast","avatarUrl":"bot:boba","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"firstName":"Alice","lastName":null,"location":null,"points":null,"membershipLevel":null,"isFollowing":false,"isBlocked":false},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice C.","bio":"Poll enthusiast","avatarUrl":"bot:boba","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"firstName":"Alice","lastName":null,"location":null,"gender":null,"isFollowing":false,"isBlocked":false},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
@@ -297,14 +303,14 @@ public class UserController {
     @Operation(summary = "Update my profile", description = """
             **Auth**: required
             **Precondition**: none
-            **Behavior**: updates `username`, `displayName`, `firstName`, `lastName`, `birthday`, `bio`, `avatarUrl` and/or `anonymousBallotByDefault` (the default for Ballots that omit `anonymous`; existing Ballots are unchanged). `avatarUrl` must be `bot:<kind>` with one of the bot cast kinds, or `bot:none` for no character; an uploaded image is set only through `PUT /api/users/me/avatar`, and switching to a bot avatar deletes the uploaded image once the change commits. `firstName` and `lastName` are stored without surrounding whitespace, and a blank value clears them. `birthday` is an ISO date (`yyyy-MM-dd`) from 1900-01-01 to yesterday in Asia/Taipei. Sending the current `username` is a no-op, except that an older account holding a reserved name gets 400 (omit `username` when unchanged). A field that is omitted or `null` is left unchanged \
-            (`null` cannot be used to clear a value; send an empty string instead, except `avatarUrl` and `birthday`, which cannot be cleared). Returns the caller's profile after the update: \
+            **Behavior**: updates `username`, `displayName`, `firstName`, `lastName`, `birthday`, `gender`, `bio`, `avatarUrl` and/or `anonymousBallotByDefault` (the default for Ballots that omit `anonymous`; existing Ballots are unchanged). `avatarUrl` must be `bot:<kind>` with one of the bot cast kinds, or `bot:none` for no character; an uploaded image is set only through `PUT /api/users/me/avatar`, and switching to a bot avatar deletes the uploaded image once the change commits. `firstName` and `lastName` are stored without surrounding whitespace, and a blank value clears them. `birthday` is an ISO date (`yyyy-MM-dd`) from 1900-01-01 to yesterday in Asia/Taipei. `gender` is one of `MALE`, `FEMALE`, `OTHER`, `UNDISCLOSED` (hidden on the public profile unless made visible). Sending the current `username` is a no-op, except that an older account holding a reserved name gets 400 (omit `username` when unchanged). A field that is omitted or `null` is left unchanged \
+            (`null` cannot be used to clear a value; send an empty string instead, except `avatarUrl`, `birthday` and `gender`, which cannot be cleared). Returns the caller's profile after the update: \
             optional fields the caller explicitly hid are `null`, fields whose visibility was never set are shown.
             **Side effects**: persists the new values; after a `username` change the old public profile path returns 404
             **Errors**:
             - 400 `common.validation_failed`: `username` is not 3-50 characters of [a-z0-9_] or is a reserved name (see the `username` schema), \
             `displayName` exceeds 100 characters, `firstName` or `lastName` exceeds 50 characters, `birthday` is before 1900-01-01 or not before today (Asia/Taipei), `bio` exceeds 500 characters, or `avatarUrl` is not a known `bot:<kind>` or `bot:none`
-            - 400 `common.bad_request`: `birthday` is not a valid `yyyy-MM-dd` date
+            - 400 `common.bad_request`: `birthday` is not a valid `yyyy-MM-dd` date, or `gender` is not one of the allowed values
             - 404 `user.not_found`: the account no longer exists
             - 409 `user.username.taken`: another account already uses `username`""")
     public ResponseEntity<ApiResponse<UserProfileResponse>> updateMyProfile(
@@ -315,11 +321,77 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.ok(profile));
     }
 
+    @PostMapping("/me/phone/send-otp")
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
+            content = @Content(examples = @ExampleObject(value = """
+                    {"success":true,"data":{"success":true},"message":null,"errorCode":null,"error":null}""")))
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
+                    {"phone": "0912345678"}""")))
+    @Operation(summary = "Send phone bind OTP", description = """
+            **Auth**: required
+            **Precondition**: none; a number already used by another account gets the same response, which is told only by `POST /api/users/me/phone/verify`
+            **Behavior**: normalizes the number to E.164 (`0912345678` and `+886912345678` are the same number), generates a 6-digit OTP, stores it with a TTL (default 180 s) and sends it by SMS. \
+            The code only binds a phone (`POST /api/users/me/phone/verify`); it cannot sign in, and a sign-in code from `POST /api/auth/phone/send-otp` cannot bind
+            **Side effects**: sends an SMS; replaces any previous bind OTP for this number. A resend is refused during the cooldown (default 180 s), and each IP can request at most 5 bind OTPs for one number per UTC day, and all IPs together 15
+            **Errors**:
+            - 400 `auth.phone.invalid`: the number is neither a Taiwan mobile number (`09` + 8 digits) nor `+` country code and number (8-15 digits)
+            - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
+            - 400 `auth.sms.send_failed`: the SMS provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
+            - 401 `auth.otp.too_many_attempts`: binding this number is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours)
+            - 429 `auth.otp.daily_limit`: 5 bind OTPs were already requested for this number from this IP today (UTC), or 15 from all IPs""")
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> sendPhoneBindOtp(
+            @Valid @RequestBody BindPhoneSendOtpRequest request, HttpServletRequest httpRequest) {
+        authService.sendPhoneBindOtp(request.phone(), ClientIpResolver.resolve(httpRequest));
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
+    @PostMapping("/me/phone/verify")
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
+            content = @Content(examples = @ExampleObject(value = """
+                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":"+886912345678","phoneVerified":true,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","gender":"FEMALE","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"createdPollCount":6,"votedPollCount":21,"followersCount":12,"followingCount":8,"visibilitySettings":{"firstName":false,"lastName":false,"location":false,"displayName":true,"bio":true,"gender":false},"anonymousBallotByDefault":false},"message":null,"errorCode":null,"error":null}""")))
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
+                    {"phone": "0912345678", "code": "123456"}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(value = """
+                            {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Number already used by another account (errorCode `user.phone.taken`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(value = """
+                            {"success":false,"data":null,"message":"Phone number already in use","errorCode":"user.phone.taken","error":"Phone number already in use"}""")))
+    @Operation(summary = "Verify phone bind OTP", description = """
+            **Auth**: required
+            **Precondition**: a bind OTP was sent to this number via `POST /api/users/me/phone/send-otp` and has not expired
+            **Behavior**: normalizes the number to E.164 like send-otp, consumes the OTP, then sets the caller's `phoneNumber` to it and marks it verified. \
+            Binding a different number replaces the old one, verified by this OTP; re-verifying the current number only refreshes its verification. \
+            Returns the caller's profile as `GET /api/users/me` does, with `phoneVerified` true
+            **Side effects**: the OTP is consumed on success (also when the number turns out to be taken). Wrong codes are counted per number and client IP as on sign-in: \
+            the 3rd wrong code locks binding this number for the caller's IP (5 minutes, doubling up to 24 hours), and one OTP allows 10 guesses in total across all IPs. \
+            Once bound, the number also signs in to this account through `POST /api/auth/phone/verify-otp`
+            **Errors**:
+            - 400 `auth.phone.invalid`: the number is not in a supported format (see send-otp)
+            - 401 `auth.otp.invalid_or_expired`: no bind OTP exists for this number (never sent, expired, already used, or its 10 guesses are used up)
+            - 401 `auth.invalid_otp`: the code is wrong
+            - 401 `auth.otp.too_many_attempts`: 3rd wrong code, or binding this number is locked for the caller's IP
+            - 404 `user.not_found`: the account no longer exists
+            - 409 `user.phone.taken`: another account already uses this number
+            - 409 `common.conflict`: another account bound the same number at the same moment""")
+    public ResponseEntity<ApiResponse<MyProfileResponse>> verifyPhoneBind(
+            @Valid @RequestBody PhoneVerifyOtpRequest request,
+            @AuthenticationPrincipal UserPrincipal principal, HttpServletRequest httpRequest) {
+        authService.bindPhone(UUID.fromString(principal.userId()), request.phone(), request.code(),
+                ClientIpResolver.resolve(httpRequest));
+        log.info("Phone bound for user: {}", principal.userId());
+        return ResponseEntity.ok(ApiResponse.ok(userService.getMyProfile(principal.userId())));
+    }
+
     @PutMapping(value = "/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice C.","bio":"Poll enthusiast","avatarUrl":"/api/avatars/019a5e3c-2f1d-7b6a-8c4e-5d7f9a1b3c2e.jpg","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"firstName":"Alice","lastName":null,"location":null,"points":null,"membershipLevel":null,"isFollowing":false,"isBlocked":false},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice C.","bio":"Poll enthusiast","avatarUrl":"/api/avatars/019a5e3c-2f1d-7b6a-8c4e-5d7f9a1b3c2e.jpg","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"firstName":"Alice","lastName":null,"location":null,"gender":null,"isFollowing":false,"isBlocked":false},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "413", description = "File larger than 2 MB (errorCode `common.file_too_large`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """

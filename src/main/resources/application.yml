@@ -29,9 +29,11 @@ spring:
 
   flyway:
     # Migrations run at startup, so an unreachable database now fails startup (SPRING_FLYWAY_ENABLED=false skips them).
-    # Databases created from the old schema.sql have no history table: baselined at V1, then V2 catches them up
+    # Databases created from the old schema.sql have no history table: baselined at the baseline migration's version,
+    # then catch_up brings them up to date
     schemas: vomatt
     baseline-on-migrate: true
+    baseline-version: "20261027125251"
 
   jpa:
     # Do not read DB metadata at startup (serverless cold start: open the port even if the DB is slow or unreachable; errors surface at request time)

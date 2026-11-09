@@ -22,7 +22,8 @@ public class UserMapper {
                 user.getId().toString(),
                 user.getUsername(),
                 displayNameVisible ? user.getDisplayName() : null,
-                user.getAvatarUrl()
+                user.getAvatarUrl(),
+                user.isOfficial()
         );
     }
 
@@ -34,7 +35,8 @@ public class UserMapper {
                 displayNameVisible ? user.getDisplayName() : null,
                 user.getAvatarUrl(),
                 isFollowing,
-                followsYou
+                followsYou,
+                user.isOfficial()
         );
     }
 
@@ -49,15 +51,15 @@ public class UserMapper {
                 user.getUsername(),
                 user.getEmail(),
                 user.getPhoneNumber(),
+                user.isPhoneVerified(),
                 user.getFirstName(),
                 user.getLastName(),
                 user.getBirthday(),
+                user.getGender(),
                 user.getDisplayName(),
                 user.getBio(),
                 user.getAvatarUrl(),
                 user.getLocation(),
-                user.getPoints(),
-                user.getMembershipLevel(),
                 user.isActive(),
                 user.getLastLoginAt(),
                 user.getCreatedAt(),
@@ -68,7 +70,8 @@ public class UserMapper {
                 stats.getFollowersCount().intValue(),
                 stats.getFollowingCount().intValue(),
                 visibilitySettings,
-                anonymousBallotByDefault
+                anonymousBallotByDefault,
+                user.isOfficial()
         );
     }
 
@@ -93,13 +96,13 @@ public class UserMapper {
                 visibility.getOrDefault("firstName", false) ? projection.getFirstName() : null,
                 visibility.getOrDefault("lastName", false) ? projection.getLastName() : null,
                 visibility.getOrDefault("location", false) ? projection.getLocation() : null,
-                visibility.getOrDefault("points", false) ? projection.getPoints() : null,
-                visibility.getOrDefault("membershipLevel", false) ? projection.getMembershipLevel() : null,
+                visibility.getOrDefault("gender", false) ? projection.getGender() : null,
                 isFollowing,
                 followsYou,
                 isBlocked,
                 mutualFollowersCount,
-                mutualFollowersPreview
+                mutualFollowersPreview,
+                projection.isOfficial()
         );
     }
 }

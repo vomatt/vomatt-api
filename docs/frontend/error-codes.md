@@ -67,7 +67,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.passkey.admin_scope_required` | 403 | 此 Passkey 不能登入管理後台，請先用 email 驗證碼登入，再到管理後台重新註冊 Passkey | This passkey cannot sign in to the admin console. Sign in with an email code, then register a passkey from the admin console | Show a permission-denied notice | PasskeyService |
 | `auth.session_revoked` | 401 | 此裝置已被登出，請重新登入 | This device has been signed out. Please sign in again | See [auth-flow.md](auth-flow.md) | JwtAuthFilter |
 | `auth.session_not_found` | 404 | 找不到此登入裝置 | Signed-in device not found | Show resource not found | UserController |
-| `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | AdminUserService, AuthService, CommunityService, FeedbackService, InviteListService, JwtAuthFilter, NotificationService, PasskeyService, UserGuard, UserService, VoteCommentService, VoteService |
+| `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | AdminUserService, AuthService, CommunityService, FeedbackService, InviteListService, JwtAuthFilter, NotificationService, PasskeyService, PlanService, UserGuard, UserService, VoteCommentService, VoteService |
 | `user.username.taken` | 409 | 使用者名稱已被使用 | Username already taken | Show message (resource state conflict) | CommunityService, UserService |
 | `user.phone.taken` | 409 | 手機號碼已被使用 | Phone number already in use | Show message (resource state conflict) | AuthService |
 | `user.delete.forbidden` | 403 | 只能刪除自己的帳號 | You can only delete your own account | Show a permission-denied notice | UserService |
@@ -133,6 +133,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `report.not_pro` | 400 | 只有 Pro 投票提供結果報告 | Result reports are available only for Pro polls | Show message so the user can fix the input | PollReportService |
 | `report.not_ready` | 403 | 投票結束並公布結果後才能查看報告 | The report is available once the poll has ended and its results are revealed | Show a permission-denied notice | PollReportService |
 | `report.cancelled` | 400 | 已取消的投票沒有結果報告 | A cancelled poll has no result report | Show message so the user can fix the input | PollReportService |
+| `community.limit_reached` | 403 | 已達方案可擁有的社群帳號數量上限 | You own as many community accounts as your plan allows | Show a permission-denied notice | PlanService |
 
 ## Success messages and others
 

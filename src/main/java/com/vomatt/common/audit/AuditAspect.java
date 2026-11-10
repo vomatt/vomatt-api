@@ -49,7 +49,7 @@ public class AuditAspect {
             String userId = currentUserId();
             HttpServletRequest request = currentRequest();
             
-            if (request != null && userId != null && request.getAttribute(SUCCESS_ENTRY_WRITTEN) == null) {
+            if (request != null && userId != null && !auditable.action().equals(request.getAttribute(SUCCESS_ENTRY_WRITTEN))) {
                 String resourceId = argString(joinPoint.getArgs(), auditable.resourceIdIndex());
                 
                 auditService.logAction(
@@ -110,10 +110,10 @@ public class AuditAspect {
         return null;
     }
     
-    static void markSuccessEntryWritten() {
+    static void markSuccessEntryWritten(String action) {
         HttpServletRequest request = currentRequest();
         if (request != null) {
-            request.setAttribute(SUCCESS_ENTRY_WRITTEN, true);
+            request.setAttribute(SUCCESS_ENTRY_WRITTEN, action);
         }
     }
 

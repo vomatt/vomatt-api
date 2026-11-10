@@ -46,7 +46,7 @@ public class AdminMapper {
                 user.getFirstName(), user.getLastName(), user.getBirthday(), user.getEmail(),
                 user.getPhoneNumber(), user.getAuthMethod(), List.of(user.getRoles()), user.isActive(),
                 user.getLastLoginAt(), user.getCreatedAt(),
-                pollCount, ballotCount, commentCount, blockingCount, blockedByCount);
+                pollCount, ballotCount, commentCount, blockingCount, blockedByCount, user.getPlan());
     }
 
     /** {@code other} is the side of the block that is not the user being looked at. */

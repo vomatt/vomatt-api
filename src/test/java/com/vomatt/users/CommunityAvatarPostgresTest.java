@@ -49,7 +49,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 /** PUT /api/communities/{id}/avatar with real commits: the upload runs outside the caller's transaction. */
 @Import({ CommunityService.class, UserService.class, UserMapper.class, VoteCommentService.class, CommentMapper.class,
-        VoteServiceSlice.class, StorageService.class, AuditService.class })
+        VoteServiceSlice.class, StorageService.class, PlanService.class, AuditService.class })
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class CommunityAvatarPostgresTest extends PostgresRepositoryTest {
 

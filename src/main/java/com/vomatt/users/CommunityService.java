@@ -48,6 +48,7 @@ public class CommunityService {
     private final LockTimeout lockTimeout;
     private final UserService userService;
     private final AuditService auditService;
+    private final PlanService planService;
 
     /**
      * Creates the community account (no email or phone, so it can never sign in) with {@code ownerUserId} as its first
@@ -58,6 +59,7 @@ public class CommunityService {
             throw ApiException.conflict(MessageKey.USER_USERNAME_TAKEN);
         }
         requireEligible(ownerUserId);
+        planService.requireRoom(ownerUserId);
         User community = userRepository.saveAndFlush(User.builder()
                 .username(username)
                 .displayName(displayName.trim())
@@ -94,6 +96,9 @@ public class CommunityService {
         if (memberRepository.existsById(new CommunityMember.Key(communityId, userId))) {
             throw ApiException.conflict(MessageKey.COMMUNITY_MEMBER_EXISTS);
         }
+        if (role == OWNER) {
+            planService.requireRoom(userId);
+        }
         CommunityMember member = memberRepository.saveAndFlush(new CommunityMember(communityId, userId, role));
         log.info("Community account {}: {} added {} as {}", communityId, callerId, userId, role);
         return toResponse(member, user);
@@ -106,6 +111,9 @@ public class CommunityService {
         requireGrant(caller, role);
         if (member.getRole() == OWNER && role != OWNER) {
             requireAnotherOwner(communityId, userId);
+        }
+        if (role == OWNER && member.getRole() != OWNER) {
+            planService.requireRoom(userId);
         }
         member.setRole(role);
         log.info("Community account {}: {} set {} to {}", communityId, callerId, userId, role);
@@ -130,9 +138,15 @@ public class CommunityService {
     /**
      * OWNER only: the member becomes an OWNER and the caller an ADMIN. Transferring to oneself changes nothing. Takes
      * the OWNER row lock and checks the caller's role under it, so an OWNER demoted concurrently cannot still transfer.
+     * A recipient not yet an OWNER needs room in their plan, checked first: the person's row is locked before OWNER rows.
      */
     public void transferOwner(UUID communityId, UUID userId, String callerId) {
-        requireRole(communityId, callerId);
+        if (requireRole(communityId, callerId) != OWNER) {
+            throw ApiException.forbidden(MessageKey.COMMUNITY_ROLE_FORBIDDEN);
+        }
+        if (findMember(communityId, userId).getRole() != OWNER) {
+            planService.requireRoom(userId);
+        }
         if (!lockTimeout.within(() -> memberRepository.lockOwnerIds(communityId)).contains(UUID.fromString(callerId))) {
             throw ApiException.forbidden(MessageKey.COMMUNITY_ROLE_FORBIDDEN);
         }

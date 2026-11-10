@@ -13,7 +13,6 @@ import com.vomatt.entity.VoteComment;
 import com.vomatt.repository.OfficialMemberRepository;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.repository.UserRepository;
-import com.vomatt.users.dto.CreateOfficialRequest;
 import com.vomatt.users.dto.UserDto;
 import com.vomatt.votes.VoteServiceSlice;
 import com.vomatt.votes.dto.CreateVoteRequest;
@@ -49,8 +48,8 @@ class OfficialPostgresTest extends PostgresRepositoryTest {
     void setUp() {
         owner = persistUser("of-" + UUID.randomUUID().toString().substring(0, 8));
         em.flush();
-        UserDto official = officialService.createOfficial(new CreateOfficialRequest(
-                "official_" + UUID.randomUUID().toString().substring(0, 8), "Sunrise Tower", owner.getId()));
+        UserDto official = officialService.createOfficial(
+                "official_" + UUID.randomUUID().toString().substring(0, 8), "Sunrise Tower", owner.getId());
         officialId = UUID.fromString(official.id());
         em.flush();
         em.clear();
@@ -79,6 +78,21 @@ class OfficialPostgresTest extends PostgresRepositoryTest {
                 .singleElement().satisfies(m -> assertThat(m.role()).isEqualTo(OfficialRole.OWNER));
         // The public profile badge comes from the profile projection
         assertThat(userRepository.findProfileByUsername(official.getUsername()).orElseThrow().getRoles()).contains("official");
+    }
+
+    @Test
+    void shouldRefuseUsernameTakenWhenAnotherAccountHasIt() {
+        String taken = userRepository.findById(officialId).orElseThrow().getUsername();
+
+        assertThatThrownBy(() -> officialService.createOfficial(taken, "Copycat", owner.getId()))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.USER_USERNAME_TAKEN));
+    }
+
+    @Test
+    void shouldRefuseOwnerWhenOwnerIsOfficialAccount() {
+        assertThatThrownBy(() -> officialService.createOfficial("official_child", "Child", officialId))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.OFFICIAL_MEMBER_INVALID));
+        assertThat(userRepository.existsByUsername("official_child")).isFalse();
     }
 
     @Test

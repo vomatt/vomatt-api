@@ -60,6 +60,7 @@ public class AdminOfficialController {
                     examples = @ExampleObject(name = "user.username.taken", value = OpenAPIConfig.ERR_MESSAGE + "Username already taken"
                             + OpenAPIConfig.ERR_CODE + "user.username.taken" + OpenAPIConfig.ERR_ERROR + "Username already taken" + OpenAPIConfig.ERR_END)))
     public ResponseEntity<ApiResponse<UserDto>> createOfficial(@Valid @RequestBody CreateOfficialRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(officialService.createOfficial(request)));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(officialService.createOfficial(
+                request.username(), request.displayName(), request.ownerUserId())));
     }
 }

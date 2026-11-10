@@ -27,6 +27,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.vomatt.entity.CommunityRole.OWNER;
 
@@ -171,6 +172,26 @@ public class CommunityService {
         AuditAspect.recordDetails(String.join("; ", changes));
         log.info("Community account {}: avatar uploaded by {}", communityId, callerId);
         return profile;
+    }
+
+    /**
+     * OWNER only: deletes the community account as {@link UserService#deleteAccount} deletes any account; its memberships
+     * go with it. Checks the role under the OWNER row lock, as {@link #transferOwner} does. The audit details keep the
+     * username, display name and members, which are gone afterwards.
+     */
+    public void deleteCommunity(UUID communityId, String callerId) {
+        requireRole(communityId, callerId);
+        if (!lockTimeout.within(() -> memberRepository.lockOwnerIds(communityId)).contains(UUID.fromString(callerId))) {
+            throw ApiException.forbidden(MessageKey.COMMUNITY_ROLE_FORBIDDEN);
+        }
+        User community = userRepository.findById(communityId).orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
+        String members = memberRepository.findByCommunityUserIdOrderByCreatedAtAscUserIdAsc(communityId).stream()
+                .map(m -> m.getUser().getUsername() + ":" + m.getRole())
+                .collect(Collectors.joining(","));
+        AuditAspect.recordDetails("username=" + community.getUsername() + "; displayName=" + quote(community.getDisplayName())
+                + "; members=" + members);
+        userService.deleteAccount(community, callerId);
+        log.info("Community account {} deleted by {}", communityId, callerId);
     }
 
     private static void change(List<String> changes, String field, String before, String after) {

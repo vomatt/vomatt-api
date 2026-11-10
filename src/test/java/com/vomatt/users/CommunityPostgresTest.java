@@ -152,6 +152,48 @@ class CommunityPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    void shouldDeleteCommunityWithItsPollsAndMembershipsWhenOwnerDeletes() {
+        User editor = persistUser("of-del-" + UUID.randomUUID().toString().substring(0, 8));
+        em.flush();
+        communityService.addMember(communityId, editor.getId(), CommunityRole.EDITOR, owner.getId().toString());
+        User community = userRepository.findById(communityId).orElseThrow();
+        String username = community.getUsername();
+        Vote poll = persistPoll(community, OffsetDateTime.now().minusHours(1), OffsetDateTime.now().plusDays(1), "A", "B");
+        em.flush();
+        em.clear();
+        AuditService auditService = mock(AuditService.class);
+
+        auditedController(auditService, owner.getId()).deleteCommunity(communityId, principal(owner.getId()));
+        em.flush();
+        em.clear();
+
+        assertThatThrownBy(() -> userService.getUserProfile(username, null))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.USER_NOT_FOUND));
+        assertThat(communityService.listMine(owner.getId().toString())).isEmpty();
+        assertThat(communityService.listMine(editor.getId().toString())).isEmpty();
+        assertThat(em.find(Vote.class, poll.getId())).isNull();
+        assertThat(userRepository.findById(owner.getId())).isPresent();
+        verify(auditService).logAction(eq(owner.getId().toString()), eq("DELETE"), eq("COMMUNITY"), eq(communityId.toString()),
+                any(), any(), any(), any(), eq("username=" + username + "; displayName=\"Sunrise Tower\"; members="
+                        + owner.getUsername() + ":OWNER," + editor.getUsername() + ":EDITOR"));
+    }
+
+    @Test
+    void shouldKeepCommunityWhenAdminDeletes() {
+        User admin = persistUser("of-deladm-" + UUID.randomUUID().toString().substring(0, 8));
+        em.flush();
+        communityService.addMember(communityId, admin.getId(), CommunityRole.ADMIN, owner.getId().toString());
+        em.flush();
+
+        assertThatThrownBy(() -> communityService.deleteCommunity(communityId, admin.getId().toString()))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMUNITY_ROLE_FORBIDDEN));
+        em.clear();
+        assertThat(userRepository.findById(communityId)).isPresent();
+        assertThat(communityService.listMine(admin.getId().toString())).singleElement()
+                .satisfies(m -> assertThat(m.communityId()).isEqualTo(communityId.toString()));
+    }
+
+    @Test
     void shouldRefuseUsernameTakenWhenAnotherAccountHasIt() {
         String taken = userRepository.findById(communityId).orElseThrow().getUsername();
 

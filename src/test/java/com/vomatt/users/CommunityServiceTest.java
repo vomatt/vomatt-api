@@ -221,4 +221,13 @@ class CommunityServiceTest {
             org.mockito.Mockito.verifyNoInteractions(userService);
         }
     }
+
+    @Test
+    void shouldRefuseDeleteWhenCallerIsNotMember() {
+        when(memberRepository.findActiveRole(communityId, callerId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.deleteCommunity(communityId, callerId.toString()))
+                .satisfies(ex -> assertKey(ex, MessageKey.COMMUNITY_NOT_MEMBER));
+        org.mockito.Mockito.verifyNoInteractions(userService);
+    }
 }

@@ -1,6 +1,7 @@
 package com.vomatt.users;
 
 import com.vomatt.common.audit.AuditAspect;
+import com.vomatt.common.audit.AuditService;
 import com.vomatt.common.constant.ReservedUsernames;
 import com.vomatt.common.constant.UserRole;
 import com.vomatt.common.exception.ApiException;
@@ -46,6 +47,7 @@ public class CommunityService {
     private final UserMapper userMapper;
     private final LockTimeout lockTimeout;
     private final UserService userService;
+    private final AuditService auditService;
 
     /**
      * Creates the community account (no email or phone, so it can never sign in) with {@code ownerUserId} as its first
@@ -84,7 +86,9 @@ public class CommunityService {
                 .toList();
     }
 
+    /** Waits for a deletion of either account in flight, so the checks see it and the insert cannot fail its key. */
     public CommunityMemberResponse addMember(UUID communityId, UUID userId, CommunityRole role, String callerId) {
+        userRepository.lockKeyShare(List.of(communityId, userId));
         requireGrant(requireManager(communityId, callerId), role);
         User user = requireEligible(userId);
         if (memberRepository.existsById(new CommunityMember.Key(communityId, userId))) {
@@ -176,21 +180,23 @@ public class CommunityService {
 
     /**
      * OWNER only: deletes the community account as {@link UserService#deleteAccount} deletes any account; its memberships
-     * go with it. Checks the role under the OWNER row lock, as {@link #transferOwner} does. The audit details keep the
-     * username, display name and members, which are gone afterwards.
+     * go with it. Checks the role under the OWNER row lock, as {@link #transferOwner} does. The audit entry, written
+     * in this transaction so it cannot be dropped, keeps the username, display name and members, which are gone
+     * afterwards; the account row is locked before members are read, so a member added meanwhile is listed.
      */
     public void deleteCommunity(UUID communityId, String callerId) {
         requireRole(communityId, callerId);
         if (!lockTimeout.within(() -> memberRepository.lockOwnerIds(communityId)).contains(UUID.fromString(callerId))) {
             throw ApiException.forbidden(MessageKey.COMMUNITY_ROLE_FORBIDDEN);
         }
+        userRepository.lockForDelete(communityId);
         User community = userRepository.findById(communityId).orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
         String members = memberRepository.findByCommunityUserIdOrderByCreatedAtAscUserIdAsc(communityId).stream()
                 .map(m -> m.getUser().getUsername() + ":" + m.getRole())
                 .collect(Collectors.joining(","));
-        AuditAspect.recordDetails("username=" + community.getUsername() + "; displayName=" + quote(community.getDisplayName())
-                + "; members=" + members);
         userService.deleteAccount(community, callerId);
+        auditService.logActionNow(callerId, "DELETE", "COMMUNITY", communityId.toString(), "username=" + community.getUsername()
+                + "; displayName=" + quote(community.getDisplayName()) + "; members=" + members);
         log.info("Community account {} deleted by {}", communityId, callerId);
     }
 

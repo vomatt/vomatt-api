@@ -71,6 +71,13 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Query(value = "SELECT id FROM vomatt.users WHERE id = :id FOR UPDATE", nativeQuery = true)
     Optional<UUID> lockForDelete(@Param("id") UUID id);
 
+    /**
+     * Key-share locks the accounts, the lock a foreign-key insert referencing them takes, in id order. An account
+     * deletion in flight is waited for here, so checks made afterwards see it instead of the insert failing its key.
+     */
+    @Query(value = "SELECT id FROM vomatt.users WHERE id IN (:ids) ORDER BY id FOR KEY SHARE", nativeQuery = true)
+    List<UUID> lockKeyShare(@Param("ids") Collection<UUID> ids);
+
     /** Whether the account is active and still holds the admin role; checked per request on /api/admin/**. */
     @Query(value = "SELECT EXISTS (SELECT 1 FROM vomatt.users WHERE id = :id AND active = true AND 'admin' = ANY(roles))",
            nativeQuery = true)

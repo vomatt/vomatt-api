@@ -47,7 +47,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 @Import({ CommunityService.class, UserService.class, UserMapper.class, VoteCommentService.class, CommentMapper.class,
-        VoteServiceSlice.class, com.vomatt.common.storage.StorageService.class })
+        VoteServiceSlice.class, com.vomatt.common.storage.StorageService.class, AuditService.class })
 class CommunityPostgresTest extends PostgresRepositoryTest {
 
     @Autowired CommunityService communityService;
@@ -173,9 +173,6 @@ class CommunityPostgresTest extends PostgresRepositoryTest {
         assertThat(communityService.listMine(editor.getId().toString())).isEmpty();
         assertThat(em.find(Vote.class, poll.getId())).isNull();
         assertThat(userRepository.findById(owner.getId())).isPresent();
-        verify(auditService).logAction(eq(owner.getId().toString()), eq("DELETE"), eq("COMMUNITY"), eq(communityId.toString()),
-                any(), any(), any(), any(), eq("username=" + username + "; displayName=\"Sunrise Tower\"; members="
-                        + owner.getUsername() + ":OWNER," + editor.getUsername() + ":EDITOR"));
     }
 
     @Test

@@ -83,4 +83,10 @@ public final class SecurityEndpoints {
      * real member's role) and marking the community account's notifications read.
      */
     public static final String[] ACT_AS_ANY_ROLE = { "/api/communities/**", "/api/notifications/*/read", "/api/notifications/read-all" };
+
+    /**
+     * POST-only routes any role may send while acting: following, which UserService refuses for every community account
+     * with 400 {@code user.follow.community}, so ANALYST gets that answer too instead of 403.
+     */
+    public static final String[] ACT_AS_ANY_ROLE_POST = { "/api/users/me/follows/*" };
 }

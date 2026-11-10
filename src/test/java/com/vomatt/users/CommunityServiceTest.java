@@ -41,6 +41,7 @@ class CommunityServiceTest {
     @Mock UserRepository userRepository;
     @Spy UserMapper userMapper = new UserMapper();
     @Mock UserService userService;
+    @Mock com.vomatt.common.audit.AuditService auditService;
     @Spy LockTimeout lockTimeout = new LockTimeout(mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @InjectMocks CommunityService service;
 

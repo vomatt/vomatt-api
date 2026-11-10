@@ -304,6 +304,18 @@ class CommunityPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    void shouldNotCountSuspendedCommunityWhenFreeUserCreatesAnother() {
+        em.createNativeQuery("UPDATE vomatt.users SET active = false WHERE id = :id").setParameter("id", communityId).executeUpdate();
+
+        createFor(owner);
+        em.flush();
+        em.clear();
+
+        assertThat(planService.quota(userRepository.findById(owner.getId()).orElseThrow()).owned()).isEqualTo(1);
+        assertThat(communityService.listMine(owner.getId().toString())).hasSize(1);
+    }
+
+    @Test
     void shouldAllowThreeCommunitiesWhenProAndRefuseFourth() {
         planService.changePlan(owner.getId(), Plan.PRO, PlanService.Source.ADMIN, null);
         createFor(owner);

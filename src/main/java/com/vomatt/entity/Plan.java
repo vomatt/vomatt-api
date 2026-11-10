@@ -1,7 +1,7 @@
 package com.vomatt.entity;
 
 /**
- * A user's paid plan. Each caps the community accounts the user may own (be an OWNER of) with an admin-tunable
+ * A user's paid plan. Each caps the community accounts the user may own (be an OWNER of, not locked) with an admin-tunable
  * {@code config} lookup, falling back to the default here.
  */
 public enum Plan {

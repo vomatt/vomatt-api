@@ -146,6 +146,23 @@ class ActAsFilterTest {
     }
 
     @Test
+    void shouldLetFollowThroughForTheServiceToRefuseWhenActingAsAnyRole() throws Exception {
+        String follow = "/api/users/me/follows/" + UUID.randomUUID();
+        for (CommunityRole role : List.of(CommunityRole.ANALYST, CommunityRole.EDITOR)) {
+            signIn();
+            member(role);
+            Authentication auth = run(acting("POST", follow), new MockHttpServletResponse());
+            assertThat(auth).as(role.name()).isNotNull();
+            assertThat(((UserPrincipal) auth.getPrincipal()).userId()).isEqualTo(communityId.toString());
+        }
+        signIn();
+        member(CommunityRole.ANALYST);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        assertThat(run(acting("DELETE", follow), response)).as("ANALYST unfollowing").isNull();
+        assertThat(response.getContentAsString()).contains("community.role_forbidden");
+    }
+
+    @Test
     void shouldRefuseProfileEditWhenEditor() throws Exception {
         signIn();
         member(CommunityRole.EDITOR);

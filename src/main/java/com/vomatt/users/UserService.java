@@ -225,9 +225,12 @@ public class UserService {
             page -> toSearchResults(page.stream().map(UserBlock::getBlocked).toList()));
     }
 
-    /** Follows a user (one-way, see {@link UserFollow}); idempotent. */
+    /** Follows a user (one-way, see {@link UserFollow}); idempotent. A community account follows no one. */
     @Transactional
     public void followUser(String userId, String targetId) {
+        if (userRepository.findById(UUID.fromString(userId)).filter(User::isCommunity).isPresent()) {
+            throw ApiException.badRequest(MessageKey.USER_FOLLOW_COMMUNITY);
+        }
         User target = findOtherActiveUser(userId, targetId, MessageKey.USER_FOLLOW_SELF);
         // Same pair lock as blockUser, so a concurrent block cannot slip between the check and the insert
         followRepository.lockPair(UUID.fromString(userId), target.getId());

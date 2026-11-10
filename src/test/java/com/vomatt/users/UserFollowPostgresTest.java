@@ -1,6 +1,7 @@
 package com.vomatt.users;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -13,7 +14,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Limit;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.util.UUIDv7Generator;
 import com.vomatt.entity.Audience;
 import com.vomatt.entity.User;
@@ -27,13 +32,15 @@ import com.vomatt.votes.VoteService;
 import com.vomatt.votes.VoteServiceSlice;
 import com.vomatt.votes.dto.VoteResponse;
 
-@Import(VoteServiceSlice.class)
+@Import({ VoteServiceSlice.class, UserService.class, UserMapper.class, com.vomatt.common.storage.StorageService.class })
 @DisplayName("User follows (Postgres)")
 class UserFollowPostgresTest extends PostgresRepositoryTest {
 
     @Autowired VoteService voteService;
     @Autowired UserFollowRepository followRepository;
     @Autowired com.vomatt.repository.UserRepository userRepository;
+    @Autowired UserService userService;
+    @MockitoBean RefreshTokenService refreshTokenService;
 
     private User viewer;
     private User followed;
@@ -46,6 +53,26 @@ class UserFollowPostgresTest extends PostgresRepositoryTest {
         other = persistUser("uf-other-" + UUID.randomUUID());
         em.persist(new UserFollow(viewer, followed));
         em.flush();
+    }
+
+    @Test
+    @DisplayName("should refuse a community account's follow but let others follow it, so its followingCount stays 0")
+    void shouldRefuseFollowWhenFollowerIsCommunityAccount() {
+        User community = User.builder().username("uf-comm-" + UUID.randomUUID().toString().substring(0, 8))
+                .roles(new String[] { "community" }).build();
+        em.persist(community);
+        em.flush();
+
+        assertThatThrownBy(() -> userService.followUser(community.getId().toString(), other.getId().toString()))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.USER_FOLLOW_COMMUNITY));
+        userService.followUser(viewer.getId().toString(), community.getId().toString());
+        em.flush();
+        em.clear();
+
+        var profile = userService.getUserProfile(community.getUsername(), null);
+        assertThat(profile.followingCount()).isZero();
+        assertThat(profile.followersCount()).isEqualTo(1);
+        assertThat(userService.listFollowing(community.getUsername(), null, 50, viewer.getId().toString()).items()).isEmpty();
     }
 
     private List<UUID> following(User as) {

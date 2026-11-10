@@ -1,6 +1,7 @@
 package com.vomatt.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
@@ -36,6 +37,19 @@ class UserPlanMigrationPostgresTest extends PostgresRepositoryTest {
         assertThat(plan(pro)).isEqualTo("PRO");
         assertThat(em.createNativeQuery("SELECT stripe_customer_id FROM vomatt.users WHERE id = :id").setParameter("id", pro)
                 .getSingleResult()).isNull();
+    }
+
+    @Test
+    void shouldRefusePlanOutsideFreeAndPro() {
+        UUID id = UUID.randomUUID();
+        em.createNativeQuery("INSERT INTO vomatt.users (id, username, email, created_at, updated_at) VALUES (:id, :u, :e, now(), now())")
+                .setParameter("id", id).setParameter("u", "plan" + id.toString().substring(0, 8))
+                .setParameter("e", id + "@test.local").executeUpdate();
+
+        assertThatThrownBy(() -> em.createNativeQuery("UPDATE vomatt.users SET plan = 'GOLD' WHERE id = :id")
+                .setParameter("id", id).executeUpdate())
+                .hasRootCauseInstanceOf(org.postgresql.util.PSQLException.class)
+                .rootCause().hasMessageContaining("users_plan_check");
     }
 
     private Object plan(UUID id) {

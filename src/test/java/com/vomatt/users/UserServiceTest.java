@@ -58,7 +58,7 @@ import com.vomatt.repository.VoteRepository;
 class UserServiceTest {
 
     @Mock UserRepository userRepository;
-    @Mock com.vomatt.repository.OfficialMemberRepository officialMemberRepository;
+    @Mock com.vomatt.repository.CommunityMemberRepository communityMemberRepository;
     @Mock UserPreferenceRepository preferenceRepository;
     @Mock UserBlockRepository blockRepository;
     @Mock UserFollowRepository followRepository;
@@ -188,14 +188,14 @@ class UserServiceTest {
     }
 
     @Test
-    void shouldRefuseWhenDeletingSoleOwnerOfOfficialAccount() {
+    void shouldRefuseWhenDeletingSoleOwnerOfCommunityAccount() {
         UUID id = UUID.randomUUID();
         when(userRepository.findById(id)).thenReturn(Optional.of(User.builder().id(id).username("owner").build()));
-        when(officialMemberRepository.isSoleOwnerOfAny(id)).thenReturn(true);
+        when(communityMemberRepository.isSoleOwnerOfAny(id)).thenReturn(true);
 
         assertThatThrownBy(() -> userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), List.of("user"), null)))
                 .isInstanceOfSatisfying(ApiException.class,
-                        e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.OFFICIAL_LAST_OWNER));
+                        e -> assertThat(e.getMessageKey()).isEqualTo(MessageKey.COMMUNITY_LAST_OWNER));
         verify(userRepository, never()).delete(any());
     }
 

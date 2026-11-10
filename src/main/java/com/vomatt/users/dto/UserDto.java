@@ -13,6 +13,6 @@ public record UserDto(
         @Schema(description = "Avatar as `bot:<kind>` (the bot cast) or `/api/avatars/<id>.jpg` (an uploaded image, a path on the API origin). Older accounts may hold an image URL; null if never set",
                 example = "bot:boba", nullable = true)
         String avatarUrl,
-        @Schema(description = "Whether this is an official account (a group's page, shown with a badge)", example = "false")
-        boolean official
+        @Schema(description = "Whether this is a community account (a group's page, shown with a badge)", example = "false")
+        boolean community
 ) {}

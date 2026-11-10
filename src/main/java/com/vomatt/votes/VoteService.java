@@ -343,7 +343,7 @@ public class VoteService {
                 || inviteeRepository.existsByVoteIdAndUserId(v.getId(), UUID.fromString(viewerId)))
             .map(Vote::getCreator)
             .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
-        return new VoteCreatorResponse(creator.getUsername(), creator.getAvatarUrl(), creator.isOfficial());
+        return new VoteCreatorResponse(creator.getUsername(), creator.getAvatarUrl(), creator.isCommunity());
     }
 
     /**
@@ -738,9 +738,9 @@ public class VoteService {
         if (users.size() != ids.size()) {
             throw ApiException.badRequest(MessageKey.VOTE_INVITEE_IDS_INVALID);
         }
-        // An official account never votes, so as an Invitee it would only keep the Poll from auto-ending
-        if (users.stream().anyMatch(User::isOfficial)) {
-            throw ApiException.badRequest(MessageKey.OFFICIAL_INVITEE_NOT_ALLOWED);
+        // A community account never votes, so as an Invitee it would only keep the Poll from auto-ending
+        if (users.stream().anyMatch(User::isCommunity)) {
+            throw ApiException.badRequest(MessageKey.COMMUNITY_INVITEE_NOT_ALLOWED);
         }
         List<Invitee> invited = inviteeRepository.findByVoteId(vote.getId());
         Set<UUID> invitedById = invited.stream().filter(i -> i.getEmail() == null)
@@ -1034,12 +1034,12 @@ public class VoteService {
 
     /**
      * The one check of who may hold a Ballot in a Poll, run by cast, change, Retraction and Selection removal: an
-     * official account never votes, and a Pro poll takes a Selection ({@code selecting}: cast or change) only from
+     * community account never votes, and a Pro poll takes a Selection ({@code selecting}: cast or change) only from
      * users with a verified phone number. Withdrawing one needs no phone, so a user who lost it is never stuck.
      */
     void requireBallotEligible(Vote vote, String userId, boolean selecting) {
         if (ActingMember.current().isPresent()) {
-            throw ApiException.forbidden(MessageKey.VOTE_BALLOT_OFFICIAL_NOT_ALLOWED);
+            throw ApiException.forbidden(MessageKey.VOTE_BALLOT_COMMUNITY_NOT_ALLOWED);
         }
         if (selecting && vote.isPro() && !userRepository.findById(UUID.fromString(userId))
                 .orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND)).isPhoneVerified()) {

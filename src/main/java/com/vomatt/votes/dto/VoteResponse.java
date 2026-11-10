@@ -35,8 +35,8 @@ public class VoteResponse {
             example = "bot:boba", nullable = true)
     private String creatorAvatarUrl;
 
-    @Schema(description = "Whether the owner is an official account (a group's page, shown with a badge)", example = "false")
-    private boolean creatorOfficial;
+    @Schema(description = "Whether the owner is a community account (a group's page, shown with a badge)", example = "false")
+    private boolean creatorCommunity;
 
     @Schema(description = "When the Poll opens (or opened)", example = "2026-10-12T09:00:00+08:00")
     private OffsetDateTime startTime;

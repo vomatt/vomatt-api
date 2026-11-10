@@ -101,7 +101,7 @@ public class SecurityConfig {
                         .anyRequest().authenticated())
                 .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
-                // Swaps the principal to an official account once the member is authenticated
+                // Swaps the principal to a community account once the member is authenticated
                 .addFilterAfter(actAsFilter, JwtAuthFilter.class).build();
     }
 

@@ -35,7 +35,7 @@ import lombok.RequiredArgsConstructor;
 public class PollReportController {
 
     private static final String ACCESS = """
-            **Auth**: required. Readers: the Poll's owner; for a Poll of an official account, members acting as it (`X-Act-As`) whose role may read reports (`OWNER`, `ADMIN`, `ANALYST`; not `CHIEF_EDITOR` or `EDITOR`)
+            **Auth**: required. Readers: the Poll's owner; for a Poll of a community account, members acting as it (`X-Act-As`) whose role may read reports (`OWNER`, `ADMIN`, `ANALYST`; not `CHIEF_EDITOR` or `EDITOR`)
             **Precondition**: the Poll is a Pro poll (`pro`), not Cancelled (it opened before it Ended), has Ended and its `revealAt` (if set) has passed
             """;
     private static final String BEHAVIOR = """
@@ -50,7 +50,7 @@ public class PollReportController {
             **Errors**:
             - 404 `vote.not_found`: Poll does not exist or is Deleted
             - 403 `vote.forbidden`: the caller is not the Poll's owner
-            - 403 `official.role_forbidden`: acting as the official account with a role that may not read reports (`CHIEF_EDITOR`, `EDITOR`)
+            - 403 `community.role_forbidden`: acting as the community account with a role that may not read reports (`CHIEF_EDITOR`, `EDITOR`)
             - 400 `report.not_pro`: the Poll is not a Pro poll
             - 400 `report.cancelled`: the Poll was Cancelled (Ended before it opened); it has no report
             - 403 `report.not_ready`: the Poll has not Ended or its `revealAt` has not passed
@@ -83,7 +83,7 @@ public class PollReportController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "The report",
             content = @Content(examples = @ExampleObject(name = "Report", value = "{ \"success\": true, \"data\": " + EX_REPORT
                     + ", \"message\": null, \"errorCode\": null, \"error\": null }")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not the owner (`vote.forbidden`), role may not read reports (`official.role_forbidden`), or not revealed yet (`report.not_ready`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not the owner (`vote.forbidden`), role may not read reports (`community.role_forbidden`), or not revealed yet (`report.not_ready`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(name = "report.not_ready", value = ERR_EXAMPLE)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Not a Pro poll (`report.not_pro`), or Cancelled (`report.cancelled`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = {
@@ -120,7 +120,7 @@ public class PollReportController {
                     30-39,8,5,3\r
                     MERGED,,,\r
                     """)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not the owner (`vote.forbidden`), role may not read reports (`official.role_forbidden`), or not revealed yet (`report.not_ready`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not the owner (`vote.forbidden`), role may not read reports (`community.role_forbidden`), or not revealed yet (`report.not_ready`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(name = "report.not_ready", value = ERR_EXAMPLE)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Not a Pro poll (`report.not_pro`), or Cancelled (`report.cancelled`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = {

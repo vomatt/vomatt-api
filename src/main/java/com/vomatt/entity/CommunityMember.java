@@ -21,17 +21,17 @@ import java.io.Serializable;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
-/** A person who manages an official account, with one {@link OfficialRole}. */
+/** A person who manages a community account, with one {@link CommunityRole}. */
 @Entity
-@Table(name = "official_members")
-@IdClass(OfficialMember.Key.class)
+@Table(name = "community_members")
+@IdClass(CommunityMember.Key.class)
 @Getter
 @NoArgsConstructor
-public class OfficialMember {
+public class CommunityMember {
 
     @Id
-    @Column(name = "official_user_id")
-    private UUID officialUserId;
+    @Column(name = "community_user_id")
+    private UUID communityUserId;
 
     @Id
     @Column(name = "user_id")
@@ -40,7 +40,7 @@ public class OfficialMember {
     @Setter
     @Enumerated(EnumType.STRING)
     @Column(name = "role", nullable = false, length = 20)
-    private OfficialRole role;
+    private CommunityRole role;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -48,15 +48,15 @@ public class OfficialMember {
 
     // Read-only views of the two users, for the member list and the account switcher
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "official_user_id", insertable = false, updatable = false)
-    private User official;
+    @JoinColumn(name = "community_user_id", insertable = false, updatable = false)
+    private User community;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", insertable = false, updatable = false)
     private User user;
 
-    public OfficialMember(UUID officialUserId, UUID userId, OfficialRole role) {
-        this.officialUserId = officialUserId;
+    public CommunityMember(UUID communityUserId, UUID userId, CommunityRole role) {
+        this.communityUserId = communityUserId;
         this.userId = userId;
         this.role = role;
     }
@@ -65,7 +65,7 @@ public class OfficialMember {
     @AllArgsConstructor
     @EqualsAndHashCode
     public static class Key implements Serializable {
-        private UUID officialUserId;
+        private UUID communityUserId;
         private UUID userId;
     }
 }

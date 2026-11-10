@@ -114,9 +114,9 @@ public class User extends AuditableEntity {
         return Arrays.asList(roles).contains(UserRole.ADMIN);
     }
 
-    /** An official account: managed by its members through {@code X-Act-As}, never signed in to directly. */
-    public boolean isOfficial() {
-        return Arrays.asList(roles).contains(UserRole.OFFICIAL);
+    /** A community account: managed by its members through {@code X-Act-As}, never signed in to directly. */
+    public boolean isCommunity() {
+        return Arrays.asList(roles).contains(UserRole.COMMUNITY);
     }
 
     /**

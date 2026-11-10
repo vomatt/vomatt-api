@@ -8,10 +8,10 @@ public final class UserRole {
     public static final String MODERATOR = "moderator";
     public static final String ADMIN     = "admin";
     /**
-     * An official account (a group's page). Never assignable: only {@code POST /api/admin/officials} creates one, so it
+     * A community account (a group's page). Never assignable: only {@code POST /api/admin/communities} creates one, so it
      * stays out of {@link #PATTERN} and {@link #ALL}. Its holder cannot sign in or cast a Ballot.
      */
-    public static final String OFFICIAL  = "official";
+    public static final String COMMUNITY  = "community";
 
     /** Every assignable role; the one list for role validation. */
     public static final String PATTERN   = "user|moderator|admin";

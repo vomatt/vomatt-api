@@ -53,7 +53,7 @@ public class Vote extends AuditableEntity {
     @JoinColumn(name = "creator_id")
     private User creator;
 
-    /** The member who published this Poll while acting as the official account {@link #creator}; null otherwise. */
+    /** The member who published this Poll while acting as the community account {@link #creator}; null otherwise. */
     @Column(name = "acted_by")
     private UUID actedBy;
 

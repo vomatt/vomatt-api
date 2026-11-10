@@ -7,11 +7,9 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
-import java.util.UUID;
-
-@Schema(description = "A new official account and its first OWNER")
-public record CreateOfficialRequest(
-        @Schema(description = "Username of the official account: 3-50 characters of [a-z0-9_], not a reserved name",
+@Schema(description = "A new community account; the caller becomes its first OWNER")
+public record NewCommunityRequest(
+        @Schema(description = "Username of the community account: 3-50 characters of [a-z0-9_], not a reserved name",
                 example = "sunrise_tower", minLength = 3, maxLength = 50)
         @NotNull
         @Pattern(regexp = ReservedUsernames.USERNAME_PATTERN,
@@ -19,8 +17,5 @@ public record CreateOfficialRequest(
         String username,
         @Schema(description = "Group name, shown as the display name (max 100 characters)", example = "Sunrise Tower Committee", maxLength = 100)
         @NotBlank @Size(max = 100)
-        String displayName,
-        @Schema(description = "The active user who becomes the first OWNER", example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47")
-        @NotNull
-        UUID ownerUserId
+        String displayName
 ) {}

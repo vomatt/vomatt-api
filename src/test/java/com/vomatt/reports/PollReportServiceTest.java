@@ -31,7 +31,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.security.ActingMember;
-import com.vomatt.entity.OfficialRole;
+import com.vomatt.entity.CommunityRole;
 import com.vomatt.entity.Vote;
 import com.vomatt.lookups.LookupService;
 import com.vomatt.reports.dto.PollReportResponse;
@@ -72,9 +72,9 @@ class PollReportServiceTest {
         SecurityContextHolder.clearContext();
     }
 
-    private static void act(OfficialRole role, UUID officialId, UUID memberId) {
-        var auth = new UsernamePasswordAuthenticationToken(officialId.toString(), null, List.of());
-        auth.setDetails(new ActingMember(memberId, officialId, role));
+    private static void act(CommunityRole role, UUID communityId, UUID memberId) {
+        var auth = new UsernamePasswordAuthenticationToken(communityId.toString(), null, List.of());
+        auth.setDetails(new ActingMember(memberId, communityId, role));
         SecurityContextHolder.getContext().setAuthentication(auth);
     }
 
@@ -104,7 +104,7 @@ class PollReportServiceTest {
     @Test
     void shouldAllowWhenActingMemberMayReadReports() {
         UUID memberId = UUID.randomUUID();
-        act(OfficialRole.ANALYST, UUID.fromString(ownerId), memberId);
+        act(CommunityRole.ANALYST, UUID.fromString(ownerId), memberId);
 
         assertThat(service.getReport(voteId.toString(), ownerId)).isNotNull();
     }
@@ -112,11 +112,11 @@ class PollReportServiceTest {
     @Test
     void shouldRefuseWhenActingMemberMayNotReadReports() {
         UUID memberId = UUID.randomUUID();
-        act(OfficialRole.EDITOR, UUID.fromString(ownerId), memberId);
-        assertRefused(ownerId, MessageKey.OFFICIAL_ROLE_FORBIDDEN);
+        act(CommunityRole.EDITOR, UUID.fromString(ownerId), memberId);
+        assertRefused(ownerId, MessageKey.COMMUNITY_ROLE_FORBIDDEN);
 
-        act(OfficialRole.CHIEF_EDITOR, UUID.fromString(ownerId), memberId);
-        assertRefused(ownerId, MessageKey.OFFICIAL_ROLE_FORBIDDEN);
+        act(CommunityRole.CHIEF_EDITOR, UUID.fromString(ownerId), memberId);
+        assertRefused(ownerId, MessageKey.COMMUNITY_ROLE_FORBIDDEN);
     }
 
     @Test

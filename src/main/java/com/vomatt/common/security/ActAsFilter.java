@@ -2,8 +2,8 @@ package com.vomatt.common.security;
 
 import com.vomatt.common.constant.UserRole;
 import com.vomatt.common.i18n.MessageKey;
-import com.vomatt.entity.OfficialRole;
-import com.vomatt.repository.OfficialMemberRepository;
+import com.vomatt.entity.CommunityRole;
+import com.vomatt.repository.CommunityMemberRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -29,9 +29,9 @@ import java.util.UUID;
 import static org.springframework.http.HttpMethod.DELETE;
 
 /**
- * Acting as an official account: a signed-in member sends {@code X-Act-As: <officialUserId>}. Runs after
- * {@link JwtAuthFilter}; a non-member gets 403 {@code official.not_member}. On success the principal becomes the
- * official account and {@link ActingMember} keeps the real member and role. Role rules by route (in
+ * Acting as a community account: a signed-in member sends {@code X-Act-As: <communityUserId>}. Runs after
+ * {@link JwtAuthFilter}; a non-member gets 403 {@code community.not_member}. On success the principal becomes the
+ * community account and {@link ActingMember} keeps the real member and role. Role rules by route (in
  * {@link SecurityEndpoints}): account and session routes are never reachable this way, the profile routes need
  * OWNER or ADMIN, member management and marking notifications read take any role, and any other write needs a
  * role that can publish (ANALYST is read-only); the rest is checked by the services. Without a signed-in caller, and on sign-in, refresh and logout, the header is ignored.
@@ -49,7 +49,7 @@ public class ActAsFilter extends OncePerRequestFilter {
     private static final RequestMatcher PROFILE = JwtAuthFilter.anyOf(SecurityEndpoints.ACT_AS_PROFILE);
     private static final RequestMatcher ANY_ROLE = JwtAuthFilter.anyOf(SecurityEndpoints.ACT_AS_ANY_ROLE);
 
-    private final OfficialMemberRepository memberRepository;
+    private final CommunityMemberRepository memberRepository;
     private final SecurityErrorWriter errorWriter;
 
     @Override
@@ -62,26 +62,26 @@ public class ActAsFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
             return;
         }
-        UUID officialId = parseUuid(header.trim());
-        Optional<OfficialRole> role = officialId == null ? Optional.empty()
-                : memberRepository.findActiveRole(officialId, UUID.fromString(member.userId()));
+        UUID communityId = parseUuid(header.trim());
+        Optional<CommunityRole> role = communityId == null ? Optional.empty()
+                : memberRepository.findActiveRole(communityId, UUID.fromString(member.userId()));
         if (role.isEmpty()) {
-            errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN, MessageKey.OFFICIAL_NOT_MEMBER);
+            errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN, MessageKey.COMMUNITY_NOT_MEMBER);
             return;
         }
         if (!allowed(role.get(), request)) {
-            errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN, MessageKey.OFFICIAL_ROLE_FORBIDDEN);
+            errorWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN, MessageKey.COMMUNITY_ROLE_FORBIDDEN);
             return;
         }
         // Same session: revoking the member's session cuts their acting too
-        UserPrincipal official = new UserPrincipal(officialId.toString(), List.of(UserRole.OFFICIAL), member.sessionId());
-        var acting = new UsernamePasswordAuthenticationToken(official, null, List.of(new SimpleGrantedAuthority("ROLE_OFFICIAL")));
-        acting.setDetails(new ActingMember(UUID.fromString(member.userId()), officialId, role.get()));
+        UserPrincipal community = new UserPrincipal(communityId.toString(), List.of(UserRole.COMMUNITY), member.sessionId());
+        var acting = new UsernamePasswordAuthenticationToken(community, null, List.of(new SimpleGrantedAuthority("ROLE_COMMUNITY")));
+        acting.setDetails(new ActingMember(UUID.fromString(member.userId()), communityId, role.get()));
         SecurityContextHolder.getContext().setAuthentication(acting);
         filterChain.doFilter(request, response);
     }
 
-    private static boolean allowed(OfficialRole role, HttpServletRequest request) {
+    private static boolean allowed(CommunityRole role, HttpServletRequest request) {
         if (DENIED.matches(request)) {
             return false;
         }

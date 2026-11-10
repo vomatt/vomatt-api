@@ -39,11 +39,11 @@ import com.vomatt.reports.dto.PollReportResponse;
 import com.vomatt.reports.dto.PollReportResponse.Group;
 import com.vomatt.repository.PollReportRepository;
 import com.vomatt.repository.PostgresRepositoryTest;
-import com.vomatt.users.OfficialService;
+import com.vomatt.users.CommunityService;
 import com.vomatt.users.UserMapper;
 import com.vomatt.votes.VoteServiceSlice;
 
-@Import({ VoteServiceSlice.class, PollReportService.class, PollReportRepository.class, OfficialService.class, UserMapper.class,
+@Import({ VoteServiceSlice.class, PollReportService.class, PollReportRepository.class, CommunityService.class, UserMapper.class,
         RetentionJob.class })
 class PollReportPostgresTest extends PostgresRepositoryTest {
 

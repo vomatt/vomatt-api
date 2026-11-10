@@ -24,9 +24,9 @@ public interface UserProfileProjection {
     Boolean getActive();
     String[] getRoles();
 
-    /** Same rule as {@link com.vomatt.entity.User#isOfficial()}. */
-    default boolean isOfficial() {
-        return getRoles() != null && Arrays.asList(getRoles()).contains(UserRole.OFFICIAL);
+    /** Same rule as {@link com.vomatt.entity.User#isCommunity()}. */
+    default boolean isCommunity() {
+        return getRoles() != null && Arrays.asList(getRoles()).contains(UserRole.COMMUNITY);
     }
     // Extended fields whose visibility can be controlled
     String getFirstName();

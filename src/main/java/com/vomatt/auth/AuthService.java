@@ -1182,9 +1182,9 @@ public class AuthService {
         if (!user.isActive()) {
             throw ApiException.forbidden(MessageKey.AUTH_ACCOUNT_BANNED);
         }
-        // An official account is used only through its members (X-Act-As), never signed in to
-        if (user.isOfficial()) {
-            throw ApiException.forbidden(MessageKey.AUTH_OFFICIAL_SIGN_IN_NOT_ALLOWED);
+        // A community account is used only through its members (X-Act-As), never signed in to
+        if (user.isCommunity()) {
+            throw ApiException.forbidden(MessageKey.AUTH_COMMUNITY_SIGN_IN_NOT_ALLOWED);
         }
         user.setLastLoginAt(OffsetDateTime.now());
         userRepository.save(user);

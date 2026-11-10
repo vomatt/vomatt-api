@@ -142,4 +142,23 @@ class AuditAspectTest {
                 org.mockito.ArgumentMatchers.eq("VOTE"), org.mockito.ArgumentMatchers.isNull(), any(), any(), any(), any(),
                 org.mockito.ArgumentMatchers.eq("actingAs=" + communityId));
     }
+
+    @Test
+    void shouldStoreRecordedDetailsAfterActingPrefixWhenCallRecordsThem() {
+        java.util.UUID memberId = java.util.UUID.randomUUID();
+        java.util.UUID communityId = java.util.UUID.randomUUID();
+        var auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                new com.vomatt.common.security.UserPrincipal(communityId.toString(), java.util.List.of("community"), "s1"), null, java.util.List.of());
+        auth.setDetails(new com.vomatt.common.security.ActingMember(memberId, communityId, com.vomatt.entity.CommunityRole.ADMIN));
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
+        try {
+            AuditAspect.recordDetails("bio: null -> \"Hi\"");
+            aspect.logSuccessfulAction(joinPoint, auditable);
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+
+        verify(auditService).logAction(any(), any(), any(), any(), any(), any(), any(), any(),
+                org.mockito.ArgumentMatchers.eq("actingAs=" + communityId + "; bio: null -> \"Hi\""));
+    }
 }

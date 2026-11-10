@@ -47,6 +47,8 @@ import com.vomatt.votes.VoteServiceSlice;
         RetentionJob.class })
 class PollReportPostgresTest extends PostgresRepositoryTest {
 
+    @org.springframework.test.context.bean.override.mockito.MockitoBean com.vomatt.users.UserService userService;
+
     @Autowired PollReportService reportService;
     @MockitoSpyBean PollReportRepository reportRepository;
     @Autowired RetentionJob retentionJob;

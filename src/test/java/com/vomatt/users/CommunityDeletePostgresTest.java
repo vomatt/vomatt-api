@@ -54,6 +54,7 @@ import static org.mockito.Mockito.verify;
 class CommunityDeletePostgresTest extends PostgresRepositoryTest {
 
     @Autowired CommunityService communityService;
+    @Autowired PlanService planService;
     @Autowired AuditLogRepository auditLogRepository;
     @Autowired TransactionTemplate tx;
     @MockitoBean RefreshTokenService refreshTokenService;
@@ -99,7 +100,7 @@ class CommunityDeletePostgresTest extends PostgresRepositoryTest {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 new UserPrincipal(owner.getId().toString(), List.of("user"), null), null, List.of()));
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest("DELETE", "/api/communities/" + communityId)));
-        AspectJProxyFactory factory = new AspectJProxyFactory(new CommunityController(communityService));
+        AspectJProxyFactory factory = new AspectJProxyFactory(new CommunityController(communityService, planService));
         factory.addAspect(new AuditAspect(droppingWriter));
         CommunityController controller = factory.getProxy();
 

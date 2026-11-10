@@ -61,6 +61,7 @@ class ErrorCodesDocTest {
             Map.entry("AUTH_TOKEN_INVALID", Set.of(401)),
             Map.entry("AUTH_SESSION_REVOKED", Set.of(401)),
             Map.entry("COMMON_FORBIDDEN", Set.of(403)),
+            Map.entry("COMMUNITY_LOCKED", Set.of(403)),
             Map.entry("COMMON_RATE_LIMITED", Set.of(429)),
             Map.entry("COMMON_CONFLICT", Set.of(409)),
             Map.entry("COMMON_FILE_TOO_LARGE", Set.of(413)),

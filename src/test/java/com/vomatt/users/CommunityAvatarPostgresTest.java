@@ -54,6 +54,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class CommunityAvatarPostgresTest extends PostgresRepositoryTest {
 
     @Autowired CommunityService communityService;
+    @Autowired PlanService planService;
     @Autowired UserRepository userRepository;
     @Autowired TransactionTemplate tx;
     @MockitoBean StorageService storageService;
@@ -91,7 +92,7 @@ class CommunityAvatarPostgresTest extends PostgresRepositoryTest {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 principal(memberId), null, List.of()));
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));
-        AspectJProxyFactory factory = new AspectJProxyFactory(new CommunityController(communityService));
+        AspectJProxyFactory factory = new AspectJProxyFactory(new CommunityController(communityService, planService));
         factory.addAspect(new AuditAspect(auditService));
         return factory.getProxy();
     }

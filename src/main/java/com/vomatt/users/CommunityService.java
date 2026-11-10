@@ -84,7 +84,8 @@ public class CommunityService {
         return memberRepository.findByUserIdAndCommunityActiveTrueOrderByCreatedAtAscCommunityUserIdAsc(UUID.fromString(callerId))
                 .stream()
                 .map(m -> new MyCommunityResponse(m.getCommunityUserId().toString(), m.getCommunity().getUsername(),
-                        m.getCommunity().getDisplayName(), m.getCommunity().getAvatarUrl(), m.getRole()))
+                        m.getCommunity().getDisplayName(), m.getCommunity().getAvatarUrl(), m.getRole(),
+                        m.getCommunity().getLockedAt() != null))
                 .toList();
     }
 

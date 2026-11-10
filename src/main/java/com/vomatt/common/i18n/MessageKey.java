@@ -167,6 +167,8 @@ public enum MessageKey {
 
     // === Plans ===
     COMMUNITY_LIMIT_REACHED("community.limit_reached"),
+    COMMUNITY_LOCKED("community.locked"),
+    COMMUNITY_KEEP_INVALID("community.keep.invalid"),
     ;
 
     private final String code;

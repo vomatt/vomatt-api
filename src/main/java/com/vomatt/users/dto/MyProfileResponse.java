@@ -67,6 +67,6 @@ public record MyProfileResponse(
         Map<String, Boolean> visibilitySettings,
         @Schema(description = "Whether Ballots are Anonymous when a Ballot does not say otherwise; false until set", example = "false")
         boolean anonymousBallotByDefault,
-        @Schema(description = "Whether this is an official account (a group's page, shown with a badge)", example = "false")
-        boolean official
+        @Schema(description = "Whether this is a community account (a group's page, shown with a badge)", example = "false")
+        boolean community
 ) {}

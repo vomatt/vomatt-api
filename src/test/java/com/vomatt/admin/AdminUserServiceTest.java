@@ -6,7 +6,7 @@ import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.entity.User;
 import com.vomatt.repository.AdminQueryRepository;
 import com.vomatt.repository.LockTimeout;
-import com.vomatt.repository.OfficialMemberRepository;
+import com.vomatt.repository.CommunityMemberRepository;
 import com.vomatt.repository.UserBlockRepository;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.UserVoteRepository;
@@ -64,7 +64,7 @@ class AdminUserServiceTest {
     @BeforeEach
     void setUp() {
         // The real guard, so these tests cover the shared last-admin rule as admins reach it
-        UserService userService = new UserService(userRepository, null, null, null, null, refreshTokenService, null, voteRepository, lockTimeout, null, null, null, null, null, null, null, null, null, null, null, mock(OfficialMemberRepository.class));
+        UserService userService = new UserService(userRepository, null, null, null, null, refreshTokenService, null, voteRepository, lockTimeout, null, null, null, null, null, null, null, null, null, null, null, mock(CommunityMemberRepository.class));
         service = new AdminUserService(adminQueryRepository, userRepository, voteRepository, userVoteRepository,
                 voteCommentRepository, userBlockRepository, userService, new AdminMapper(), authService);
     }

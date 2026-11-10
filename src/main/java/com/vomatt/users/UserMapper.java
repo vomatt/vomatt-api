@@ -23,7 +23,7 @@ public class UserMapper {
                 user.getUsername(),
                 displayNameVisible ? user.getDisplayName() : null,
                 user.getAvatarUrl(),
-                user.isOfficial()
+                user.isCommunity()
         );
     }
 
@@ -36,7 +36,7 @@ public class UserMapper {
                 user.getAvatarUrl(),
                 isFollowing,
                 followsYou,
-                user.isOfficial()
+                user.isCommunity()
         );
     }
 
@@ -71,7 +71,7 @@ public class UserMapper {
                 stats.getFollowingCount().intValue(),
                 visibilitySettings,
                 anonymousBallotByDefault,
-                user.isOfficial()
+                user.isCommunity()
         );
     }
 
@@ -102,7 +102,7 @@ public class UserMapper {
                 isBlocked,
                 mutualFollowersCount,
                 mutualFollowersPreview,
-                projection.isOfficial()
+                projection.isCommunity()
         );
     }
 }

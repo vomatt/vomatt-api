@@ -50,7 +50,7 @@ public class VoteComment extends AuditableEntity {
     @Column(name = "is_deleted")
     private boolean isDeleted = false;
 
-    /** The member who wrote this Comment while acting as the official account {@link #user}; null otherwise. */
+    /** The member who wrote this Comment while acting as the community account {@link #user}; null otherwise. */
     @Column(name = "acted_by")
     private UUID actedBy;
 

@@ -118,9 +118,9 @@ public class InviteListService {
         if (users.size() != ids.size()) {
             throw ApiException.badRequest(MessageKey.INVITE_LIST_MEMBER_IDS_INVALID);
         }
-        // Invite Lists feed Invitees, which an official account cannot be
-        if (users.stream().anyMatch(User::isOfficial)) {
-            throw ApiException.badRequest(MessageKey.OFFICIAL_INVITEE_NOT_ALLOWED);
+        // Invite Lists feed Invitees, which a community account cannot be
+        if (users.stream().anyMatch(User::isCommunity)) {
+            throw ApiException.badRequest(MessageKey.COMMUNITY_INVITEE_NOT_ALLOWED);
         }
         List<InviteListMember> existing = inviteListMemberRepository.findByInviteListId(inviteList.getId());
         Set<UUID> membersById = existing.stream().filter(m -> m.getEmail() == null)

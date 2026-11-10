@@ -18,6 +18,6 @@ public record FollowUserDto(
         boolean isFollowing,
         @Schema(description = "Whether this user follows the caller; false for the caller's own entry", example = "false")
         boolean followsYou,
-        @Schema(description = "Whether this is an official account (a group's page, shown with a badge)", example = "false")
-        boolean official
+        @Schema(description = "Whether this is a community account (a group's page, shown with a badge)", example = "false")
+        boolean community
 ) {}

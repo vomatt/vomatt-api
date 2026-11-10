@@ -69,7 +69,7 @@ public class PollReportService {
     private final LookupService lookupService;
 
     /**
-     * The report of a Pro poll for its owner; while acting as an official account owner, only members whose role may
+     * The report of a Pro poll for its owner; while acting as a community account owner, only members whose role may
      * read reports. Generated on the first read after the Poll has Ended and its results are revealed.
      */
     public PollReportResponse getReport(String voteId, String callerId) {
@@ -80,7 +80,7 @@ public class PollReportService {
         ActingMember.current()
                 .filter(a -> !a.role().canReadReports())
                 .ifPresent(a -> {
-                    throw ApiException.forbidden(MessageKey.OFFICIAL_ROLE_FORBIDDEN);
+                    throw ApiException.forbidden(MessageKey.COMMUNITY_ROLE_FORBIDDEN);
                 });
         if (!vote.isPro()) {
             throw ApiException.badRequest(MessageKey.REPORT_NOT_PRO);

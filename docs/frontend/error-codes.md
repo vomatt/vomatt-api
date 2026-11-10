@@ -67,8 +67,8 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.passkey.admin_scope_required` | 403 | 此 Passkey 不能登入管理後台，請先用 email 驗證碼登入，再到管理後台重新註冊 Passkey | This passkey cannot sign in to the admin console. Sign in with an email code, then register a passkey from the admin console | Show a permission-denied notice | PasskeyService |
 | `auth.session_revoked` | 401 | 此裝置已被登出，請重新登入 | This device has been signed out. Please sign in again | See [auth-flow.md](auth-flow.md) | JwtAuthFilter |
 | `auth.session_not_found` | 404 | 找不到此登入裝置 | Signed-in device not found | Show resource not found | UserController |
-| `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | AdminUserService, AuthService, FeedbackService, InviteListService, JwtAuthFilter, NotificationService, OfficialService, PasskeyService, UserGuard, UserService, VoteCommentService, VoteService |
-| `user.username.taken` | 409 | 使用者名稱已被使用 | Username already taken | Show message (resource state conflict) | OfficialService, UserService |
+| `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | AdminUserService, AuthService, CommunityService, FeedbackService, InviteListService, JwtAuthFilter, NotificationService, PasskeyService, UserGuard, UserService, VoteCommentService, VoteService |
+| `user.username.taken` | 409 | 使用者名稱已被使用 | Username already taken | Show message (resource state conflict) | CommunityService, UserService |
 | `user.phone.taken` | 409 | 手機號碼已被使用 | Phone number already in use | Show message (resource state conflict) | AuthService |
 | `user.delete.forbidden` | 403 | 只能刪除自己的帳號 | You can only delete your own account | Show a permission-denied notice | UserService |
 | `user.follow.blocked` | 400 | 不能追蹤已封鎖的使用者，請先解除封鎖 | You cannot follow a user you blocked; unblock them first | Show message so the user can fix the input | UserService |
@@ -115,16 +115,16 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `lookup.exists` | 409 | 字典資料已存在：{0}/{1} | Dictionary item already exists: {0}/{1} | Show message (resource state conflict) | LookupService |
 | `admin.self_action_forbidden` | 403 | 不能停權自己或移除自己的管理員角色 | You cannot suspend yourself or remove your own admin role | Show a permission-denied notice | AdminUserService |
 | `admin.last_admin` | 409 | 不能移除最後一位管理員 | Cannot remove the last active admin | Show message (resource state conflict) | UserService |
-| `auth.official_sign_in_not_allowed` | 403 | 官方帳號無法登入，請以成員身分登入後切換 | Official accounts cannot sign in; sign in as a member and switch to the account | Show a permission-denied notice | AuthService |
-| `vote.ballot.official_not_allowed` | 403 | 官方帳號不能投票 | Official accounts cannot vote | Show a permission-denied notice | VoteService |
-| `official.not_member` | 403 | 你不是此官方帳號的成員 | You are not a member of this official account | Show a permission-denied notice | ActAsFilter, OfficialService |
-| `official.role_forbidden` | 403 | 你在此官方帳號的角色無權執行此操作 | Your role in this official account does not allow this action | Show a permission-denied notice | ActAsFilter, ActingMember, OfficialService, PollReportService |
-| `official.member.not_found` | 404 | 此用戶不是該官方帳號的成員 | This user is not a member of the official account | Show resource not found | OfficialService |
-| `official.member.exists` | 409 | 此用戶已是該官方帳號的成員 | This user is already a member of the official account | Show message (resource state conflict) | OfficialService |
-| `official.member.invalid` | 400 | 此用戶無法成為官方帳號成員 | This user cannot become a member of an official account | Show message so the user can fix the input | OfficialService |
-| `official.last_owner` | 409 | 官方帳號至少需保留一位擁有者 | An official account must keep at least one owner | Show message (resource state conflict) | OfficialService, UserService |
-| `official.roles_fixed` | 400 | 官方帳號的角色不能變更 | The roles of an official account cannot be changed | Show message so the user can fix the input | AdminUserService |
-| `official.invitee_not_allowed` | 400 | 官方帳號不能被邀請投票或加入邀請名單 | An official account cannot be invited to a poll or added to an invite list | Show message so the user can fix the input | InviteListService, VoteService |
+| `auth.community_sign_in_not_allowed` | 403 | 社群帳號無法登入，請以成員身分登入後切換 | Community accounts cannot sign in; sign in as a member and switch to the account | Show a permission-denied notice | AuthService |
+| `vote.ballot.community_not_allowed` | 403 | 社群帳號不能投票 | Community accounts cannot vote | Show a permission-denied notice | VoteService |
+| `community.not_member` | 403 | 你不是此社群帳號的成員 | You are not a member of this community account | Show a permission-denied notice | ActAsFilter, CommunityService |
+| `community.role_forbidden` | 403 | 你在此社群帳號的角色無權執行此操作 | Your role in this community account does not allow this action | Show a permission-denied notice | ActAsFilter, ActingMember, CommunityService, PollReportService |
+| `community.member.not_found` | 404 | 此用戶不是該社群帳號的成員 | This user is not a member of the community account | Show resource not found | CommunityService |
+| `community.member.exists` | 409 | 此用戶已是該社群帳號的成員 | This user is already a member of the community account | Show message (resource state conflict) | CommunityService |
+| `community.member.invalid` | 400 | 此用戶無法成為社群帳號成員 | This user cannot become a member of a community account | Show message so the user can fix the input | CommunityService |
+| `community.last_owner` | 409 | 社群帳號至少需保留一位擁有者 | A community account must keep at least one owner | Show message (resource state conflict) | CommunityService, UserService |
+| `community.roles_fixed` | 400 | 社群帳號的角色不能變更 | The roles of a community account cannot be changed | Show message so the user can fix the input | AdminUserService |
+| `community.invitee_not_allowed` | 400 | 社群帳號不能被邀請投票或加入邀請名單 | A community account cannot be invited to a poll or added to an invite list | Show message so the user can fix the input | InviteListService, VoteService |
 | `vote.reveal_at.before_end` | 400 | 公布結果時間不可早於結束時間 | Reveal time cannot be before the end time | Show message so the user can fix the input | VoteService |
 | `vote.reveal_at.too_late` | 400 | 公布結果時間不可晚於結束時間後 {0} 天 | Reveal time cannot be more than {0} days after the end time | Show message so the user can fix the input | VoteService |
 | `vote.ballot.anonymous_not_allowed` | 400 | Pro 投票不接受匿名投票 | Anonymous ballots are not allowed in a Pro poll | Show message so the user can fix the input | VoteService |

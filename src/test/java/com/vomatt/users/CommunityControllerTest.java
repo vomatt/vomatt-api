@@ -30,13 +30,13 @@ import com.vomatt.common.security.UserPrincipal;
 import com.vomatt.users.dto.UserDto;
 
 @ExtendWith(MockitoExtension.class)
-class OfficialControllerTest {
+class CommunityControllerTest {
 
     private static final UUID USER_ID = UUID.randomUUID();
 
-    @Mock OfficialService officialService;
+    @Mock CommunityService communityService;
     @Mock LocalizedMessageService messageService;
-    @InjectMocks OfficialController controller;
+    @InjectMocks CommunityController controller;
 
     MockMvc mockMvc;
 
@@ -56,24 +56,24 @@ class OfficialControllerTest {
     }
 
     @Test
-    void shouldMakeCallerTheOwnerWhenUserCreatesOfficial() throws Exception {
-        when(officialService.createOfficial("sunrise_tower", "Sunrise Tower Committee", USER_ID))
+    void shouldMakeCallerTheOwnerWhenUserCreatesCommunity() throws Exception {
+        when(communityService.createCommunity("sunrise_tower", "Sunrise Tower Committee", USER_ID))
                 .thenReturn(new UserDto("o1", "sunrise_tower", "Sunrise Tower Committee", null, true));
 
-        mockMvc.perform(post("/api/officials").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/api/communities").contentType(MediaType.APPLICATION_JSON)
                         .content("{ \"username\": \"sunrise_tower\", \"displayName\": \"Sunrise Tower Committee\" }"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.username").value("sunrise_tower"))
-                .andExpect(jsonPath("$.data.official").value(true));
+                .andExpect(jsonPath("$.data.community").value(true));
     }
 
     @Test
-    void shouldRejectReservedUsernameWhenUserCreatesOfficial() throws Exception {
+    void shouldRejectReservedUsernameWhenUserCreatesCommunity() throws Exception {
 
-        mockMvc.perform(post("/api/officials").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/api/communities").contentType(MediaType.APPLICATION_JSON)
                         .content("{ \"username\": \"settings\", \"displayName\": \"Sunrise\" }"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("common.validation_failed"));
-        verifyNoInteractions(officialService);
+        verifyNoInteractions(communityService);
     }
 }

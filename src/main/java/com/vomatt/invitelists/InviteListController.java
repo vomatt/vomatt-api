@@ -204,7 +204,7 @@ public class InviteListController {
             **Side effects**: nobody is notified (members never learn about the Invite List); the action is audit-logged.
             **Errors**:
             - 400 `invite_list.member.ids_invalid`: one of `userIds` is not an existing user or is suspended (`emails` never cause it)
-            - 400 `official.invitee_not_allowed`: one of `userIds` is an official account
+            - 400 `community.invitee_not_allowed`: one of `userIds` is a community account
             - 400 `invite_list.members.max`: the Invite List would hold more members than the limit (default 100), including when it is already over a lowered limit
             - 400 `common.validation_failed`: both `userIds` and `emails` are empty, one holds more than 100 entries, a null element or an invalid address
             """ + NOT_FOUND,

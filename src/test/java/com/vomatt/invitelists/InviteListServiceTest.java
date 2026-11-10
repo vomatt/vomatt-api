@@ -136,14 +136,14 @@ class InviteListServiceTest {
     }
 
     @Test
-    void shouldRejectAddWhenMemberIsOfficialAccount() {
+    void shouldRejectAddWhenMemberIsCommunityAccount() {
         lockInviteList();
-        User official = User.builder().id(UUID.randomUUID()).roles(new String[] { "official" }).build();
-        when(userRepository.findAllById(Set.of(official.getId()))).thenReturn(List.of(official));
+        User community = User.builder().id(UUID.randomUUID()).roles(new String[] { "community" }).build();
+        when(userRepository.findAllById(Set.of(community.getId()))).thenReturn(List.of(community));
 
         assertThatThrownBy(() -> inviteListService.addMembers(inviteListId.toString(),
-                members(List.of(official.getId()), null), ownerId.toString()))
-                .satisfies(ex -> assertApiException(ex, MessageKey.OFFICIAL_INVITEE_NOT_ALLOWED));
+                members(List.of(community.getId()), null), ownerId.toString()))
+                .satisfies(ex -> assertApiException(ex, MessageKey.COMMUNITY_INVITEE_NOT_ALLOWED));
     }
 
     @Test

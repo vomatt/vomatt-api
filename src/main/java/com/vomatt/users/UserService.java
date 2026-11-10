@@ -38,7 +38,7 @@ import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.VoteRepository;
 import com.vomatt.votes.VoteViewRecorder;
 import com.vomatt.repository.LockTimeout;
-import com.vomatt.repository.OfficialMemberRepository;
+import com.vomatt.repository.CommunityMemberRepository;
 import com.vomatt.common.util.AfterCommit;
 import com.vomatt.common.util.TextUtil;
 import com.vomatt.common.util.UUIDv7Generator;
@@ -90,7 +90,7 @@ public class UserService {
     private final StorageService storageService;
     private final LookupService lookupService;
     private final TransactionTemplate transactionTemplate;
-    private final OfficialMemberRepository officialMemberRepository;
+    private final CommunityMemberRepository communityMemberRepository;
 
     /** One export per user per UTC day: the response is the account's whole footprint and is not cheap to build. */
     private static final String EXPORT_COUNTER_NS = "export:daily";
@@ -120,10 +120,10 @@ public class UserService {
         }
         User user = findUserById(userId);
         requireAnotherActiveAdmin(user);
-        // Membership rows cascade with the account; an official account must not be left without an OWNER.
+        // Membership rows cascade with the account; a community account must not be left without an OWNER.
         // ponytail: unlocked check, a concurrent demotion of the other OWNER can slip through; lock OWNER rows if it matters
-        if (officialMemberRepository.isSoleOwnerOfAny(user.getId())) {
-            throw ApiException.conflict(MessageKey.OFFICIAL_LAST_OWNER);
+        if (communityMemberRepository.isSoleOwnerOfAny(user.getId())) {
+            throw ApiException.conflict(MessageKey.COMMUNITY_LAST_OWNER);
         }
         userRepository.lockForDelete(user.getId());
         // After commit: a sign-in or refresh before then still sees the account, and a rollback keeps its tokens

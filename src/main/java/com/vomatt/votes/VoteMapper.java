@@ -30,7 +30,7 @@ public class VoteMapper {
         response.setCreatorId(vote.getCreator().getId().toString());
         response.setCreatorUsername(vote.getCreator().getUsername());
         response.setCreatorAvatarUrl(vote.getCreator().getAvatarUrl());
-        response.setCreatorOfficial(vote.getCreator().isOfficial());
+        response.setCreatorCommunity(vote.getCreator().isCommunity());
         response.setStartTime(vote.getStartTime());
         response.setEndTime(vote.getEndTime());
         response.setDeadline(vote.getDeadline());
@@ -93,7 +93,7 @@ public class VoteMapper {
         response.setCreatorId(vote.getCreator().getId().toString());
         response.setCreatorUsername(vote.getCreator().getUsername());
         response.setCreatorAvatarUrl(vote.getCreator().getAvatarUrl());
-        response.setCreatorOfficial(vote.getCreator().isOfficial());
+        response.setCreatorCommunity(vote.getCreator().isCommunity());
         response.setStartTime(vote.getStartTime());
         response.setEndTime(vote.getEndTime());
         response.setDeadline(vote.getDeadline());

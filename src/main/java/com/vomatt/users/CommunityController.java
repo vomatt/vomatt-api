@@ -12,12 +12,12 @@ import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.SimpleResultResponse;
 import com.vomatt.common.security.ActingMember;
 import com.vomatt.common.security.UserPrincipal;
-import com.vomatt.users.dto.MyOfficialResponse;
-import com.vomatt.users.dto.NewOfficialRequest;
-import com.vomatt.users.dto.OfficialMemberRequest;
-import com.vomatt.users.dto.OfficialMemberResponse;
-import com.vomatt.users.dto.OfficialOwnerRequest;
-import com.vomatt.users.dto.OfficialRoleRequest;
+import com.vomatt.users.dto.MyCommunityResponse;
+import com.vomatt.users.dto.NewCommunityRequest;
+import com.vomatt.users.dto.CommunityMemberRequest;
+import com.vomatt.users.dto.CommunityMemberResponse;
+import com.vomatt.users.dto.CommunityOwnerRequest;
+import com.vomatt.users.dto.CommunityRoleRequest;
 import com.vomatt.users.dto.UserDto;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -42,15 +42,15 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Official account members. Authorized by the caller's own membership (the real member, whether or not the request
+ * Community account members. Authorized by the caller's own membership (the real member, whether or not the request
  * also sends {@code X-Act-As}).
  */
 @RestController
 @RequiredArgsConstructor
-@Tag(name = "Official Account", description = "Official accounts (a group's page) and the members who manage them")
-public class OfficialController {
+@Tag(name = "Community Account", description = "Community accounts (a group's page) and the members who manage them")
+public class CommunityController {
 
-    private final OfficialService officialService;
+    private final CommunityService communityService;
 
     private static final String EX_MEMBER = """
             { "userId": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47", "username": "alice", "displayName": "Alice", "avatarUrl": "bot:boba",
@@ -67,78 +67,78 @@ public class OfficialController {
     private static final String ROLES = """
             Roles: OWNER and ADMIN manage members; an ADMIN never changes or removes an OWNER nor grants OWNER. \
             CHIEF_EDITOR, EDITOR and ANALYST cannot manage members.""";
-    private static final String NOT_MEMBER = "- 403 `official.not_member`: the caller is not a member of this official account, or it does not exist or is suspended\n";
-    private static final String ROLE_FORBIDDEN = "- 403 `official.role_forbidden`: the caller's role does not allow this change\n";
-    private static final String MEMBER_NOT_FOUND = "- 404 `official.member.not_found`: the user is not a member\n";
-    private static final String LAST_OWNER = "- 409 `official.last_owner`: the change would leave the official account without an OWNER\n"
+    private static final String NOT_MEMBER = "- 403 `community.not_member`: the caller is not a member of this community account, or it does not exist or is suspended\n";
+    private static final String ROLE_FORBIDDEN = "- 403 `community.role_forbidden`: the caller's role does not allow this change\n";
+    private static final String MEMBER_NOT_FOUND = "- 404 `community.member.not_found`: the user is not a member\n";
+    private static final String LAST_OWNER = "- 409 `community.last_owner`: the change would leave the community account without an OWNER\n"
             + "- 409 `common.conflict`: another member change is in progress; retry\n";
 
-    private static final String ERR_NOT_MEMBER = ERR_MESSAGE + "You are not a member of this official account" + ERR_CODE
-            + "official.not_member" + ERR_ERROR + "You are not a member of this official account" + ERR_END;
-    private static final String ERR_LAST_OWNER = ERR_MESSAGE + "An official account must keep at least one owner" + ERR_CODE
-            + "official.last_owner" + ERR_ERROR + "An official account must keep at least one owner" + ERR_END;
+    private static final String ERR_NOT_MEMBER = ERR_MESSAGE + "You are not a member of this community account" + ERR_CODE
+            + "community.not_member" + ERR_ERROR + "You are not a member of this community account" + ERR_END;
+    private static final String ERR_LAST_OWNER = ERR_MESSAGE + "A community account must keep at least one owner" + ERR_CODE
+            + "community.last_owner" + ERR_ERROR + "A community account must keep at least one owner" + ERR_END;
 
-    @PostMapping("/api/officials")
-    @Auditable(action = "CREATE", resourceType = "OFFICIAL")
+    @PostMapping("/api/communities")
+    @Auditable(action = "CREATE", resourceType = "COMMUNITY")
     @CommonApiResponses
-    @Operation(summary = "Create an official account", description = """
+    @Operation(summary = "Create a community account", description = """
             **Auth**: required
-            **Precondition**: the caller is an active account that is not an official account; the username is free
-            **Behavior**: creates an official account (a group's page: `displayName` is the group name, the logo is its avatar) \
+            **Precondition**: the caller is an active account that is not a community account; the username is free
+            **Behavior**: creates a community account (a group's page: `displayName` is the group name, the logo is its avatar) \
             with the caller as its first OWNER, who then adds members. It has no email or phone and can never sign in; members \
             act as it with the `X-Act-As` header. Sent while acting, the real member becomes the OWNER. Returns 201 with the \
-            account, `official` true
+            account, `community` true
             **Side effects**: the creation is audit-logged
             **Errors**:
             - 400 `common.validation_failed`: `username` not 3-50 characters of [a-z0-9_] or reserved, `displayName` blank or over 100 characters
-            - 400 `official.member.invalid`: the caller is suspended or is an official account
+            - 400 `community.member.invalid`: the caller is suspended or is a community account
             - 409 `user.username.taken`: the username is in use
             """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
-                    examples = @ExampleObject(name = "Create an official account", value = """
+                    examples = @ExampleObject(name = "Create a community account", value = """
                             { "username": "sunrise_tower", "displayName": "Sunrise Tower Committee" }
                             """))))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Official account created",
-            content = @Content(examples = @ExampleObject(name = "Official account", value = """
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Community account created",
+            content = @Content(examples = @ExampleObject(name = "Community account", value = """
                     { "success": true, "data": { "id": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48", "username": "sunrise_tower",
-                        "displayName": "Sunrise Tower Committee", "avatarUrl": null, "official": true },
+                        "displayName": "Sunrise Tower Committee", "avatarUrl": null, "community": true },
                       "message": null, "errorCode": null, "error": null }
                     """)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Username in use (`user.username.taken`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "user.username.taken", value = ERR_MESSAGE + "Username already taken"
                             + ERR_CODE + "user.username.taken" + ERR_ERROR + "Username already taken" + ERR_END)))
-    public ResponseEntity<ApiResponse<UserDto>> createOwnOfficial(@Valid @RequestBody NewOfficialRequest request,
+    public ResponseEntity<ApiResponse<UserDto>> createOwnCommunity(@Valid @RequestBody NewCommunityRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(officialService.createOfficial(
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(communityService.createCommunity(
                 request.username(), request.displayName(), UUID.fromString(ActingMember.realUserId(principal)))));
     }
 
-    @GetMapping("/api/users/me/officials")
+    @GetMapping("/api/users/me/communities")
     @CommonApiResponses
-    @Operation(summary = "List my official accounts", description = """
+    @Operation(summary = "List my community accounts", description = """
             **Auth**: required
             **Precondition**: none
-            **Behavior**: the active official accounts the caller is a member of, with the caller's role, oldest membership first; \
-            for the account switcher. Send an account's `officialId` as the `X-Act-As` header to act as it. While acting, the list \
+            **Behavior**: the active community accounts the caller is a member of, with the caller's role, oldest membership first; \
+            for the account switcher. Send an account's `communityId` as the `X-Act-As` header to act as it. While acting, the list \
             is still the real member's.
             **Side effects**: none
             **Errors**: none
             """)
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "The caller's official accounts",
-            content = @Content(examples = @ExampleObject(name = "Official accounts", value = """
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "The caller's community accounts",
+            content = @Content(examples = @ExampleObject(name = "Community accounts", value = """
                     { "success": true, "data": [
-                        { "officialId": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48", "username": "sunrise_tower", "displayName": "Sunrise Tower Committee",
+                        { "communityId": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48", "username": "sunrise_tower", "displayName": "Sunrise Tower Committee",
                           "avatarUrl": "/api/avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d49.jpg", "role": "EDITOR" }
                       ], "message": null, "errorCode": null, "error": null }
                     """)))
-    public ResponseEntity<ApiResponse<List<MyOfficialResponse>>> listMine(@AuthenticationPrincipal UserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.ok(officialService.listMine(ActingMember.realUserId(principal))));
+    public ResponseEntity<ApiResponse<List<MyCommunityResponse>>> listMine(@AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(communityService.listMine(ActingMember.realUserId(principal))));
     }
 
-    @GetMapping("/api/officials/{officialId}/members")
+    @GetMapping("/api/communities/{communityId}/members")
     @CommonApiResponses
-    @Operation(summary = "List official account members", description = """
+    @Operation(summary = "List community account members", description = """
             **Auth**: required (any member)
             **Precondition**: none
             **Behavior**: every member with their role, earliest first.
@@ -147,31 +147,31 @@ public class OfficialController {
             """ + NOT_MEMBER)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Members",
             content = @Content(examples = @ExampleObject(name = "Members", value = EX_MEMBERS_RESPONSE)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not a member (`official.not_member`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not a member (`community.not_member`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "official.not_member", value = ERR_NOT_MEMBER)))
-    public ResponseEntity<ApiResponse<List<OfficialMemberResponse>>> listMembers(
-            @Parameter(description = "Official account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
-            @PathVariable UUID officialId,
+                    examples = @ExampleObject(name = "community.not_member", value = ERR_NOT_MEMBER)))
+    public ResponseEntity<ApiResponse<List<CommunityMemberResponse>>> listMembers(
+            @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
+            @PathVariable UUID communityId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.ok(officialService.listMembers(officialId, ActingMember.realUserId(principal))));
+        return ResponseEntity.ok(ApiResponse.ok(communityService.listMembers(communityId, ActingMember.realUserId(principal))));
     }
 
-    @PostMapping("/api/officials/{officialId}/members")
-    @Auditable(action = "ADD_MEMBER", resourceType = "OFFICIAL", resourceIdIndex = 0)
+    @PostMapping("/api/communities/{communityId}/members")
+    @Auditable(action = "ADD_MEMBER", resourceType = "COMMUNITY", resourceIdIndex = 0)
     @CommonApiResponses
-    @Operation(summary = "Add an official account member", description = """
+    @Operation(summary = "Add a community account member", description = """
             **Auth**: required (OWNER or ADMIN)
-            **Precondition**: the user is an active account, not an official account, and not yet a member
+            **Precondition**: the user is an active account, not a community account, and not yet a member
             **Behavior**: adds the user with the role. \
             """ + ROLES + """
 
             **Side effects**: the action is audit-logged.
             **Errors**:
-            - 400 `official.member.invalid`: the user is suspended or is an official account
+            - 400 `community.member.invalid`: the user is suspended or is a community account
             - 400 `common.validation_failed`: `userId` or `role` missing or invalid
             - 404 `user.not_found`: no user with this id
-            - 409 `official.member.exists`: the user is already a member
+            - 409 `community.member.exists`: the user is already a member
             """ + NOT_MEMBER + ROLE_FORBIDDEN,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = @ExampleObject(name = "Add an editor", value = """
@@ -179,22 +179,22 @@ public class OfficialController {
                             """))))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Member added",
             content = @Content(examples = @ExampleObject(name = "Member", value = EX_MEMBER_RESPONSE)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not a member or the role does not allow it (`official.not_member`, `official.role_forbidden`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not a member or the role does not allow it (`community.not_member`, `community.role_forbidden`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "official.not_member", value = ERR_NOT_MEMBER)))
-    public ResponseEntity<ApiResponse<OfficialMemberResponse>> addMember(
-            @Parameter(description = "Official account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
-            @PathVariable UUID officialId,
-            @Valid @RequestBody OfficialMemberRequest request,
+                    examples = @ExampleObject(name = "community.not_member", value = ERR_NOT_MEMBER)))
+    public ResponseEntity<ApiResponse<CommunityMemberResponse>> addMember(
+            @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
+            @PathVariable UUID communityId,
+            @Valid @RequestBody CommunityMemberRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(officialService.addMember(officialId,
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(communityService.addMember(communityId,
                 request.userId(), request.role(), ActingMember.realUserId(principal))));
     }
 
-    @PatchMapping("/api/officials/{officialId}/members/{userId}")
-    @Auditable(action = "UPDATE_MEMBER", resourceType = "OFFICIAL", resourceIdIndex = 0)
+    @PatchMapping("/api/communities/{communityId}/members/{userId}")
+    @Auditable(action = "UPDATE_MEMBER", resourceType = "COMMUNITY", resourceIdIndex = 0)
     @CommonApiResponses
-    @Operation(summary = "Change an official account member's role", description = """
+    @Operation(summary = "Change a community account member's role", description = """
             **Auth**: required (OWNER or ADMIN)
             **Precondition**: the user is a member
             **Behavior**: sets the member's role. \
@@ -210,24 +210,24 @@ public class OfficialController {
                             """))))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Member after the change",
             content = @Content(examples = @ExampleObject(name = "Member", value = EX_MEMBER_RESPONSE)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Would leave no OWNER (`official.last_owner`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Would leave no OWNER (`community.last_owner`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "official.last_owner", value = ERR_LAST_OWNER)))
-    public ResponseEntity<ApiResponse<OfficialMemberResponse>> changeRole(
-            @Parameter(description = "Official account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
-            @PathVariable UUID officialId,
+                    examples = @ExampleObject(name = "community.last_owner", value = ERR_LAST_OWNER)))
+    public ResponseEntity<ApiResponse<CommunityMemberResponse>> changeRole(
+            @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
+            @PathVariable UUID communityId,
             @Parameter(description = "Member's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47")
             @PathVariable UUID userId,
-            @Valid @RequestBody OfficialRoleRequest request,
+            @Valid @RequestBody CommunityRoleRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.ok(officialService.changeRole(officialId, userId, request.role(),
+        return ResponseEntity.ok(ApiResponse.ok(communityService.changeRole(communityId, userId, request.role(),
                 ActingMember.realUserId(principal))));
     }
 
-    @DeleteMapping("/api/officials/{officialId}/members/{userId}")
-    @Auditable(action = "REMOVE_MEMBER", resourceType = "OFFICIAL", resourceIdIndex = 0)
+    @DeleteMapping("/api/communities/{communityId}/members/{userId}")
+    @Auditable(action = "REMOVE_MEMBER", resourceType = "COMMUNITY", resourceIdIndex = 0)
     @CommonApiResponses
-    @Operation(summary = "Remove an official account member", description = """
+    @Operation(summary = "Remove a community account member", description = """
             **Auth**: required (OWNER or ADMIN; any member may remove themself)
             **Precondition**: the user is a member
             **Behavior**: removes the member; a member naming their own id leaves, whatever their role. Polls and Comments they published as the account stay, still naming them in `acted_by`. \
@@ -238,30 +238,30 @@ public class OfficialController {
             """ + NOT_MEMBER + ROLE_FORBIDDEN + MEMBER_NOT_FOUND + LAST_OWNER)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Member removed",
             content = @Content(examples = @ExampleObject(name = "Removed", value = EX_OK)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Would leave no OWNER (`official.last_owner`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Would leave no OWNER (`community.last_owner`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "official.last_owner", value = ERR_LAST_OWNER)))
+                    examples = @ExampleObject(name = "community.last_owner", value = ERR_LAST_OWNER)))
     public ResponseEntity<ApiResponse<SimpleResultResponse>> removeMember(
-            @Parameter(description = "Official account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
-            @PathVariable UUID officialId,
+            @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
+            @PathVariable UUID communityId,
             @Parameter(description = "Member's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47")
             @PathVariable UUID userId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        officialService.removeMember(officialId, userId, ActingMember.realUserId(principal));
+        communityService.removeMember(communityId, userId, ActingMember.realUserId(principal));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 
-    @PostMapping("/api/officials/{officialId}/owner")
-    @Auditable(action = "TRANSFER_OWNER", resourceType = "OFFICIAL", resourceIdIndex = 0)
+    @PostMapping("/api/communities/{communityId}/owner")
+    @Auditable(action = "TRANSFER_OWNER", resourceType = "COMMUNITY", resourceIdIndex = 0)
     @CommonApiResponses
-    @Operation(summary = "Transfer official account ownership", description = """
+    @Operation(summary = "Transfer community account ownership", description = """
             **Auth**: required (OWNER only)
             **Precondition**: the user is a member
             **Behavior**: the member becomes an OWNER and the caller an ADMIN. Naming oneself changes nothing.
             **Side effects**: the action is audit-logged.
             **Errors**:
             - 400 `common.validation_failed`: `userId` missing
-            - 403 `official.role_forbidden`: the caller is not an OWNER
+            - 403 `community.role_forbidden`: the caller is not an OWNER
             - 409 `common.conflict`: another member change is in progress; retry
             """ + NOT_MEMBER + MEMBER_NOT_FOUND,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
@@ -271,11 +271,11 @@ public class OfficialController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Ownership transferred",
             content = @Content(examples = @ExampleObject(name = "Transferred", value = EX_OK)))
     public ResponseEntity<ApiResponse<SimpleResultResponse>> transferOwner(
-            @Parameter(description = "Official account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
-            @PathVariable UUID officialId,
-            @Valid @RequestBody OfficialOwnerRequest request,
+            @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
+            @PathVariable UUID communityId,
+            @Valid @RequestBody CommunityOwnerRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        officialService.transferOwner(officialId, request.userId(), ActingMember.realUserId(principal));
+        communityService.transferOwner(communityId, request.userId(), ActingMember.realUserId(principal));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 }

@@ -1723,16 +1723,16 @@ class VoteServiceTest {
         }
 
         @Test
-        void shouldRefuseAddWhenInviteeIsOfficialAccount() {
+        void shouldRefuseAddWhenInviteeIsCommunityAccount() {
             inviteOnly(OffsetDateTime.now().plusDays(1));
-            User official = User.builder().id(UUID.randomUUID()).roles(new String[] { "official" }).build();
+            User community = User.builder().id(UUID.randomUUID()).roles(new String[] { "community" }).build();
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
-            when(userRepository.findAllById(Set.of(official.getId()))).thenReturn(List.of(official));
+            when(userRepository.findAllById(Set.of(community.getId()))).thenReturn(List.of(community));
             InviteesRequest invite = new InviteesRequest();
-            invite.setUserIds(List.of(official.getId()));
+            invite.setUserIds(List.of(community.getId()));
 
             assertThatThrownBy(() -> voteService.addInvitees(voteId.toString(), invite, userId.toString()))
-                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.OFFICIAL_INVITEE_NOT_ALLOWED));
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.COMMUNITY_INVITEE_NOT_ALLOWED));
             verify(inviteeRepository, never()).saveAllAndFlush(any());
         }
 
@@ -2093,15 +2093,15 @@ class VoteServiceTest {
         }
     }
 
-    // ─── official accounts ────────────────────────────────────────────────────
+    // ─── community accounts ────────────────────────────────────────────────────
 
     @Nested
-    @DisplayName("acting as an official account")
-    class OfficialAccountTests {
+    @DisplayName("acting as a community account")
+    class CommunityAccountTests {
 
         private final UUID memberId = UUID.randomUUID();
 
-        private void actAs(com.vomatt.entity.OfficialRole role) {
+        private void actAs(com.vomatt.entity.CommunityRole role) {
             var auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(userId.toString(), null, List.of());
             auth.setDetails(new com.vomatt.common.security.ActingMember(memberId, userId, role));
             org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
@@ -2113,37 +2113,37 @@ class VoteServiceTest {
         }
 
         @Test
-        void shouldRefuseEveryBallotChangeWhenActingAsOfficial() {
-            actAs(com.vomatt.entity.OfficialRole.OWNER);
+        void shouldRefuseEveryBallotChangeWhenActingAsCommunity() {
+            actAs(com.vomatt.entity.CommunityRole.OWNER);
             vote.setActive(true);
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
             VoteRequest request = new VoteRequest();
             request.setOptionIds(List.of(UUID.randomUUID().toString()));
 
             assertThatThrownBy(() -> voteService.vote(voteId.toString(), request, userId.toString()))
-                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_BALLOT_OFFICIAL_NOT_ALLOWED));
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_BALLOT_COMMUNITY_NOT_ALLOWED));
             assertThatThrownBy(() -> voteService.retract(voteId.toString(), userId.toString()))
-                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_BALLOT_OFFICIAL_NOT_ALLOWED));
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_BALLOT_COMMUNITY_NOT_ALLOWED));
             assertThatThrownBy(() -> voteService.removeVote(voteId.toString(), UUID.randomUUID().toString(), userId.toString()))
-                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_BALLOT_OFFICIAL_NOT_ALLOWED));
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_BALLOT_COMMUNITY_NOT_ALLOWED));
             verify(userVoteRepository, never()).saveAndFlush(any());
             verify(userVoteRepository, never()).findByUserIdAndVoteId(any(), any());
         }
 
         @Test
         void shouldRefuseDeleteWhenEditorDidNotPublishPoll() {
-            actAs(com.vomatt.entity.OfficialRole.EDITOR);
+            actAs(com.vomatt.entity.CommunityRole.EDITOR);
             vote.setActedBy(UUID.randomUUID());
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
 
             assertThatThrownBy(() -> voteService.deleteVote(voteId.toString(), userId.toString()))
-                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.OFFICIAL_ROLE_FORBIDDEN));
+                    .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.COMMUNITY_ROLE_FORBIDDEN));
             assertThat(vote.getDeletedAt()).isNull();
         }
 
         @Test
         void shouldDeleteWhenEditorPublishedPoll() {
-            actAs(com.vomatt.entity.OfficialRole.EDITOR);
+            actAs(com.vomatt.entity.CommunityRole.EDITOR);
             vote.setActedBy(memberId);
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
 
@@ -2153,8 +2153,8 @@ class VoteServiceTest {
         }
 
         @Test
-        void shouldDeleteAnyOfficialPollWhenAdmin() {
-            actAs(com.vomatt.entity.OfficialRole.ADMIN);
+        void shouldDeleteAnyCommunityPollWhenAdmin() {
+            actAs(com.vomatt.entity.CommunityRole.ADMIN);
             vote.setActedBy(UUID.randomUUID());
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
 

@@ -29,7 +29,7 @@ public class CommentMapper {
             dto.setUserId(comment.getUser().getId().toString());
             dto.setAuthor(comment.getUser().getUsername());
             dto.setAuthorAvatarUrl(comment.getUser().getAvatarUrl());
-            dto.setAuthorOfficial(comment.getUser().isOfficial());
+            dto.setAuthorCommunity(comment.getUser().isCommunity());
             dto.setText(comment.getContent());
             dto.setMentions(mentions(comment, usernames));
         }

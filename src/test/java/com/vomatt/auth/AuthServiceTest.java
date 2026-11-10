@@ -1439,15 +1439,15 @@ class AuthServiceTest {
     }
 
     @Test
-    void shouldRefuseSignInWhenUserIsOfficialAccount() {
+    void shouldRefuseSignInWhenUserIsCommunityAccount() {
         // Every sign-in path (OTP, OAuth, passkey) funnels through buildAuthResponse
-        User official = User.builder().id(UUID.randomUUID()).username("sunrise_tower")
-                .roles(new String[] { "official" }).active(true).build();
+        User community = User.builder().id(UUID.randomUUID()).username("sunrise_tower")
+                .roles(new String[] { "community" }).active(true).build();
 
-        assertThatThrownBy(() -> authService.buildAuthResponse(official, false, false))
+        assertThatThrownBy(() -> authService.buildAuthResponse(community, false, false))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getMessageKey())
-                        .isEqualTo(MessageKey.AUTH_OFFICIAL_SIGN_IN_NOT_ALLOWED));
+                        .isEqualTo(MessageKey.AUTH_COMMUNITY_SIGN_IN_NOT_ALLOWED));
         verify(refreshTokenService, org.mockito.Mockito.never()).issue(anyString(), any(), anyBoolean());
     }
 

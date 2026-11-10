@@ -140,24 +140,24 @@ class VoteCommentServiceTest {
     void shouldLetOnlyAuthorMemberEditWhenActingAsEditorAndAnyCommentWhenChiefEditor() {
         Vote vote = new Vote();
         ReflectionTestUtils.setField(vote, "id", voteId);
-        // The principal is the official account (the Comment's author); another member published it
-        VoteComment target = comment(vote, User.builder().id(viewerId).username("official").build(), "theirs");
+        // The principal is the community account (the Comment's author); another member published it
+        VoteComment target = comment(vote, User.builder().id(viewerId).username("community").build(), "theirs");
         target.setActedBy(UUID.randomUUID());
         when(commentRepository.findByIdAndNotDeleted(target.getId())).thenReturn(java.util.Optional.of(target));
         when(voteService.findAccessibleVote(voteId, viewerId.toString())).thenReturn(vote);
         com.vomatt.comments.dto.UpdateCommentRequest edit = new com.vomatt.comments.dto.UpdateCommentRequest();
         edit.setText("hijacked");
         try {
-            actAs(com.vomatt.entity.OfficialRole.EDITOR);
+            actAs(com.vomatt.entity.CommunityRole.EDITOR);
             assertThatThrownBy(() -> commentService.updateComment(target.getId(), viewerId.toString(), edit))
                     .isInstanceOfSatisfying(ApiException.class,
-                            ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.OFFICIAL_ROLE_FORBIDDEN));
+                            ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMUNITY_ROLE_FORBIDDEN));
             assertThatThrownBy(() -> commentService.deleteComment(target.getId(), viewerId.toString()))
                     .isInstanceOfSatisfying(ApiException.class,
-                            ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.OFFICIAL_ROLE_FORBIDDEN));
+                            ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMUNITY_ROLE_FORBIDDEN));
             assertThat(target.isDeleted()).isFalse();
 
-            actAs(com.vomatt.entity.OfficialRole.CHIEF_EDITOR);
+            actAs(com.vomatt.entity.CommunityRole.CHIEF_EDITOR);
             commentService.deleteComment(target.getId(), viewerId.toString());
             assertThat(target.isDeleted()).isTrue();
         } finally {
@@ -165,7 +165,7 @@ class VoteCommentServiceTest {
         }
     }
 
-    private void actAs(com.vomatt.entity.OfficialRole role) {
+    private void actAs(com.vomatt.entity.CommunityRole role) {
         var auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(viewerId.toString(), null, List.of());
         auth.setDetails(new com.vomatt.common.security.ActingMember(UUID.randomUUID(), viewerId, role));
         org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);

@@ -125,12 +125,12 @@ class AuditAspectTest {
     }
 
     @Test
-    void shouldRecordRealMemberAndOfficialWhenActingAsOfficial() {
+    void shouldRecordRealMemberAndCommunityWhenActingAsCommunity() {
         java.util.UUID memberId = java.util.UUID.randomUUID();
-        java.util.UUID officialId = java.util.UUID.randomUUID();
+        java.util.UUID communityId = java.util.UUID.randomUUID();
         var auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
-                new com.vomatt.common.security.UserPrincipal(officialId.toString(), java.util.List.of("official"), "s1"), null, java.util.List.of());
-        auth.setDetails(new com.vomatt.common.security.ActingMember(memberId, officialId, com.vomatt.entity.OfficialRole.EDITOR));
+                new com.vomatt.common.security.UserPrincipal(communityId.toString(), java.util.List.of("community"), "s1"), null, java.util.List.of());
+        auth.setDetails(new com.vomatt.common.security.ActingMember(memberId, communityId, com.vomatt.entity.CommunityRole.EDITOR));
         org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
         try {
             aspect.logSuccessfulAction(joinPoint, auditable);
@@ -140,6 +140,6 @@ class AuditAspectTest {
 
         verify(auditService).logAction(org.mockito.ArgumentMatchers.eq(memberId.toString()), org.mockito.ArgumentMatchers.eq("CAST_BALLOT"),
                 org.mockito.ArgumentMatchers.eq("VOTE"), org.mockito.ArgumentMatchers.isNull(), any(), any(), any(), any(),
-                org.mockito.ArgumentMatchers.eq("actingAs=" + officialId));
+                org.mockito.ArgumentMatchers.eq("actingAs=" + communityId));
     }
 }

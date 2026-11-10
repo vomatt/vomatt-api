@@ -85,7 +85,7 @@ public class AuditAspect {
     
     /**
      * The caller's user id, or null; the token carries no username, AuditService resolves the actor on its async writer.
-     * While acting as an official account the actor is the real member (the official account goes in the details).
+     * While acting as a community account the actor is the real member (the community account goes in the details).
      */
     private String currentUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -112,7 +112,7 @@ public class AuditAspect {
         String details = index >= 0 && index < args.length && args[index] instanceof AuditDetails auditDetails
                 ? auditDetails.auditDetails() : argString(args, index);
         return ActingMember.current()
-                .map(acting -> "actingAs=" + acting.officialId() + (details == null ? "" : "; " + details))
+                .map(acting -> "actingAs=" + acting.communityId() + (details == null ? "" : "; " + details))
                 .orElse(details);
     }
 

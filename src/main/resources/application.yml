@@ -168,6 +168,9 @@ app:
     path-style: ${STORAGE_PATH_STYLE:false}
   audit:
     enabled: ${AUDIT_ENABLED:true}
+  billing:
+    # Paid plans through Stripe; off until it is integrated (vomatt-web docs/release/stripe-go-live.md)
+    enabled: ${BILLING_ENABLED:false}
   retention:
     # Daily data retention run (RetentionJob), UTC; one instance does the work, the others skip via advisory lock
     cron: ${RETENTION_CRON:0 30 4 * * *}

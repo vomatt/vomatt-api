@@ -57,10 +57,9 @@ public class AuditService {
     }
     
     /**
-     * The current request's success entry, written now in the caller's transaction instead of after return by
-     * {@link #logAction}, which drops entries when its writers are busy: it commits or rolls back with the change it
-     * records, and AuditAspect skips its own. For a record that must outlive what it describes, such as a deleted
-     * account's name.
+     * Written now in the caller's transaction instead of after return by {@link #logAction}, which drops entries when
+     * its writers are busy: it commits or rolls back with the change it records. In a request whose {@code @Auditable}
+     * action is the same, it is that request's success entry and AuditAspect skips its own. A null actor is the system.
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public void logActionNow(String userId, String action, String resourceType, String resourceId, String details) {
@@ -78,7 +77,7 @@ public class AuditService {
         auditLog.setDetails(AuditAspect.withActingAs(details));
         resolveActor(auditLog);
         auditLogRepository.save(auditLog);
-        AuditAspect.markSuccessEntryWritten();
+        AuditAspect.markSuccessEntryWritten(action);
     }
 
     @Async

@@ -66,7 +66,7 @@ public class UserController {
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":null,"phoneVerified":false,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","gender":"FEMALE","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"followersCount":12,"followingCount":8,"visibilitySettings":{"firstName":false,"lastName":false,"location":false,"displayName":true,"bio":true,"gender":false},"anonymousBallotByDefault":false},"message":null,"errorCode":null,"error":null}""")))
+                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":null,"phoneVerified":false,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","gender":"FEMALE","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"followersCount":12,"followingCount":8,"visibilitySettings":{"firstName":false,"lastName":false,"location":false,"displayName":true,"bio":true,"gender":false},"anonymousBallotByDefault":false,"community":false,"plan":"FREE","communityQuota":{"owned":1,"limit":1}},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
@@ -80,7 +80,9 @@ public class UserController {
             `totalPolls` counts Polls the user created that have opened (Open and Ended; not Scheduled or Cancelled before opening), \
             `totalVotes` counts Public, non-Deleted Polls the user holds a Ballot in. \
             `followersCount` / `followingCount` count the users in `GET /api/users/{username}/followers` / `/following` (suspended accounts left out). \
-            `anonymousBallotByDefault` is whether Ballots are Anonymous when a Ballot does not say otherwise (false until set).
+            `anonymousBallotByDefault` is whether Ballots are Anonymous when a Ballot does not say otherwise (false until set). \
+            `plan` is FREE or PRO; `communityQuota` counts the community accounts the caller is an OWNER of (`owned`) against \
+            the plan's `limit`.
             **Side effects**: none
             **Errors**:
             - 404 `user.not_found`: the account no longer exists""")

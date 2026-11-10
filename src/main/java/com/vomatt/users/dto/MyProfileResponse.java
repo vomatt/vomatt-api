@@ -1,6 +1,7 @@
 package com.vomatt.users.dto;
 
 import com.vomatt.entity.Gender;
+import com.vomatt.entity.Plan;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDate;
@@ -68,5 +69,9 @@ public record MyProfileResponse(
         @Schema(description = "Whether Ballots are Anonymous when a Ballot does not say otherwise; false until set", example = "false")
         boolean anonymousBallotByDefault,
         @Schema(description = "Whether this is a community account (a group's page, shown with a badge)", example = "false")
-        boolean community
+        boolean community,
+        @Schema(description = "The paid plan: FREE or PRO. Set by an admin until billing goes live", example = "FREE")
+        Plan plan,
+        @Schema(description = "Community accounts owned against the plan's limit")
+        CommunityQuota communityQuota
 ) {}

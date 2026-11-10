@@ -78,6 +78,7 @@ class UserServiceTest {
     @Mock com.vomatt.lookups.LookupService lookupService;
     @Mock TransactionTemplate transactionTemplate;
     @Spy com.vomatt.repository.LockTimeout lockTimeout = new com.vomatt.repository.LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
+    @Mock PlanService planService;
     @InjectMocks UserService userService;
 
     @Test

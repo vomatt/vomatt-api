@@ -164,6 +164,9 @@ public enum MessageKey {
     REPORT_NOT_PRO("report.not_pro"),
     REPORT_NOT_READY("report.not_ready"),
     REPORT_CANCELLED("report.cancelled"),
+
+    // === Plans ===
+    COMMUNITY_LIMIT_REACHED("community.limit_reached"),
     ;
 
     private final String code;

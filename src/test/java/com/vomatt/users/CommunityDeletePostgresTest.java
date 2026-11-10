@@ -49,7 +49,7 @@ import static org.mockito.Mockito.verify;
 
 /** DELETE /api/communities/{id} with real commits: its audit entry and a member added while it runs. */
 @Import({ CommunityService.class, UserService.class, UserMapper.class, VoteCommentService.class, CommentMapper.class,
-        VoteServiceSlice.class, StorageService.class, AuditService.class })
+        VoteServiceSlice.class, StorageService.class, PlanService.class, AuditService.class })
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class CommunityDeletePostgresTest extends PostgresRepositoryTest {
 

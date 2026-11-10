@@ -10,7 +10,6 @@ import com.vomatt.entity.User;
 import com.vomatt.repository.LockTimeout;
 import com.vomatt.repository.OfficialMemberRepository;
 import com.vomatt.repository.UserRepository;
-import com.vomatt.users.dto.CreateOfficialRequest;
 import com.vomatt.users.dto.MyOfficialResponse;
 import com.vomatt.users.dto.OfficialMemberResponse;
 import com.vomatt.users.dto.UserDto;
@@ -39,19 +38,22 @@ public class OfficialService {
     private final UserMapper userMapper;
     private final LockTimeout lockTimeout;
 
-    /** Admin only: creates the official account (no email or phone, so it can never sign in) and its first OWNER. */
-    public UserDto createOfficial(CreateOfficialRequest request) {
-        if (ReservedUsernames.contains(request.username()) || userRepository.existsByUsername(request.username())) {
+    /**
+     * Creates the official account (no email or phone, so it can never sign in) with {@code ownerUserId} as its first
+     * OWNER: an admin names the owner, any other user creates one for themself.
+     */
+    public UserDto createOfficial(String username, String displayName, UUID ownerUserId) {
+        if (ReservedUsernames.contains(username) || userRepository.existsByUsername(username)) {
             throw ApiException.conflict(MessageKey.USER_USERNAME_TAKEN);
         }
-        requireEligible(request.ownerUserId());
+        requireEligible(ownerUserId);
         User official = userRepository.saveAndFlush(User.builder()
-                .username(request.username())
-                .displayName(request.displayName().trim())
+                .username(username)
+                .displayName(displayName.trim())
                 .roles(new String[] { UserRole.OFFICIAL })
                 .build());
-        memberRepository.save(new OfficialMember(official.getId(), request.ownerUserId(), OWNER));
-        log.info("Official account {} created with owner {}", official.getId(), request.ownerUserId());
+        memberRepository.save(new OfficialMember(official.getId(), ownerUserId, OWNER));
+        log.info("Official account {} created with owner {}", official.getId(), ownerUserId);
         return userMapper.toSearchResult(official, true);
     }
 

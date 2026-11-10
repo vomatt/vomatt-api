@@ -2,6 +2,9 @@
 
 Contract changes that affect the frontend. 💥 BREAKING means frontend code must change. See [openapi.json](openapi.json) for the contract snapshot and [error-codes.md](error-codes.md) for error codes.
 
+## 2026-11-10
+- New `POST /api/officials` (sign-in required) `{ "username", "displayName" }`: any user creates an official account with themself as its first `OWNER`, then adds members with `POST /api/officials/{officialId}/members`. Sent while acting (`X-Act-As`), the real member becomes the `OWNER`. 201 `UserDto` with `official` true, as `POST /api/admin/officials`. Errors: 400 `common.validation_failed` (username format or reserved, `displayName` blank or over 100 characters), 400 `official.member.invalid` (the caller is suspended or is an official account), 409 `user.username.taken`. Audit-logged as `CREATE` on `OFFICIAL`.
+
 ## 2026-11-09
 - New official account role `CHIEF_EDITOR`, between `ADMIN` and `EDITOR`: publishes Polls, comments and likes, and may edit, close, delete and manage Invitees of any of the official account's Polls and edit or delete any of its Comments; it cannot manage members, edit the profile, or read result reports (403 `official.role_forbidden`). `OWNER` and `ADMIN` may grant it (`POST /api/officials/{officialId}/members`, `PATCH .../members/{userId}`); `role` in `OfficialMemberResponse`, `MyOfficialResponse` and the member requests may now be `CHIEF_EDITOR`. Clients that render roles exhaustively must handle it.
 - 💥 Comments of an official account follow the Poll rule: while acting, an `EDITOR` may edit (`PUT /api/votes/{voteId}/comments/{commentId}`) or delete (`DELETE /api/votes/{voteId}/comments/{commentId}`) only Comments it posted itself; others answer 403 `official.role_forbidden`. `OWNER`, `ADMIN` and `CHIEF_EDITOR` may edit or delete any.

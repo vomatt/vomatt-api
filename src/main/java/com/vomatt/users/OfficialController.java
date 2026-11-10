@@ -13,10 +13,12 @@ import com.vomatt.common.response.SimpleResultResponse;
 import com.vomatt.common.security.ActingMember;
 import com.vomatt.common.security.UserPrincipal;
 import com.vomatt.users.dto.MyOfficialResponse;
+import com.vomatt.users.dto.NewOfficialRequest;
 import com.vomatt.users.dto.OfficialMemberRequest;
 import com.vomatt.users.dto.OfficialMemberResponse;
 import com.vomatt.users.dto.OfficialOwnerRequest;
 import com.vomatt.users.dto.OfficialRoleRequest;
+import com.vomatt.users.dto.UserDto;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -75,6 +77,42 @@ public class OfficialController {
             + "official.not_member" + ERR_ERROR + "You are not a member of this official account" + ERR_END;
     private static final String ERR_LAST_OWNER = ERR_MESSAGE + "An official account must keep at least one owner" + ERR_CODE
             + "official.last_owner" + ERR_ERROR + "An official account must keep at least one owner" + ERR_END;
+
+    @PostMapping("/api/officials")
+    @Auditable(action = "CREATE", resourceType = "OFFICIAL")
+    @CommonApiResponses
+    @Operation(summary = "Create an official account", description = """
+            **Auth**: required
+            **Precondition**: the caller is an active account that is not an official account; the username is free
+            **Behavior**: creates an official account (a group's page: `displayName` is the group name, the logo is its avatar) \
+            with the caller as its first OWNER, who then adds members. It has no email or phone and can never sign in; members \
+            act as it with the `X-Act-As` header. Sent while acting, the real member becomes the OWNER. Returns 201 with the \
+            account, `official` true
+            **Side effects**: the creation is audit-logged
+            **Errors**:
+            - 400 `common.validation_failed`: `username` not 3-50 characters of [a-z0-9_] or reserved, `displayName` blank or over 100 characters
+            - 400 `official.member.invalid`: the caller is suspended or is an official account
+            - 409 `user.username.taken`: the username is in use
+            """,
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
+                    examples = @ExampleObject(name = "Create an official account", value = """
+                            { "username": "sunrise_tower", "displayName": "Sunrise Tower Committee" }
+                            """))))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Official account created",
+            content = @Content(examples = @ExampleObject(name = "Official account", value = """
+                    { "success": true, "data": { "id": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48", "username": "sunrise_tower",
+                        "displayName": "Sunrise Tower Committee", "avatarUrl": null, "official": true },
+                      "message": null, "errorCode": null, "error": null }
+                    """)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Username in use (`user.username.taken`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "user.username.taken", value = ERR_MESSAGE + "Username already taken"
+                            + ERR_CODE + "user.username.taken" + ERR_ERROR + "Username already taken" + ERR_END)))
+    public ResponseEntity<ApiResponse<UserDto>> createOwnOfficial(@Valid @RequestBody NewOfficialRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(officialService.createOfficial(
+                request.username(), request.displayName(), UUID.fromString(ActingMember.realUserId(principal)))));
+    }
 
     @GetMapping("/api/users/me/officials")
     @CommonApiResponses

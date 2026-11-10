@@ -219,6 +219,35 @@ public class CommunityController {
         return ResponseEntity.ok(ApiResponse.ok(communityService.uploadAvatar(communityId, file, ActingMember.realUserId(principal))));
     }
 
+    @DeleteMapping("/api/communities/{communityId}")
+    @Auditable(action = "DELETE", resourceType = "COMMUNITY", resourceIdIndex = 0)
+    @CommonApiResponses
+    @Operation(summary = "Delete a community account", description = """
+            **Auth**: required (OWNER only)
+            **Precondition**: none
+            **Behavior**: permanently deletes the community account the way `DELETE /api/users/{userId}` deletes a user's: \
+            its Polls go with it, together with every Ballot and Comment on them, and so do its own Comments, likes and \
+            follows. Every membership is removed, so the account leaves each member's `GET /api/users/me/communities`, \
+            `GET /api/users/{username}` answers 404 `user.not_found`, and a later `X-Act-As` with its id gets 403 `community.not_member`.
+            **Side effects**: audit-logged as `DELETE` on `COMMUNITY` with the username, display name and members (`username:ROLE`) \
+            at deletion in the details; the community account's earlier audit entries are kept
+            **Errors**:
+            - 403 `community.role_forbidden`: the caller is not an OWNER
+            - 409 `common.conflict`: another member change is in progress; retry
+            """ + NOT_MEMBER)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Community account deleted",
+            content = @Content(examples = @ExampleObject(name = "Deleted", value = EX_OK)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not a member, or not an OWNER (`community.not_member`, `community.role_forbidden`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "community.role_forbidden", value = ERR_ROLE_FORBIDDEN)))
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> deleteCommunity(
+            @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
+            @PathVariable UUID communityId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        communityService.deleteCommunity(communityId, ActingMember.realUserId(principal));
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
     @GetMapping("/api/communities/{communityId}/members")
     @CommonApiResponses
     @Operation(summary = "List community account members", description = """

@@ -42,7 +42,8 @@ public interface CommunityMemberRepository extends JpaRepository<CommunityMember
             nativeQuery = true)
     boolean isSoleOwnerOfAny(@Param("userId") UUID userId);
 
-    /** How many community accounts the user is an OWNER of: what their plan limits. */
-    @Query(value = "SELECT count(*) FROM vomatt.community_members WHERE user_id = :userId AND role = 'OWNER'", nativeQuery = true)
+    /** How many active community accounts the user is an OWNER of: what their plan limits. A suspended one is not listed, so it does not count. */
+    @Query(value = "SELECT count(*) FROM vomatt.community_members m JOIN vomatt.users c ON c.id = m.community_user_id "
+            + "WHERE m.user_id = :userId AND m.role = 'OWNER' AND c.active", nativeQuery = true)
     int countOwned(@Param("userId") UUID userId);
 }

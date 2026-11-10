@@ -2920,7 +2920,7 @@
             "type" : "integer"
           },
           "owned" : {
-            "description" : "Community accounts the user is an OWNER of",
+            "description" : "Active community accounts the user is an OWNER of; a suspended one does not count",
             "example" : 1,
             "format" : "int32",
             "type" : "integer"

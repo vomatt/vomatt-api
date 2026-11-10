@@ -72,6 +72,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `user.phone.taken` | 409 | 手機號碼已被使用 | Phone number already in use | Show message (resource state conflict) | AuthService |
 | `user.delete.forbidden` | 403 | 只能刪除自己的帳號 | You can only delete your own account | Show a permission-denied notice | UserService |
 | `user.follow.blocked` | 400 | 不能追蹤已封鎖的使用者，請先解除封鎖 | You cannot follow a user you blocked; unblock them first | Show message so the user can fix the input | UserService |
+| `user.follow.community` | 400 | 社群帳號不能追蹤別人 | A community account cannot follow anyone | Show message so the user can fix the input | UserService |
 | `user.avatar.unsupported_image` | 400 | 不支援的圖片：請上傳 4000 萬像素以內的 JPEG、PNG、GIF 或 BMP | Unsupported image: upload a JPEG, PNG, GIF or BMP of at most 40 megapixels | Show message so the user can fix the input | AvatarImage |
 | `vote.not_found` | 404 | 找不到投票 | Vote not found | Show resource not found | AdminVoteService, VoteService |
 | `vote.option.not_found` | 404 | 找不到投票選項 | Vote option not found | Show resource not found | VoteService |

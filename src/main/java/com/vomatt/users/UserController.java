@@ -685,19 +685,22 @@ public class UserController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Following yourself or a user you blocked (errorCode `user.follow.self`, `user.follow.blocked`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Following yourself or a user you blocked, or following as a community account (errorCode `user.follow.self`, `user.follow.blocked`, `user.follow.community`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = {@ExampleObject(name = "Self", value = """
                             {"success":false,"data":null,"message":"You cannot follow yourself","errorCode":"user.follow.self","error":"You cannot follow yourself"}"""),
                             @ExampleObject(name = "Blocked", value = """
-                            {"success":false,"data":null,"message":"You cannot follow a user you blocked; unblock them first","errorCode":"user.follow.blocked","error":"You cannot follow a user you blocked; unblock them first"}""")}))
+                            {"success":false,"data":null,"message":"You cannot follow a user you blocked; unblock them first","errorCode":"user.follow.blocked","error":"You cannot follow a user you blocked; unblock them first"}"""),
+                            @ExampleObject(name = "Community", value = """
+                            {"success":false,"data":null,"message":"A community account cannot follow anyone","errorCode":"user.follow.community","error":"A community account cannot follow anyone"}""")}))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account does not exist (errorCode `user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Follow a user", description = """
             **Auth**: required
-            **Precondition**: `userId` is another existing, active account the caller has not blocked
+            **Precondition**: `userId` is another existing, active account the caller has not blocked; the caller is not acting \
+            as a community account (`X-Act-As`), which follows no one, so its `followingCount` stays 0. Anyone may follow a community account
             **Behavior**: one-way follow. From then on `GET /api/votes/following` lists PUBLIC Polls the followed user creates. \
             The followed user gets a FOLLOWED notification in `GET /api/notifications` (gone again if the caller unfollows); \
             the follow shows in `GET /api/users/{username}/followers` and `/following`. \
@@ -706,6 +709,7 @@ public class UserController {
             **Errors**:
             - 400 `user.follow.self`: `userId` is the caller's own id
             - 400 `user.follow.blocked`: the caller has blocked this user; unblock first
+            - 400 `user.follow.community`: sent while acting as a community account
             - 400 `common.bad_request`: `userId` is not a valid id
             - 404 `user.not_found`: no account with this id, or it is suspended""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> followUser(

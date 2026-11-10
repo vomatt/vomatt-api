@@ -52,8 +52,8 @@ public final class SecurityEndpoints {
             VOTE + "/results", VOTE + "/comments", VOTE + "/comments/*/replies", "/api/users/{username}",
             "/api/users/{username}/votes", AVATAR_FILE };
 
-    /** POST-only public endpoints: the about site's contact form (senders are anonymous) */
-    public static final String[] PUBLIC_POST = { "/api/contact" };
+    /** POST-only public endpoints: the about site's contact form (senders are anonymous) and the payment provider's webhook */
+    public static final String[] PUBLIC_POST = { "/api/contact", "/api/billing/webhook" };
 
     /** Swagger / OpenAPI UI */
     public static final String[] PUBLIC_SWAGGER = { "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**",

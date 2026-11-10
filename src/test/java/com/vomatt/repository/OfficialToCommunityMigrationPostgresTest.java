@@ -19,8 +19,7 @@ class OfficialToCommunityMigrationPostgresTest extends PostgresRepositoryTest {
     @Test
     @DisplayName("should move the official role, member table and audit logs to community, also on rerun")
     void shouldRenameOfficialToCommunityWhenMigrationRuns() throws Exception {
-        User member = User.builder().username("u" + System.nanoTime()).email("m" + System.nanoTime() + "@example.com").build();
-        em.persist(member);
+        User member = persistUser("mig-member-" + System.nanoTime());
         em.flush();
         // recreate the pre-migration shape: an 'official' user without email or phone, its member row and an audit log
         em.createNativeQuery("""

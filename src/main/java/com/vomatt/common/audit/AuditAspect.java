@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
+import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -26,7 +27,20 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class AuditAspect {
     
+    private static final String RECORDED_DETAILS = AuditAspect.class.getName() + ".details";
+
     private final AuditService auditService;
+
+    /**
+     * Details only the audited call itself knows, such as the values before a change; they replace the details taken
+     * from the arguments. A no-op outside a request.
+     */
+    public static void recordDetails(String details) {
+        RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
+        if (attributes != null) {
+            attributes.setAttribute(RECORDED_DETAILS, details, RequestAttributes.SCOPE_REQUEST);
+        }
+    }
     
     @AfterReturning("@annotation(auditable)")
     public void logSuccessfulAction(JoinPoint joinPoint, Auditable auditable) {
@@ -109,7 +123,10 @@ public class AuditAspect {
     }
     
     private String details(Object[] args, int index) {
-        String details = index >= 0 && index < args.length && args[index] instanceof AuditDetails auditDetails
+        RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
+        Object recorded = attributes == null ? null : attributes.getAttribute(RECORDED_DETAILS, RequestAttributes.SCOPE_REQUEST);
+        String details = recorded != null ? recorded.toString()
+                : index >= 0 && index < args.length && args[index] instanceof AuditDetails auditDetails
                 ? auditDetails.auditDetails() : argString(args, index);
         return ActingMember.current()
                 .map(acting -> "actingAs=" + acting.communityId() + (details == null ? "" : "; " + details))

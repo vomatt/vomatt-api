@@ -1,5 +1,6 @@
 package com.vomatt.users;
 
+import com.vomatt.common.audit.AuditAspect;
 import com.vomatt.common.constant.ReservedUsernames;
 import com.vomatt.common.constant.UserRole;
 import com.vomatt.common.exception.ApiException;
@@ -12,12 +13,18 @@ import com.vomatt.repository.CommunityMemberRepository;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.users.dto.MyCommunityResponse;
 import com.vomatt.users.dto.CommunityMemberResponse;
+import com.vomatt.users.dto.UpdateCommunityRequest;
+import com.vomatt.users.dto.UpdateProfileRequest;
 import com.vomatt.users.dto.UserDto;
+import com.vomatt.users.dto.UserProfileResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -37,6 +44,7 @@ public class CommunityService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
     private final LockTimeout lockTimeout;
+    private final UserService userService;
 
     /**
      * Creates the community account (no email or phone, so it can never sign in) with {@code ownerUserId} as its first
@@ -130,6 +138,55 @@ public class CommunityService {
         target.setRole(OWNER);
         findMember(communityId, UUID.fromString(callerId)).setRole(CommunityRole.ADMIN);
         log.info("Community account {}: ownership transferred from {} to {}", communityId, callerId, userId);
+    }
+
+    /** OWNER or ADMIN: display name and bio; the audit details hold each changed field before and after. */
+    public UserProfileResponse updateProfile(UUID communityId, UpdateCommunityRequest request, String callerId) {
+        requireProfileEditor(communityId, callerId);
+        User community = userRepository.findById(communityId).orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
+        String displayName = request.displayName() == null ? null : request.displayName().trim();
+        List<String> changes = new ArrayList<>();
+        change(changes, "displayName", community.getDisplayName(), displayName);
+        change(changes, "bio", community.getBio(), request.bio());
+        UpdateProfileRequest update = new UpdateProfileRequest();
+        update.setDisplayName(displayName);
+        update.setBio(request.bio());
+        UserProfileResponse profile = userService.updateMyProfile(communityId.toString(), update);
+        AuditAspect.recordDetails(changes.isEmpty() ? null : String.join("; ", changes));
+        log.info("Community account {}: profile updated by {}", communityId, callerId);
+        return profile;
+    }
+
+    /**
+     * OWNER or ADMIN: replaces the avatar as {@link UserService#uploadAvatar} does, which decodes and stores the image
+     * outside any transaction; the daily upload limit counts per community account.
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public UserProfileResponse uploadAvatar(UUID communityId, MultipartFile file, String callerId) {
+        requireProfileEditor(communityId, callerId);
+        String before = userRepository.findById(communityId).map(User::getAvatarUrl).orElse(null);
+        UserProfileResponse profile = userService.uploadAvatar(communityId.toString(), file);
+        List<String> changes = new ArrayList<>();
+        change(changes, "avatarUrl", before, profile.avatarUrl());
+        AuditAspect.recordDetails(String.join("; ", changes));
+        log.info("Community account {}: avatar uploaded by {}", communityId, callerId);
+        return profile;
+    }
+
+    private static void change(List<String> changes, String field, String before, String after) {
+        if (after != null && !after.equals(before)) {
+            changes.add(field + ": " + quote(before) + " -> " + quote(after));
+        }
+    }
+
+    private static String quote(String value) {
+        return value == null ? "null" : '"' + value + '"';
+    }
+
+    private void requireProfileEditor(UUID communityId, String callerId) {
+        if (!requireRole(communityId, callerId).canEditProfile()) {
+            throw ApiException.forbidden(MessageKey.COMMUNITY_ROLE_FORBIDDEN);
+        }
     }
 
     private CommunityRole requireRole(UUID communityId, String callerId) {

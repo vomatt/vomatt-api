@@ -6,6 +6,7 @@ import static com.vomatt.common.config.OpenAPIConfig.ERR_ERROR;
 import static com.vomatt.common.config.OpenAPIConfig.ERR_MESSAGE;
 
 import com.vomatt.common.annotation.CommonApiResponses;
+import com.vomatt.common.annotation.StorageUnavailableResponse;
 import com.vomatt.common.audit.Auditable;
 import com.vomatt.common.config.OpenAPIConfig;
 import com.vomatt.common.response.ApiResponse;
@@ -18,7 +19,9 @@ import com.vomatt.users.dto.CommunityMemberRequest;
 import com.vomatt.users.dto.CommunityMemberResponse;
 import com.vomatt.users.dto.CommunityOwnerRequest;
 import com.vomatt.users.dto.CommunityRoleRequest;
+import com.vomatt.users.dto.UpdateCommunityRequest;
 import com.vomatt.users.dto.UserDto;
+import com.vomatt.users.dto.UserProfileResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -28,6 +31,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -35,8 +39,11 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -64,6 +71,15 @@ public class CommunityController {
               "message": null, "errorCode": null, "error": null }
             """;
 
+    private static final String EX_PROFILE_RESPONSE = """
+            { "success": true, "data": { "id": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48", "username": "sunrise_tower",
+                "displayName": "Sunrise Tower Committee", "bio": "Residents' committee of Sunrise Tower",
+                "avatarUrl": "/api/avatars/019a5e3c-2f1d-7b6a-8c4e-5d7f9a1b3c2e.jpg", "joinedAt": "2026-11-09T10:00:00+08:00",
+                "totalPolls": 3, "totalVotes": 0, "followersCount": 120, "followingCount": 0, "firstName": null, "lastName": null,
+                "location": null, "gender": null, "isFollowing": false, "followsYou": false, "isBlocked": false, "community": true },
+              "message": null, "errorCode": null, "error": null }
+            """;
+
     private static final String ROLES = """
             Roles: OWNER and ADMIN manage members; an ADMIN never changes or removes an OWNER nor grants OWNER. \
             CHIEF_EDITOR, EDITOR and ANALYST cannot manage members.""";
@@ -72,6 +88,10 @@ public class CommunityController {
     private static final String MEMBER_NOT_FOUND = "- 404 `community.member.not_found`: the user is not a member\n";
     private static final String LAST_OWNER = "- 409 `community.last_owner`: the change would leave the community account without an OWNER\n"
             + "- 409 `common.conflict`: another member change is in progress; retry\n";
+
+    private static final String PROFILE_EDITOR = "- 403 `community.role_forbidden`: the caller is not an OWNER or ADMIN\n";
+    private static final String ERR_ROLE_FORBIDDEN = ERR_MESSAGE + "Your role in this community account does not allow this action" + ERR_CODE
+            + "community.role_forbidden" + ERR_ERROR + "Your role in this community account does not allow this action" + ERR_END;
 
     private static final String ERR_NOT_MEMBER = ERR_MESSAGE + "You are not a member of this community account" + ERR_CODE
             + "community.not_member" + ERR_ERROR + "You are not a member of this community account" + ERR_END;
@@ -134,6 +154,69 @@ public class CommunityController {
                     """)))
     public ResponseEntity<ApiResponse<List<MyCommunityResponse>>> listMine(@AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(communityService.listMine(ActingMember.realUserId(principal))));
+    }
+
+    @PatchMapping("/api/communities/{communityId}")
+    @Auditable(action = "UPDATE", resourceType = "COMMUNITY", resourceIdIndex = 0)
+    @CommonApiResponses
+    @Operation(summary = "Update a community account's profile", description = """
+            **Auth**: required (OWNER or ADMIN)
+            **Precondition**: none
+            **Behavior**: updates `displayName` and/or `bio`. A field that is omitted or `null` is left unchanged; an empty `bio` clears it. \
+            `displayName` is stored without surrounding whitespace. The `username` can never change: a `username` in the body is ignored. \
+            Returns the community account's profile after the update, as `GET /api/users/{username}` shows it.
+            **Side effects**: audit-logged as `UPDATE` on `COMMUNITY`, with each changed field's value before and after in the details
+            **Errors**:
+            - 400 `common.validation_failed`: `displayName` blank or over 100 characters, or `bio` over 500 characters
+            """ + NOT_MEMBER + PROFILE_EDITOR,
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
+                    examples = @ExampleObject(name = "Rename", value = """
+                            { "displayName": "Sunrise Tower Committee", "bio": "Residents' committee of Sunrise Tower" }
+                            """))))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Profile after the update",
+            content = @Content(examples = @ExampleObject(name = "Profile", value = EX_PROFILE_RESPONSE)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not a member, or not an OWNER or ADMIN (`community.not_member`, `community.role_forbidden`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "community.role_forbidden", value = ERR_ROLE_FORBIDDEN)))
+    public ResponseEntity<ApiResponse<UserProfileResponse>> updateProfile(
+            @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
+            @PathVariable UUID communityId,
+            @Valid @RequestBody UpdateCommunityRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(communityService.updateProfile(communityId, request, ActingMember.realUserId(principal))));
+    }
+
+    @PutMapping(value = "/api/communities/{communityId}/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Auditable(action = "UPDATE", resourceType = "COMMUNITY", resourceIdIndex = 0)
+    @CommonApiResponses
+    @StorageUnavailableResponse
+    @Operation(summary = "Upload a community account's avatar", description = """
+            **Auth**: required (OWNER or ADMIN)
+            **Precondition**: multipart/form-data with the image in part `file`, as `PUT /api/users/me/avatar`
+            **Behavior**: processes and stores the image as `PUT /api/users/me/avatar` does (512x512 JPEG, `avatarUrl` becomes \
+            `/api/avatars/<id>.jpg`). The daily upload limit counts per community account. Returns the community account's profile after the update.
+            **Side effects**: audit-logged as `UPDATE` on `COMMUNITY`, with `avatarUrl` before and after in the details; once the change \
+            commits, the previously uploaded image (if any) is deleted
+            **Errors**:
+            - 400 `common.file_required`: part `file` is missing or empty
+            - 400 `common.file_read_failed`: the uploaded file could not be read
+            - 400 `user.avatar.unsupported_image`: the file is not a decodable JPEG, PNG, GIF or BMP, or exceeds 40 megapixels
+            - 413 `common.file_too_large`: the file exceeds 2 MB
+            - 429 `common.rate_limited`: the community account already attempted the daily number of avatar uploads
+            - 503 `common.storage_unavailable`: image storage is not configured or unreachable; retry later
+            """ + NOT_MEMBER + PROFILE_EDITOR)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Profile after the update",
+            content = @Content(examples = @ExampleObject(name = "Profile", value = EX_PROFILE_RESPONSE)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not a member, or not an OWNER or ADMIN (`community.not_member`, `community.role_forbidden`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "community.role_forbidden", value = ERR_ROLE_FORBIDDEN)))
+    public ResponseEntity<ApiResponse<UserProfileResponse>> uploadAvatar(
+            @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
+            @PathVariable UUID communityId,
+            @Parameter(description = "Image file (JPEG, PNG, GIF or BMP), at most 2 MB", required = true)
+            @RequestPart(value = "file", required = false) MultipartFile file,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(communityService.uploadAvatar(communityId, file, ActingMember.realUserId(principal))));
     }
 
     @GetMapping("/api/communities/{communityId}/members")

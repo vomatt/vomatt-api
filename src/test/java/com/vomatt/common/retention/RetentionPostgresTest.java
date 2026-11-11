@@ -22,6 +22,8 @@ import com.vomatt.repository.PostgresRepositoryTest;
 @DisplayName("RetentionJob (Postgres)")
 class RetentionPostgresTest extends PostgresRepositoryTest {
 
+    @org.springframework.test.context.bean.override.mockito.MockitoBean com.vomatt.users.UserService userService;
+
     @Autowired RetentionJob retentionJob;
     @Autowired com.vomatt.repository.VoteRepository voteRepository;
     @Autowired com.vomatt.repository.VoteOptionRepository voteOptionRepository;

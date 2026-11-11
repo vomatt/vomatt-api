@@ -40,6 +40,7 @@ class CommunityServiceTest {
     @Mock CommunityMemberRepository memberRepository;
     @Mock UserRepository userRepository;
     @Spy UserMapper userMapper = new UserMapper();
+    @Mock UserService userService;
     @Spy LockTimeout lockTimeout = new LockTimeout(mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @InjectMocks CommunityService service;
 
@@ -189,5 +190,35 @@ class CommunityServiceTest {
         assertThatThrownBy(() -> service.transferOwner(communityId, targetId, callerId.toString()))
                 .satisfies(ex -> assertKey(ex, MessageKey.COMMUNITY_ROLE_FORBIDDEN));
         verify(memberRepository, never()).findByCommunityUserIdAndUserId(any(), any());
+    }
+
+    // caller role (blank = not a member), expected error (blank = allowed)
+    @ParameterizedTest
+    @CsvSource({
+            "OWNER, ",
+            "ADMIN, ",
+            "CHIEF_EDITOR, COMMUNITY_ROLE_FORBIDDEN",
+            "EDITOR, COMMUNITY_ROLE_FORBIDDEN",
+            "ANALYST, COMMUNITY_ROLE_FORBIDDEN",
+            ", COMMUNITY_NOT_MEMBER",
+    })
+    void shouldAllowOnlyOwnerAndAdminWhenEditingProfile(CommunityRole role, MessageKey error) {
+        when(memberRepository.findActiveRole(communityId, callerId)).thenReturn(Optional.ofNullable(role));
+        lenient().when(userRepository.findById(communityId)).thenReturn(Optional.of(User.builder().id(communityId).username("sunrise").build()));
+        var update = new com.vomatt.users.dto.UpdateCommunityRequest("Sunrise", null);
+        var file = mock(org.springframework.web.multipart.MultipartFile.class);
+        lenient().when(userService.uploadAvatar(communityId.toString(), file)).thenReturn(mock(com.vomatt.users.dto.UserProfileResponse.class));
+
+        if (error == null) {
+            service.updateProfile(communityId, update, callerId.toString());
+            service.uploadAvatar(communityId, file, callerId.toString());
+            verify(userService).updateMyProfile(org.mockito.ArgumentMatchers.eq(communityId.toString()),
+                    org.mockito.ArgumentMatchers.argThat(r -> "Sunrise".equals(r.getDisplayName()) && r.getUsername() == null));
+            verify(userService).uploadAvatar(communityId.toString(), file);
+        } else {
+            assertThatThrownBy(() -> service.updateProfile(communityId, update, callerId.toString())).satisfies(ex -> assertKey(ex, error));
+            assertThatThrownBy(() -> service.uploadAvatar(communityId, file, callerId.toString())).satisfies(ex -> assertKey(ex, error));
+            org.mockito.Mockito.verifyNoInteractions(userService);
+        }
     }
 }

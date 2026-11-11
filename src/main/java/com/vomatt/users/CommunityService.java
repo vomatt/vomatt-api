@@ -2,6 +2,7 @@ package com.vomatt.users;
 
 import com.vomatt.common.audit.AuditAspect;
 import com.vomatt.common.audit.AuditService;
+import com.vomatt.common.audit.Auditable;
 import com.vomatt.common.constant.ReservedUsernames;
 import com.vomatt.common.constant.UserRole;
 import com.vomatt.common.exception.ApiException;
@@ -14,7 +15,6 @@ import com.vomatt.repository.CommunityMemberRepository;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.users.dto.MyCommunityResponse;
 import com.vomatt.users.dto.CommunityMemberResponse;
-import com.vomatt.users.dto.UpdateCommunityRequest;
 import com.vomatt.users.dto.UpdateProfileRequest;
 import com.vomatt.users.dto.UserDto;
 import com.vomatt.users.dto.UserProfileResponse;
@@ -27,8 +27,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.vomatt.entity.CommunityRole.OWNER;
 
@@ -163,18 +165,32 @@ public class CommunityService {
         log.info("Community account {}: ownership transferred from {} to {}", communityId, callerId, userId);
     }
 
-    /** OWNER or ADMIN: display name and bio; the audit details hold each changed field before and after. */
-    public UserProfileResponse updateProfile(UUID communityId, UpdateCommunityRequest request, String callerId) {
+    /**
+     * OWNER or ADMIN: display name, bio and bot avatar, from {@code PATCH /api/communities/{id}} or {@code PATCH /api/users/me}
+     * while acting; the audit details hold each changed field before and after. 400 {@code community.username_immutable}
+     * for a new username and {@code common.bad_request} for a person's field (names, birthday, gender).
+     */
+    @Auditable(action = "UPDATE", resourceType = "COMMUNITY", resourceIdIndex = 0)
+    public UserProfileResponse updateProfile(UUID communityId, UpdateProfileRequest request, String callerId) {
         requireProfileEditor(communityId, callerId);
         User community = userRepository.findById(communityId).orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
-        String displayName = request.displayName() == null ? null : request.displayName().trim();
+        if (request.getUsername() != null && !request.getUsername().equals(community.getUsername())) {
+            throw ApiException.badRequest(MessageKey.COMMUNITY_USERNAME_IMMUTABLE);
+        }
+        if (Stream.of(request.getFirstName(), request.getLastName(), request.getBirthday(), request.getGender()).anyMatch(Objects::nonNull)) {
+            throw ApiException.badRequest(MessageKey.COMMON_BAD_REQUEST);
+        }
+        if (request.getDisplayName() != null) {
+            request.setDisplayName(request.getDisplayName().trim());
+            if (request.getDisplayName().isEmpty()) {
+                throw ApiException.badRequest(MessageKey.COMMON_VALIDATION_FAILED);
+            }
+        }
         List<String> changes = new ArrayList<>();
-        change(changes, "displayName", community.getDisplayName(), displayName);
-        change(changes, "bio", community.getBio(), request.bio());
-        UpdateProfileRequest update = new UpdateProfileRequest();
-        update.setDisplayName(displayName);
-        update.setBio(request.bio());
-        UserProfileResponse profile = userService.updateMyProfile(communityId.toString(), update);
+        change(changes, "displayName", community.getDisplayName(), request.getDisplayName());
+        change(changes, "bio", community.getBio(), request.getBio());
+        change(changes, "avatarUrl", community.getAvatarUrl(), request.getAvatarUrl());
+        UserProfileResponse profile = userService.updateMyProfile(communityId.toString(), request);
         AuditAspect.recordDetails(changes.isEmpty() ? null : String.join("; ", changes));
         log.info("Community account {}: profile updated by {}", communityId, callerId);
         return profile;
@@ -185,6 +201,7 @@ public class CommunityService {
      * outside any transaction; the daily upload limit counts per community account.
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    @Auditable(action = "UPDATE", resourceType = "COMMUNITY", resourceIdIndex = 0)
     public UserProfileResponse uploadAvatar(UUID communityId, MultipartFile file, String callerId) {
         requireProfileEditor(communityId, callerId);
         String before = userRepository.findById(communityId).map(User::getAvatarUrl).orElse(null);

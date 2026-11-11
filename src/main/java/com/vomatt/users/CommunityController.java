@@ -168,7 +168,6 @@ public class CommunityController {
     }
 
     @PatchMapping("/api/communities/{communityId}")
-    @Auditable(action = "UPDATE", resourceType = "COMMUNITY", resourceIdIndex = 0)
     @CommonApiResponses
     @Operation(summary = "Update a community account's profile", description = """
             **Auth**: required (OWNER or ADMIN)
@@ -194,11 +193,10 @@ public class CommunityController {
             @PathVariable UUID communityId,
             @Valid @RequestBody UpdateCommunityRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.ok(communityService.updateProfile(communityId, request, ActingMember.realUserId(principal))));
+        return ResponseEntity.ok(ApiResponse.ok(communityService.updateProfile(communityId, request.toProfileUpdate(), ActingMember.realUserId(principal))));
     }
 
     @PutMapping(value = "/api/communities/{communityId}/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Auditable(action = "UPDATE", resourceType = "COMMUNITY", resourceIdIndex = 0)
     @CommonApiResponses
     @StorageUnavailableResponse
     @Operation(summary = "Upload a community account's avatar", description = """

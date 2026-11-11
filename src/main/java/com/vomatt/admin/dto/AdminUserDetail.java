@@ -4,6 +4,8 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 
+import com.vomatt.entity.Plan;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 
 @Schema(description = "An account with its activity counts, as shown in the back office")
@@ -25,6 +27,7 @@ public record AdminUserDetail(
         @Schema(description = "Ballots the user currently holds", example = "35") long ballotCount,
         @Schema(description = "Comments and Replies the user wrote, deleted ones included", example = "14") long commentCount,
         @Schema(description = "Users this user blocks", example = "2") long blockingCount,
-        @Schema(description = "Users who block this user", example = "1") long blockedByCount
+        @Schema(description = "Users who block this user", example = "1") long blockedByCount,
+        @Schema(description = "Plan: FREE or PRO", example = "FREE") Plan plan
 ) {
 }

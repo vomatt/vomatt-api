@@ -67,18 +67,24 @@ public class LookupService {
      * Missing, inactive, non-numeric, non-positive or out-of-int-range values fall back to {@code defaultValue}.
      */
     public int configInt(String key, int defaultValue) {
-        Integer value = configOverride(key);
+        Integer value = configOverride(getActiveByType(CONFIG_TYPE), key);
         return value != null ? value : defaultValue;
+    }
+
+    public Map<String, Integer> configInts(Map<String, Integer> defaults) {
+        List<LookupDto> config = getActiveByType(CONFIG_TYPE);
+        return defaults.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey,
+                e -> Objects.requireNonNullElse(configOverride(config, e.getKey()), e.getValue())));
     }
 
     /** {@link #configInt} for a duration stored as a count of {@code unit}; without a valid override, {@code defaultValue} as is. */
     public Duration configDuration(String key, ChronoUnit unit, Duration defaultValue) {
-        Integer value = configOverride(key);
+        Integer value = configOverride(getActiveByType(CONFIG_TYPE), key);
         return value != null ? Duration.of(value, unit) : defaultValue;
     }
 
-    private Integer configOverride(String key) {
-        return getActiveByType(CONFIG_TYPE).stream()
+    private Integer configOverride(List<LookupDto> config, String key) {
+        return config.stream()
                 .filter(l -> key.equals(l.lookupKey()) && l.lookupValue() != null)
                 .findFirst()
                 .map(l -> {

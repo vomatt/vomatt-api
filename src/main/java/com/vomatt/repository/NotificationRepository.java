@@ -148,7 +148,11 @@ public class NotificationRepository {
             NotificationKind.POLL_LIKE, select(NotificationKind.POLL_LIKE, "l.id", "l.created_at", "l.user_id", "v.id", NONE) + """
                     FROM vomatt.votes v
                     JOIN vomatt.vote_likes l ON l.vote_id = v.id
-                    WHERE v.creator_id = :userId AND v.deleted_at IS NULL AND l.user_id <> :userId"""));
+                    WHERE v.creator_id = :userId AND v.deleted_at IS NULL AND l.user_id <> :userId""",
+            NotificationKind.COMMUNITY_LOCKED, select(NotificationKind.COMMUNITY_LOCKED, "a.id", "a.created_at", "m.community_user_id", NONE, NONE) + """
+                    FROM vomatt.community_members m
+                    JOIN vomatt.audit_logs a ON a.resource_type = 'COMMUNITY' AND a.resource_id = CAST(m.community_user_id AS text)
+                    WHERE m.user_id = :userId AND m.role = 'OWNER' AND a.action = 'LOCK' AND a.details = 'reason=SELECTION_DEADLINE'"""));
 
     // Inside each branch, before its LIMIT: nothing from a suspended user, nor from someone the user blocked or who
     // blocked the user

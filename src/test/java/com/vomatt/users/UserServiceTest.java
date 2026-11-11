@@ -78,6 +78,7 @@ class UserServiceTest {
     @Mock com.vomatt.lookups.LookupService lookupService;
     @Mock TransactionTemplate transactionTemplate;
     @Spy com.vomatt.repository.LockTimeout lockTimeout = new com.vomatt.repository.LockTimeout(org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
+    @Mock PlanService planService;
     @InjectMocks UserService userService;
 
     @Test
@@ -109,7 +110,9 @@ class UserServiceTest {
         when(userRepository.findById(suspended))
                 .thenReturn(Optional.of(User.builder().id(suspended).username("s").active(false).build()));
         when(userRepository.findById(unknown)).thenReturn(Optional.empty());
-        String caller = UUID.randomUUID().toString();
+        UUID callerId = UUID.randomUUID();
+        when(userRepository.findById(callerId)).thenReturn(Optional.of(User.builder().id(callerId).username("c").build()));
+        String caller = callerId.toString();
 
         for (UUID target : List.of(suspended, unknown)) {
             assertThatThrownBy(() -> userService.followUser(caller, target.toString()))
@@ -572,6 +575,7 @@ class UserServiceTest {
     void shouldRejectFollowWhenCallerBlockedTarget() {
         UUID caller = UUID.randomUUID();
         UUID target = UUID.randomUUID();
+        when(userRepository.findById(caller)).thenReturn(Optional.of(User.builder().id(caller).username("c").build()));
         when(userRepository.findById(target)).thenReturn(Optional.of(User.builder().id(target).username("t").build()));
         when(blockRepository.existsByBlockerIdAndBlockedId(caller, target)).thenReturn(true);
 

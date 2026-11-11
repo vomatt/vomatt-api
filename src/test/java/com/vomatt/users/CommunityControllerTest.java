@@ -90,7 +90,7 @@ class CommunityControllerTest {
                         .content("{ \"username\": \"stolen\", \"displayName\": \"Sunrise\", \"bio\": \"Hi\" }"))
                 .andExpect(status().isOk());
 
-        verify(communityService).updateProfile(eq(communityId), eq(new UpdateCommunityRequest("Sunrise", "Hi")), eq(USER_ID.toString()));
+        verify(communityService).updateProfile(eq(communityId), eq(new UpdateCommunityRequest("Sunrise", "Hi").toProfileUpdate()), eq(USER_ID.toString()));
     }
 
     @Test

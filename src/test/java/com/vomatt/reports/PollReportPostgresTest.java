@@ -44,7 +44,7 @@ import com.vomatt.users.UserMapper;
 import com.vomatt.votes.VoteServiceSlice;
 
 @Import({ VoteServiceSlice.class, PollReportService.class, PollReportRepository.class, CommunityService.class, UserMapper.class,
-        RetentionJob.class })
+        RetentionJob.class, com.vomatt.users.PlanService.class, com.vomatt.common.audit.AuditService.class })
 class PollReportPostgresTest extends PostgresRepositoryTest {
 
     @org.springframework.test.context.bean.override.mockito.MockitoBean com.vomatt.users.UserService userService;

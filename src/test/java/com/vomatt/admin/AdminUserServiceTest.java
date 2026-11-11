@@ -64,9 +64,9 @@ class AdminUserServiceTest {
     @BeforeEach
     void setUp() {
         // The real guard, so these tests cover the shared last-admin rule as admins reach it
-        UserService userService = new UserService(userRepository, null, null, null, null, refreshTokenService, null, voteRepository, lockTimeout, null, null, null, null, null, null, null, null, null, null, null, mock(CommunityMemberRepository.class));
+        UserService userService = new UserService(userRepository, null, null, null, null, refreshTokenService, null, voteRepository, lockTimeout, null, null, null, null, null, null, null, null, null, null, null, mock(CommunityMemberRepository.class), null);
         service = new AdminUserService(adminQueryRepository, userRepository, voteRepository, userVoteRepository,
-                voteCommentRepository, userBlockRepository, userService, new AdminMapper(), authService);
+                voteCommentRepository, userBlockRepository, userService, new AdminMapper(), authService, mock(com.vomatt.users.PlanService.class));
     }
 
     private User user(UUID id, String... roles) {

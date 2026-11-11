@@ -24,6 +24,7 @@ import com.vomatt.common.constant.UserRole;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.PageResponse;
+import com.vomatt.entity.Plan;
 import com.vomatt.entity.User;
 import com.vomatt.repository.AdminQueryRepository;
 import com.vomatt.repository.UserBlockRepository;
@@ -31,6 +32,7 @@ import com.vomatt.repository.UserRepository;
 import com.vomatt.repository.UserVoteRepository;
 import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.repository.VoteRepository;
+import com.vomatt.users.PlanService;
 import com.vomatt.users.UserService;
 
 import lombok.RequiredArgsConstructor;
@@ -56,6 +58,7 @@ public class AdminUserService {
     private final UserService userService;
     private final AdminMapper adminMapper;
     private final AuthService authService;
+    private final PlanService planService;
 
     /** @param status active, suspended, or null for both */
     @Transactional(readOnly = true)
@@ -101,6 +104,7 @@ public class AdminUserService {
         requireNotSelf(user, actorId);
         userService.requireAnotherActiveAdmin(user);
         user.setActive(false);
+        planService.reconcileOwners(userId);
         userService.revokeTokensAfterCommit(userId.toString());
         log.info("User {} suspended by admin {}", userId, actorId);
         return detail(user);
@@ -109,6 +113,7 @@ public class AdminUserService {
     public AdminUserDetail unsuspend(UUID userId, String actorId) {
         User user = findUser(userId);
         user.setActive(true);
+        planService.reconcileOwners(userId);
         log.info("User {} unsuspended by admin {}", userId, actorId);
         return detail(user);
     }
@@ -153,6 +158,12 @@ public class AdminUserService {
         }
         log.info("User {} login unlocked by admin {} ({}): {} entries cleared", userId, actorId, request.auditDetails(), cleared);
         return new UnlockLoginResponse(cleared);
+    }
+
+    /** Grants or takes back PRO by hand (testing, compensation); the same path the payment webhook will take. */
+    public AdminUserDetail changePlan(UUID userId, Plan plan, String actorId) {
+        planService.changePlan(userId, plan, PlanService.Source.ADMIN, actorId);
+        return detail(findUser(userId));
     }
 
     private User findUser(UUID userId) {

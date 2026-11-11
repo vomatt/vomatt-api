@@ -6,6 +6,7 @@ import com.vomatt.admin.dto.AdminUserBlockResponse;
 import com.vomatt.admin.dto.AdminUserDetail;
 import com.vomatt.admin.dto.AdminUserOptionsResponse;
 import com.vomatt.admin.dto.AdminUserResponse;
+import com.vomatt.admin.dto.ChangePlanRequest;
 import com.vomatt.admin.dto.SuspendUserRequest;
 import com.vomatt.admin.dto.UnlockLoginRequest;
 import com.vomatt.admin.dto.UnlockLoginResponse;
@@ -69,7 +70,8 @@ public class AdminUserController {
                 "ballotCount": 35,
                 "commentCount": 14,
                 "blockingCount": 2,
-                "blockedByCount": 1
+                "blockedByCount": 1,
+                "plan": "FREE"
               },
               "message": null,
               "errorCode": null,
@@ -408,5 +410,40 @@ public class AdminUserController {
             @AuthenticationPrincipal UserPrincipal principal) {
         UnlockLoginRequest scope = request != null ? request : new UnlockLoginRequest(null, null, null);
         return ResponseEntity.ok(ApiResponse.ok(adminUserService.unlockLogin(userId, scope, principal.userId())));
+    }
+
+    @PatchMapping("/{userId}/plan")
+    @CommonApiResponses
+    @Operation(summary = "Change User Plan",
+            description = """
+                    **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
+                    **Precondition**: the account exists
+                    **Behavior**: puts the account on `plan` (FREE or PRO) and returns it; grants or takes back PRO by hand, for testing \
+                    and compensation. The same change the payment webhook will make once billing is live. The same plan changes nothing. \
+                    An upgrade unlocks the earliest created of the account's locked community accounts, as many as the new limit has room for; \
+                    a downgrade over the new limit sets `communityQuota.selectionRequired` with a 7-day `selectionDeadline`
+                    **Side effects**: a change is written to the audit log in the same transaction as `CHANGE_PLAN` on `USER`, with \
+                    `details` `from=<plan>; to=<plan>; source=ADMIN`
+                    **Errors**:
+                    - 400 `common.type_mismatch`: `userId` is not a valid UUID
+                    - 400 `common.validation_failed`: `plan` missing
+                    - 400 `common.bad_request`: `plan` is not FREE or PRO
+                    - 404 `user.not_found`: no account with this ID
+                    - 409 `common.conflict`: another change to the account's plan or community accounts is in progress; retry""")
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(mediaType = "application/json",
+            examples = @ExampleObject(name = "Pro", value = """
+                    {
+                      "plan": "PRO"
+                    }""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Plan changed",
+            content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "PlanChanged", value = USER_DETAIL_EXAMPLE)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found (`user.not_found`)",
+            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "UserNotFound", value = USER_NOT_FOUND_EXAMPLE)))
+    public ResponseEntity<ApiResponse<AdminUserDetail>> changePlan(
+            @Parameter(description = "User ID (UUIDv7)", required = true) @PathVariable UUID userId,
+            @Valid @RequestBody ChangePlanRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(adminUserService.changePlan(userId, request.plan(), principal.userId())));
     }
 }

@@ -8,7 +8,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
-import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -28,6 +27,7 @@ import lombok.extern.slf4j.Slf4j;
 public class AuditAspect {
     
     private static final String RECORDED_DETAILS = AuditAspect.class.getName() + ".details";
+    private static final String SUCCESS_ENTRY_WRITTEN = AuditAspect.class.getName() + ".successEntryWritten";
 
     private final AuditService auditService;
 
@@ -36,9 +36,9 @@ public class AuditAspect {
      * from the arguments. A no-op outside a request.
      */
     public static void recordDetails(String details) {
-        RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
-        if (attributes != null) {
-            attributes.setAttribute(RECORDED_DETAILS, details, RequestAttributes.SCOPE_REQUEST);
+        HttpServletRequest request = currentRequest();
+        if (request != null) {
+            request.setAttribute(RECORDED_DETAILS, details);
         }
     }
     
@@ -46,9 +46,9 @@ public class AuditAspect {
     public void logSuccessfulAction(JoinPoint joinPoint, Auditable auditable) {
         try {
             String userId = currentUserId();
-            HttpServletRequest request = getCurrentRequest();
+            HttpServletRequest request = currentRequest();
             
-            if (request != null && userId != null) {
+            if (request != null && userId != null && !auditable.action().equals(request.getAttribute(SUCCESS_ENTRY_WRITTEN))) {
                 String resourceId = argString(joinPoint.getArgs(), auditable.resourceIdIndex());
                 
                 auditService.logAction(
@@ -77,7 +77,7 @@ public class AuditAspect {
         }
         try {
             String userId = currentUserId();
-            HttpServletRequest request = getCurrentRequest();
+            HttpServletRequest request = currentRequest();
             
             if (request != null) {
                 String resourceId = argString(joinPoint.getArgs(), auditable.resourceIdIndex());
@@ -109,7 +109,14 @@ public class AuditAspect {
         return null;
     }
     
-    private HttpServletRequest getCurrentRequest() {
+    static void markSuccessEntryWritten(String action) {
+        HttpServletRequest request = currentRequest();
+        if (request != null) {
+            request.setAttribute(SUCCESS_ENTRY_WRITTEN, action);
+        }
+    }
+
+    static HttpServletRequest currentRequest() {
         ServletRequestAttributes requestAttributes = 
             (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
         return requestAttributes != null ? requestAttributes.getRequest() : null;
@@ -123,11 +130,14 @@ public class AuditAspect {
     }
     
     private String details(Object[] args, int index) {
-        RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
-        Object recorded = attributes == null ? null : attributes.getAttribute(RECORDED_DETAILS, RequestAttributes.SCOPE_REQUEST);
-        String details = recorded != null ? recorded.toString()
+        HttpServletRequest request = currentRequest();
+        Object recorded = request == null ? null : request.getAttribute(RECORDED_DETAILS);
+        return withActingAs(recorded != null ? recorded.toString()
                 : index >= 0 && index < args.length && args[index] instanceof AuditDetails auditDetails
-                ? auditDetails.auditDetails() : argString(args, index);
+                ? auditDetails.auditDetails() : argString(args, index));
+    }
+
+    static String withActingAs(String details) {
         return ActingMember.current()
                 .map(acting -> "actingAs=" + acting.communityId() + (details == null ? "" : "; " + details))
                 .orElse(details);

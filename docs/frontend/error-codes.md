@@ -11,7 +11,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 
 | errorCode | HTTP status | zh-TW message | en message | Suggested UI behavior | Used in |
 |-----------|-------------|-----------|---------|--------------|----------|
-| `common.bad_request` | 400 | 請求格式錯誤 | Bad request format | Show message so the user can fix the input | GlobalExceptionHandler, UserController |
+| `common.bad_request` | 400 | 請求格式錯誤 | Bad request format | Show message so the user can fix the input | GlobalExceptionHandler, UserController, UserService |
 | `common.internal_error` | 500 | 伺服器錯誤，請稍後再試 | Internal server error, please try again later | Show a generic error notice | GlobalExceptionHandler |
 | `common.service_unavailable` | 503 | 服務暫時無法使用，請稍後再試 | Service temporarily unavailable, please try again later | Show service temporarily unavailable, retry later | AuthService, GlobalExceptionHandler |
 | `common.unauthorized` | 401 | 未授權的請求 | Unauthorized request | See [auth-flow.md](auth-flow.md) | JwtAuthenticationEntryPoint |
@@ -19,7 +19,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `common.rate_limited` | 429 | 請求過於頻繁，請稍後再試 | Too many requests, please try again later | Retry after the `Retry-After` seconds | ContactService, FeedbackService, RateLimitFilter, UserService, VoteService |
 | `common.not_found` | 404 | 找不到指定資源 | The requested resource was not found | Show resource not found | AvatarController, GlobalExceptionHandler, PasskeyService |
 | `common.conflict` | 409 | 資源衝突，請重試 | Resource conflict, please try again | Show message (resource state conflict) | GlobalExceptionHandler |
-| `common.validation_failed` | 400 | 輸入資料驗證失敗 | Validation failed | Show message so the user can fix the input | AdminUserService, GlobalExceptionHandler |
+| `common.validation_failed` | 400 | 輸入資料驗證失敗 | Validation failed | Show message so the user can fix the input | AdminUserService, GlobalExceptionHandler, UserService |
 | `common.missing_param` | 400 | 缺少必要參數：{0} | Missing required parameter: {0} | Show message so the user can fix the input | GlobalExceptionHandler, UserController |
 | `common.type_mismatch` | 400 | 參數格式錯誤：{0} | Invalid parameter format: {0} | Show message so the user can fix the input | GlobalExceptionHandler |
 | `common.file_required` | 400 | 請選擇要上傳的檔案 | Please select a file to upload | Show message so the user can fix the input | UserService |
@@ -67,11 +67,12 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.passkey.admin_scope_required` | 403 | 此 Passkey 不能登入管理後台，請先用 email 驗證碼登入，再到管理後台重新註冊 Passkey | This passkey cannot sign in to the admin console. Sign in with an email code, then register a passkey from the admin console | Show a permission-denied notice | PasskeyService |
 | `auth.session_revoked` | 401 | 此裝置已被登出，請重新登入 | This device has been signed out. Please sign in again | See [auth-flow.md](auth-flow.md) | JwtAuthFilter |
 | `auth.session_not_found` | 404 | 找不到此登入裝置 | Signed-in device not found | Show resource not found | UserController |
-| `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | AdminUserService, AuthService, CommunityService, FeedbackService, InviteListService, JwtAuthFilter, NotificationService, PasskeyService, UserGuard, UserService, VoteCommentService, VoteService |
+| `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | AdminUserService, AuthService, CommunityService, FeedbackService, InviteListService, JwtAuthFilter, NotificationService, PasskeyService, PlanService, UserGuard, UserService, VoteCommentService, VoteService |
 | `user.username.taken` | 409 | 使用者名稱已被使用 | Username already taken | Show message (resource state conflict) | CommunityService, UserService |
 | `user.phone.taken` | 409 | 手機號碼已被使用 | Phone number already in use | Show message (resource state conflict) | AuthService |
 | `user.delete.forbidden` | 403 | 只能刪除自己的帳號 | You can only delete your own account | Show a permission-denied notice | UserService |
 | `user.follow.blocked` | 400 | 不能追蹤已封鎖的使用者，請先解除封鎖 | You cannot follow a user you blocked; unblock them first | Show message so the user can fix the input | UserService |
+| `user.follow.community` | 400 | 社群帳號不能追蹤別人 | A community account cannot follow anyone | Show message so the user can fix the input | UserService |
 | `user.avatar.unsupported_image` | 400 | 不支援的圖片：請上傳 4000 萬像素以內的 JPEG、PNG、GIF 或 BMP | Unsupported image: upload a JPEG, PNG, GIF or BMP of at most 40 megapixels | Show message so the user can fix the input | AvatarImage |
 | `vote.not_found` | 404 | 找不到投票 | Vote not found | Show resource not found | AdminVoteService, VoteService |
 | `vote.option.not_found` | 404 | 找不到投票選項 | Vote option not found | Show resource not found | VoteService |
@@ -125,6 +126,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `community.last_owner` | 409 | 社群帳號至少需保留一位擁有者 | A community account must keep at least one owner | Show message (resource state conflict) | CommunityService, UserService |
 | `community.roles_fixed` | 400 | 社群帳號的角色不能變更 | The roles of a community account cannot be changed | Show message so the user can fix the input | AdminUserService |
 | `community.invitee_not_allowed` | 400 | 社群帳號不能被邀請投票或加入邀請名單 | A community account cannot be invited to a poll or added to an invite list | Show message so the user can fix the input | InviteListService, VoteService |
+| `community.username_immutable` | 400 | 社群帳號的使用者名稱不能變更 | A community account's username cannot be changed | Show message so the user can fix the input | UserService |
 | `vote.reveal_at.before_end` | 400 | 公布結果時間不可早於結束時間 | Reveal time cannot be before the end time | Show message so the user can fix the input | VoteService |
 | `vote.reveal_at.too_late` | 400 | 公布結果時間不可晚於結束時間後 {0} 天 | Reveal time cannot be more than {0} days after the end time | Show message so the user can fix the input | VoteService |
 | `vote.ballot.anonymous_not_allowed` | 400 | Pro 投票不接受匿名投票 | Anonymous ballots are not allowed in a Pro poll | Show message so the user can fix the input | VoteService |
@@ -132,6 +134,10 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `report.not_pro` | 400 | 只有 Pro 投票提供結果報告 | Result reports are available only for Pro polls | Show message so the user can fix the input | PollReportService |
 | `report.not_ready` | 403 | 投票結束並公布結果後才能查看報告 | The report is available once the poll has ended and its results are revealed | Show a permission-denied notice | PollReportService |
 | `report.cancelled` | 400 | 已取消的投票沒有結果報告 | A cancelled poll has no result report | Show message so the user can fix the input | PollReportService |
+| `community.limit_reached` | 403 | 已達方案可擁有的社群帳號數量上限 | You own as many community accounts as your plan allows | Show a permission-denied notice | PlanService |
+| `community.locked` | 403 | 此社群帳號已鎖定，升級方案或解鎖後才能使用 | This community account is locked; upgrade your plan or unlock it to use it | Show a permission-denied notice | ActAsFilter |
+| `community.keep.invalid` | 400 | 要保留的社群帳號數量須等於方案上限（擁有的較少時須全選），且都是你擁有的社群帳號 | Choose as many community accounts as your plan allows (all of them if you own fewer), all owned by you | Show message so the user can fix the input | PlanService |
+| `billing.unavailable` | 503 | 付費方案即將推出 | Paid plans are coming soon | Show service temporarily unavailable, retry later | BillingController |
 
 ## Success messages and others
 

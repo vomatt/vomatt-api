@@ -11,6 +11,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -123,6 +124,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     static RequestMatcher anyOf(String[] patterns) {
         return new OrRequestMatcher(Arrays.stream(patterns)
                 .map(PathPatternRequestMatcher.withDefaults()::matcher).map(RequestMatcher.class::cast).toList());
+    }
+
+    static RequestMatcher anyOf(HttpMethod method, String[] patterns) {
+        return new OrRequestMatcher(Arrays.stream(patterns)
+                .map(p -> PathPatternRequestMatcher.withDefaults().matcher(method, p)).map(RequestMatcher.class::cast).toList());
     }
 
     private String extractToken(HttpServletRequest request) {

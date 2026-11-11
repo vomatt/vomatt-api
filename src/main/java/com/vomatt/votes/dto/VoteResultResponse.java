@@ -32,6 +32,15 @@ public class VoteResultResponse {
     @Schema(description = "Whether the owner is a community account (a group's page, shown with a badge)", example = "false")
     private boolean creatorCommunity;
 
+    @Schema(description = "Display name of the owner; null if they hid it (public by default) or never set one", example = "Alice", nullable = true)
+    private String creatorDisplayName;
+
+    @Schema(description = "First name of the owner; null if they hid it (hidden by default) or never set one", example = "Alice", nullable = true)
+    private String creatorFirstName;
+
+    @Schema(description = "Last name of the owner; null if they hid it (hidden by default) or never set one", example = "Chen", nullable = true)
+    private String creatorLastName;
+
     @Schema(description = "When the Poll opened", example = "2026-10-12T09:00:00+08:00")
     private OffsetDateTime startTime;
 

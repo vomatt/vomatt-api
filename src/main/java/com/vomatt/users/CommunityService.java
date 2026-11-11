@@ -62,7 +62,7 @@ public class CommunityService {
                 .build());
         memberRepository.save(new CommunityMember(community.getId(), ownerUserId, OWNER));
         log.info("Community account {} created with owner {}", community.getId(), ownerUserId);
-        return userMapper.toSearchResult(community, true);
+        return userMapper.toSearchResult(community, new PublicName(community.getDisplayName(), null, null));
     }
 
     /** Any member: everyone in the community account with their role, earliest first. */

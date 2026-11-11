@@ -272,11 +272,11 @@ class UserControllerTest {
     @DisplayName("should return only public profile fields when searching users")
     void shouldReturnOnlyPublicFieldsWhenSearchingUsers() throws Exception {
         when(userService.searchUsersByUsername(eq("ali"), isNull(), isNull())).thenReturn(new CursorResponse<>(
-                List.of(new UserDto("0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47", "alice", "Alice", null, false)), null));
+                List.of(new UserDto("0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47", "alice", "Alice", null, null, null, false)), null));
 
         mockMvc.perform(get("/api/users/search").param("username", " ali "))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items[0].*", hasSize(5)))
+                .andExpect(jsonPath("$.data.items[0].*", hasSize(7)))
                 .andExpect(jsonPath("$.data.items[0].username").value("alice"))
                 .andExpect(jsonPath("$.data.items[0].displayName").value("Alice"))
                 .andExpect(jsonPath("$.data.items[0].email").doesNotExist())
@@ -371,7 +371,7 @@ class UserControllerTest {
     @DisplayName("should pass cursor, limit and caller through when listing followers and following")
     void shouldPassCursorWhenListingFollowersAndFollowing() throws Exception {
         signIn("u1");
-        FollowUserDto bob = new FollowUserDto("id-2", "bob", "Bob", null, false, true, false);
+        FollowUserDto bob = new FollowUserDto("id-2", "bob", "Bob", null, null, null, false, true, false);
         when(userService.listFollowers("alice", "c1", 10, "u1")).thenReturn(new CursorResponse<>(List.of(bob), "next"));
         when(userService.listFollowing("alice", null, null, "u1")).thenReturn(new CursorResponse<>(List.of(), null));
 
@@ -409,7 +409,7 @@ class UserControllerTest {
         signIn("u1");
         when(userService.getUserProfile("alice", "u1")).thenReturn(new UserProfileResponse("id-1", "alice", null, null,
                 "bot:boba", null, 0, 0, 1204, 0, null, null, null, null, true, false, false,
-                3, List.of(new UserDto("id-2", "jtan", "J Tan", "bot:boba", false)), false));
+                3, List.of(new UserDto("id-2", "jtan", "J Tan", null, null, "bot:boba", false)), false));
 
         mockMvc.perform(get("/api/users/alice"))
                 .andExpect(status().isOk())
@@ -434,7 +434,7 @@ class UserControllerTest {
     @DisplayName("should pass cursor, limit and caller through when listing mutual followers")
     void shouldPassCursorWhenListingMutualFollowers() throws Exception {
         signIn("u1");
-        FollowUserDto jtan = new FollowUserDto("id-2", "jtan", "J Tan", "bot:boba", true, false, false);
+        FollowUserDto jtan = new FollowUserDto("id-2", "jtan", "J Tan", null, null, "bot:boba", true, false, false);
         when(userService.listMutualFollowers("alice", "c1", 10, "u1")).thenReturn(new CursorResponse<>(List.of(jtan), "next"));
 
         mockMvc.perform(get("/api/users/alice/mutual-followers").param("cursor", "c1").param("limit", "10"))

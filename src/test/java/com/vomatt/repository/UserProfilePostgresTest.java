@@ -102,7 +102,7 @@ class UserProfilePostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("should fetch one preference key for many users in one query")
+    @DisplayName("should fetch the requested preference keys for many users in one query")
     void shouldReturnOnlyRequestedKeyWhenFetchingPreferencesForManyUsers() {
         User a = persistUser("pa-" + System.nanoTime());
         User b = persistUser("pb-" + System.nanoTime());
@@ -122,7 +122,7 @@ class UserProfilePostgresTest extends PostgresRepositoryTest {
         em.flush();
         em.clear();
 
-        assertThat(preferenceRepository.findByUserIdInAndKey(List.of(a.getId(), b.getId(), c.getId()), "visibility.displayName"))
+        assertThat(preferenceRepository.findByUserIdInAndKeyIn(List.of(a.getId(), b.getId(), c.getId()), List.of("visibility.displayName", "visibility.firstName")))
                 .extracting(p -> p.getUser().getId(), UserPreference::getValue)
                 .containsExactlyInAnyOrder(tuple(a.getId(), "false"), tuple(b.getId(), "true"));
     }

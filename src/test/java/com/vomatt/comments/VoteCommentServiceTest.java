@@ -47,6 +47,7 @@ class VoteCommentServiceTest {
     @Mock VoteCommentRepository commentRepository;
     @Mock VoteService voteService;
     @Mock UserRepository userRepository;
+    @Mock com.vomatt.repository.UserPreferenceRepository preferenceRepository;
     @Mock CommentLikeRepository commentLikeRepository;
     @Mock CommentReportRepository commentReportRepository;
     @Mock LookupService lookupService;

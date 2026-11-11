@@ -15,24 +15,28 @@ import java.util.Map;
 public class UserMapper {
 
     /**
-     * Convert User entity to search result item; displayName is masked by the owner's visibility setting
+     * Convert User entity to search result item; {@code name} is already masked by the owner's visibility settings
      */
-    public UserDto toSearchResult(User user, boolean displayNameVisible) {
+    public UserDto toSearchResult(User user, PublicName name) {
         return new UserDto(
                 user.getId().toString(),
                 user.getUsername(),
-                displayNameVisible ? user.getDisplayName() : null,
+                name.displayName(),
+                name.firstName(),
+                name.lastName(),
                 user.getAvatarUrl(),
                 user.isCommunity()
         );
     }
 
     /** Follower / following list item: search result fields plus the caller's relation to the user. */
-    public FollowUserDto toFollowItem(User user, boolean displayNameVisible, boolean isFollowing, boolean followsYou) {
+    public FollowUserDto toFollowItem(User user, PublicName name, boolean isFollowing, boolean followsYou) {
         return new FollowUserDto(
                 user.getId().toString(),
                 user.getUsername(),
-                displayNameVisible ? user.getDisplayName() : null,
+                name.displayName(),
+                name.firstName(),
+                name.lastName(),
                 user.getAvatarUrl(),
                 isFollowing,
                 followsYou,

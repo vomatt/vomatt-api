@@ -48,6 +48,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @RestController
@@ -64,6 +65,7 @@ public class UserController {
     private final AuthService authService;
     private final RefreshTokenService refreshTokenService;
     private final PlanService planService;
+    private final CommunityService communityService;
 
     @GetMapping("/me")
     @CommonApiResponses
@@ -310,17 +312,29 @@ public class UserController {
             **Precondition**: none
             **Behavior**: updates `username`, `displayName`, `firstName`, `lastName`, `birthday`, `gender`, `bio`, `avatarUrl` and/or `anonymousBallotByDefault` (the default for Ballots that omit `anonymous`; existing Ballots are unchanged). `avatarUrl` must be `bot:<kind>` with one of the bot cast kinds, or `bot:none` for no character; an uploaded image is set only through `PUT /api/users/me/avatar`, and switching to a bot avatar deletes the uploaded image once the change commits. `firstName` and `lastName` are stored without surrounding whitespace, and a blank value clears them. `birthday` is an ISO date (`yyyy-MM-dd`) from 1900-01-01 to yesterday in Asia/Taipei. `gender` is one of `MALE`, `FEMALE`, `OTHER`, `UNDISCLOSED` (hidden on the public profile unless made visible). Sending the current `username` is a no-op, except that an older account holding a reserved name gets 400 (omit `username` when unchanged). A field that is omitted or `null` is left unchanged \
             (`null` cannot be used to clear a value; send an empty string instead, except `avatarUrl`, `birthday` and `gender`, which cannot be cleared). Returns the caller's profile after the update: \
-            optional fields the caller explicitly hid are `null`, fields whose visibility was never set are shown.
-            **Side effects**: persists the new values; after a `username` change the old public profile path returns 404
+            optional fields the caller explicitly hid are `null`, fields whose visibility was never set are shown. \
+            While acting as a community account (`X-Act-As`, OWNER or ADMIN) this edits it as `PATCH /api/communities/{communityId}` does, \
+            plus `avatarUrl` and `anonymousBallotByDefault`: its `username` never changes (sending the current one is a no-op), \
+            `displayName` is stored trimmed and cannot be blank, and `firstName`, `lastName`, `birthday` and `gender` are refused.
+            **Side effects**: persists the new values; after a `username` change the old public profile path returns 404. \
+            While acting, audit-logged as `UPDATE` on `COMMUNITY` (actor the real member, `actingAs` and each changed field before and after in the details)
             **Errors**:
             - 400 `common.validation_failed`: `username` is not 3-50 characters of [a-z0-9_] or is a reserved name (see the `username` schema), \
             `displayName` exceeds 100 characters, `firstName` or `lastName` exceeds 50 characters, `birthday` is before 1900-01-01 or not before today (Asia/Taipei), `bio` exceeds 500 characters, or `avatarUrl` is not a known `bot:<kind>` or `bot:none`
-            - 400 `common.bad_request`: `birthday` is not a valid `yyyy-MM-dd` date, or `gender` is not one of the allowed values
+            - 400 `common.bad_request`: `birthday` is not a valid `yyyy-MM-dd` date, or `gender` is not one of the allowed values; \
+            while acting, `firstName`, `lastName`, `birthday` or `gender` sent
+            - 400 `common.validation_failed`: while acting, a blank `displayName`
+            - 400 `community.username_immutable`: while acting, a `username` other than the community account's own
             - 404 `user.not_found`: the account no longer exists
             - 409 `user.username.taken`: another account already uses `username`""")
     public ResponseEntity<ApiResponse<UserProfileResponse>> updateMyProfile(
             @Valid @RequestBody UpdateProfileRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
+        Optional<ActingMember> acting = ActingMember.current();
+        if (acting.isPresent()) {
+            return ResponseEntity.ok(ApiResponse.ok(
+                    communityService.updateProfile(acting.get().communityId(), request, acting.get().memberId().toString())));
+        }
         UserProfileResponse profile = userService.updateMyProfile(principal.userId(), request);
         log.info("Profile updated for user: {}", principal.userId());
         return ResponseEntity.ok(ApiResponse.ok(profile));
@@ -441,8 +455,10 @@ public class UserController {
             **Behavior**: center-crops the image to a square, resizes it to 512x512 and re-encodes it as JPEG (transparent pixels become white; \
             EXIF metadata, GPS included, is dropped). Each upload is a new image with a new path: `avatarUrl` becomes `/api/avatars/<id>.jpg`, \
             a path on the API origin served by `GET /api/avatars/{file}`. Returns the caller's profile after the update, as `PATCH /api/users/me` does. \
-            To go back to a bot avatar, send `avatarUrl` = `bot:<kind>` to `PATCH /api/users/me`.
-            **Side effects**: counts one attempt toward the daily upload limit (before the image is checked); stores the image; once the change commits, the previously uploaded image (if any) is deleted and its path returns 404
+            To go back to a bot avatar, send `avatarUrl` = `bot:<kind>` to `PATCH /api/users/me`. \
+            While acting as a community account (`X-Act-As`, OWNER or ADMIN) this is `PUT /api/communities/{communityId}/avatar`.
+            **Side effects**: counts one attempt toward the daily upload limit (before the image is checked); stores the image; once the change commits, the previously uploaded image (if any) is deleted and its path returns 404. \
+            While acting, audit-logged as `UPDATE` on `COMMUNITY` with `avatarUrl` before and after
             **Errors**:
             - 400 `common.file_required`: part `file` is missing or empty
             - 400 `common.file_read_failed`: the uploaded file could not be read
@@ -456,7 +472,10 @@ public class UserController {
             @Parameter(description = "Image file (JPEG, PNG, GIF or BMP), at most 2 MB", required = true)
             @RequestPart(value = "file", required = false) MultipartFile file,
             @AuthenticationPrincipal UserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.ok(userService.uploadAvatar(principal.userId(), file)));
+        Optional<ActingMember> acting = ActingMember.current();
+        return ResponseEntity.ok(ApiResponse.ok(acting.isPresent()
+                ? communityService.uploadAvatar(acting.get().communityId(), file, acting.get().memberId().toString())
+                : userService.uploadAvatar(principal.userId(), file)));
     }
 
     @GetMapping("/search")

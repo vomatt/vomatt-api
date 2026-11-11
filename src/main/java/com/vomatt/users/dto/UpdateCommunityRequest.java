@@ -14,4 +14,11 @@ public record UpdateCommunityRequest(
                 maxLength = 500, nullable = true)
         @Size(max = 500)
         String bio
-) {}
+) {
+    public UpdateProfileRequest toProfileUpdate() {
+        UpdateProfileRequest update = new UpdateProfileRequest();
+        update.setDisplayName(displayName);
+        update.setBio(bio);
+        return update;
+    }
+}

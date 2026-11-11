@@ -208,7 +208,7 @@ class CommunityServiceTest {
     void shouldAllowOnlyOwnerAndAdminWhenEditingProfile(CommunityRole role, MessageKey error) {
         when(memberRepository.findActiveRole(communityId, callerId)).thenReturn(Optional.ofNullable(role));
         lenient().when(userRepository.findById(communityId)).thenReturn(Optional.of(User.builder().id(communityId).username("sunrise").build()));
-        var update = new com.vomatt.users.dto.UpdateCommunityRequest("Sunrise", null);
+        var update = new com.vomatt.users.dto.UpdateCommunityRequest("Sunrise", null).toProfileUpdate();
         var file = mock(org.springframework.web.multipart.MultipartFile.class);
         lenient().when(userService.uploadAvatar(communityId.toString(), file)).thenReturn(mock(com.vomatt.users.dto.UserProfileResponse.class));
 

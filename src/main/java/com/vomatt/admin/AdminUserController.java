@@ -419,7 +419,9 @@ public class AdminUserController {
                     **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
                     **Precondition**: the account exists
                     **Behavior**: puts the account on `plan` (FREE or PRO) and returns it; grants or takes back PRO by hand, for testing \
-                    and compensation. The same change the payment webhook will make once billing is live. The same plan changes nothing
+                    and compensation. The same change the payment webhook will make once billing is live. The same plan changes nothing. \
+                    An upgrade unlocks the earliest created of the account's locked community accounts, as many as the new limit has room for; \
+                    a downgrade over the new limit sets `communityQuota.selectionRequired` with a 7-day `selectionDeadline`
                     **Side effects**: a change is written to the audit log in the same transaction as `CHANGE_PLAN` on `USER`, with \
                     `details` `from=<plan>; to=<plan>; source=ADMIN`
                     **Errors**:

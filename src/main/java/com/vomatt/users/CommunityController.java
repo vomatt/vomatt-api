@@ -408,7 +408,8 @@ public class CommunityController {
             **Auth**: required (OWNER only)
             **Precondition**: the caller owns fewer unlocked community accounts than their plan allows
             **Behavior**: unlocks a locked community account, which then counts toward the caller's `communityQuota`. \
-            An account that is not locked changes nothing.
+            An account that is not locked changes nothing. It counts toward every other OWNER's limit again too, so one now \
+            over it gets `communityQuota.selectionRequired`.
             **Side effects**: an unlock is audit-logged as `UNLOCK` on `COMMUNITY` with `reason=OWNER_UNLOCK`.
             **Errors**:
             - 403 `community.role_forbidden`: the caller is not an OWNER

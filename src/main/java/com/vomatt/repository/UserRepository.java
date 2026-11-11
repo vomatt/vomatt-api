@@ -91,12 +91,23 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     Optional<String> lockPlan(@Param("id") UUID id);
 
     @Modifying
-    @Query("UPDATE User u SET u.plan = :plan, u.communitySelectionDeadline = :deadline WHERE u.id = :id")
-    void setPlan(@Param("id") UUID id, @Param("plan") Plan plan, @Param("deadline") OffsetDateTime deadline);
+    @Query("UPDATE User u SET u.plan = :plan WHERE u.id = :id")
+    void setPlan(@Param("id") UUID id, @Param("plan") Plan plan);
 
-    @Modifying
-    @Query("UPDATE User u SET u.communitySelectionDeadline = NULL WHERE u.id = :id")
-    void clearSelectionDeadline(@Param("id") UUID id);
+    /**
+     * Gives each of the people a selection deadline exactly while they own more active, unlocked community accounts
+     * than their plan's limit: a running one keeps its date, a new one is {@code deadline}, and one within the limit has none.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query(value = """
+            UPDATE vomatt.users u SET community_selection_deadline = CASE
+                WHEN (SELECT count(*) FROM vomatt.community_members m JOIN vomatt.users c ON c.id = m.community_user_id
+                      WHERE m.user_id = u.id AND m.role = 'OWNER' AND c.active AND c.locked_at IS NULL)
+                     > CASE u.plan WHEN 'PRO' THEN :proLimit ELSE :freeLimit END
+                THEN COALESCE(u.community_selection_deadline, :deadline) END
+            WHERE u.id IN (:ids)""", nativeQuery = true)
+    void reconcileSelectionDeadlines(@Param("ids") Collection<UUID> ids, @Param("freeLimit") int freeLimit,
+                                     @Param("proLimit") int proLimit, @Param("deadline") OffsetDateTime deadline);
 
     @Query("SELECT u.communitySelectionDeadline FROM User u WHERE u.id = :id")
     Optional<OffsetDateTime> findSelectionDeadline(@Param("id") UUID id);

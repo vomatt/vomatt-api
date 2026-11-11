@@ -92,6 +92,8 @@ public class CommunityController {
     private static final String PROFILE_EDITOR = "- 403 `community.role_forbidden`: the caller is not an OWNER or ADMIN\n";
     private static final String ERR_ROLE_FORBIDDEN = ERR_MESSAGE + "Your role in this community account does not allow this action" + ERR_CODE
             + "community.role_forbidden" + ERR_ERROR + "Your role in this community account does not allow this action" + ERR_END;
+    private static final String LIMIT_REACHED = "- 403 `community.limit_reached`: the user who would become an OWNER already owns as many "
+            + "community accounts as their plan allows; `data` is `{ \"limit\": 1, \"owned\": 1 }`\n";
 
     private static final String ERR_NOT_MEMBER = ERR_MESSAGE + "You are not a member of this community account" + ERR_CODE
             + "community.not_member" + ERR_ERROR + "You are not a member of this community account" + ERR_END;
@@ -113,7 +115,8 @@ public class CommunityController {
             - 400 `common.validation_failed`: `username` not 3-50 characters of [a-z0-9_] or reserved, `displayName` blank or over 100 characters
             - 400 `community.member.invalid`: the caller is suspended or is a community account
             - 409 `user.username.taken`: the username is in use
-            """,
+            - 409 `common.conflict`: another change to the caller's community accounts is in progress; retry
+            """ + LIMIT_REACHED,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = @ExampleObject(name = "Create a community account", value = """
                             { "username": "sunrise_tower", "displayName": "Sunrise Tower Committee" }
@@ -124,6 +127,13 @@ public class CommunityController {
                         "displayName": "Sunrise Tower Committee", "avatarUrl": null, "community": true },
                       "message": null, "errorCode": null, "error": null }
                     """)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Plan limit reached (`community.limit_reached`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "community.limit_reached", value = """
+                            { "success": false, "data": { "limit": 1, "owned": 1 },
+                              "message": "You own as many community accounts as your plan allows",
+                              "errorCode": "community.limit_reached", "error": "You own as many community accounts as your plan allows" }
+                            """)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Username in use (`user.username.taken`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "user.username.taken", value = ERR_MESSAGE + "Username already taken"
@@ -141,7 +151,7 @@ public class CommunityController {
             **Precondition**: none
             **Behavior**: the active community accounts the caller is a member of, with the caller's role, oldest membership first; \
             for the account switcher. Send an account's `communityId` as the `X-Act-As` header to act as it. While acting, the list \
-            is still the real member's.
+            is still the real member's. `locked` accounts are readable, but writes as them answer 403 `community.locked`.
             **Side effects**: none
             **Errors**: none
             """)
@@ -149,7 +159,7 @@ public class CommunityController {
             content = @Content(examples = @ExampleObject(name = "Community accounts", value = """
                     { "success": true, "data": [
                         { "communityId": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48", "username": "sunrise_tower", "displayName": "Sunrise Tower Committee",
-                          "avatarUrl": "/api/avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d49.jpg", "role": "EDITOR" }
+                          "avatarUrl": "/api/avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d49.jpg", "role": "EDITOR", "locked": false }
                       ], "message": null, "errorCode": null, "error": null }
                     """)))
     public ResponseEntity<ApiResponse<List<MyCommunityResponse>>> listMine(@AuthenticationPrincipal UserPrincipal principal) {
@@ -157,7 +167,6 @@ public class CommunityController {
     }
 
     @PatchMapping("/api/communities/{communityId}")
-    @Auditable(action = "UPDATE", resourceType = "COMMUNITY", resourceIdIndex = 0)
     @CommonApiResponses
     @Operation(summary = "Update a community account's profile", description = """
             **Auth**: required (OWNER or ADMIN)
@@ -183,11 +192,10 @@ public class CommunityController {
             @PathVariable UUID communityId,
             @Valid @RequestBody UpdateCommunityRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.ok(communityService.updateProfile(communityId, request, ActingMember.realUserId(principal))));
+        return ResponseEntity.ok(ApiResponse.ok(communityService.updateProfile(communityId, request.toProfileUpdate(), ActingMember.realUserId(principal))));
     }
 
     @PutMapping(value = "/api/communities/{communityId}/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Auditable(action = "UPDATE", resourceType = "COMMUNITY", resourceIdIndex = 0)
     @CommonApiResponses
     @StorageUnavailableResponse
     @Operation(summary = "Upload a community account's avatar", description = """
@@ -217,6 +225,35 @@ public class CommunityController {
             @RequestPart(value = "file", required = false) MultipartFile file,
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(communityService.uploadAvatar(communityId, file, ActingMember.realUserId(principal))));
+    }
+
+    @DeleteMapping("/api/communities/{communityId}")
+    @Auditable(action = "DELETE", resourceType = "COMMUNITY", resourceIdIndex = 0)
+    @CommonApiResponses
+    @Operation(summary = "Delete a community account", description = """
+            **Auth**: required (OWNER only)
+            **Precondition**: none
+            **Behavior**: permanently deletes the community account the way `DELETE /api/users/{userId}` deletes a user's: \
+            its Polls go with it, together with every Ballot and Comment on them, and so do its own Comments, likes and \
+            follows. Every membership is removed, so the account leaves each member's `GET /api/users/me/communities`, \
+            `GET /api/users/{username}` answers 404 `user.not_found`, and a later `X-Act-As` with its id gets 403 `community.not_member`.
+            **Side effects**: audit-logged as `DELETE` on `COMMUNITY` with the username, display name and members (`username:ROLE`) \
+            at deletion in the details; the community account's earlier audit entries are kept
+            **Errors**:
+            - 403 `community.role_forbidden`: the caller is not an OWNER
+            - 409 `common.conflict`: another member change is in progress; retry
+            """ + NOT_MEMBER)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Community account deleted",
+            content = @Content(examples = @ExampleObject(name = "Deleted", value = EX_OK)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not a member, or not an OWNER (`community.not_member`, `community.role_forbidden`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "community.role_forbidden", value = ERR_ROLE_FORBIDDEN)))
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> deleteCommunity(
+            @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
+            @PathVariable UUID communityId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        communityService.deleteCommunity(communityId, ActingMember.realUserId(principal));
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 
     @GetMapping("/api/communities/{communityId}/members")
@@ -255,7 +292,7 @@ public class CommunityController {
             - 400 `common.validation_failed`: `userId` or `role` missing or invalid
             - 404 `user.not_found`: no user with this id
             - 409 `community.member.exists`: the user is already a member
-            """ + NOT_MEMBER + ROLE_FORBIDDEN,
+            """ + NOT_MEMBER + ROLE_FORBIDDEN + LIMIT_REACHED,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = @ExampleObject(name = "Add an editor", value = """
                             { "userId": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47", "role": "EDITOR" }
@@ -286,7 +323,7 @@ public class CommunityController {
             **Side effects**: the action is audit-logged.
             **Errors**:
             - 400 `common.validation_failed`: `role` missing or invalid
-            """ + NOT_MEMBER + ROLE_FORBIDDEN + MEMBER_NOT_FOUND + LAST_OWNER,
+            """ + NOT_MEMBER + ROLE_FORBIDDEN + MEMBER_NOT_FOUND + LAST_OWNER + LIMIT_REACHED,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = @ExampleObject(name = "Make admin", value = """
                             { "role": "ADMIN" }
@@ -346,7 +383,7 @@ public class CommunityController {
             - 400 `common.validation_failed`: `userId` missing
             - 403 `community.role_forbidden`: the caller is not an OWNER
             - 409 `common.conflict`: another member change is in progress; retry
-            """ + NOT_MEMBER + MEMBER_NOT_FOUND,
+            """ + NOT_MEMBER + MEMBER_NOT_FOUND + LIMIT_REACHED,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = @ExampleObject(name = "Transfer", value = """
                             { "userId": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47" }
@@ -359,6 +396,32 @@ public class CommunityController {
             @Valid @RequestBody CommunityOwnerRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
         communityService.transferOwner(communityId, request.userId(), ActingMember.realUserId(principal));
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
+    @PostMapping("/api/communities/{communityId}/unlock")
+    @CommonApiResponses
+    @Operation(summary = "Unlock a community account", description = """
+            **Auth**: required (OWNER only)
+            **Precondition**: the caller owns fewer unlocked community accounts than their plan allows
+            **Behavior**: unlocks a locked community account, which then counts toward the caller's `communityQuota`. \
+            An account that is not locked changes nothing. It counts toward every other OWNER's limit again too, so one now \
+            over it gets `communityQuota.selectionRequired`.
+            **Side effects**: an unlock is audit-logged as `UNLOCK` on `COMMUNITY` with `reason=OWNER_UNLOCK`.
+            **Errors**:
+            - 403 `community.role_forbidden`: the caller is not an OWNER
+            - 409 `common.conflict`: another change to the caller's community accounts is in progress; retry
+            """ + NOT_MEMBER + LIMIT_REACHED)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Unlocked",
+            content = @Content(examples = @ExampleObject(name = "Unlocked", value = EX_OK)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not an OWNER, or no room in the plan (`community.role_forbidden`, `community.limit_reached`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "community.not_member", value = ERR_NOT_MEMBER)))
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> unlock(
+            @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
+            @PathVariable UUID communityId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        communityService.unlock(communityId, ActingMember.realUserId(principal));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 }

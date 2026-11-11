@@ -28,7 +28,12 @@ public enum NotificationKind {
     /** Someone liked the user's Comment or Reply. Source: the like row. */
     LIKE(NotificationCategory.LIKE),
     /** Someone liked the user's Poll. Source: the like row. */
-    POLL_LIKE(NotificationCategory.LIKE);
+    POLL_LIKE(NotificationCategory.LIKE),
+    /**
+     * A community account the user is an OWNER of was locked because its selection deadline passed without a choice.
+     * Source: the LOCK audit entry.
+     */
+    COMMUNITY_LOCKED(NotificationCategory.COMMUNITY);
 
     private final NotificationCategory category;
 

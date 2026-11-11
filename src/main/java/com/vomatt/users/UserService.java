@@ -59,11 +59,13 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Slf4j
 @Service
@@ -91,6 +93,7 @@ public class UserService {
     private final LookupService lookupService;
     private final TransactionTemplate transactionTemplate;
     private final CommunityMemberRepository communityMemberRepository;
+    private final PlanService planService;
 
     /** One export per user per UTC day: the response is the account's whole footprint and is not cheap to build. */
     private static final String EXPORT_COUNTER_NS = "export:daily";
@@ -118,7 +121,16 @@ public class UserService {
             log.warn("User {} attempted to delete user {} without permission", principal.userId(), userId);
             throw ApiException.forbidden(MessageKey.USER_DELETE_FORBIDDEN);
         }
-        User user = findUserById(userId);
+        deleteAccount(findUserById(userId), principal.userId());
+    }
+
+    /**
+     * Deletes the account with everything that cascades from it: its Polls (with every Ballot and Comment on them),
+     * its Comments, Ballots, follows and memberships. Callers check who may delete it first.
+     */
+    @Transactional
+    public void deleteAccount(User user, String deletedBy) {
+        String userId = user.getId().toString();
         requireAnotherActiveAdmin(user);
         // Membership rows cascade with the account; a community account must not be left without an OWNER.
         // ponytail: unlocked check, a concurrent demotion of the other OWNER can slip through; lock OWNER rows if it matters
@@ -137,8 +149,10 @@ public class UserService {
         voteRepository.decrementLikeCountForUserLikes(user.getId());
         auditLogRepository.anonymizeByUserId(userId);
         deleteUploadedAvatarAfterCommit(user.getAvatarUrl());
+        List<UUID> owners = communityMemberRepository.findOwnerIds(List.of(user.getId()));
         userRepository.delete(user);
-        log.info("User {} deleted by {}", userId, principal.userId());
+        planService.reconcile(owners);
+        log.info("User {} deleted by {}", userId, deletedBy);
     }
 
     /**
@@ -216,9 +230,12 @@ public class UserService {
             page -> toSearchResults(page.stream().map(UserBlock::getBlocked).toList()));
     }
 
-    /** Follows a user (one-way, see {@link UserFollow}); idempotent. */
+    /** Follows a user (one-way, see {@link UserFollow}); idempotent. A community account follows no one. */
     @Transactional
     public void followUser(String userId, String targetId) {
+        if (userRepository.findById(UUID.fromString(userId)).filter(User::isCommunity).isPresent()) {
+            throw ApiException.badRequest(MessageKey.USER_FOLLOW_COMMUNITY);
+        }
         User target = findOtherActiveUser(userId, targetId, MessageKey.USER_FOLLOW_SELF);
         // Same pair lock as blockUser, so a concurrent block cannot slip between the check and the insert
         followRepository.lockPair(UUID.fromString(userId), target.getId());
@@ -371,7 +388,7 @@ public class UserService {
         Map<String, Boolean> visibility = loadVisibilitySettings(user.getId());
         boolean anonymousBallotByDefault = preferenceRepository.anonymousBallotByDefault(user.getId());
         return userMapper.toMyProfileResponse(user, projection, userRepository.countCreatedPolls(user.getId()),
-            userRepository.countVotedPolls(user.getId()), visibility, anonymousBallotByDefault);
+            userRepository.countVotedPolls(user.getId()), visibility, anonymousBallotByDefault, planService.quota(user));
     }
 
     /** Data portability: everything stored about the caller, nothing about anyone else. Fails closed when Redis is down. */
@@ -455,6 +472,20 @@ public class UserService {
     @Transactional
     public UserProfileResponse updateMyProfile(String userId, UpdateProfileRequest request) {
         User user = findUserById(userId);
+        if (user.isCommunity()) {
+            if (request.getUsername() != null && !request.getUsername().equals(user.getUsername())) {
+                throw ApiException.badRequest(MessageKey.COMMUNITY_USERNAME_IMMUTABLE);
+            }
+            if (Stream.of(request.getFirstName(), request.getLastName(), request.getBirthday(), request.getGender()).anyMatch(Objects::nonNull)) {
+                throw ApiException.badRequest(MessageKey.COMMON_BAD_REQUEST);
+            }
+            if (request.getDisplayName() != null) {
+                request.setDisplayName(request.getDisplayName().trim());
+                if (request.getDisplayName().isEmpty()) {
+                    throw ApiException.badRequest(MessageKey.COMMON_VALIDATION_FAILED);
+                }
+            }
+        }
         if (request.getUsername() != null && !request.getUsername().equals(user.getUsername())) {
             if (userRepository.existsByUsername(request.getUsername())) {
                 throw ApiException.conflict(MessageKey.USER_USERNAME_TAKEN);

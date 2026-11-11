@@ -94,8 +94,11 @@ public class NotificationController {
             the caller blocked (as COMMENT). Gone if the like is taken back; liking again is a new, unread LIKE
             - POLL_LIKE: someone else liked the caller's Poll (`PUT /api/votes/{voteId}/like`). Gone if the like is taken back; \
             liking again is a new, unread POLL_LIKE
+            - COMMUNITY_LOCKED: a community account the caller is an OWNER of was locked because the selection deadline \
+            after a downgrade passed without a choice (`POST /api/users/me/communities/keep`); every OWNER gets one, `actor` is the \
+            community account. Kept 180 days
             Each kind falls in one `category`: CONVERSATION (COMMENT, MENTION), LIKE (LIKE, POLL_LIKE), POLL_END (RESULT, CANCELLED, CLOSING_SOON), \
-            INVITATION (INVITATION), FOLLOW (FOLLOWED). With `category`, only that category is listed; pass the same `category` with \
+            INVITATION (INVITATION), FOLLOW (FOLLOWED), COMMUNITY (COMMUNITY_LOCKED). With `category`, only that category is listed; pass the same `category` with \
             every page.
             Kinds switched off in the caller's preferences are left out (FOLLOWED cannot be switched off). Nothing from a suspended user, \
             a user the caller blocked or a user who blocked the caller is listed, nor anything about a Poll whose owner blocked the caller. `poll` never carries per-option counts, its \

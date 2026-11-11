@@ -32,7 +32,7 @@ import com.vomatt.votes.dto.VoteRequest;
 import com.vomatt.votes.dto.VoteResponse;
 
 /** Invitations and Ended Notifications derived on read (ADR 0003). */
-@Import({ NotificationService.class, VoteServiceSlice.class, UserService.class, UserMapper.class,
+@Import({ NotificationService.class, VoteServiceSlice.class, UserService.class, UserMapper.class, com.vomatt.users.PlanService.class, com.vomatt.common.audit.AuditService.class,
         com.vomatt.common.storage.StorageService.class })
 @DisplayName("Notifications (Postgres)")
 class NotificationPostgresTest extends PostgresRepositoryTest {

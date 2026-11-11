@@ -87,6 +87,7 @@ public enum MessageKey {
     USER_BLOCK_SELF("user.block.self"),
     USER_FOLLOW_SELF("user.follow.self"),
     USER_FOLLOW_BLOCKED("user.follow.blocked"),
+    USER_FOLLOW_COMMUNITY("user.follow.community"),
     USER_AVATAR_UNSUPPORTED_IMAGE("user.avatar.unsupported_image"),
 
     // === Vote ===

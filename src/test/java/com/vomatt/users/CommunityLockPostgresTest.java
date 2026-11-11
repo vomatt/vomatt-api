@@ -2,8 +2,10 @@ package com.vomatt.users;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
@@ -17,6 +19,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.IntNode;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -43,7 +47,10 @@ import com.vomatt.repository.CommunityMemberRepository;
 import com.vomatt.repository.NotificationRepository;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.repository.UserRepository;
+import com.vomatt.entity.Lookup;
+import com.vomatt.lookups.LookupService;
 import com.vomatt.users.dto.CommunityQuota;
+import com.vomatt.users.dto.KeepCommunitiesRequest;
 import com.vomatt.users.dto.MyCommunityResponse;
 import com.vomatt.votes.VoteService;
 import com.vomatt.votes.VoteServiceSlice;
@@ -219,6 +226,63 @@ class CommunityLockPostgresTest extends PostgresRepositoryTest {
         assertKey(() -> planService.keep(owner.getId(), Set.of(UUID.randomUUID())), MessageKey.COMMUNITY_KEEP_INVALID);
         assertKey(() -> planService.keep(owner.getId(), Set.of()), MessageKey.COMMUNITY_KEEP_INVALID);
         assertThat(lockedById()).doesNotContainValue(true);
+    }
+
+    @Test
+    void shouldRefuseKeepNamingOneAccountTwice() {
+        KeepCommunitiesRequest twice = JsonMapper.builder().build().readValue(
+                "{\"communityIds\":[\"" + first + "\",\"" + first + "\",\"" + second + "\"]}", KeepCommunitiesRequest.class);
+
+        assertKey(() -> planService.keep(owner.getId(), twice.communityIds()), MessageKey.COMMUNITY_KEEP_INVALID);
+        downgrade();
+        KeepCommunitiesRequest once = JsonMapper.builder().build().readValue(
+                "{\"communityIds\":[\"" + first + "\",\"" + first + "\"]}", KeepCommunitiesRequest.class);
+        assertKey(() -> planService.keep(owner.getId(), once.communityIds()), MessageKey.COMMUNITY_KEEP_INVALID);
+        assertThat(lockedById()).doesNotContainValue(true);
+    }
+
+    @Test
+    void shouldStartSelectionForOwnerAlreadyOverTheLimitWhenTheJobRuns() {
+        User legacy = persistUser("legacy-" + UUID.randomUUID().toString().substring(0, 8));
+        adopt(legacy, "2025-01-01T00:00:00Z");
+        adopt(legacy, "2025-02-01T00:00:00Z");
+        assertThat(storedDeadline(legacy)).as("created before plans, never reconciled").isNull();
+        OffsetDateTime now = OffsetDateTime.now();
+
+        assertThat(job.run(now)).as("nothing locked yet").isZero();
+
+        assertThat(storedDeadline(legacy)).isCloseTo(now.plus(PlanService.SELECTION_PERIOD), within(1, ChronoUnit.SECONDS));
+        assertThat(lockedById()).doesNotContainValue(true);
+    }
+
+    @Test
+    void shouldStartSelectionWhenAdminLowersTheLimitAndTheJobRuns() {
+        assertThat(storedDeadline(owner)).isNull();
+        Lookup limit = new Lookup();
+        limit.setLookupType(LookupService.CONFIG_TYPE);
+        limit.setLookupKey(Plan.PRO.limitKey());
+        limit.setLookupValue(IntNode.valueOf(2));
+        em.persist(limit);
+        OffsetDateTime now = OffsetDateTime.now();
+
+        job.run(now);
+
+        assertThat(storedDeadline(owner)).isCloseTo(now.plus(PlanService.SELECTION_PERIOD), within(1, ChronoUnit.SECONDS));
+    }
+
+    @Test
+    void shouldKeepARunningDeadlineAndEndAStaleOneWhenTheJobRuns() {
+        downgrade();
+        OffsetDateTime running = OffsetDateTime.parse("2026-11-15T00:00:00Z");
+        User within = persistUser("within-" + UUID.randomUUID().toString().substring(0, 8));
+        em.flush();
+        em.createNativeQuery("UPDATE vomatt.users SET community_selection_deadline = :at WHERE id IN (:ids)")
+                .setParameter("at", running).setParameter("ids", List.of(owner.getId(), within.getId())).executeUpdate();
+
+        job.run(OffsetDateTime.parse("2026-11-12T00:00:00Z"));
+
+        assertThat(storedDeadline(owner)).isEqualTo(running);
+        assertThat(storedDeadline(within)).isNull();
     }
 
     @Test

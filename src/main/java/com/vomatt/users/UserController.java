@@ -349,8 +349,8 @@ public class UserController {
             account that another OWNER also owns counts toward their limit again, so they may get `selectionRequired`
             **Errors**:
             - 400 `common.validation_failed`: `communityIds` missing or empty
-            - 400 `community.keep.invalid`: not as many ids as the limit (all owned ones when fewer), or an id the caller is not \
-            an OWNER of
+            - 400 `community.keep.invalid`: not as many ids as the limit (all owned ones when fewer), an id the caller is not \
+            an OWNER of, or an id sent twice
             - 409 `common.conflict`: another change to the caller's community accounts is in progress; retry""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> keepCommunities(@Valid @RequestBody KeepCommunitiesRequest request,
                                                                              @AuthenticationPrincipal UserPrincipal principal) {

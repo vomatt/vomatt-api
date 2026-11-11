@@ -95,19 +95,33 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     void setPlan(@Param("id") UUID id, @Param("plan") Plan plan);
 
     /**
-     * Gives each of the people a selection deadline exactly while they own more active, unlocked community accounts
-     * than their plan's limit: a running one keeps its date, a new one is {@code deadline}, and one within the limit has none.
+     * The selection deadline person {@code u} should have: while they own more active, unlocked community accounts than
+     * their plan's limit, a running one keeps its date and a new one is {@code :deadline}; within the limit, none.
      */
+    String SELECTION_DEADLINE = """
+            CASE WHEN (SELECT count(*) FROM vomatt.community_members m JOIN vomatt.users c ON c.id = m.community_user_id
+                       WHERE m.user_id = u.id AND m.role = 'OWNER' AND c.active AND c.locked_at IS NULL)
+                      > CASE u.plan WHEN 'PRO' THEN :proLimit ELSE :freeLimit END
+                 THEN COALESCE(u.community_selection_deadline, :deadline) END""";
+
     @Modifying(flushAutomatically = true)
-    @Query(value = """
-            UPDATE vomatt.users u SET community_selection_deadline = CASE
-                WHEN (SELECT count(*) FROM vomatt.community_members m JOIN vomatt.users c ON c.id = m.community_user_id
-                      WHERE m.user_id = u.id AND m.role = 'OWNER' AND c.active AND c.locked_at IS NULL)
-                     > CASE u.plan WHEN 'PRO' THEN :proLimit ELSE :freeLimit END
-                THEN COALESCE(u.community_selection_deadline, :deadline) END
-            WHERE u.id IN (:ids)""", nativeQuery = true)
+    @Query(value = "UPDATE vomatt.users u SET community_selection_deadline = " + SELECTION_DEADLINE + " WHERE u.id IN (:ids)",
+           nativeQuery = true)
     void reconcileSelectionDeadlines(@Param("ids") Collection<UUID> ids, @Param("freeLimit") int freeLimit,
                                      @Param("proLimit") int proLimit, @Param("deadline") OffsetDateTime deadline);
+
+    /**
+     * {@link #reconcileSelectionDeadlines} of everyone whose deadline is out of step, returning how many it changed. Rows
+     * another transaction holds are skipped: a plan or ownership change reconciles its own people, and the next run gets the rest.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query(value = "UPDATE vomatt.users u SET community_selection_deadline = " + SELECTION_DEADLINE + " WHERE u.id IN ("
+            + "SELECT u.id FROM vomatt.users u WHERE (u.community_selection_deadline IS NOT NULL OR EXISTS (SELECT 1 FROM "
+            + "vomatt.community_members o WHERE o.user_id = u.id AND o.role = 'OWNER')) "
+            + "AND (" + SELECTION_DEADLINE + ") IS DISTINCT FROM u.community_selection_deadline "
+            + "FOR NO KEY UPDATE SKIP LOCKED)", nativeQuery = true)
+    int reconcileAllSelectionDeadlines(@Param("freeLimit") int freeLimit, @Param("proLimit") int proLimit,
+                                       @Param("deadline") OffsetDateTime deadline);
 
     @Query("SELECT u.communitySelectionDeadline FROM User u WHERE u.id = :id")
     Optional<OffsetDateTime> findSelectionDeadline(@Param("id") UUID id);

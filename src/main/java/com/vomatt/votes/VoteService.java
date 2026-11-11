@@ -794,22 +794,13 @@ public class VoteService {
         }
         User owner = vote.getCreator();
         UUID voteId = vote.getId();
-        List<String> unsent = new ArrayList<>(emails);
-        unsent.removeAll(inviteeRepository.findInvitationsSent(voteId, emails));
-        if (unsent.isEmpty()) {
+        List<String> recipients = invitationEmailLimiter.claim(owner.getId(), emails,
+            unsent -> inviteeRepository.findInvitationsSent(voteId, unsent),
+            sent -> inviteeRepository.recordInvitationsSent(voteId, sent.toArray(String[]::new)));
+        if (recipients.isEmpty()) {
             return;
         }
-        int allowed = invitationEmailLimiter.takeQuota(owner.getId(), unsent.size());
-        if (allowed < unsent.size()) {
-            log.warn("Invitation email daily limit reached: {} invitation(s) for vote {} by owner {} not sent",
-                unsent.size() - allowed, voteId, owner.getId());
-        }
-        if (allowed == 0) {
-            return;
-        }
-        List<String> recipients = List.copyOf(unsent.subList(0, allowed));
-        inviteeRepository.recordInvitationsSent(voteId, recipients.toArray(String[]::new));
-        String inviterName = owner.getDisplayName() != null ? owner.getDisplayName() : owner.getUsername();
+        String inviterName = owner.displayNameOrUsername();
         String title = vote.getTitle();
         Locale locale = LocaleContextHolder.getLocale();
         AfterCommit.run(() -> emailService.sendInvitationEmails(recipients, inviterName, title, voteId, locale));

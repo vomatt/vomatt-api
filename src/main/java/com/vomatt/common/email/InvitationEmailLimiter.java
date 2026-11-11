@@ -6,6 +6,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -58,27 +60,37 @@ public class InvitationEmailLimiter {
 
     /**
      * Of the sign-up invitation addresses, those to mail now: not mailed by this sender within {@link #RESEND_AFTER},
-     * within the daily quota. Records them sent (at most once: a failed send is not retried); the caller mails them
-     * after commit.
+     * within the daily quota.
      */
     public List<String> claim(UUID senderId, Collection<String> emails) {
+        OffsetDateTime now = OffsetDateTime.now();
+        return claim(senderId, emails,
+                unsent -> invitationEmailRepository.findSentSince(senderId, unsent, now.minus(RESEND_AFTER)),
+                recipients -> invitationEmailRepository.recordSent(senderId, recipients, now));
+    }
+
+    /**
+     * Of {@code emails}, those to mail now: the ones {@code alreadySent} leaves out, up to the sender's daily quota.
+     * Records them with {@code record} before returning (at most once: a failed send is not retried); the caller mails
+     * them after commit. Over the quota the rest are skipped, never queued.
+     */
+    public List<String> claim(UUID senderId, Collection<String> emails, Function<Collection<String>, Collection<String>> alreadySent,
+                              Consumer<List<String>> record) {
         if (emails.isEmpty()) {
             return List.of();
         }
-        OffsetDateTime now = OffsetDateTime.now();
         List<String> unsent = new ArrayList<>(emails);
-        unsent.removeAll(invitationEmailRepository.findSentSince(senderId, emails, now.minus(RESEND_AFTER)));
+        unsent.removeAll(alreadySent.apply(emails));
         if (unsent.isEmpty()) {
             return List.of();
         }
         int allowed = takeQuota(senderId, unsent.size());
         if (allowed < unsent.size()) {
-            log.warn("Invitation email daily limit reached: {} sign-up invitation(s) by sender {} not sent",
-                    unsent.size() - allowed, senderId);
+            log.warn("Invitation email daily limit reached: {} invitation(s) by sender {} not sent", unsent.size() - allowed, senderId);
         }
         List<String> recipients = List.copyOf(unsent.subList(0, allowed));
         if (!recipients.isEmpty()) {
-            invitationEmailRepository.recordSent(senderId, recipients, now);
+            record.accept(recipients);
         }
         return recipients;
     }

@@ -99,8 +99,7 @@ public class CommunityService {
     public List<MyCommunityResponse> listMine(String callerId) {
         return memberRepository.findByUserIdAndCommunityActiveTrueOrderByCreatedAtAscCommunityUserIdAsc(UUID.fromString(callerId))
                 .stream()
-                .map(m -> new MyCommunityResponse(m.getCommunityUserId().toString(), m.getCommunity().getUsername(),
-                        m.getCommunity().getDisplayName(), m.getCommunity().getAvatarUrl(), m.getRole()))
+                .map(m -> toMine(m.getCommunity(), m.getRole()))
                 .toList();
     }
 
@@ -114,19 +113,16 @@ public class CommunityService {
     public CommunityInvitationResponse invite(UUID communityId, UUID userId, String email, CommunityRole role, String callerId) {
         requireGrant(requireManager(communityId, callerId), role);
         User user = null;
-        String address = null;
         if (userId != null) {
             // Picked by id, so who they are is no secret: an ineligible user or a member says so
             user = requireEligible(userId);
             if (memberRepository.existsById(new CommunityMember.Key(communityId, userId))) {
                 throw ApiException.conflict(MessageKey.COMMUNITY_MEMBER_EXISTS);
             }
-        } else {
-            address = User.normalizeEmail(email);
         }
         OffsetDateTime now = OffsetDateTime.now();
-        (user != null ? invitationRepository.findByCommunityUserIdAndUserId(communityId, userId)
-                : invitationRepository.findByCommunityUserIdAndEmail(communityId, address)).ifPresent(existing -> {
+        (userId != null ? invitationRepository.findByCommunityUserIdAndUserId(communityId, userId)
+                : invitationRepository.findByCommunityUserIdAndEmail(communityId, email)).ifPresent(existing -> {
             if (!existing.isExpiredAt(now)) {
                 throw ApiException.conflict(MessageKey.COMMUNITY_INVITATION_EXISTS);
             }
@@ -136,16 +132,16 @@ public class CommunityService {
         });
         CommunityInvitation invitation;
         try {
-            invitation = invitationRepository.saveAndFlush(new CommunityInvitation(communityId, userId, address, role,
+            invitation = invitationRepository.saveAndFlush(new CommunityInvitation(communityId, userId, email, role,
                     UUID.fromString(callerId), now.plus(INVITATION_TTL)));
         } catch (DataIntegrityViolationException e) {
             // A concurrent invite of the same user or address won the unique key
             throw ApiException.conflict(MessageKey.COMMUNITY_INVITATION_EXISTS);
         }
-        if (address != null && !userRepository.existsByEmail(address)) {
-            mailInvitation(communityId, address, role, callerId);
+        if (email != null && !userRepository.existsByEmail(email)) {
+            mailInvitation(communityId, email, role, callerId);
         }
-        log.info("Community account {}: {} invited {} as {} ({})", communityId, callerId, user != null ? userId : "an address",
+        log.info("Community account {}: {} invited {} as {} ({})", communityId, callerId, userId != null ? userId : "an address",
                 role, invitation.getId());
         return toResponse(invitation, user);
     }
@@ -158,8 +154,8 @@ public class CommunityService {
         }
         User community = userRepository.getReferenceById(communityId);
         User inviter = userRepository.getReferenceById(UUID.fromString(callerId));
-        String communityName = community.getDisplayName() != null ? community.getDisplayName() : community.getUsername();
-        String inviterName = inviter.getDisplayName() != null ? inviter.getDisplayName() : inviter.getUsername();
+        String communityName = community.displayNameOrUsername();
+        String inviterName = inviter.displayNameOrUsername();
         String inviterUsername = inviter.getUsername();
         Locale locale = LocaleContextHolder.getLocale();
         AfterCommit.run(() -> emailService.sendCommunityInvitationEmail(address, inviterName, inviterUsername, communityName,
@@ -192,21 +188,23 @@ public class CommunityService {
      * member: the membership is kept as it is and the invitation is used up.
      */
     public MyCommunityResponse acceptInvitation(UUID invitationId, String callerId) {
-        CommunityInvitation invitation = findOwnInvitation(invitationId, callerId);
+        User caller = requireEligible(UUID.fromString(callerId));
+        CommunityInvitation invitation = findOwnInvitation(invitationId, caller);
         User community = userRepository.findById(invitation.getCommunityUserId()).filter(User::isActive)
                 .orElseThrow(() -> ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
-        UUID userId = requireEligible(UUID.fromString(callerId)).getId();
+        UUID userId = caller.getId();
         CommunityMember member = memberRepository.findByCommunityUserIdAndUserId(community.getId(), userId)
                 .orElseGet(() -> memberRepository.save(new CommunityMember(community.getId(), userId, invitation.getRole())));
         invitationRepository.delete(invitation);
         log.info("Community account {}: {} accepted invitation {} as {}", community.getId(), callerId, invitationId, member.getRole());
-        return new MyCommunityResponse(community.getId().toString(), community.getUsername(), community.getDisplayName(),
-                community.getAvatarUrl(), member.getRole());
+        return toMine(community, member.getRole());
     }
 
     /** The invitee turns the invitation down; it is deleted, and its notification goes with it. */
     public void declineInvitation(UUID invitationId, String callerId) {
-        invitationRepository.delete(findOwnInvitation(invitationId, callerId));
+        User caller = userRepository.findById(UUID.fromString(callerId))
+                .orElseThrow(() -> ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
+        invitationRepository.delete(findOwnInvitation(invitationId, caller));
         log.info("User {} declined community invitation {}", callerId, invitationId);
     }
 
@@ -225,11 +223,14 @@ public class CommunityService {
         invitationRepository.deleteByEmail(user.getEmail());
     }
 
-    private CommunityInvitation findOwnInvitation(UUID invitationId, String callerId) {
-        UUID userId = UUID.fromString(callerId);
-        String email = userRepository.findById(userId).map(User::getEmail).orElse(null);
+    private static MyCommunityResponse toMine(User community, CommunityRole role) {
+        return new MyCommunityResponse(community.getId().toString(), community.getUsername(), community.getDisplayName(),
+                community.getAvatarUrl(), role);
+    }
+
+    private CommunityInvitation findOwnInvitation(UUID invitationId, User caller) {
         return invitationRepository.findById(invitationId)
-                .filter(i -> (userId.equals(i.getUserId()) || i.getEmail() != null && i.getEmail().equals(email))
+                .filter(i -> (caller.getId().equals(i.getUserId()) || i.getEmail() != null && i.getEmail().equals(caller.getEmail()))
                         && !i.isExpiredAt(OffsetDateTime.now()))
                 .orElseThrow(() -> ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
     }

@@ -36,6 +36,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -155,12 +156,17 @@ public class EmailServiceImpl implements EmailService {
     @Async
     @Override
     public void sendInvitationEmails(List<String> recipients, String inviterName, String pollTitle, UUID pollId, Locale locale) {
+        sendPaced(recipients, to -> sendInvitationEmail(to, inviterName, pollTitle, pollId, locale));
+    }
+
+    // One after another; over Resend, paced under its per-second rate limit
+    private void sendPaced(List<String> recipients, Consumer<String> send) {
         for (int i = 0; i < recipients.size(); i++) {
             if (i > 0 && resend != null && !pause(RESEND_SEND_INTERVAL)) {
-                log.warn("Invitation emails for vote {} interrupted, {} not sent", pollId, recipients.size() - i);
+                log.warn("Invitation emails interrupted, {} not sent", recipients.size() - i);
                 return;
             }
-            sendInvitationEmail(recipients.get(i), inviterName, pollTitle, pollId, locale);
+            send.accept(recipients.get(i));
         }
     }
 
@@ -189,28 +195,24 @@ public class EmailServiceImpl implements EmailService {
     @Async
     @Override
     public void sendSignupInvitationEmails(List<String> recipients, String inviterName, Locale locale) {
-        for (int i = 0; i < recipients.size(); i++) {
-            if (i > 0 && resend != null && !pause(RESEND_SEND_INTERVAL)) {
-                log.warn("Sign-up invitation emails interrupted, {} not sent", recipients.size() - i);
-                return;
-            }
-            sendJoinInvitation(recipients.get(i), "email.join.vomatt.subject", locale,
-                    Map.of("inviterName", Objects.toString(inviterName, "")));
-        }
+        sendPaced(recipients, to -> sendJoinInvitation(to, "vomatt", locale, Map.of("inviterName", Objects.toString(inviterName, ""))));
     }
 
     @Async
     @Override
     public void sendCommunityInvitationEmail(String to, String inviterName, String inviterUsername, String communityName,
                                              String role, Duration expiresIn, Locale locale) {
-        sendJoinInvitation(to, "email.join.community.subject", locale,
+        sendJoinInvitation(to, "community", locale,
                 Map.of("inviterName", Objects.toString(inviterName, ""), "inviterUsername", inviterUsername,
                         "communityName", communityName, "role", role, "expiresDays", expiresIn.toDays()));
     }
 
-    // Shaped like a team invitation: greeting by address, the invite, a button and its URL, then when and to whom it was sent
-    private void sendJoinInvitation(String to, String subjectKey, Locale locale, Map<String, Object> variables) {
+    // Shaped like a team invitation: greeting by address, the invite, a button and its URL, then when and to whom it was
+    // sent. kind picks the texts, email.join.<kind>.*
+    private void sendJoinInvitation(String to, String kind, Locale locale, Map<String, Object> variables) {
+        String subjectKey = "email.join." + kind + ".subject";
         Map<String, Object> all = new HashMap<>(variables);
+        all.put("kind", kind);
         all.put("email", to);
         all.put("joinUrl", siteUrl + signupPath);
         all.put("sentAt", OffsetDateTime.now(ZoneOffset.UTC).format(SENT_AT));

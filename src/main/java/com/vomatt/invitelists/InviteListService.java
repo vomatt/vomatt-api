@@ -165,7 +165,7 @@ public class InviteListService {
         if (recipients.isEmpty()) {
             return;
         }
-        String inviterName = owner.getDisplayName() != null ? owner.getDisplayName() : owner.getUsername();
+        String inviterName = owner.displayNameOrUsername();
         Locale locale = LocaleContextHolder.getLocale();
         AfterCommit.run(() -> emailService.sendSignupInvitationEmails(recipients, inviterName, locale));
     }

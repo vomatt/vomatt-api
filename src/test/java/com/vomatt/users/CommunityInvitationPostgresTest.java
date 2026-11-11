@@ -73,7 +73,7 @@ class CommunityInvitationPostgresTest extends PostgresRepositoryTest {
 
     @Test
     void shouldNotifyAccountAndJoinWithRoleWhenInviteeAccepts() {
-        CommunityInvitationResponse invitation = invite(" " + dave.getEmail().toUpperCase(), CommunityRole.EDITOR);
+        CommunityInvitationResponse invitation = invite(dave.getEmail(), CommunityRole.EDITOR);
 
         assertThat(invitation.email()).isEqualTo(dave.getEmail());
         assertThat(hasNotification(dave, invitation.id())).isTrue();

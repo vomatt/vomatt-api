@@ -23,10 +23,17 @@ public interface CommunityInvitationRepository extends JpaRepository<CommunityIn
     List<CommunityInvitation> findByCommunityUserIdOrderByCreatedAtAscIdAsc(UUID communityUserId);
 
     /**
+     * Deletes the invitation in one statement, so a concurrent delete of the same row is a miss (0), not a failure.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("DELETE FROM CommunityInvitation i WHERE i.id = :id")
+    int removeById(@Param("id") UUID id);
+
+    /**
      * Uses up every invitation of the community account to the user, by id or to their address, so a second one cannot
      * bring them back after they leave.
      */
-    @Modifying
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM CommunityInvitation i WHERE i.communityUserId = :communityId AND (i.userId = :userId OR i.email = :email)")
     void deleteForInvitee(@Param("communityId") UUID communityId, @Param("userId") UUID userId, @Param("email") String email);
 }

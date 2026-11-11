@@ -3,6 +3,7 @@ package com.vomatt.invitelists;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -20,7 +21,6 @@ import com.vomatt.common.email.EmailService;
 import com.vomatt.common.email.InvitationEmailLimiter;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
-import com.vomatt.common.security.ActingMember;
 import com.vomatt.common.util.AfterCommit;
 import com.vomatt.entity.InviteList;
 import com.vomatt.entity.InviteListMember;
@@ -121,7 +121,7 @@ public class InviteListService {
         Set<UUID> ids = new HashSet<>(orEmpty(request.getUserIds()));
         ids.remove(ownerId);
         // The DTO setter already normalized the addresses
-        Set<String> newEmails = new HashSet<>(orEmpty(request.getEmails()));
+        Set<String> newEmails = new LinkedHashSet<>(orEmpty(request.getEmails()));
         // Suspended users cannot be added by ID, same as unknown ones
         List<User> users = ids.isEmpty() ? List.of() : userRepository.findAllById(ids).stream().filter(User::isActive).toList();
         if (users.size() != ids.size()) {
@@ -160,15 +160,10 @@ public class InviteListService {
         return members(inviteList.getId());
     }
 
-    /**
-     * Mails each address a sign-up invitation from the owner, after commit, within the shared invitation email limits of
-     * the person adding them: the real member while acting as a community account, so more community accounts never
-     * mean more emails.
-     */
+    /** Mails each address a sign-up invitation from the owner, after commit, within the invitation email limits. */
     private void inviteToSignUp(InviteList inviteList, List<String> emails) {
         User owner = inviteList.getOwner();
-        UUID sender = ActingMember.current().map(ActingMember::memberId).orElse(owner.getId());
-        List<String> recipients = invitationEmailLimiter.claim(sender, inviteList.getId(), emails);
+        List<String> recipients = invitationEmailLimiter.claim(owner.getId(), inviteList.getId(), emails);
         if (recipients.isEmpty()) {
             return;
         }

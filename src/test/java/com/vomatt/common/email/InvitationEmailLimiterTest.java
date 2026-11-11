@@ -55,6 +55,23 @@ class InvitationEmailLimiterTest {
     }
 
     @Test
+    void shouldCountAgainstRealMemberWhenActingAsCommunity() {
+        UUID memberId = UUID.randomUUID();
+        var auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(senderId.toString(), null, List.of());
+        auth.setDetails(new com.vomatt.common.security.ActingMember(memberId, senderId, com.vomatt.entity.CommunityRole.EDITOR));
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
+        when(lookupService.configInt(anyString(), anyInt())).thenReturn(200);
+        when(redisService.incrementAndExpire(eq("email:invitation"), org.mockito.ArgumentMatchers.startsWith(memberId + ":"), eq(1L), any()))
+                .thenReturn(1L);
+        try {
+            assertThat(limiter.claim(senderId, scopeId, List.of("a@example.com"))).containsExactly("a@example.com");
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+        verify(repository).recordSent(eq(memberId), eq(scopeId), eq(List.of("a@example.com")), any());
+    }
+
+    @Test
     void shouldClaimOnlyWhatQuotaLeavesWhenLimitIsNearlyReached() {
         when(lookupService.configInt(anyString(), anyInt())).thenReturn(3);
         // 2 already sent today, then 2 more counted: only one fits under 3

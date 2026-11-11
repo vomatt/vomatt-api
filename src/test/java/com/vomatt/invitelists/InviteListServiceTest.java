@@ -157,23 +157,6 @@ class InviteListServiceTest {
     }
 
     @Test
-    @DisplayName("should count sign-up invitations against the real member when acting as a community account")
-    void shouldCountAgainstRealMemberWhenActingAsCommunity() {
-        lockInviteList();
-        UUID memberId = UUID.randomUUID();
-        var auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(ownerId.toString(), null, List.of());
-        auth.setDetails(new com.vomatt.common.security.ActingMember(memberId, ownerId, com.vomatt.entity.CommunityRole.EDITOR));
-        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
-        try {
-            inviteListService.addMembers(inviteListId.toString(), members(null, List.of("carol@example.com")), ownerId.toString());
-        } finally {
-            org.springframework.security.core.context.SecurityContextHolder.clearContext();
-        }
-
-        verify(invitationEmailLimiter).claim(memberId, inviteListId, List.of("carol@example.com"));
-    }
-
-    @Test
     @DisplayName("should send nothing when the limiter withholds every address (recently mailed or over the daily quota)")
     void shouldNotMailWhenLimiterWithholdsAddresses() {
         lockInviteList();

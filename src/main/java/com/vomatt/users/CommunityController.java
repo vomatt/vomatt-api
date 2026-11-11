@@ -486,6 +486,7 @@ public class CommunityController {
             - 400 `community.member.invalid`: the caller is suspended or is a community account
             - 404 `community.invitation.not_found`: no unexpired invitation with this id was sent to the caller, \
             or the community account is suspended
+            - 403 `community.locked`: the community account is locked; the invitation stays and can be accepted once it is unlocked
             """ + LIMIT_REACHED)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Joined",
             content = @Content(examples = @ExampleObject(name = "Membership", value = """

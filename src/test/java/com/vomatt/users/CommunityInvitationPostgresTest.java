@@ -88,6 +88,33 @@ class CommunityInvitationPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    void shouldDropPendingInvitationWhenMemberIsRemoved() {
+        communityService.acceptInvitation(UUID.fromString(invite(dave.getEmail(), CommunityRole.EDITOR).id()), dave.getId().toString());
+        em.flush();
+        // An address invitation never says whether the address is a member, so it is created and waits
+        CommunityInvitationResponse pending = invite(dave.getEmail(), CommunityRole.OWNER);
+
+        communityService.removeMember(communityId, dave.getId(), owner.getId().toString());
+        em.flush();
+
+        assertThat(hasNotification(dave, pending.id())).isFalse();
+        assertKey(() -> communityService.acceptInvitation(UUID.fromString(pending.id()), dave.getId().toString()),
+                MessageKey.COMMUNITY_INVITATION_NOT_FOUND);
+    }
+
+    @Test
+    void shouldRefuseAcceptAndKeepInvitationWhenCommunityIsLocked() {
+        CommunityInvitationResponse invitation = invite(dave.getEmail(), CommunityRole.EDITOR);
+        em.createNativeQuery("UPDATE vomatt.users SET locked_at = now() WHERE id = :id").setParameter("id", communityId).executeUpdate();
+        em.clear();
+
+        assertKey(() -> communityService.acceptInvitation(UUID.fromString(invitation.id()), dave.getId().toString()),
+                MessageKey.COMMUNITY_LOCKED);
+        assertThat(memberRepository.findActiveRole(communityId, dave.getId())).isEmpty();
+        assertThat(invitationRepository.existsById(UUID.fromString(invitation.id()))).isTrue();
+    }
+
+    @Test
     void shouldRefuseAcceptWhenCallerIsNotTheInvitedAddress() {
         CommunityInvitationResponse invitation = invite(dave.getEmail(), CommunityRole.EDITOR);
 

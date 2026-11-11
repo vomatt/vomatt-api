@@ -130,9 +130,8 @@ public class CommunityService {
             if (!existing.isExpiredAt(now)) {
                 throw ApiException.conflict(MessageKey.COMMUNITY_INVITATION_EXISTS);
             }
-            invitationRepository.delete(existing);
-            // Hibernate flushes inserts before deletes; flush now so the replacement cannot hit the unique key
-            invitationRepository.flush();
+            // Runs now, before the insert; a concurrent replacement that deleted it first makes the insert conflict
+            invitationRepository.removeById(existing.getId());
         });
         CommunityInvitation invitation;
         try {
@@ -182,7 +181,7 @@ public class CommunityService {
         CommunityInvitation invitation = invitationRepository.findByIdAndCommunityUserId(invitationId, communityId)
                 .orElseThrow(() -> ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
         requireGrant(caller, invitation.getRole());
-        invitationRepository.delete(invitation);
+        removeOrNotFound(invitation.getId());
         log.info("Community account {}: {} revoked invitation {}", communityId, callerId, invitationId);
     }
 
@@ -198,14 +197,18 @@ public class CommunityService {
         userRepository.lockKeyShare(List.of(invitation.getCommunityUserId(), caller.getId()));
         User community = userRepository.findById(invitation.getCommunityUserId()).filter(User::isActive)
                 .orElseThrow(() -> ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
-        // A member keeps their role. Insert-or-keep, so a double-tapped accept cannot fail on the primary key
+        if (community.getLockedAt() != null) {
+            throw ApiException.forbidden(MessageKey.COMMUNITY_LOCKED);
+        }
+        // A member keeps their role. Insert-or-keep, then read what is stored: a concurrent accept may have won the
+        // primary key with another invitation's role
         CommunityRole role = memberRepository.findByCommunityUserIdAndUserId(community.getId(), caller.getId())
                 .map(CommunityMember::getRole).orElseGet(() -> {
                     if (invitation.getRole() == OWNER) {
                         planService.requireRoom(caller.getId());
                     }
                     memberRepository.insertIfAbsent(community.getId(), caller.getId(), invitation.getRole().name());
-                    return invitation.getRole();
+                    return memberRepository.findByCommunityUserIdAndUserId(community.getId(), caller.getId()).orElseThrow().getRole();
                 });
         invitationRepository.deleteForInvitee(community.getId(), caller.getId(), caller.getEmail());
         log.info("Community account {}: {} accepted invitation {} as {}", community.getId(), callerId, invitationId, role);
@@ -216,8 +219,14 @@ public class CommunityService {
     public void declineInvitation(UUID invitationId, String callerId) {
         User caller = userRepository.findById(UUID.fromString(callerId))
                 .orElseThrow(() -> ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
-        invitationRepository.delete(findOwnInvitation(invitationId, caller));
+        removeOrNotFound(findOwnInvitation(invitationId, caller).getId());
         log.info("User {} declined community invitation {}", callerId, invitationId);
+    }
+
+    private void removeOrNotFound(UUID invitationId) {
+        if (invitationRepository.removeById(invitationId) == 0) {
+            throw ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND);
+        }
     }
 
     private static MyCommunityResponse toMine(User community, CommunityRole role) {
@@ -267,6 +276,8 @@ public class CommunityService {
             requireAnotherOwner(communityId, userId);
         }
         memberRepository.delete(member);
+        // An invitation sent while they were a member (by address, which never says so) must not bring them back
+        invitationRepository.deleteForInvitee(communityId, userId, userRepository.getReferenceById(userId).getEmail());
         planService.reconcile(List.of(userId));
         log.info("Community account {}: {} removed {}", communityId, callerId, userId);
     }

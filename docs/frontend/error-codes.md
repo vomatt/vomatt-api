@@ -137,7 +137,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `report.not_ready` | 403 | 投票結束並公布結果後才能查看報告 | The report is available once the poll has ended and its results are revealed | Show a permission-denied notice | PollReportService |
 | `report.cancelled` | 400 | 已取消的投票沒有結果報告 | A cancelled poll has no result report | Show message so the user can fix the input | PollReportService |
 | `community.limit_reached` | 403 | 已達方案可擁有的社群帳號數量上限 | You own as many community accounts as your plan allows | Show a permission-denied notice | PlanService |
-| `community.locked` | 403 | 此社群帳號已鎖定，升級方案或解鎖後才能使用 | This community account is locked; upgrade your plan or unlock it to use it | Show a permission-denied notice | ActAsFilter |
+| `community.locked` | 403 | 此社群帳號已鎖定，升級方案或解鎖後才能使用 | This community account is locked; upgrade your plan or unlock it to use it | Show a permission-denied notice | ActAsFilter, CommunityService |
 | `community.keep.invalid` | 400 | 要保留的社群帳號數量須等於方案上限（擁有的較少時須全選），且都是你擁有的社群帳號 | Choose as many community accounts as your plan allows (all of them if you own fewer), all owned by you | Show message so the user can fix the input | PlanService |
 | `billing.unavailable` | 503 | 付費方案即將推出 | Paid plans are coming soon | Show service temporarily unavailable, retry later | BillingController |
 

@@ -17,13 +17,14 @@ import com.vomatt.common.util.TextUtil;
 import com.vomatt.lookups.LookupService;
 import com.vomatt.repository.InvitationEmailRepository;
 
+import com.vomatt.common.security.ActingMember;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * The one daily budget of invitation emails per sender (a user, or a community account), shared by Poll invitations,
- * Invite List members and community account invitations; admins tune it with the {@code config} lookup
- * {@value #LIMIT_KEY}.
+ * The one daily budget of invitation emails per person, shared by Poll invitations, Invite List members and community
+ * account invitations; admins tune it with the {@code config} lookup {@value #LIMIT_KEY}. While a member acts as a
+ * community account the budget is the member's own, so more community accounts never mean more emails.
  */
 @Slf4j
 @Component
@@ -46,7 +47,7 @@ public class InvitationEmailLimiter {
      * Takes up to {@code n} emails from the sender's daily quota with one INCRBY; the counter moves by {@code n} even
      * over the cap, as {@code n} single increments would. Fails closed: when Redis is down nothing is sent.
      */
-    public int takeQuota(UUID senderId, int n) {
+    private int takeQuota(UUID senderId, int n) {
         // Read before counting and outside the catch: a failing lookup query must not be swallowed inside the caller's transaction
         int limit = lookupService.configInt(LIMIT_KEY, dailyLimit);
         try {
@@ -64,9 +65,10 @@ public class InvitationEmailLimiter {
      */
     public List<String> claim(UUID senderId, UUID scopeId, Collection<String> emails) {
         OffsetDateTime now = OffsetDateTime.now();
-        return claim(senderId, emails,
-                unsent -> invitationEmailRepository.findSentSince(senderId, scopeId, unsent, now.minus(RESEND_AFTER)),
-                recipients -> invitationEmailRepository.recordSent(senderId, scopeId, recipients, now));
+        UUID sender = realSender(senderId);
+        return claim(sender, emails,
+                unsent -> invitationEmailRepository.findSentSince(sender, scopeId, unsent, now.minus(RESEND_AFTER)),
+                recipients -> invitationEmailRepository.recordSent(sender, scopeId, recipients, now));
     }
 
     /**
@@ -79,19 +81,25 @@ public class InvitationEmailLimiter {
         if (emails.isEmpty()) {
             return List.of();
         }
+        UUID sender = realSender(senderId);
         List<String> unsent = new ArrayList<>(emails);
         unsent.removeAll(alreadySent.apply(emails));
         if (unsent.isEmpty()) {
             return List.of();
         }
-        int allowed = takeQuota(senderId, unsent.size());
+        int allowed = takeQuota(sender, unsent.size());
         if (allowed < unsent.size()) {
-            log.warn("Invitation email daily limit reached: {} invitation(s) by sender {} not sent", unsent.size() - allowed, senderId);
+            log.warn("Invitation email daily limit reached: {} invitation(s) by sender {} not sent", unsent.size() - allowed, sender);
         }
         List<String> recipients = List.copyOf(unsent.subList(0, allowed));
         if (!recipients.isEmpty()) {
             record.accept(recipients);
         }
         return recipients;
+    }
+
+    /** The member acting as the community account {@code senderId}, or the sender itself. */
+    private static UUID realSender(UUID senderId) {
+        return ActingMember.current().map(ActingMember::memberId).orElse(senderId);
     }
 }

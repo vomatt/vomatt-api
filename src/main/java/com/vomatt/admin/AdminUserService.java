@@ -104,6 +104,7 @@ public class AdminUserService {
         requireNotSelf(user, actorId);
         userService.requireAnotherActiveAdmin(user);
         user.setActive(false);
+        planService.reconcileOwners(userId);
         userService.revokeTokensAfterCommit(userId.toString());
         log.info("User {} suspended by admin {}", userId, actorId);
         return detail(user);
@@ -112,6 +113,7 @@ public class AdminUserService {
     public AdminUserDetail unsuspend(UUID userId, String actorId) {
         User user = findUser(userId);
         user.setActive(true);
+        planService.reconcileOwners(userId);
         log.info("User {} unsuspended by admin {}", userId, actorId);
         return detail(user);
     }

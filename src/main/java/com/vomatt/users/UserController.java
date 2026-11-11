@@ -336,19 +336,21 @@ public class UserController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Not a valid choice (errorCode `community.keep.invalid`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"Choose no more community accounts than your plan allows, all owned by you","errorCode":"community.keep.invalid","error":"Choose no more community accounts than your plan allows, all owned by you"}""")))
+                            {"success":false,"data":null,"message":"Choose as many community accounts as your plan allows (all of them if you own fewer), all owned by you","errorCode":"community.keep.invalid","error":"Choose as many community accounts as your plan allows (all of them if you own fewer), all owned by you"}""")))
     @Operation(summary = "Choose which community accounts to keep", description = """
             **Auth**: required (the real member, also while acting)
-            **Precondition**: every id is a community account the caller is an OWNER of, and there are at most \
-            `communityQuota.limit` of them
+            **Precondition**: every id is an active community account the caller is an OWNER of, and there are exactly \
+            `communityQuota.limit` of them, or all of them when the caller owns fewer
             **Behavior**: the caller keeps exactly these unlocked: every other community account they own is locked, and a \
             chosen one that was locked is unlocked. Ends `communityQuota.selectionRequired`. Sending the same choice again \
             changes nothing. Used after a downgrade, before `selectionDeadline`; afterwards it swaps which ones stay unlocked.
             **Side effects**: each account locked or unlocked is audit-logged as `LOCK` / `UNLOCK` on `COMMUNITY` with \
-            `reason=USER_CHOICE`. A locked account stays readable; writes as it answer 403 `community.locked`
+            `reason=USER_CHOICE`. A locked account stays readable; writes as it answer 403 `community.locked`. A chosen \
+            account that another OWNER also owns counts toward their limit again, so they may get `selectionRequired`
             **Errors**:
             - 400 `common.validation_failed`: `communityIds` missing or empty
-            - 400 `community.keep.invalid`: more ids than the limit, or an id the caller is not an OWNER of
+            - 400 `community.keep.invalid`: not as many ids as the limit (all owned ones when fewer), or an id the caller is not \
+            an OWNER of
             - 409 `common.conflict`: another change to the caller's community accounts is in progress; retry""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> keepCommunities(@Valid @RequestBody KeepCommunitiesRequest request,
                                                                              @AuthenticationPrincipal UserPrincipal principal) {

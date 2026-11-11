@@ -138,6 +138,8 @@ app:
     site-url: ${EMAIL_SITE_URL:https://vomatt.com}
     # Frontend path of a Poll, appended to site-url in invitation emails; {voteId} is replaced
     poll-path: ${EMAIL_POLL_PATH:/poll/{voteId}}
+    # Frontend sign-up page, appended to site-url in invitations for addresses with no account
+    signup-path: ${EMAIL_SIGNUP_PATH:/login}
     # Invitation emails one owner may trigger per UTC day; over it the Invitees are still added, only the email is skipped
     invitation-daily-limit: ${EMAIL_INVITATION_DAILY_LIMIT:200}
   security:

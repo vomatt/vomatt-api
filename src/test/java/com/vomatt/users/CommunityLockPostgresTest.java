@@ -321,7 +321,7 @@ class CommunityLockPostgresTest extends PostgresRepositoryTest {
     void shouldUnlockOnlyWithRoomWhenOwnerUnlocks() {
         User friend = persistUser("friend-" + UUID.randomUUID().toString().substring(0, 8));
         em.flush();
-        communityService.addMember(first, friend.getId(), CommunityRole.EDITOR, owner.getId().toString());
+        join(first, friend, CommunityRole.EDITOR, owner.getId().toString());
         downgrade();
         planService.keep(owner.getId(), Set.of(first));
 
@@ -340,7 +340,7 @@ class CommunityLockPostgresTest extends PostgresRepositoryTest {
     void shouldTransferLeaveAndReadWhenCommunityIsLocked() {
         User friend = persistUser("heir-" + UUID.randomUUID().toString().substring(0, 8));
         em.flush();
-        communityService.addMember(third, friend.getId(), CommunityRole.ADMIN, owner.getId().toString());
+        join(third, friend, CommunityRole.ADMIN, owner.getId().toString());
         actAs(third);
         CreateVoteRequest request = new CreateVoteRequest();
         request.setTitle("Before the lock");
@@ -520,5 +520,11 @@ class CommunityLockPostgresTest extends PostgresRepositoryTest {
         CreateVoteRequest.VoteOptionRequest option = new CreateVoteRequest.VoteOptionRequest();
         option.setText(text);
         return option;
+    }
+
+    /** Invites the user by id and has them accept: the one way to add a member. */
+    private void join(UUID community, User user, CommunityRole role, String inviterId) {
+        String invitationId = communityService.invite(community, user.getId(), null, role, inviterId).id();
+        communityService.acceptInvitation(UUID.fromString(invitationId), user.getId().toString());
     }
 }

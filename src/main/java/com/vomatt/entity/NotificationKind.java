@@ -30,6 +30,11 @@ public enum NotificationKind {
     /** Someone liked the user's Poll. Source: the like row. */
     POLL_LIKE(NotificationCategory.LIKE),
     /**
+     * A community account invited the user, by id or the address of their account, and the invitation waits for an answer (unexpired,
+     * the user not yet a member). Source: the invitation.
+     */
+    COMMUNITY_INVITATION(NotificationCategory.INVITATION),
+    /**
      * A community account the user is an OWNER of was locked because its selection deadline passed without a choice.
      * Source: the LOCK audit entry.
      */

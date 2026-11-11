@@ -18,6 +18,7 @@ import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.Cursor;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.util.UUIDv7Generator;
+import com.vomatt.entity.CommunityInvitation;
 import com.vomatt.entity.NotificationCategory;
 import com.vomatt.entity.NotificationKind;
 import com.vomatt.entity.UserPreference;
@@ -30,6 +31,7 @@ import com.vomatt.notifications.dto.UnreadCountResponse;
 import com.vomatt.notifications.dto.UnreadIdsResponse;
 import com.vomatt.notifications.dto.UpdateNotificationPreferencesRequest;
 import com.vomatt.repository.BallotSelection;
+import com.vomatt.repository.CommunityInvitationRepository;
 import com.vomatt.repository.NotificationRepository;
 import com.vomatt.repository.NotificationRepository.NotificationRow;
 import com.vomatt.repository.UserPreferenceRepository;
@@ -67,6 +69,7 @@ public class NotificationService {
     private final UserService userService;
     private final VoteService voteService;
     private final VoteMapper voteMapper;
+    private final CommunityInvitationRepository invitationRepository;
 
     /** The caller's feed, newest first, of the kinds their preferences leave on, only {@code category}'s when given. */
     @Transactional(readOnly = true)
@@ -211,6 +214,9 @@ public class NotificationService {
                 .collect(Collectors.toMap(BallotSelection::getVoteId, BallotSelection::getOptionId, (a, b) -> a));
         Map<UUID, VoteComment> comments = commentRepository.findAllById(ids(rows, NotificationRow::commentId)).stream()
                 .collect(Collectors.toMap(VoteComment::getId, Function.identity()));
+        Map<UUID, CommunityInvitation> invitations = invitationRepository.findAllById(rows.stream()
+                        .filter(row -> row.kind() == NotificationKind.COMMUNITY_INVITATION).map(NotificationRow::sourceId).toList())
+                .stream().collect(Collectors.toMap(CommunityInvitation::getId, Function.identity()));
         OffsetDateTime now = OffsetDateTime.now();
         return rows.stream().map(row -> new NotificationResponse(
                 new NotificationId(row.kind(), row.sourceId()).toString(),
@@ -220,7 +226,8 @@ public class NotificationService {
                 row.read(),
                 row.actorId() == null ? null : actors.get(row.actorId()),
                 row.voteId() == null ? null : toPollSummary(polls.get(row.voteId()), myOptions.get(row.voteId()), now),
-                row.commentId() == null ? null : toCommentSummary(comments.get(row.commentId()))))
+                row.commentId() == null ? null : toCommentSummary(comments.get(row.commentId())),
+                toInvitationSummary(invitations.get(row.sourceId()))))
                 .toList();
     }
 
@@ -237,6 +244,12 @@ public class NotificationService {
                 winners == null ? null : winners.stream().map(option -> option.getId().toString()).toList(),
                 winners == null ? null : winners.stream().map(VoteOption::getText).toList(),
                 winners == null ? null : winners.size() > 1);
+    }
+
+    // Null for other kinds, whose source ids never match an invitation
+    private static NotificationResponse.CommunityInvitationSummary toInvitationSummary(CommunityInvitation invitation) {
+        return invitation == null ? null : new NotificationResponse.CommunityInvitationSummary(invitation.getId().toString(),
+                invitation.getRole(), invitation.getExpiresAt());
     }
 
     private static NotificationResponse.CommentSummary toCommentSummary(VoteComment comment) {

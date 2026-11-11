@@ -26,12 +26,17 @@ import org.thymeleaf.context.Context;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -65,6 +70,12 @@ public class EmailServiceImpl implements EmailService {
 
     @Value("${app.email.poll-path:/poll/{voteId}}")
     private String pollPath;
+
+    // Where a join invitation's button leads: the sign-up page, as signing up with the address is what joins
+    @Value("${app.email.signup-path:/login}")
+    private String signupPath;
+
+    private static final DateTimeFormatter SENT_AT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     @Value("${otp.ttl-seconds:180}")
     private long otpTtlSeconds;
@@ -145,12 +156,17 @@ public class EmailServiceImpl implements EmailService {
     @Async
     @Override
     public void sendInvitationEmails(List<String> recipients, String inviterName, String pollTitle, UUID pollId, Locale locale) {
+        sendPaced("vote " + pollId, recipients, to -> sendInvitationEmail(to, inviterName, pollTitle, pollId, locale));
+    }
+
+    // One after another; over Resend, paced under its per-second rate limit
+    private void sendPaced(String batch, List<String> recipients, Consumer<String> send) {
         for (int i = 0; i < recipients.size(); i++) {
             if (i > 0 && resend != null && !pause(RESEND_SEND_INTERVAL)) {
-                log.warn("Invitation emails for vote {} interrupted, {} not sent", pollId, recipients.size() - i);
+                log.warn("Invitation emails for {} interrupted, {} not sent", batch, recipients.size() - i);
                 return;
             }
-            sendInvitationEmail(recipients.get(i), inviterName, pollTitle, pollId, locale);
+            send.accept(recipients.get(i));
         }
     }
 
@@ -173,6 +189,38 @@ public class EmailServiceImpl implements EmailService {
             log.info("Invitation email for vote {} sent to: {}", pollId, TextUtil.maskEmail(to));
         } catch (MessagingException | ResendException | RuntimeException e) {
             log.error("Failed to send invitation email for vote {} to: {}", pollId, TextUtil.maskEmail(to), e);
+        }
+    }
+
+    @Async
+    @Override
+    public void sendSignupInvitationEmails(List<String> recipients, String inviterName, Locale locale) {
+        sendPaced("sign-up invitations", recipients, to -> sendJoinInvitation(to, "vomatt", locale, Map.of("inviterName", Objects.toString(inviterName, ""))));
+    }
+
+    @Async
+    @Override
+    public void sendCommunityInvitationEmail(String to, String inviterName, String inviterUsername, String communityName,
+                                             String role, Duration expiresIn, Locale locale) {
+        sendJoinInvitation(to, "community", locale,
+                Map.of("inviterName", Objects.toString(inviterName, ""), "inviterUsername", inviterUsername,
+                        "communityName", communityName, "role", role, "expiresDays", expiresIn.toDays()));
+    }
+
+    // Shaped like a team invitation: greeting by address, the invite, a button and its URL, then when and to whom it was
+    // sent. kind picks the texts, email.join.<kind>.*
+    private void sendJoinInvitation(String to, String kind, Locale locale, Map<String, Object> variables) {
+        String subjectKey = "email.join." + kind + ".subject";
+        Map<String, Object> all = new HashMap<>(variables);
+        all.put("kind", kind);
+        all.put("email", to);
+        all.put("joinUrl", siteUrl + signupPath);
+        all.put("sentAt", OffsetDateTime.now(ZoneOffset.UTC).format(SENT_AT));
+        try {
+            send(to, subjectKey, "email/join-invitation-email", locale, all);
+            log.info("Join invitation email ({}) sent to: {}", subjectKey, TextUtil.maskEmail(to));
+        } catch (MessagingException | ResendException | RuntimeException e) {
+            log.error("Failed to send join invitation email ({}) to: {}", subjectKey, TextUtil.maskEmail(to), e);
         }
     }
 

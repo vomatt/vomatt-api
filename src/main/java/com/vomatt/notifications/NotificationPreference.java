@@ -9,7 +9,8 @@ import com.vomatt.entity.NotificationKind;
 
 /**
  * The switches of {@code /api/users/me/notification-preferences}, each turning a set of kinds on or off. A kind switched
- * off is left out of the feed and the unread count. FOLLOWED has no switch, so the feed is never empty of kinds.
+ * off is left out of the feed and the unread count. FOLLOWED has no switch, so the feed is never empty of kinds; nor
+ * has COMMUNITY_INVITATION, as an invitation waiting for an answer must not be hidden.
  * Stored in {@code user_preferences} under {@link #preferenceKey()}; unset means {@link #onByDefault}.
  */
 public enum NotificationPreference {

@@ -74,8 +74,9 @@ class CommunityDeletePostgresTest extends PostgresRepositoryTest {
             em.flush();
             communityUsername = "community_" + UUID.randomUUID().toString().substring(0, 8);
             communityId = UUID.fromString(communityService.createCommunity(communityUsername, "Sunrise Tower", owner.getId()).id());
-            communityService.addMember(communityId, admin.getId(), CommunityRole.ADMIN, owner.getId().toString());
         });
+        // Joins later than the owner, as a real invitation does, so the members are listed in that order
+        tx.executeWithoutResult(s -> join(communityId, admin, CommunityRole.ADMIN, owner.getId().toString()));
     }
 
     @AfterEach
@@ -122,7 +123,9 @@ class CommunityDeletePostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    void shouldRefuseAddingMemberWhenCommunityIsDeletedMeanwhile() throws Exception {
+    void shouldRefuseAcceptingWhenCommunityIsDeletedMeanwhile() throws Exception {
+        UUID invitationId = tx.execute(s -> UUID.fromString(communityService.invite(communityId, newcomer.getId(), null,
+                CommunityRole.EDITOR, admin.getId().toString()).id()));
         CountDownLatch deleted = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         Future<?> delete = pool.submit(() -> tx.executeWithoutResult(s -> {
@@ -133,13 +136,13 @@ class CommunityDeletePostgresTest extends PostgresRepositoryTest {
         assertThat(deleted.await(5, TimeUnit.SECONDS)).isTrue();
 
         Future<?> add = pool.submit(() -> tx.executeWithoutResult(s ->
-                communityService.addMember(communityId, newcomer.getId(), CommunityRole.EDITOR, admin.getId().toString())));
+                communityService.acceptInvitation(invitationId, newcomer.getId().toString())));
         assertThatThrownBy(() -> add.get(500, TimeUnit.MILLISECONDS)).as("waits for the delete").isInstanceOf(TimeoutException.class);
         release.countDown();
         delete.get(5, TimeUnit.SECONDS);
 
         assertThatThrownBy(() -> add.get(5, TimeUnit.SECONDS)).cause()
-                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMUNITY_NOT_MEMBER));
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
     }
 
     private static void await(CountDownLatch latch) {
@@ -148,5 +151,11 @@ class CommunityDeletePostgresTest extends PostgresRepositoryTest {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    /** Invites the user by id and has them accept: the one way to add a member. */
+    private void join(UUID community, User user, CommunityRole role, String inviterId) {
+        String invitationId = communityService.invite(community, user.getId(), null, role, inviterId).id();
+        communityService.acceptInvitation(UUID.fromString(invitationId), user.getId().toString());
     }
 }

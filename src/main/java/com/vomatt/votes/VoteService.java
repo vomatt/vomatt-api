@@ -11,6 +11,7 @@ import com.vomatt.common.util.TextUtil;
 import com.vomatt.common.util.UUIDv7Generator;
 import com.vomatt.common.util.UserGuard;
 import com.vomatt.common.email.EmailService;
+import com.vomatt.common.email.InvitationEmailLimiter;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.dto.ReportRequest;
@@ -32,7 +33,6 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
@@ -112,17 +112,13 @@ public class VoteService {
     private final VoteViewRecorder viewRecorder;
     private final VoteReportRepository voteReportRepository;
     private final VoteBookmarkRepository bookmarkRepository;
+    private final InvitationEmailLimiter invitationEmailLimiter;
 
-    private static final String INVITATION_COUNTER_NS = "email:invitation";
     private static final String BALLOT_RATE_LIMIT_NS = "rate:limit:ballot";
-    // Admin overrides (lookup type config); without one the app.* settings below apply
-    static final String INVITATION_LIMIT_KEY = "invitation_email_daily_limit";
+    // Admin overrides (lookup type config)
     static final String MAX_OPTIONS_KEY = "vote_max_options";
     static final String MAX_DURATION_DAYS_KEY = "vote_max_duration_days";
     static final String DELETE_WINDOW_MINUTES_KEY = "vote_delete_window_minutes";
-
-    @Value("${app.email.invitation-daily-limit:200}")
-    private int invitationDailyLimit;
 
     public VoteResponse createVote(CreateVoteRequest request, String creatorId) {
         validateCreateVoteRequest(request, request.getStartTime(), request.getRevealAt());
@@ -816,43 +812,16 @@ public class VoteService {
         }
         User owner = vote.getCreator();
         UUID voteId = vote.getId();
-        List<String> unsent = new ArrayList<>(emails);
-        unsent.removeAll(inviteeRepository.findInvitationsSent(voteId, emails));
-        if (unsent.isEmpty()) {
+        List<String> recipients = invitationEmailLimiter.claim(owner.getId(), emails,
+            unsent -> inviteeRepository.findInvitationsSent(voteId, unsent),
+            sent -> inviteeRepository.recordInvitationsSent(voteId, sent.toArray(String[]::new)));
+        if (recipients.isEmpty()) {
             return;
         }
-        int allowed = takeInvitationQuota(owner.getId(), unsent.size());
-        if (allowed < unsent.size()) {
-            log.warn("Invitation email daily limit reached: {} invitation(s) for vote {} by owner {} not sent",
-                unsent.size() - allowed, voteId, owner.getId());
-        }
-        if (allowed == 0) {
-            return;
-        }
-        List<String> recipients = List.copyOf(unsent.subList(0, allowed));
-        inviteeRepository.recordInvitationsSent(voteId, recipients.toArray(String[]::new));
-        String inviterName = owner.getDisplayName() != null ? owner.getDisplayName() : owner.getUsername();
+        String inviterName = owner.displayNameOrUsername();
         String title = vote.getTitle();
         Locale locale = LocaleContextHolder.getLocale();
         AfterCommit.run(() -> emailService.sendInvitationEmails(recipients, inviterName, title, voteId, locale));
-    }
-
-    /**
-     * Takes up to {@code n} emails from the owner's daily quota with one INCRBY; the counter moves by {@code n} even
-     * over the cap, as {@code n} single increments would. Fails closed: when Redis is down no invitation is sent, but
-     * the Invitees are still saved.
-     */
-    private int takeInvitationQuota(UUID ownerId, int n) {
-        // Read before counting and outside the catch: a failing lookup query must not be swallowed inside this transaction
-        int limit = lookupService.configInt(INVITATION_LIMIT_KEY, invitationDailyLimit);
-        try {
-            String day = TextUtil.utcDay();
-            long count = redisService.incrementAndExpire(INVITATION_COUNTER_NS, ownerId + ":" + day, n, Duration.ofDays(1));
-            return Math.clamp(limit - (count - n), 0, n);
-        } catch (RuntimeException e) {
-            log.warn("Invitation email limit check failed for owner {}: {}", ownerId, e.getMessage());
-            return 0;
-        }
     }
 
     // Runs before any row lock so throttled requests never touch the Poll; fails open like RateLimitFilter's write path

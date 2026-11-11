@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -49,6 +50,8 @@ class InviteListServiceTest {
     @Mock UserRepository userRepository;
     @Spy InviteListMapper inviteListMapper = new InviteListMapper();
     @Mock LookupService lookupService;
+    @Mock com.vomatt.common.email.InvitationEmailLimiter invitationEmailLimiter;
+    @Mock com.vomatt.common.email.EmailService emailService;
 
     @InjectMocks
     InviteListService inviteListService;
@@ -133,6 +136,35 @@ class InviteListServiceTest {
         assertThat(saved()).extracting(m -> m.getUser() == null ? null : m.getUser().getId(), InviteListMember::getEmail)
                 .containsExactlyInAnyOrder(org.assertj.core.groups.Tuple.tuple(bob.getId(), "bob@example.com"),
                         org.assertj.core.groups.Tuple.tuple(null, "carol@example.com"));
+    }
+
+    @Test
+    @DisplayName("should mail a sign-up invitation only to new addresses with no account at all, active or suspended")
+    void shouldInviteToSignUpWhenAddedAddressHasNoAccount() {
+        lockInviteList();
+        User bob = User.builder().id(UUID.randomUUID()).email("bob@example.com").build();
+        User dave = User.builder().id(UUID.randomUUID()).email("dave@example.com").active(false).build();
+        when(inviteListMemberRepository.findByInviteListId(inviteListId))
+                .thenReturn(List.of(new InviteListMember(inviteList, "erin@example.com")));
+        when(userRepository.findByEmailIn(Set.of("bob@example.com", "carol@example.com", "dave@example.com")))
+                .thenReturn(List.of(bob, dave));
+        when(invitationEmailLimiter.claim(ownerId, inviteListId, List.of("carol@example.com"))).thenReturn(List.of("carol@example.com"));
+
+        inviteListService.addMembers(inviteListId.toString(), members(null,
+                List.of("bob@example.com", "carol@example.com", "dave@example.com", "erin@example.com")), ownerId.toString());
+
+        verify(emailService).sendSignupInvitationEmails(eq(List.of("carol@example.com")), eq("alice"), any());
+    }
+
+    @Test
+    @DisplayName("should send nothing when the limiter withholds every address (recently mailed or over the daily quota)")
+    void shouldNotMailWhenLimiterWithholdsAddresses() {
+        lockInviteList();
+        when(invitationEmailLimiter.claim(ownerId, inviteListId, List.of("carol@example.com"))).thenReturn(List.of());
+
+        inviteListService.addMembers(inviteListId.toString(), members(null, List.of("carol@example.com")), ownerId.toString());
+
+        verify(emailService, never()).sendSignupInvitationEmails(any(), any(), any());
     }
 
     @Test

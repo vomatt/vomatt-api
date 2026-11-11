@@ -3,19 +3,25 @@ package com.vomatt.invitelists;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.vomatt.lookups.LookupService;
+import com.vomatt.common.email.EmailService;
+import com.vomatt.common.email.InvitationEmailLimiter;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.common.util.AfterCommit;
 import com.vomatt.entity.InviteList;
 import com.vomatt.entity.InviteListMember;
 import com.vomatt.entity.User;
@@ -33,7 +39,8 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Invite Lists are owner-only: another user's Invite List is {@code invite_list.not_found} on every path, so its existence never leaks.
- * Members are never notified; they only matter once an Invite List is invited into a Poll.
+ * Members get no notification; they only matter once an Invite List is invited into a Poll. An address added by email
+ * that has no account is mailed an invitation to sign up.
  */
 @Service
 @RequiredArgsConstructor
@@ -52,6 +59,8 @@ public class InviteListService {
     private final UserRepository userRepository;
     private final InviteListMapper inviteListMapper;
     private final LookupService lookupService;
+    private final InvitationEmailLimiter invitationEmailLimiter;
+    private final EmailService emailService;
 
     /** An Invite List's members as they are now: users added by ID and addresses added by email. */
     public record Members(List<UUID> userIds, List<String> emails) {
@@ -112,7 +121,7 @@ public class InviteListService {
         Set<UUID> ids = new HashSet<>(orEmpty(request.getUserIds()));
         ids.remove(ownerId);
         // The DTO setter already normalized the addresses
-        Set<String> newEmails = new HashSet<>(orEmpty(request.getEmails()));
+        Set<String> newEmails = new LinkedHashSet<>(orEmpty(request.getEmails()));
         // Suspended users cannot be added by ID, same as unknown ones
         List<User> users = ids.isEmpty() ? List.of() : userRepository.findAllById(ids).stream().filter(User::isActive).toList();
         if (users.size() != ids.size()) {
@@ -128,8 +137,8 @@ public class InviteListService {
         existing.forEach(m -> newEmails.remove(m.getEmail()));
         List<InviteListMember> added = new ArrayList<>();
         users.stream().filter(u -> membersById.add(u.getId())).forEach(u -> added.add(new InviteListMember(inviteList, u)));
-        Map<String, User> accounts = newEmails.isEmpty() ? Map.of() : userRepository.findByEmailIn(newEmails).stream()
-            .filter(User::isActive).collect(Collectors.toMap(User::getEmail, u -> u));
+        List<User> found = newEmails.isEmpty() ? List.of() : userRepository.findByEmailIn(newEmails);
+        Map<String, User> accounts = found.stream().filter(User::isActive).collect(Collectors.toMap(User::getEmail, u -> u));
         for (String email : newEmails) {
             User account = accounts.get(email);
             if (account == null) {
@@ -145,7 +154,22 @@ public class InviteListService {
         }
         inviteListMemberRepository.saveAllAndFlush(added);
         log.info("{} member(s) added to Invite List {} by user {}", added.size(), inviteListId, userId);
+        // Only an address with no account at all is invited to sign up; a suspended account's owner cannot
+        Set<String> known = found.stream().map(User::getEmail).collect(Collectors.toSet());
+        inviteToSignUp(inviteList, newEmails.stream().filter(email -> !known.contains(email)).toList());
         return members(inviteList.getId());
+    }
+
+    /** Mails each address a sign-up invitation from the owner, after commit, within the invitation email limits. */
+    private void inviteToSignUp(InviteList inviteList, List<String> emails) {
+        User owner = inviteList.getOwner();
+        List<String> recipients = invitationEmailLimiter.claim(owner.getId(), inviteList.getId(), emails);
+        if (recipients.isEmpty()) {
+            return;
+        }
+        String inviterName = owner.displayNameOrUsername();
+        Locale locale = LocaleContextHolder.getLocale();
+        AfterCommit.run(() -> emailService.sendSignupInvitationEmails(recipients, inviterName, locale));
     }
 
     /** Removes the member added by this user ID; a no-op when there is none. */

@@ -1,5 +1,6 @@
 package com.vomatt.common.email;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -33,4 +34,18 @@ public interface EmailService {
      * @param locale captured from the inviting owner's request, because the background thread has no request locale
      */
     void sendInvitationEmails(List<String> recipients, String inviterName, String pollTitle, UUID pollId, Locale locale);
+
+    /**
+     * Invites each address, which has no account, to sign up, on behalf of an Invite List owner; one background task
+     * mails them one after another, failures are only logged. Callers record the addresses as sent before this runs.
+     */
+    void sendSignupInvitationEmails(List<String> recipients, String inviterName, Locale locale);
+
+    /**
+     * Invites an address with no account to join a community account in the background, failures only logged: once
+     * signed up with the address, the invitee accepts it like any other ({@code role} is an enum name, labelled from
+     * {@code community.role.*}).
+     */
+    void sendCommunityInvitationEmail(String to, String inviterName, String inviterUsername, String communityName,
+                                      String role, Duration expiresIn, Locale locale);
 }

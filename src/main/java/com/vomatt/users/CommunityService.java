@@ -25,6 +25,20 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.vomatt.common.email.EmailService;
+import com.vomatt.common.email.InvitationEmailLimiter;
+import com.vomatt.common.util.AfterCommit;
+import com.vomatt.entity.CommunityInvitation;
+import com.vomatt.repository.CommunityInvitationRepository;
+import com.vomatt.users.dto.CommunityInvitationResponse;
+import org.springframework.context.i18n.LocaleContextHolder;
+import org.springframework.dao.DataIntegrityViolationException;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -47,8 +61,14 @@ public class CommunityService {
     private final UserMapper userMapper;
     private final LockTimeout lockTimeout;
     private final UserService userService;
+    private final CommunityInvitationRepository invitationRepository;
+    private final InvitationEmailLimiter invitationEmailLimiter;
+    private final EmailService emailService;
     private final AuditService auditService;
     private final PlanService planService;
+
+    /** How long an invitation can be accepted. */
+    static final Duration INVITATION_TTL = Duration.ofDays(7);
 
     /**
      * Creates the community account (no email or phone, so it can never sign in) with {@code ownerUserId} as its first
@@ -83,26 +103,148 @@ public class CommunityService {
     public List<MyCommunityResponse> listMine(String callerId) {
         return memberRepository.findByUserIdAndCommunityActiveTrueOrderByCreatedAtAscCommunityUserIdAsc(UUID.fromString(callerId))
                 .stream()
-                .map(m -> new MyCommunityResponse(m.getCommunityUserId().toString(), m.getCommunity().getUsername(),
-                        m.getCommunity().getDisplayName(), m.getCommunity().getAvatarUrl(), m.getRole(),
-                        m.getCommunity().getLockedAt() != null))
+                .map(m -> toMine(m.getCommunity(), m.getRole()))
                 .toList();
     }
 
-    /** Waits for a deletion of either account in flight, so the checks see it and the insert cannot fail its key. */
-    public CommunityMemberResponse addMember(UUID communityId, UUID userId, CommunityRole role, String callerId) {
-        userRepository.lockKeyShare(List.of(communityId, userId));
+    /**
+     * OWNER or ADMIN invites a user picked by id, or an email address, with a role; an ADMIN never grants OWNER. Nobody
+     * joins without accepting: a user by id, or the account of an address, sees a COMMUNITY_INVITATION notification and
+     * decides. An address with no account at all is mailed, once committed, within the inviting member's invitation email
+     * limits, and sees the notification once they sign up with it. For an address the response never tells whether it has an account. An
+     * unexpired invitation of the same user or address is a conflict; an expired one is replaced.
+     */
+    public CommunityInvitationResponse invite(UUID communityId, UUID userId, String email, CommunityRole role, String callerId) {
         requireGrant(requireManager(communityId, callerId), role);
-        User user = requireEligible(userId);
-        if (memberRepository.existsById(new CommunityMember.Key(communityId, userId))) {
-            throw ApiException.conflict(MessageKey.COMMUNITY_MEMBER_EXISTS);
+        User user = null;
+        if (userId != null) {
+            // Picked by id, so who they are is no secret: an ineligible user or a member says so
+            user = requireEligible(userId);
+            if (memberRepository.existsById(new CommunityMember.Key(communityId, userId))) {
+                throw ApiException.conflict(MessageKey.COMMUNITY_MEMBER_EXISTS);
+            }
         }
-        if (role == OWNER) {
-            planService.requireRoom(userId);
+        OffsetDateTime now = OffsetDateTime.now();
+        (userId != null ? invitationRepository.findByCommunityUserIdAndUserId(communityId, userId)
+                : invitationRepository.findByCommunityUserIdAndEmail(communityId, email)).ifPresent(existing -> {
+            if (!existing.isExpiredAt(now)) {
+                throw ApiException.conflict(MessageKey.COMMUNITY_INVITATION_EXISTS);
+            }
+            // Runs now, before the insert; a concurrent replacement that deleted it first makes the insert conflict
+            invitationRepository.removeById(existing.getId());
+        });
+        CommunityInvitation invitation;
+        try {
+            invitation = invitationRepository.saveAndFlush(new CommunityInvitation(communityId, userId, email, role,
+                    UUID.fromString(callerId), now.plus(INVITATION_TTL)));
+        } catch (DataIntegrityViolationException e) {
+            // A concurrent invite of the same user or address won the unique key
+            throw ApiException.conflict(MessageKey.COMMUNITY_INVITATION_EXISTS);
         }
-        CommunityMember member = memberRepository.saveAndFlush(new CommunityMember(communityId, userId, role));
-        log.info("Community account {}: {} added {} as {}", communityId, callerId, userId, role);
-        return toResponse(member, user);
+        if (email != null && !userRepository.existsByEmail(email)) {
+            mailInvitation(communityId, email, role, callerId);
+        }
+        log.info("Community account {}: {} invited {} as {} ({})", communityId, callerId, userId != null ? userId : "an address",
+                role, invitation.getId());
+        return toResponse(invitation, user);
+    }
+
+    private void mailInvitation(UUID communityId, String address, CommunityRole role, String callerId) {
+        // Counted against the inviting person, not the community account: anyone can create community accounts, so a
+        // per-community budget would multiply with each one they make
+        if (invitationEmailLimiter.claim(UUID.fromString(callerId), communityId, List.of(address)).isEmpty()) {
+            return;
+        }
+        User community = userRepository.getReferenceById(communityId);
+        User inviter = userRepository.getReferenceById(UUID.fromString(callerId));
+        String communityName = community.displayNameOrUsername();
+        String inviterName = inviter.displayNameOrUsername();
+        String inviterUsername = inviter.getUsername();
+        Locale locale = LocaleContextHolder.getLocale();
+        AfterCommit.run(() -> emailService.sendCommunityInvitationEmail(address, inviterName, inviterUsername, communityName,
+                role.name(), INVITATION_TTL, locale));
+    }
+
+    /** OWNER or ADMIN: the community account's invitations, expired ones included, oldest first. */
+    @Transactional(readOnly = true)
+    public List<CommunityInvitationResponse> listInvitations(UUID communityId, String callerId) {
+        requireManager(communityId, callerId);
+        List<CommunityInvitation> invitations = invitationRepository.findByCommunityUserIdOrderByCreatedAtAscIdAsc(communityId);
+        Map<UUID, User> users = userRepository.findAllById(invitations.stream().map(CommunityInvitation::getUserId)
+                .filter(Objects::nonNull).toList()).stream().collect(Collectors.toMap(User::getId, Function.identity()));
+        return invitations.stream().map(i -> toResponse(i, i.getUserId() == null ? null : users.get(i.getUserId()))).toList();
+    }
+
+    /** OWNER or ADMIN withdraws an invitation; only an OWNER withdraws one that grants OWNER. */
+    public void revokeInvitation(UUID communityId, UUID invitationId, String callerId) {
+        CommunityRole caller = requireManager(communityId, callerId);
+        CommunityInvitation invitation = invitationRepository.findByIdAndCommunityUserId(invitationId, communityId)
+                .orElseThrow(() -> ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
+        requireGrant(caller, invitation.getRole());
+        removeOrNotFound(invitation.getId());
+        log.info("Community account {}: {} revoked invitation {}", communityId, callerId, invitationId);
+    }
+
+    /**
+     * The invitee joins with the invitation's role. Only the user it was sent to, or the account whose (always verified)
+     * email it was sent to, can see it; any other caller, an expired invitation or a suspended community account is not found. Already a
+     * member: the membership is kept as it is. Every invitation of the community account to the caller is used up.
+     */
+    public MyCommunityResponse acceptInvitation(UUID invitationId, String callerId) {
+        User caller = requireEligible(UUID.fromString(callerId));
+        CommunityInvitation invitation = findOwnInvitation(invitationId, caller);
+        // Waits for a deletion of either account in flight, so the checks see it and the insert cannot fail its key
+        userRepository.lockKeyShare(List.of(invitation.getCommunityUserId(), caller.getId()));
+        User community = userRepository.findById(invitation.getCommunityUserId()).filter(User::isActive)
+                .orElseThrow(() -> ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
+        if (community.getLockedAt() != null) {
+            throw ApiException.forbidden(MessageKey.COMMUNITY_LOCKED);
+        }
+        // A member keeps their role. Insert-or-keep, then read what is stored: a concurrent accept may have won the
+        // primary key with another invitation's role
+        CommunityRole role = memberRepository.findByCommunityUserIdAndUserId(community.getId(), caller.getId())
+                .map(CommunityMember::getRole).orElseGet(() -> {
+                    if (invitation.getRole() == OWNER) {
+                        planService.requireRoom(caller.getId());
+                    }
+                    memberRepository.insertIfAbsent(community.getId(), caller.getId(), invitation.getRole().name());
+                    return memberRepository.findByCommunityUserIdAndUserId(community.getId(), caller.getId()).orElseThrow().getRole();
+                });
+        invitationRepository.deleteForInvitee(community.getId(), caller.getId(), caller.getEmail());
+        log.info("Community account {}: {} accepted invitation {} as {}", community.getId(), callerId, invitationId, role);
+        return toMine(community, role);
+    }
+
+    /** The invitee turns the invitation down; it is deleted, and its notification goes with it. */
+    public void declineInvitation(UUID invitationId, String callerId) {
+        User caller = userRepository.findById(UUID.fromString(callerId))
+                .orElseThrow(() -> ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
+        removeOrNotFound(findOwnInvitation(invitationId, caller).getId());
+        log.info("User {} declined community invitation {}", callerId, invitationId);
+    }
+
+    private void removeOrNotFound(UUID invitationId) {
+        if (invitationRepository.removeById(invitationId) == 0) {
+            throw ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND);
+        }
+    }
+
+    private static MyCommunityResponse toMine(User community, CommunityRole role) {
+        return new MyCommunityResponse(community.getId().toString(), community.getUsername(), community.getDisplayName(),
+                community.getAvatarUrl(), role, community.getLockedAt() != null);
+    }
+
+    private CommunityInvitation findOwnInvitation(UUID invitationId, User caller) {
+        return invitationRepository.findById(invitationId)
+                .filter(i -> (caller.getId().equals(i.getUserId()) || i.getEmail() != null && i.getEmail().equals(caller.getEmail()))
+                        && !i.isExpiredAt(OffsetDateTime.now()))
+                .orElseThrow(() -> ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
+    }
+
+    private static CommunityInvitationResponse toResponse(CommunityInvitation i, User user) {
+        return new CommunityInvitationResponse(i.getId().toString(), user == null ? null : user.getId().toString(),
+                user == null ? null : user.getUsername(), user == null ? null : user.getDisplayName(),
+                user == null ? null : user.getAvatarUrl(), i.getEmail(), i.getRole(), i.getCreatedAt(), i.getExpiresAt());
     }
 
     public CommunityMemberResponse changeRole(UUID communityId, UUID userId, CommunityRole role, String callerId) {
@@ -134,6 +276,8 @@ public class CommunityService {
             requireAnotherOwner(communityId, userId);
         }
         memberRepository.delete(member);
+        // An invitation sent while they were a member (by address, which never says so) must not bring them back
+        invitationRepository.deleteForInvitee(communityId, userId, userRepository.getReferenceById(userId).getEmail());
         planService.reconcile(List.of(userId));
         log.info("Community account {}: {} removed {}", communityId, callerId, userId);
     }

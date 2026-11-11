@@ -155,6 +155,8 @@ public enum MessageKey {
     COMMUNITY_LAST_OWNER("community.last_owner"),
     COMMUNITY_ROLES_FIXED("community.roles_fixed"),
     COMMUNITY_INVITEE_NOT_ALLOWED("community.invitee_not_allowed"),
+    COMMUNITY_INVITATION_NOT_FOUND("community.invitation.not_found"),
+    COMMUNITY_INVITATION_EXISTS("community.invitation.exists"),
     COMMUNITY_USERNAME_IMMUTABLE("community.username_immutable"),
     VOTE_REVEAL_BEFORE_END("vote.reveal_at.before_end"),
     VOTE_REVEAL_TOO_LATE("vote.reveal_at.too_late"),

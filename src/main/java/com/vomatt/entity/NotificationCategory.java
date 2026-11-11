@@ -8,7 +8,7 @@ public enum NotificationCategory {
     LIKE,
     /** A Poll Ended, was Cancelled or ends soon: RESULT, CANCELLED, CLOSING_SOON. */
     POLL_END,
-    /** Invitations to Invite-only Polls: INVITATION. */
+    /** Invitations to Invite-only Polls and to community accounts: INVITATION, COMMUNITY_INVITATION. */
     INVITATION,
     /** New followers: FOLLOWED. */
     FOLLOW,

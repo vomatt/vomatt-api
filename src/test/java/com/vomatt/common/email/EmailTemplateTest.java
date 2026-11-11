@@ -119,6 +119,31 @@ class EmailTemplateTest {
     }
 
     @Test
+    void shouldRenderSignupInvitationWhenLocaleIsZhTwOrEn() throws Exception {
+        emailService.sendSignupInvitationEmails(List.of("a@example.com"), "Amy <b>", ZH_TW);
+        assertThat(sentHtml()).contains("加入 Vomatt", "您好，a@example.com。", "Amy &lt;b&gt; 邀請您加入 Vomatt",
+                        "https://staging.vomatt.com/login", "寄給 a@example.com", "忽略此郵件即可")
+                .doesNotContain("??", "天後失效", "<b>");
+
+        emailService.sendSignupInvitationEmails(List.of("b@example.com"), "Amy", Locale.ENGLISH);
+        assertThat(sentHtml()).contains("Join Vomatt", "Hello, b@example.com.", "Amy invited you to join Vomatt",
+                "Sign up for Vomatt", "copy and paste this URL").doesNotContain("??", "expires");
+    }
+
+    @Test
+    void shouldRenderCommunityInvitationWithRoleAndExpiryWhenLocaleIsZhTwOrEn() throws Exception {
+        emailService.sendCommunityInvitationEmail("a@example.com", "Amy", "amy", "Sunrise Tower", "EDITOR",
+                java.time.Duration.ofDays(7), ZH_TW);
+        assertThat(sentHtml()).contains("在 Vomatt 加入 Sunrise Tower", "Amy（@amy）邀請您以「編輯」身分加入",
+                "加入社群帳號", "https://staging.vomatt.com/login", "7 天後失效").doesNotContain("??");
+
+        emailService.sendCommunityInvitationEmail("b@example.com", "Amy", "amy", "Sunrise Tower", "CHIEF_EDITOR",
+                java.time.Duration.ofDays(7), Locale.ENGLISH);
+        assertThat(sentHtml()).contains("Join Sunrise Tower on Vomatt", "Amy (@amy) invited you",
+                "as Chief editor", "expires in 7 days").doesNotContain("??");
+    }
+
+    @Test
     void shouldSendOverResendWithInlineLogoWhenProviderIsResend() throws Exception {
         Emails emails = useResend();
 
@@ -273,6 +298,7 @@ class EmailTemplateTest {
         ReflectionTestUtils.setField(service, "siteUrl", "https://staging.vomatt.com");
         ReflectionTestUtils.setField(service, "otpTtlSeconds", 180L);
         ReflectionTestUtils.setField(service, "pollPath", defaultPollPath());
+        ReflectionTestUtils.setField(service, "signupPath", "/login");
         return service;
     }
 }

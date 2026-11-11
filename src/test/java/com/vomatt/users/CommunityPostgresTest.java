@@ -109,7 +109,7 @@ class CommunityPostgresTest extends PostgresRepositoryTest {
     private User addAdmin() {
         User admin = persistUser("of-admin-" + UUID.randomUUID().toString().substring(0, 8));
         em.flush();
-        communityService.addMember(communityId, admin.getId(), CommunityRole.ADMIN, owner.getId().toString());
+        join(communityId, admin, CommunityRole.ADMIN, owner.getId().toString());
         em.flush();
         em.clear();
         return admin;
@@ -184,7 +184,7 @@ class CommunityPostgresTest extends PostgresRepositoryTest {
     void shouldShowNewNameAndAuditBeforeAndAfterWhenAdminRenames() {
         User admin = persistUser("of-admin-" + UUID.randomUUID().toString().substring(0, 8));
         em.flush();
-        communityService.addMember(communityId, admin.getId(), CommunityRole.ADMIN, owner.getId().toString());
+        em.persist(new com.vomatt.entity.CommunityMember(communityId, admin.getId(), CommunityRole.ADMIN));
         String username = userRepository.findById(communityId).orElseThrow().getUsername();
         em.flush();
         em.clear();
@@ -209,7 +209,7 @@ class CommunityPostgresTest extends PostgresRepositoryTest {
     void shouldLeaveProfileUnchangedWhenEditorUpdates() {
         User editor = persistUser("of-ed-" + UUID.randomUUID().toString().substring(0, 8));
         em.flush();
-        communityService.addMember(communityId, editor.getId(), CommunityRole.EDITOR, owner.getId().toString());
+        em.persist(new com.vomatt.entity.CommunityMember(communityId, editor.getId(), CommunityRole.EDITOR));
         em.flush();
 
         assertThatThrownBy(() -> communityService.updateProfile(communityId, new UpdateCommunityRequest("Hijacked", null).toProfileUpdate(),
@@ -223,7 +223,7 @@ class CommunityPostgresTest extends PostgresRepositoryTest {
     void shouldDeleteCommunityWithItsPollsAndMembershipsWhenOwnerDeletes() {
         User editor = persistUser("of-del-" + UUID.randomUUID().toString().substring(0, 8));
         em.flush();
-        communityService.addMember(communityId, editor.getId(), CommunityRole.EDITOR, owner.getId().toString());
+        join(communityId, editor, CommunityRole.EDITOR, owner.getId().toString());
         User community = userRepository.findById(communityId).orElseThrow();
         String username = community.getUsername();
         Vote poll = persistPoll(community, OffsetDateTime.now().minusHours(1), OffsetDateTime.now().plusDays(1), "A", "B");
@@ -247,7 +247,7 @@ class CommunityPostgresTest extends PostgresRepositoryTest {
     void shouldKeepCommunityWhenAdminDeletes() {
         User admin = persistUser("of-deladm-" + UUID.randomUUID().toString().substring(0, 8));
         em.flush();
-        communityService.addMember(communityId, admin.getId(), CommunityRole.ADMIN, owner.getId().toString());
+        join(communityId, admin, CommunityRole.ADMIN, owner.getId().toString());
         em.flush();
 
         assertThatThrownBy(() -> communityService.deleteCommunity(communityId, admin.getId().toString()))
@@ -332,7 +332,7 @@ class CommunityPostgresTest extends PostgresRepositoryTest {
         User second = persistUser("of2-" + UUID.randomUUID().toString().substring(0, 8));
         em.flush();
         String ownerId = owner.getId().toString();
-        communityService.addMember(communityId, second.getId(), CommunityRole.OWNER, ownerId);
+        em.persist(new com.vomatt.entity.CommunityMember(communityId, second.getId(), CommunityRole.OWNER));
         em.flush();
 
         communityService.changeRole(communityId, owner.getId(), CommunityRole.ADMIN, ownerId);
@@ -350,7 +350,7 @@ class CommunityPostgresTest extends PostgresRepositoryTest {
         User editor = persistUser("of3-" + UUID.randomUUID().toString().substring(0, 8));
         em.flush();
         String ownerId = owner.getId().toString();
-        communityService.addMember(communityId, editor.getId(), CommunityRole.EDITOR, ownerId);
+        em.persist(new com.vomatt.entity.CommunityMember(communityId, editor.getId(), CommunityRole.EDITOR));
         em.flush();
 
         communityService.transferOwner(communityId, editor.getId(), ownerId);
@@ -413,12 +413,13 @@ class CommunityPostgresTest extends PostgresRepositoryTest {
         createFor(full);
         createFor(fullToo);
         String ownerId = owner.getId().toString();
-        communityService.addMember(communityId, full.getId(), CommunityRole.EDITOR, ownerId);
+        join(communityId, full, CommunityRole.EDITOR, ownerId);
         em.flush();
 
         assertLimitReached(() -> communityService.transferOwner(communityId, full.getId(), ownerId), 1, 1);
         assertLimitReached(() -> communityService.changeRole(communityId, full.getId(), CommunityRole.OWNER, ownerId), 1, 1);
-        assertLimitReached(() -> communityService.addMember(communityId, fullToo.getId(), CommunityRole.OWNER, ownerId), 1, 1);
+        String ownerInvitation = communityService.invite(communityId, fullToo.getId(), null, CommunityRole.OWNER, ownerId).id();
+        assertLimitReached(() -> communityService.acceptInvitation(UUID.fromString(ownerInvitation), fullToo.getId().toString()), 1, 1);
         assertThat(memberRepository.findActiveRole(communityId, full.getId())).contains(CommunityRole.EDITOR);
         assertThat(memberRepository.findActiveRole(communityId, fullToo.getId())).isEmpty();
     }
@@ -429,7 +430,7 @@ class CommunityPostgresTest extends PostgresRepositoryTest {
         em.flush();
         String ownerId = owner.getId().toString();
         // The co-owner is at the FREE limit through this very community account
-        communityService.addMember(communityId, coOwner.getId(), CommunityRole.OWNER, ownerId);
+        join(communityId, coOwner, CommunityRole.OWNER, ownerId);
         em.flush();
 
         communityService.transferOwner(communityId, coOwner.getId(), ownerId);
@@ -454,5 +455,11 @@ class CommunityPostgresTest extends PostgresRepositoryTest {
         CreateVoteRequest.VoteOptionRequest option = new CreateVoteRequest.VoteOptionRequest();
         option.setText(text);
         return option;
+    }
+
+    /** Invites the user by id and has them accept: the one way to add a member. */
+    private void join(UUID community, User user, CommunityRole role, String inviterId) {
+        String invitationId = communityService.invite(community, user.getId(), null, role, inviterId).id();
+        communityService.acceptInvitation(UUID.fromString(invitationId), user.getId().toString());
     }
 }

@@ -17,7 +17,8 @@ import com.vomatt.repository.VoteListRepository;
 @TestConfiguration
 @Import({ VoteService.class, VoteMapper.class, VoteConfigurationProperties.class, VoteListRepository.class,
         NotificationRepository.class, LockTimeout.class, EmailServiceNoOp.class, InviteListService.class, InviteListMapper.class,
-        com.vomatt.lookups.LookupService.class, com.vomatt.lookups.LookupMapper.class })
+        com.vomatt.lookups.LookupService.class, com.vomatt.lookups.LookupMapper.class,
+        com.vomatt.common.email.InvitationEmailLimiter.class, com.vomatt.repository.InvitationEmailRepository.class })
 public class VoteServiceSlice {
 
     // No Redis in the slice: the invitation email counter always reads 0, so the daily limit never applies

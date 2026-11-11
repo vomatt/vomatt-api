@@ -7,6 +7,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -46,5 +47,16 @@ public class EmailServiceNoOp implements EmailService {
     @Override
     public void sendInvitationEmails(List<String> recipients, String inviterName, String pollTitle, UUID pollId, Locale locale) {
         logger.debug("Email service disabled: skipping {} invitation email(s)", recipients.size());
+    }
+
+    @Override
+    public void sendSignupInvitationEmails(List<String> recipients, String inviterName, Locale locale) {
+        logger.info("[EMAIL-NOOP] {} sign-up invitation(s) from {}", recipients.size(), inviterName);
+    }
+
+    @Override
+    public void sendCommunityInvitationEmail(String to, String inviterName, String inviterUsername, String communityName,
+                                             String role, Duration expiresIn, Locale locale) {
+        logger.info("[EMAIL-NOOP] invitation to community {} as {} for {}", communityName, role, TextUtil.maskEmail(to));
     }
 }

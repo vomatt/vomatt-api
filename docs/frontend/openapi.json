@@ -12994,6 +12994,217 @@
         "tags" : [ "User" ]
       }
     },
+    "/api/billing/checkout" : {
+      "post" : {
+        "description" : "**Auth**: required\n**Behavior**: not available yet. Will return the payment page URL to send the user to\n**Errors**:\n- 503 `billing.unavailable`: paid plans are not available yet",
+        "operationId" : "checkout",
+        "responses" : {
+          "200" : {
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          },
+          "503" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : null,
+                  "error" : "Paid plans are coming soon",
+                  "errorCode" : "billing.unavailable",
+                  "message" : "Paid plans are coming soon",
+                  "success" : false
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Paid plans are not available yet (errorCode `billing.unavailable`)"
+          }
+        },
+        "summary" : "Start upgrading to PRO",
+        "tags" : [ "Billing" ]
+      }
+    },
+    "/api/billing/portal" : {
+      "post" : {
+        "description" : "**Auth**: required\n**Behavior**: not available yet. Will return the subscription management page URL\n**Errors**:\n- 503 `billing.unavailable`: paid plans are not available yet",
+        "operationId" : "portal",
+        "responses" : {
+          "200" : {
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          },
+          "503" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : null,
+                  "error" : "Paid plans are coming soon",
+                  "errorCode" : "billing.unavailable",
+                  "message" : "Paid plans are coming soon",
+                  "success" : false
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Paid plans are not available yet (errorCode `billing.unavailable`)"
+          }
+        },
+        "summary" : "Manage the subscription",
+        "tags" : [ "Billing" ]
+      }
+    },
+    "/api/billing/webhook" : {
+      "post" : {
+        "description" : "**Auth**: none (called by the payment provider, not by apps)\n**Behavior**: not available yet. Will verify the provider's signature and change the user's plan\n**Errors**:\n- 503 `billing.unavailable`: paid plans are not available yet",
+        "operationId" : "webhook",
+        "responses" : {
+          "200" : {
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Resource not found (errorCode e.g. `vote.not_found`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          },
+          "503" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : null,
+                  "error" : "Paid plans are coming soon",
+                  "errorCode" : "billing.unavailable",
+                  "message" : "Paid plans are coming soon",
+                  "success" : false
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Paid plans are not available yet (errorCode `billing.unavailable`)"
+          }
+        },
+        "summary" : "Payment provider events",
+        "tags" : [ "Billing" ]
+      }
+    },
     "/api/communities" : {
       "post" : {
         "description" : "**Auth**: required\n**Precondition**: the caller is an active account that is not a community account; the username is free\n**Behavior**: creates a community account (a group's page: `displayName` is the group name, the logo is its avatar) with the caller as its first OWNER, who then adds members. It has no email or phone and can never sign in; members act as it with the `X-Act-As` header. Sent while acting, the real member becomes the OWNER. Returns 201 with the account, `community` true\n**Side effects**: the creation is audit-logged\n**Errors**:\n- 400 `common.validation_failed`: `username` not 3-50 characters of [a-z0-9_] or reserved, `displayName` blank or over 100 characters\n- 400 `community.member.invalid`: the caller is suspended or is a community account\n- 409 `user.username.taken`: the username is in use\n- 409 `common.conflict`: another change to the caller's community accounts is in progress; retry\n- 403 `community.limit_reached`: the user who would become an OWNER already owns as many community accounts as their plan allows; `data` is `{ \"limit\": 1, \"owned\": 1 }`\n",
@@ -24529,6 +24740,9 @@
   }, {
     "description" : "Community account creation (Admin)",
     "name" : "Admin - Community Account"
+  }, {
+    "description" : "Paid plans (not available yet)",
+    "name" : "Billing"
   }, {
     "description" : "User management APIs",
     "name" : "User"

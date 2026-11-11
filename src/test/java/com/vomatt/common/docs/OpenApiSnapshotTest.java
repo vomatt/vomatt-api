@@ -80,6 +80,17 @@ class OpenApiSnapshotTest {
         mockMvc.perform(get("/api/admin/contact-messages")).andExpect(status().isUnauthorized());
     }
 
+    /** Real filter chain: the payment provider's webhook needs no token, starting a checkout does. */
+    @Test
+    void shouldLetSignedOutCallersReachBillingWebhookOnly() throws Exception {
+        MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(context)
+                .apply(org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity()).build();
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/billing/webhook"))
+                .andExpect(status().isServiceUnavailable());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/billing/checkout"))
+                .andExpect(status().isUnauthorized());
+    }
+
     /** Real filter chain: the follow lists need a token, the profile does not. */
     @Test
     void shouldReturn401WhenReadingFollowListsSignedOut() throws Exception {

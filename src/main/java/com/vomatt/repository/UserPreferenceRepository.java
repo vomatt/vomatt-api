@@ -34,10 +34,8 @@ public interface UserPreferenceRepository extends JpaRepository<UserPreference, 
             .orElse(false);
     }
 
-    /**
-     * Fetch one preference for many users at once
-     */
-    List<UserPreference> findByUserIdInAndKey(Collection<UUID> userIds, String key);
+    /** Several preferences for many users at once; unset ones are absent. */
+    List<UserPreference> findByUserIdInAndKeyIn(Collection<UUID> userIds, Collection<String> keys);
 
     /** Sets one preference; concurrent writes of the same key keep the last value instead of failing on the unique key. */
     @Modifying

@@ -1,5 +1,8 @@
 package com.vomatt.votes;
 
+import com.vomatt.repository.InviteeStatus;
+import com.vomatt.users.PublicName;
+import com.vomatt.users.PublicNames;
 import com.vomatt.lookups.LookupService;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.security.ActingMember;
@@ -343,7 +346,9 @@ public class VoteService {
                 || inviteeRepository.existsByVoteIdAndUserId(v.getId(), UUID.fromString(viewerId)))
             .map(Vote::getCreator)
             .orElseThrow(() -> ApiException.notFound(MessageKey.VOTE_NOT_FOUND));
-        return new VoteCreatorResponse(creator.getUsername(), creator.getAvatarUrl(), creator.isCommunity());
+        PublicName name = PublicNames.load(creator, preferenceRepository);
+        return new VoteCreatorResponse(creator.getUsername(), name.displayName(), name.firstName(), name.lastName(),
+            creator.getAvatarUrl(), creator.isCommunity());
     }
 
     /**
@@ -545,7 +550,7 @@ public class VoteService {
             throw ApiException.forbidden(MessageKey.VOTE_RESULTS_SEALED);
         }
         List<VoteOption> options = voteOptionRepository.findByVoteIdOrderByDisplayOrder(vote.getId());
-        return voteMapper.toResultResponse(vote, options);
+        return voteMapper.toResultResponse(vote, options, PublicNames.load(vote.getCreator(), preferenceRepository));
     }
 
     /**
@@ -578,7 +583,10 @@ public class VoteService {
         List<UserVote> rows = userVoteRepository.findVoterPage(vote.getId(),
             after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
         return CursorResponse.of(rows, size, Cursor.Scope.VOTERS, ballot -> Cursor.of(ballot.getCreatedAt(), ballot.getId()),
-            page -> page.stream().map(ballot -> voteMapper.toVoterResponse(ballot, withOptions)).toList());
+            page -> {
+                Map<UUID, PublicName> names = PublicNames.load(page.stream().map(UserVote::getUser).toList(), preferenceRepository);
+                return page.stream().map(ballot -> voteMapper.toVoterResponse(ballot, withOptions, names.get(ballot.getUser().getId()))).toList();
+            });
     }
 
     @Transactional(readOnly = true)
@@ -709,11 +717,21 @@ public class VoteService {
     }
 
     private List<InviteeResponse> invitees(UUID voteId) {
-        return inviteeRepository.findStatuses(voteId).stream()
+        List<InviteeStatus> statuses = inviteeRepository.findStatuses(voteId);
+        Map<UUID, PublicName> names = PublicNames.mask(statuses.stream().filter(s -> s.getEmail() == null)
+            .collect(Collectors.toMap(InviteeStatus::getUserId,
+                s -> new PublicName(s.getDisplayName(), s.getFirstName(), s.getLastName()), (a, b) -> a)), preferenceRepository);
+        return statuses.stream()
             // An Invitee added by email is shown only by that address, never revealing whether it has an account
-            .map(s -> s.getEmail() != null
-                ? new InviteeResponse(null, null, null, s.getEmail(), s.getHasBallot(), s.getInvitedAt().atOffset(ZoneOffset.UTC))
-                : new InviteeResponse(s.getUserId().toString(), s.getUsername(), s.getAvatarUrl(), null, s.getHasBallot(), s.getInvitedAt().atOffset(ZoneOffset.UTC)))
+            .map(s -> {
+                if (s.getEmail() != null) {
+                    return new InviteeResponse(null, null, null, null, null, null, s.getEmail(), s.getHasBallot(),
+                        s.getInvitedAt().atOffset(ZoneOffset.UTC));
+                }
+                PublicName name = names.getOrDefault(s.getUserId(), PublicName.NONE);
+                return new InviteeResponse(s.getUserId().toString(), s.getUsername(), name.displayName(), name.firstName(),
+                    name.lastName(), s.getAvatarUrl(), null, s.getHasBallot(), s.getInvitedAt().atOffset(ZoneOffset.UTC));
+            })
             .toList();
     }
 
@@ -975,8 +993,9 @@ public class VoteService {
         // Read only when the page holds the caller's own Polls (the only ones that get deletable)
         Duration deleteWindow = votes.stream().anyMatch(v -> v.isOwnedBy(userId)) ? deleteWindow() : null;
         Set<UUID> liked = userId == null ? Set.of() : Set.copyOf(voteRepository.findLikedVoteIds(UUID.fromString(userId), ids));
+        Map<UUID, PublicName> creatorNames = PublicNames.load(votes.stream().map(Vote::getCreator).toList(), preferenceRepository);
         return votes.stream().map(vote -> {
-            VoteResponse response = voteMapper.toResponse(vote, sortedOptions(vote));
+            VoteResponse response = voteMapper.toResponse(vote, sortedOptions(vote), creatorNames.get(vote.getCreator().getId()));
             BallotSelection mine = selections.get(vote.getId());
             // A sealed Anonymous Ballot (Ended Poll) has no option any more; the Ballot itself is still the caller's
             response.setMyOptionId(mine == null || mine.getOptionId() == null ? null : mine.getOptionId().toString());

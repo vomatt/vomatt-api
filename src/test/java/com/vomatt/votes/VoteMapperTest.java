@@ -13,6 +13,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteOption;
+import com.vomatt.users.PublicName;
 import com.vomatt.votes.dto.VoteResponse;
 import com.vomatt.votes.dto.VoteResultResponse;
 
@@ -49,7 +50,7 @@ class VoteMapperTest {
     @DisplayName("should hide option counts while Poll is Open but keep Turnout visible")
     void shouldOmitOptionCountsWhenPollOpen() {
         VoteResponse response = mapper.toResponse(poll(now.minusHours(1), now.plusDays(1), 4),
-                List.of(option("A", 3), option("B", 1)));
+                List.of(option("A", 3), option("B", 1)), PublicName.NONE);
 
         assertThat(response.getOptions()).extracting(VoteResponse.VoteOptionResponse::getVotes).containsOnlyNulls();
         assertThat(response.getParticipantCount()).isEqualTo(4);
@@ -58,7 +59,7 @@ class VoteMapperTest {
     @Test
     @DisplayName("should hide option counts when Poll is Scheduled")
     void shouldOmitOptionCountsWhenPollScheduled() {
-        VoteResponse response = mapper.toResponse(poll(now.plusHours(1), now.plusDays(1)), List.of(option("A", 0)));
+        VoteResponse response = mapper.toResponse(poll(now.plusHours(1), now.plusDays(1)), List.of(option("A", 0)), PublicName.NONE);
 
         assertThat(response.getOptions()).extracting(VoteResponse.VoteOptionResponse::getVotes).containsOnlyNulls();
     }
@@ -67,7 +68,7 @@ class VoteMapperTest {
     @DisplayName("should reveal option counts after Poll has Ended")
     void shouldRevealOptionCountsWhenPollEnded() {
         VoteResponse response = mapper.toResponse(poll(now.minusDays(2), now.minusDays(1), 4),
-                List.of(option("A", 3), option("B", 1)));
+                List.of(option("A", 3), option("B", 1)), PublicName.NONE);
 
         assertThat(response.getOptions()).extracting(VoteResponse.VoteOptionResponse::getVotes).containsExactly(3L, 1L);
         assertThat(response.getParticipantCount()).isEqualTo(4);
@@ -79,14 +80,14 @@ class VoteMapperTest {
         Vote vote = poll(now.minusHours(1), now.plusDays(1));
         vote.setTags(null);
 
-        assertThat(mapper.toResponse(vote, List.of()).getTags()).isEmpty();
+        assertThat(mapper.toResponse(vote, List.of(), PublicName.NONE).getTags()).isEmpty();
     }
 
     @Test
     @DisplayName("should compute Support with Participant as denominator")
     void shouldComputeSupportFromParticipants() {
         VoteResultResponse results = mapper.toResultResponse(poll(now.minusDays(2), now.minusDays(1), 4),
-                List.of(option("A", 3), option("B", 1)));
+                List.of(option("A", 3), option("B", 1)), PublicName.NONE);
 
         assertThat(results.getTotalParticipants()).isEqualTo(4);
         assertThat(results.getDeadline()).isEqualTo(now.minusDays(1));
@@ -100,7 +101,7 @@ class VoteMapperTest {
         Vote vote = poll(now.minusDays(2), now.minusDays(1), 4);
         vote.setRevealAt(now.plusHours(1));
         vote.setPro(true);
-        VoteResponse response = mapper.toResponse(vote, List.of(option("A", 3), option("B", 1)));
+        VoteResponse response = mapper.toResponse(vote, List.of(option("A", 3), option("B", 1)), PublicName.NONE);
 
         assertThat(response.getOptions()).extracting(VoteResponse.VoteOptionResponse::getVotes).containsOnlyNulls();
         assertThat(response.getParticipantCount()).isEqualTo(4);
@@ -114,8 +115,37 @@ class VoteMapperTest {
     void shouldUnsealResultsWhenRevealAtPassed() {
         Vote vote = poll(now.minusDays(2), now.minusDays(1), 4);
         vote.setRevealAt(now.minusHours(1));
-        VoteResponse response = mapper.toResponse(vote, List.of(option("A", 3), option("B", 1)));
+        VoteResponse response = mapper.toResponse(vote, List.of(option("A", 3), option("B", 1)), PublicName.NONE);
 
         assertThat(response.getOptions()).extracting(VoteResponse.VoteOptionResponse::getVotes).containsExactly(3L, 1L);
+    }
+
+    @Test
+    @DisplayName("should carry the owner's public names on Poll and result responses")
+    void shouldSetCreatorNamesWhenMapping() {
+        Vote vote = poll(now.minusDays(2), now.minusDays(1), 0);
+        PublicName name = new PublicName("Rubes", "Ruby", null);
+
+        VoteResponse response = mapper.toResponse(vote, List.of(), name);
+        VoteResultResponse results = mapper.toResultResponse(vote, List.of(), name);
+
+        assertThat(List.of(response.getCreatorDisplayName(), response.getCreatorFirstName())).containsExactly("Rubes", "Ruby");
+        assertThat(response.getCreatorLastName()).isNull();
+        assertThat(List.of(results.getCreatorDisplayName(), results.getCreatorFirstName())).containsExactly("Rubes", "Ruby");
+        assertThat(results.getCreatorLastName()).isNull();
+    }
+
+    @Test
+    @DisplayName("should carry a voter's public names")
+    void shouldSetVoterNamesWhenMapping() {
+        Vote vote = poll(now.minusDays(2), now.minusDays(1), 1);
+        VoteOption option = option("A", 1);
+        User voter = User.builder().id(UUID.randomUUID()).username("kai").build();
+
+        var response = mapper.toVoterResponse(new com.vomatt.entity.UserVote(voter, vote, option), true,
+                new PublicName("Kai", null, null));
+
+        assertThat(response.displayName()).isEqualTo("Kai");
+        assertThat(response.firstName()).isNull();
     }
 }

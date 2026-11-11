@@ -3,6 +3,7 @@ package com.vomatt.comments;
 import com.vomatt.comments.dto.CommentDto;
 import com.vomatt.comments.dto.MentionDto;
 import com.vomatt.entity.VoteComment;
+import com.vomatt.users.PublicName;
 import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
@@ -16,9 +17,12 @@ import java.util.stream.Collectors;
 @Component
 public class CommentMapper {
 
-    /** {@code usernames} maps (at least) the comment's mentioned user ids to their current usernames. */
+    /**
+     * {@code usernames} maps (at least) the comment's mentioned user ids to their current usernames; {@code authorName}
+     * is the author's masked public name.
+     */
     public CommentDto toDto(VoteComment comment, long likeCount, boolean isLikedByCurrentUser,
-                            Map<UUID, String> usernames) {
+                            Map<UUID, String> usernames, PublicName authorName) {
         CommentDto dto = new CommentDto();
         dto.setId(comment.getId().toString());
         dto.setVoteId(comment.getVote().getId().toString());
@@ -30,6 +34,9 @@ public class CommentMapper {
             dto.setAuthor(comment.getUser().getUsername());
             dto.setAuthorAvatarUrl(comment.getUser().getAvatarUrl());
             dto.setAuthorCommunity(comment.getUser().isCommunity());
+            dto.setAuthorDisplayName(authorName.displayName());
+            dto.setAuthorFirstName(authorName.firstName());
+            dto.setAuthorLastName(authorName.lastName());
             dto.setText(comment.getContent());
             dto.setMentions(mentions(comment, usernames));
         }

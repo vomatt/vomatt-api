@@ -422,10 +422,15 @@ class UserServiceTest {
     }
 
     @Test
-    @DisplayName("should return public fields and mask hidden display name when searching users")
-    void shouldMaskHiddenDisplayNameWhenSearchingUsers() {
+    @DisplayName("should return public fields and mask hidden names when searching users")
+    void shouldMaskHiddenNamesWhenSearchingUsers() {
         User shown = User.builder().id(UUID.randomUUID()).username("alice").displayName("Alice")
+                .firstName("Alice").lastName("Chen")
                 .avatarUrl("https://cdn.example.com/a.jpg").email("alice@example.com").build();
+        UserPreference firstNameShown = new UserPreference();
+        firstNameShown.setUser(shown);
+        firstNameShown.setKey("visibility.firstName");
+        firstNameShown.setValue("true");
         User hidden = User.builder().id(UUID.randomUUID()).username("alicia").displayName("Alicia")
                 .email("alicia@example.com").build();
         UserPreference pref = new UserPreference();
@@ -433,14 +438,13 @@ class UserServiceTest {
         pref.setKey("visibility.displayName");
         pref.setValue("false");
         when(userRepository.searchByUsernameAfter(eq("ali"), any(), any(Limit.class))).thenReturn(List.of(shown, hidden));
-        when(preferenceRepository.findByUserIdInAndKey(List.of(shown.getId(), hidden.getId()), "visibility.displayName"))
-                .thenReturn(List.of(pref));
+        when(preferenceRepository.findByUserIdInAndKeyIn(any(), any())).thenReturn(List.of(pref, firstNameShown));
 
         CursorResponse<UserDto> page = userService.searchUsersByUsername("ali", null, null);
 
         assertThat(page.items()).containsExactly(
-                new UserDto(shown.getId().toString(), "alice", "Alice", "https://cdn.example.com/a.jpg", false),
-                new UserDto(hidden.getId().toString(), "alicia", null, null, false));
+                new UserDto(shown.getId().toString(), "alice", "Alice", "Alice", null, "https://cdn.example.com/a.jpg", false),
+                new UserDto(hidden.getId().toString(), "alicia", null, null, null, null, false));
         assertThat(page.nextCursor()).isNull();
     }
 
@@ -599,12 +603,11 @@ class UserServiceTest {
         when(userRepository.findActiveByUsername("alice")).thenReturn(Optional.of(alice));
         when(followRepository.findFollowersPage(eq(alice.getId()), eq(null), eq(null), any(Limit.class)))
                 .thenReturn(List.of(new UserFollow(hidden, alice)));
-        when(preferenceRepository.findByUserIdInAndKey(List.of(hidden.getId()), "visibility.displayName"))
-                .thenReturn(List.of(pref));
+        when(preferenceRepository.findByUserIdInAndKeyIn(any(), any())).thenReturn(List.of(pref));
 
         CursorResponse<FollowUserDto> page = userService.listFollowers("alice", null, null, UUID.randomUUID().toString());
 
-        assertThat(page.items()).containsExactly(new FollowUserDto(hidden.getId().toString(), "bob", null, null, false, false, false));
+        assertThat(page.items()).containsExactly(new FollowUserDto(hidden.getId().toString(), "bob", null, null, null, null, false, false, false));
         assertThat(page.nextCursor()).isNull();
     }
 
@@ -619,7 +622,7 @@ class UserServiceTest {
 
         CursorResponse<FollowUserDto> page = userService.listFollowing("alice", null, null, UUID.randomUUID().toString());
 
-        assertThat(page.items()).containsExactly(new FollowUserDto(bob.getId().toString(), "bob", "Bob", null, false, false, false));
+        assertThat(page.items()).containsExactly(new FollowUserDto(bob.getId().toString(), "bob", "Bob", null, null, null, false, false, false));
     }
 
     @Test
@@ -773,8 +776,7 @@ class UserServiceTest {
         hidden.setUser(mutuals.get(1));
         hidden.setKey(VisibilityField.DISPLAY_NAME.preferenceKey());
         hidden.setValue("false");
-        when(preferenceRepository.findByUserIdInAndKey(any(), eq(VisibilityField.DISPLAY_NAME.preferenceKey())))
-                .thenReturn(List.of(hidden));
+        when(preferenceRepository.findByUserIdInAndKeyIn(any(), any())).thenReturn(List.of(hidden));
 
         UserProfileResponse profile = userService.getUserProfile("alice", viewer.toString());
 

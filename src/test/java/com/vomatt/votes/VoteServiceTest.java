@@ -1023,7 +1023,7 @@ class VoteServiceTest {
 
             assertThat(voteService.getVoters(voteId.toString(), userId.toString(), null, null).items())
                     .singleElement().satisfies(v -> assertThat(v.optionId()).isNull());
-            verify(voteMapper).toVoterResponse(named, false);
+            verify(voteMapper).toVoterResponse(eq(named), eq(false), any());
 
             when(userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn(0L);
             assertThat(voteService.getVoters(voteId.toString(), userId.toString(), null, null).items())

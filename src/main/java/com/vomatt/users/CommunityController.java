@@ -385,8 +385,8 @@ public class CommunityController {
             address) joins with the role. An expired invitation of the address is replaced by the new one. \
             """ + ROLES + """
 
-            **Side effects**: an address with no account at all is mailed once committed; the community account mails one address \
-            at most once a week, within its daily invitation email limit (shared with its Polls' invitations). Audit-logged.
+            **Side effects**: an address with no account at all is mailed once committed; one member mails one address at most \
+            once a week, within the member's own daily invitation email limit (shared with their Poll and Invite List invitations). Audit-logged.
             **Errors**:
             - 400 `common.validation_failed`: `email` missing or invalid, or `role` missing or invalid
             - 409 `community.invitation.exists`: the address already has an unexpired invitation to this community account

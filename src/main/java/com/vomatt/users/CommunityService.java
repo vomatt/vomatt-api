@@ -116,7 +116,7 @@ public class CommunityService {
     /**
      * OWNER or ADMIN invites an address with a role; an ADMIN never grants OWNER. The response never tells whether the
      * address has an account: one with an account sees a COMMUNITY_INVITATION notification and decides; an address with
-     * no account at all is mailed, once committed, within the community account's invitation email limits, and signing up
+     * no account at all is mailed, once committed, within the inviting member's invitation email limits, and signing up
      * with it joins. An unexpired invitation of the address is a conflict; an expired one is replaced.
      */
     public CommunityInvitationResponse invite(UUID communityId, String email, CommunityRole role, String callerId) {
@@ -147,8 +147,9 @@ public class CommunityService {
     }
 
     private void mailInvitation(UUID communityId, String address, CommunityRole role, String callerId) {
-        // The community account is the sender, as for its Polls' invitations, so its members share one budget
-        if (invitationEmailLimiter.claim(communityId, List.of(address)).isEmpty()) {
+        // Counted against the inviting person, not the community account: anyone can create community accounts, so a
+        // per-community budget would multiply with each one they make
+        if (invitationEmailLimiter.claim(UUID.fromString(callerId), List.of(address)).isEmpty()) {
             return;
         }
         User community = userRepository.getReferenceById(communityId);

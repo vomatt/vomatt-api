@@ -13,6 +13,8 @@ public interface CommunityInvitationRepository extends JpaRepository<CommunityIn
 
     Optional<CommunityInvitation> findByCommunityUserIdAndEmail(UUID communityUserId, String email);
 
+    Optional<CommunityInvitation> findByCommunityUserIdAndUserId(UUID communityUserId, UUID userId);
+
     Optional<CommunityInvitation> findByIdAndCommunityUserId(UUID id, UUID communityUserId);
 
     /** A community account's invitations, expired ones included, oldest first. */

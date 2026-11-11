@@ -116,7 +116,7 @@ class CommunityPostgresTest extends PostgresRepositoryTest {
     void shouldShowNewNameAndAuditBeforeAndAfterWhenAdminRenames() {
         User admin = persistUser("of-admin-" + UUID.randomUUID().toString().substring(0, 8));
         em.flush();
-        communityService.addMember(communityId, admin.getId(), CommunityRole.ADMIN, owner.getId().toString());
+        em.persist(new com.vomatt.entity.CommunityMember(communityId, admin.getId(), CommunityRole.ADMIN));
         String username = userRepository.findById(communityId).orElseThrow().getUsername();
         em.flush();
         em.clear();
@@ -141,7 +141,7 @@ class CommunityPostgresTest extends PostgresRepositoryTest {
     void shouldLeaveProfileUnchangedWhenEditorUpdates() {
         User editor = persistUser("of-ed-" + UUID.randomUUID().toString().substring(0, 8));
         em.flush();
-        communityService.addMember(communityId, editor.getId(), CommunityRole.EDITOR, owner.getId().toString());
+        em.persist(new com.vomatt.entity.CommunityMember(communityId, editor.getId(), CommunityRole.EDITOR));
         em.flush();
 
         assertThatThrownBy(() -> communityService.updateProfile(communityId, new UpdateCommunityRequest("Hijacked", null),
@@ -225,7 +225,7 @@ class CommunityPostgresTest extends PostgresRepositoryTest {
         User second = persistUser("of2-" + UUID.randomUUID().toString().substring(0, 8));
         em.flush();
         String ownerId = owner.getId().toString();
-        communityService.addMember(communityId, second.getId(), CommunityRole.OWNER, ownerId);
+        em.persist(new com.vomatt.entity.CommunityMember(communityId, second.getId(), CommunityRole.OWNER));
         em.flush();
 
         communityService.changeRole(communityId, owner.getId(), CommunityRole.ADMIN, ownerId);
@@ -243,7 +243,7 @@ class CommunityPostgresTest extends PostgresRepositoryTest {
         User editor = persistUser("of3-" + UUID.randomUUID().toString().substring(0, 8));
         em.flush();
         String ownerId = owner.getId().toString();
-        communityService.addMember(communityId, editor.getId(), CommunityRole.EDITOR, ownerId);
+        em.persist(new com.vomatt.entity.CommunityMember(communityId, editor.getId(), CommunityRole.EDITOR));
         em.flush();
 
         communityService.transferOwner(communityId, editor.getId(), ownerId);

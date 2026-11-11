@@ -31,7 +31,7 @@ public record NotificationResponse(
                 + "and you hold no Ballot in it. "
                 + "LIKE: someone liked your Comment or Reply. "
                 + "POLL_LIKE: someone liked your Poll. "
-                + "COMMUNITY_INVITATION: a community account invited your email address to join it and waits for your answer "
+                + "COMMUNITY_INVITATION: a community account invited you (by id or your email address) to join it and waits for your answer "
                 + "(gone once you accept, decline, it is revoked or expires, or you are already a member); not affected by the "
                 + "`invitations` preference", example = "COMMENT")
         NotificationKind kind,

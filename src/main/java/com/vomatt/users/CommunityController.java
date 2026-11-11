@@ -17,7 +17,6 @@ import com.vomatt.users.dto.CommunityInvitationRequest;
 import com.vomatt.users.dto.CommunityInvitationResponse;
 import com.vomatt.users.dto.MyCommunityResponse;
 import com.vomatt.users.dto.NewCommunityRequest;
-import com.vomatt.users.dto.CommunityMemberRequest;
 import com.vomatt.users.dto.CommunityMemberResponse;
 import com.vomatt.users.dto.CommunityOwnerRequest;
 import com.vomatt.users.dto.CommunityRoleRequest;
@@ -107,7 +106,7 @@ public class CommunityController {
             **Auth**: required
             **Precondition**: the caller is an active account that is not a community account; the username is free
             **Behavior**: creates a community account (a group's page: `displayName` is the group name, the logo is its avatar) \
-            with the caller as its first OWNER, who then adds members. It has no email or phone and can never sign in; members \
+            with the caller as its first OWNER, who then invites members (`POST /api/communities/{communityId}/invitations`). It has no email or phone and can never sign in; members \
             act as it with the `X-Act-As` header. Sent while acting, the real member becomes the OWNER. Returns 201 with the \
             account, `community` true
             **Side effects**: the creation is audit-logged
@@ -242,40 +241,6 @@ public class CommunityController {
         return ResponseEntity.ok(ApiResponse.ok(communityService.listMembers(communityId, ActingMember.realUserId(principal))));
     }
 
-    @PostMapping("/api/communities/{communityId}/members")
-    @Auditable(action = "ADD_MEMBER", resourceType = "COMMUNITY", resourceIdIndex = 0)
-    @CommonApiResponses
-    @Operation(summary = "Add a community account member", description = """
-            **Auth**: required (OWNER or ADMIN)
-            **Precondition**: the user is an active account, not a community account, and not yet a member
-            **Behavior**: adds the user with the role. \
-            """ + ROLES + """
-
-            **Side effects**: the action is audit-logged.
-            **Errors**:
-            - 400 `community.member.invalid`: the user is suspended or is a community account
-            - 400 `common.validation_failed`: `userId` or `role` missing or invalid
-            - 404 `user.not_found`: no user with this id
-            - 409 `community.member.exists`: the user is already a member
-            """ + NOT_MEMBER + ROLE_FORBIDDEN,
-            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
-                    examples = @ExampleObject(name = "Add an editor", value = """
-                            { "userId": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47", "role": "EDITOR" }
-                            """))))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Member added",
-            content = @Content(examples = @ExampleObject(name = "Member", value = EX_MEMBER_RESPONSE)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not a member or the role does not allow it (`community.not_member`, `community.role_forbidden`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "community.not_member", value = ERR_NOT_MEMBER)))
-    public ResponseEntity<ApiResponse<CommunityMemberResponse>> addMember(
-            @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
-            @PathVariable UUID communityId,
-            @Valid @RequestBody CommunityMemberRequest request,
-            @AuthenticationPrincipal UserPrincipal principal) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(communityService.addMember(communityId,
-                request.userId(), request.role(), ActingMember.realUserId(principal))));
-    }
-
     @PatchMapping("/api/communities/{communityId}/members/{userId}")
     @Auditable(action = "UPDATE_MEMBER", resourceType = "COMMUNITY", resourceIdIndex = 0)
     @CommonApiResponses
@@ -365,7 +330,8 @@ public class CommunityController {
     }
 
     private static final String EX_INVITATION = """
-            { "id": "019a6b2c-3d4e-7f50-8a61-b2c3d4e5f607", "email": "dave@example.com", "role": "EDITOR",
+            { "id": "019a6b2c-3d4e-7f50-8a61-b2c3d4e5f607", "userId": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47", "username": "dave",
+              "displayName": "Dave", "avatarUrl": "bot:boba", "email": null, "role": "EDITOR",
               "invitedAt": "2026-11-11T14:52:00+08:00", "expiresAt": "2026-11-18T14:52:00+08:00" }""";
     private static final String MANAGER_ONLY = "- 403 `community.role_forbidden`: the caller is not an OWNER or ADMIN, "
             + "or is an ADMIN and the invitation grants OWNER\n";
@@ -375,41 +341,41 @@ public class CommunityController {
     @PostMapping("/api/communities/{communityId}/invitations")
     @Auditable(action = "INVITE_MEMBER", resourceType = "COMMUNITY", resourceIdIndex = 0)
     @CommonApiResponses
-    @Operation(summary = "Invite an email address to a community account", description = """
+    @Operation(summary = "Invite a user to a community account", description = """
             **Auth**: required (OWNER or ADMIN)
-            **Precondition**: the address has no unexpired invitation to this community account
-            **Behavior**: invites the address with the role; it can be used for 7 days. The response is the same whether or not \
-            the address belongs to an account, and whether or not that account is already a member. An address with an account \
-            gets a `COMMUNITY_INVITATION` notification and accepts (`POST /api/community-invitations/{invitationId}/accept`) or \
-            declines it; an address with no account is mailed, and signing up with it (any sign-in method that verifies the \
-            address) joins with the role. An expired invitation of the address is replaced by the new one. \
+            **Precondition**: the invitee has no unexpired invitation to this community account
+            **Behavior**: the only way to add a member: invites a user picked by `userId` (e.g. from user search) or an \
+            `email` address, exactly one, with the role; it can be used for 7 days. Nobody joins without answering: the user, \
+            or the account whose email is the address, gets a `COMMUNITY_INVITATION` notification and accepts \
+            (`POST /api/community-invitations/{invitationId}/accept`) or declines it. An address with no account is mailed, and \
+            signing up with it (any sign-in method that verifies the address) joins with the role. For an `email` the response \
+            is the same whether or not the address belongs to an account, or to a member. An expired invitation of the same \
+            user or address is replaced by the new one. \
             """ + ROLES + """
 
             **Side effects**: an address with no account at all is mailed once committed; one member mails one address at most \
             once a week, within the member's own daily invitation email limit (shared with their Poll and Invite List invitations). Audit-logged.
             **Errors**:
-            - 400 `common.validation_failed`: `email` missing or invalid, or `role` missing or invalid
-            - 409 `community.invitation.exists`: the address already has an unexpired invitation to this community account
+            - 400 `common.validation_failed`: neither or both of `userId` and `email`, `email` invalid, or `role` missing or invalid
+            - 400 `community.member.invalid`: the `userId` is suspended or is a community account
+            - 404 `user.not_found`: no user with this `userId`
+            - 409 `community.member.exists`: the `userId` is already a member
+            - 409 `community.invitation.exists`: the user or address already has an unexpired invitation to this community account
             """ + NOT_MEMBER + MANAGER_ONLY,
-            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
-                    examples = @ExampleObject(name = "Invite an editor", value = """
-                            { "email": "dave@example.com", "role": "EDITOR" }
-                            """))))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Invitation sent",
-            content = @Content(examples = @ExampleObject(name = "Invitation", value = "{ \"success\": true, \"data\": " + EX_INVITATION
-                    + ", \"message\": null, \"errorCode\": null, \"error\": null }")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Already invited (`community.invitation.exists`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "community.invitation.exists", value = ERR_MESSAGE
-                            + "This email address already has a pending invitation" + ERR_CODE + "community.invitation.exists"
-                            + ERR_ERROR + "This email address already has a pending invitation" + ERR_END)))
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = {
+                    @ExampleObject(name = "Invite a user", value = """
+                            { "userId": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47", "role": "EDITOR" }
+                            """),
+                    @ExampleObject(name = "Invite an email address", value = """
+                            { "email": "dave@example.com", "role": "ANALYST" }
+                            """) })))
     public ResponseEntity<ApiResponse<CommunityInvitationResponse>> invite(
             @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
             @PathVariable UUID communityId,
             @Valid @RequestBody CommunityInvitationRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(communityService.invite(communityId,
-                request.email(), request.role(), ActingMember.realUserId(principal))));
+                request.userId(), request.email(), request.role(), ActingMember.realUserId(principal))));
     }
 
     @GetMapping("/api/communities/{communityId}/invitations")
@@ -464,14 +430,14 @@ public class CommunityController {
     @CommonApiResponses
     @Operation(summary = "Accept a community account invitation", description = """
             **Auth**: required; refused while acting as a community account (`X-Act-As`)
-            **Precondition**: the invitation was sent to the caller's email address and has not expired
+            **Precondition**: the invitation was sent to the caller (by id or to their email address) and has not expired
             **Behavior**: the caller joins the community account with the invitation's role and the invitation is used up. \
             The invitation id is `communityInvitation.id` of the `COMMUNITY_INVITATION` notification. A caller already a \
             member keeps their current role. Returns the membership as `GET /api/users/me/communities` lists it.
             **Side effects**: the invitation and its notification disappear; the action is audit-logged.
             **Errors**:
             - 400 `community.member.invalid`: the caller is suspended or is a community account
-            - 404 `community.invitation.not_found`: no unexpired invitation with this id was sent to the caller's address, \
+            - 404 `community.invitation.not_found`: no unexpired invitation with this id was sent to the caller, \
             or the community account is suspended
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Joined",
@@ -495,11 +461,11 @@ public class CommunityController {
     @CommonApiResponses
     @Operation(summary = "Decline a community account invitation", description = """
             **Auth**: required; refused while acting as a community account (`X-Act-As`)
-            **Precondition**: the invitation was sent to the caller's email address and has not expired
+            **Precondition**: the invitation was sent to the caller (by id or to their email address) and has not expired
             **Behavior**: deletes the invitation; the community account can invite the address again.
             **Side effects**: the invitation and its notification disappear; the action is audit-logged.
             **Errors**:
-            - 404 `community.invitation.not_found`: no unexpired invitation with this id was sent to the caller's address
+            - 404 `community.invitation.not_found`: no unexpired invitation with this id was sent to the caller
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Declined",
             content = @Content(examples = @ExampleObject(name = "Declined", value = EX_OK)))

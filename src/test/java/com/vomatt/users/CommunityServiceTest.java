@@ -150,20 +150,20 @@ class CommunityServiceTest {
     }
 
     @Test
-    void shouldRefuseAddingOwnerWhenCallerIsAdmin() {
+    void shouldRefuseInvitingOwnerWhenCallerIsAdmin() {
         caller(ADMIN);
 
-        assertThatThrownBy(() -> service.addMember(communityId, targetId, OWNER, callerId.toString()))
+        assertThatThrownBy(() -> service.invite(communityId, targetId, null, OWNER, callerId.toString()))
                 .satisfies(ex -> assertKey(ex, MessageKey.COMMUNITY_ROLE_FORBIDDEN));
     }
 
     @Test
-    void shouldRefuseMemberWhenUserIsCommunityAccount() {
+    void shouldRefuseInviteWhenUserIsCommunityAccount() {
         caller(OWNER);
         when(userRepository.findById(targetId)).thenReturn(Optional.of(
                 User.builder().id(targetId).username("other_community").roles(new String[] { "community" }).build()));
 
-        assertThatThrownBy(() -> service.addMember(communityId, targetId, EDITOR, callerId.toString()))
+        assertThatThrownBy(() -> service.invite(communityId, targetId, null, EDITOR, callerId.toString()))
                 .satisfies(ex -> assertKey(ex, MessageKey.COMMUNITY_MEMBER_INVALID));
     }
 
@@ -242,7 +242,7 @@ class CommunityServiceTest {
         when(userRepository.getReferenceById(communityId)).thenReturn(User.builder().id(communityId).username("tower").displayName("Sunrise Tower").build());
         when(userRepository.getReferenceById(callerId)).thenReturn(User.builder().id(callerId).username("amy").build());
 
-        service.invite(communityId, " Dave@Example.com", CommunityRole.EDITOR, callerId.toString());
+        service.invite(communityId, null, "dave@example.com", CommunityRole.EDITOR, callerId.toString());
 
         verify(emailService).sendCommunityInvitationEmail(org.mockito.ArgumentMatchers.eq("dave@example.com"), org.mockito.ArgumentMatchers.eq("amy"),
                 org.mockito.ArgumentMatchers.eq("amy"), org.mockito.ArgumentMatchers.eq("Sunrise Tower"), org.mockito.ArgumentMatchers.eq("EDITOR"),
@@ -255,7 +255,7 @@ class CommunityServiceTest {
         savesInvitation();
         when(userRepository.existsByEmail("dave@example.com")).thenReturn(true);
 
-        service.invite(communityId, "dave@example.com", CommunityRole.EDITOR, callerId.toString());
+        service.invite(communityId, null, "dave@example.com", CommunityRole.EDITOR, callerId.toString());
 
         org.mockito.Mockito.verifyNoInteractions(invitationEmailLimiter, emailService);
     }

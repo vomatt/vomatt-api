@@ -14,7 +14,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * An invitation to join a community account, sent to a normalized email address with the role the invitee gets. Never
+ * An invitation to join a community account, sent to a user picked by id or to a normalized email address (exactly one),
+ * with the role the invitee gets. Never
  * updated: accepting, declining or joining at sign-up deletes it, and inviting the address again replaces an expired one.
  */
 @Entity
@@ -26,7 +27,12 @@ public class CommunityInvitation extends BaseEntity {
     @Column(name = "community_user_id", nullable = false)
     private UUID communityUserId;
 
-    @Column(name = "email", nullable = false, length = 254)
+    /** The user picked by id; null for an invitation by email. */
+    @Column(name = "user_id")
+    private UUID userId;
+
+    /** The normalized address; null for an invitation by user id. */
+    @Column(name = "email", length = 254)
     private String email;
 
     @Enumerated(EnumType.STRING)
@@ -40,8 +46,10 @@ public class CommunityInvitation extends BaseEntity {
     @Column(name = "expires_at", nullable = false)
     private OffsetDateTime expiresAt;
 
-    public CommunityInvitation(UUID communityUserId, String email, CommunityRole role, UUID invitedBy, OffsetDateTime expiresAt) {
+    public CommunityInvitation(UUID communityUserId, UUID userId, String email, CommunityRole role, UUID invitedBy,
+                               OffsetDateTime expiresAt) {
         this.communityUserId = communityUserId;
+        this.userId = userId;
         this.email = email;
         this.role = role;
         this.invitedBy = invitedBy;

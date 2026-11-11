@@ -149,12 +149,14 @@ public class NotificationRepository {
                     FROM vomatt.votes v
                     JOIN vomatt.vote_likes l ON l.vote_id = v.id
                     WHERE v.creator_id = :userId AND v.deleted_at IS NULL AND l.user_id <> :userId""",
-            // Unexpired community account invitations to the address of the user's account (always verified), from the
-            // community account; none once the user is a member. Accepting, declining or revoking deletes the row
+            // Unexpired community account invitations to the user, by id or to the address of their account (always
+            // verified), from the community account; none once the user is a member. Accepting, declining or revoking
+            // deletes the row
             NotificationKind.COMMUNITY_INVITATION, select(NotificationKind.COMMUNITY_INVITATION, "ci.id", "ci.created_at",
                     "ci.community_user_id", NONE, NONE) + """
-                    FROM vomatt.community_invitations ci JOIN vomatt.users u ON u.email = ci.email
-                    WHERE u.id = :userId AND ci.expires_at > :now
+                    FROM vomatt.community_invitations ci
+                    WHERE (ci.user_id = :userId OR ci.email = (SELECT u.email FROM vomatt.users u WHERE u.id = :userId))
+                      AND ci.expires_at > :now
                       AND NOT EXISTS (SELECT 1 FROM vomatt.community_members m
                                       WHERE m.community_user_id = ci.community_user_id AND m.user_id = :userId)"""));
 

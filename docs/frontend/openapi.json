@@ -2920,14 +2920,15 @@
         "type" : "object"
       },
       "CommunityInvitationRequest" : {
-        "description" : "Invite an email address to a community account",
+        "description" : "Invite a user, by id or by email address (exactly one), to a community account",
         "properties" : {
           "email" : {
-            "description" : "The invitee's email address",
+            "description" : "The invitee's email address; send this or `userId`",
             "example" : "dave@example.com",
             "format" : "email",
             "maxLength" : 254,
             "minLength" : 0,
+            "nullable" : true,
             "type" : "string"
           },
           "role" : {
@@ -2935,22 +2936,42 @@
             "enum" : [ "OWNER", "ADMIN", "CHIEF_EDITOR", "EDITOR", "ANALYST" ],
             "example" : "EDITOR",
             "type" : "string"
+          },
+          "userId" : {
+            "description" : "The invitee's user id, e.g. from user search; send this or `email`",
+            "example" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
+            "format" : "uuid",
+            "nullable" : true,
+            "type" : "string"
           }
         },
-        "required" : [ "email", "role" ],
+        "required" : [ "role" ],
         "type" : "object"
       },
       "CommunityInvitationResponse" : {
-        "description" : "An invitation to join a community account, sent to an email address",
+        "description" : "An invitation to join a community account, sent to a user (`userId` set) or to an email address (`email` set)",
         "nullable" : true,
         "properties" : {
+          "avatarUrl" : {
+            "description" : "The invited user's avatar; null if never set or for an invitation by email",
+            "example" : "bot:boba",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "displayName" : {
+            "description" : "The invited user's display name; null if never set or for an invitation by email",
+            "example" : "Dave",
+            "nullable" : true,
+            "type" : "string"
+          },
           "email" : {
-            "description" : "The invited address, normalized",
+            "description" : "The invited address, normalized; null for an invitation by user id. Never tells whether it has an account",
             "example" : "dave@example.com",
+            "nullable" : true,
             "type" : "string"
           },
           "expiresAt" : {
-            "description" : "When it stops being usable, 7 days after it was sent; an expired one is listed until the address is invited again",
+            "description" : "When it stops being usable, 7 days after it was sent; an expired one is listed until the user or address is invited again",
             "example" : "2026-11-18T14:52:00+08:00",
             "format" : "date-time",
             "type" : "string"
@@ -2970,6 +2991,18 @@
             "description" : "Role the invitee gets on joining",
             "enum" : [ "OWNER", "ADMIN", "CHIEF_EDITOR", "EDITOR", "ANALYST" ],
             "example" : "EDITOR",
+            "type" : "string"
+          },
+          "userId" : {
+            "description" : "The invited user's id; null for an invitation by email",
+            "example" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "username" : {
+            "description" : "The invited user's username; null for an invitation by email",
+            "example" : "dave",
+            "nullable" : true,
             "type" : "string"
           }
         },
@@ -2997,25 +3030,6 @@
             "type" : "string"
           }
         },
-        "type" : "object"
-      },
-      "CommunityMemberRequest" : {
-        "description" : "A user to add to a community account, with a role",
-        "properties" : {
-          "role" : {
-            "description" : "Role: OWNER, ADMIN, CHIEF_EDITOR, EDITOR or ANALYST; only an OWNER can grant OWNER",
-            "enum" : [ "OWNER", "ADMIN", "CHIEF_EDITOR", "EDITOR", "ANALYST" ],
-            "example" : "EDITOR",
-            "type" : "string"
-          },
-          "userId" : {
-            "description" : "The active user to add",
-            "example" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
-            "format" : "uuid",
-            "type" : "string"
-          }
-        },
-        "required" : [ "role", "userId" ],
         "type" : "object"
       },
       "CommunityMemberResponse" : {
@@ -4282,7 +4296,7 @@
             "type" : "string"
           },
           "kind" : {
-            "description" : "RESULT: a Poll you own, hold a Ballot in, are invited to or bookmarked has Ended with at least one Ballot. CANCELLED: an Invite-only Poll you are invited to was Cancelled before it opened. INVITATION: you are invited to a Scheduled or Open Invite-only Poll (replaced by RESULT once it Ends). FOLLOWED: someone followed you. COMMENT: someone commented on your Poll or replied to your Comment. MENTION: someone @mentioned you in a Comment or Reply that is not already your COMMENT. CLOSING_SOON: a Poll you are invited to, or a Public Poll of someone you follow, ends within 24 hours and you hold no Ballot in it. LIKE: someone liked your Comment or Reply. POLL_LIKE: someone liked your Poll. COMMUNITY_INVITATION: a community account invited your email address to join it and waits for your answer (gone once you accept, decline, it is revoked or expires, or you are already a member); not affected by the `invitations` preference",
+            "description" : "RESULT: a Poll you own, hold a Ballot in, are invited to or bookmarked has Ended with at least one Ballot. CANCELLED: an Invite-only Poll you are invited to was Cancelled before it opened. INVITATION: you are invited to a Scheduled or Open Invite-only Poll (replaced by RESULT once it Ends). FOLLOWED: someone followed you. COMMENT: someone commented on your Poll or replied to your Comment. MENTION: someone @mentioned you in a Comment or Reply that is not already your COMMENT. CLOSING_SOON: a Poll you are invited to, or a Public Poll of someone you follow, ends within 24 hours and you hold no Ballot in it. LIKE: someone liked your Comment or Reply. POLL_LIKE: someone liked your Poll. COMMUNITY_INVITATION: a community account invited you (by id or your email address) to join it and waits for your answer (gone once you accept, decline, it is revoked or expires, or you are already a member); not affected by the `invitations` preference",
             "enum" : [ "RESULT", "CANCELLED", "INVITATION", "FOLLOWED", "COMMENT", "MENTION", "CLOSING_SOON", "LIKE", "POLL_LIKE", "COMMUNITY_INVITATION" ],
             "example" : "COMMENT",
             "type" : "string"
@@ -12950,7 +12964,7 @@
     },
     "/api/communities" : {
       "post" : {
-        "description" : "**Auth**: required\n**Precondition**: the caller is an active account that is not a community account; the username is free\n**Behavior**: creates a community account (a group's page: `displayName` is the group name, the logo is its avatar) with the caller as its first OWNER, who then adds members. It has no email or phone and can never sign in; members act as it with the `X-Act-As` header. Sent while acting, the real member becomes the OWNER. Returns 201 with the account, `community` true\n**Side effects**: the creation is audit-logged\n**Errors**:\n- 400 `common.validation_failed`: `username` not 3-50 characters of [a-z0-9_] or reserved, `displayName` blank or over 100 characters\n- 400 `community.member.invalid`: the caller is suspended or is a community account\n- 409 `user.username.taken`: the username is in use\n",
+        "description" : "**Auth**: required\n**Precondition**: the caller is an active account that is not a community account; the username is free\n**Behavior**: creates a community account (a group's page: `displayName` is the group name, the logo is its avatar) with the caller as its first OWNER, who then invites members (`POST /api/communities/{communityId}/invitations`). It has no email or phone and can never sign in; members act as it with the `X-Act-As` header. Sent while acting, the real member becomes the OWNER. Returns 201 with the account, `community` true\n**Side effects**: the creation is audit-logged\n**Errors**:\n- 400 `common.validation_failed`: `username` not 3-50 characters of [a-z0-9_] or reserved, `displayName` blank or over 100 characters\n- 400 `community.member.invalid`: the caller is suspended or is a community account\n- 409 `user.username.taken`: the username is in use\n",
         "operationId" : "createOwnCommunity",
         "requestBody" : {
           "content" : {
@@ -13359,11 +13373,15 @@
                     "description" : "Invitations",
                     "value" : {
                       "data" : [ {
-                        "email" : "dave@example.com",
+                        "avatarUrl" : "bot:boba",
+                        "displayName" : "Dave",
+                        "email" : null,
                         "expiresAt" : "2026-11-18T14:52:00+08:00",
                         "id" : "019a6b2c-3d4e-7f50-8a61-b2c3d4e5f607",
                         "invitedAt" : "2026-11-11T14:52:00+08:00",
-                        "role" : "EDITOR"
+                        "role" : "EDITOR",
+                        "userId" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
+                        "username" : "dave"
                       } ],
                       "error" : null,
                       "errorCode" : null,
@@ -13428,7 +13446,7 @@
         "tags" : [ "Community Account" ]
       },
       "post" : {
-        "description" : "**Auth**: required (OWNER or ADMIN)\n**Precondition**: the address has no unexpired invitation to this community account\n**Behavior**: invites the address with the role; it can be used for 7 days. The response is the same whether or not the address belongs to an account, and whether or not that account is already a member. An address with an account gets a `COMMUNITY_INVITATION` notification and accepts (`POST /api/community-invitations/{invitationId}/accept`) or declines it; an address with no account is mailed, and signing up with it (any sign-in method that verifies the address) joins with the role. An expired invitation of the address is replaced by the new one. Roles: OWNER and ADMIN manage members; an ADMIN never changes or removes an OWNER nor grants OWNER. CHIEF_EDITOR, EDITOR and ANALYST cannot manage members.\n**Side effects**: an address with no account at all is mailed once committed; one member mails one address at most once a week, within the member's own daily invitation email limit (shared with their Poll and Invite List invitations). Audit-logged.\n**Errors**:\n- 400 `common.validation_failed`: `email` missing or invalid, or `role` missing or invalid\n- 409 `community.invitation.exists`: the address already has an unexpired invitation to this community account\n- 403 `community.not_member`: the caller is not a member of this community account, or it does not exist or is suspended\n- 403 `community.role_forbidden`: the caller is not an OWNER or ADMIN, or is an ADMIN and the invitation grants OWNER\n",
+        "description" : "**Auth**: required (OWNER or ADMIN)\n**Precondition**: the invitee has no unexpired invitation to this community account\n**Behavior**: the only way to add a member: invites a user picked by `userId` (e.g. from user search) or an `email` address, exactly one, with the role; it can be used for 7 days. Nobody joins without answering: the user, or the account whose email is the address, gets a `COMMUNITY_INVITATION` notification and accepts (`POST /api/community-invitations/{invitationId}/accept`) or declines it. An address with no account is mailed, and signing up with it (any sign-in method that verifies the address) joins with the role. For an `email` the response is the same whether or not the address belongs to an account, or to a member. An expired invitation of the same user or address is replaced by the new one. Roles: OWNER and ADMIN manage members; an ADMIN never changes or removes an OWNER nor grants OWNER. CHIEF_EDITOR, EDITOR and ANALYST cannot manage members.\n**Side effects**: an address with no account at all is mailed once committed; one member mails one address at most once a week, within the member's own daily invitation email limit (shared with their Poll and Invite List invitations). Audit-logged.\n**Errors**:\n- 400 `common.validation_failed`: neither or both of `userId` and `email`, `email` invalid, or `role` missing or invalid\n- 400 `community.member.invalid`: the `userId` is suspended or is a community account\n- 404 `user.not_found`: no user with this `userId`\n- 409 `community.member.exists`: the `userId` is already a member\n- 409 `community.invitation.exists`: the user or address already has an unexpired invitation to this community account\n- 403 `community.not_member`: the caller is not a member of this community account, or it does not exist or is suspended\n- 403 `community.role_forbidden`: the caller is not an OWNER or ADMIN, or is an ADMIN and the invitation grants OWNER\n",
         "operationId" : "invite",
         "parameters" : [ {
           "description" : "Community account's user id",
@@ -13445,11 +13463,18 @@
           "content" : {
             "application/json" : {
               "examples" : {
-                "Invite an editor" : {
-                  "description" : "Invite an editor",
+                "Invite a user" : {
+                  "description" : "Invite a user",
+                  "value" : {
+                    "role" : "EDITOR",
+                    "userId" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47"
+                  }
+                },
+                "Invite an email address" : {
+                  "description" : "Invite an email address",
                   "value" : {
                     "email" : "dave@example.com",
-                    "role" : "EDITOR"
+                    "role" : "ANALYST"
                   }
                 }
               },
@@ -13461,33 +13486,15 @@
           "required" : true
         },
         "responses" : {
-          "201" : {
+          "200" : {
             "content" : {
               "application/json" : {
-                "examples" : {
-                  "Invitation" : {
-                    "description" : "Invitation",
-                    "value" : {
-                      "data" : {
-                        "email" : "dave@example.com",
-                        "expiresAt" : "2026-11-18T14:52:00+08:00",
-                        "id" : "019a6b2c-3d4e-7f50-8a61-b2c3d4e5f607",
-                        "invitedAt" : "2026-11-11T14:52:00+08:00",
-                        "role" : "EDITOR"
-                      },
-                      "error" : null,
-                      "errorCode" : null,
-                      "message" : null,
-                      "success" : true
-                    }
-                  }
-                },
                 "schema" : {
                   "$ref" : "#/components/schemas/ApiResponseCommunityInvitationResponse"
                 }
               }
             },
-            "description" : "Invitation sent"
+            "description" : "Success"
           },
           "400" : {
             "content" : {
@@ -13522,28 +13529,6 @@
             },
             "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
           },
-          "409" : {
-            "content" : {
-              "application/json" : {
-                "examples" : {
-                  "community.invitation.exists" : {
-                    "description" : "community.invitation.exists",
-                    "value" : {
-                      "data" : null,
-                      "error" : "This email address already has a pending invitation",
-                      "errorCode" : "community.invitation.exists",
-                      "message" : "This email address already has a pending invitation",
-                      "success" : false
-                    }
-                  }
-                },
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description" : "Already invited (`community.invitation.exists`)"
-          },
           "429" : {
             "content" : {
               "application/json" : {
@@ -13556,7 +13541,7 @@
             "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
           }
         },
-        "summary" : "Invite an email address to a community account",
+        "summary" : "Invite a user to a community account",
         "tags" : [ "Community Account" ]
       }
     },
@@ -13775,117 +13760,6 @@
           }
         },
         "summary" : "List community account members",
-        "tags" : [ "Community Account" ]
-      },
-      "post" : {
-        "description" : "**Auth**: required (OWNER or ADMIN)\n**Precondition**: the user is an active account, not a community account, and not yet a member\n**Behavior**: adds the user with the role. Roles: OWNER and ADMIN manage members; an ADMIN never changes or removes an OWNER nor grants OWNER. CHIEF_EDITOR, EDITOR and ANALYST cannot manage members.\n**Side effects**: the action is audit-logged.\n**Errors**:\n- 400 `community.member.invalid`: the user is suspended or is a community account\n- 400 `common.validation_failed`: `userId` or `role` missing or invalid\n- 404 `user.not_found`: no user with this id\n- 409 `community.member.exists`: the user is already a member\n- 403 `community.not_member`: the caller is not a member of this community account, or it does not exist or is suspended\n- 403 `community.role_forbidden`: the caller's role does not allow this change\n",
-        "operationId" : "addMember",
-        "parameters" : [ {
-          "description" : "Community account's user id",
-          "example" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48",
-          "in" : "path",
-          "name" : "communityId",
-          "required" : true,
-          "schema" : {
-            "format" : "uuid",
-            "type" : "string"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "examples" : {
-                "Add an editor" : {
-                  "description" : "Add an editor",
-                  "value" : {
-                    "role" : "EDITOR",
-                    "userId" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47"
-                  }
-                }
-              },
-              "schema" : {
-                "$ref" : "#/components/schemas/CommunityMemberRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "201" : {
-            "content" : {
-              "application/json" : {
-                "examples" : {
-                  "Member" : {
-                    "description" : "Member",
-                    "value" : {
-                      "data" : {
-                        "avatarUrl" : "bot:boba",
-                        "displayName" : "Alice",
-                        "joinedAt" : "2026-11-09T10:00:00+08:00",
-                        "role" : "OWNER",
-                        "userId" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
-                        "username" : "alice"
-                      },
-                      "error" : null,
-                      "errorCode" : null,
-                      "message" : null,
-                      "success" : true
-                    }
-                  }
-                },
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseCommunityMemberResponse"
-                }
-              }
-            },
-            "description" : "Member added"
-          },
-          "400" : {
-            "content" : {
-              "application/json" : {
-                "example" : null,
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
-          },
-          "401" : {
-            "content" : {
-              "application/json" : {
-                "example" : null,
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
-          },
-          "403" : {
-            "content" : {
-              "application/json" : {
-                "example" : null,
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
-          },
-          "429" : {
-            "content" : {
-              "application/json" : {
-                "example" : null,
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
-          }
-        },
-        "summary" : "Add a community account member",
         "tags" : [ "Community Account" ]
       }
     },
@@ -14267,7 +14141,7 @@
     },
     "/api/community-invitations/{invitationId}/accept" : {
       "post" : {
-        "description" : "**Auth**: required; refused while acting as a community account (`X-Act-As`)\n**Precondition**: the invitation was sent to the caller's email address and has not expired\n**Behavior**: the caller joins the community account with the invitation's role and the invitation is used up. The invitation id is `communityInvitation.id` of the `COMMUNITY_INVITATION` notification. A caller already a member keeps their current role. Returns the membership as `GET /api/users/me/communities` lists it.\n**Side effects**: the invitation and its notification disappear; the action is audit-logged.\n**Errors**:\n- 400 `community.member.invalid`: the caller is suspended or is a community account\n- 404 `community.invitation.not_found`: no unexpired invitation with this id was sent to the caller's address, or the community account is suspended\n",
+        "description" : "**Auth**: required; refused while acting as a community account (`X-Act-As`)\n**Precondition**: the invitation was sent to the caller (by id or to their email address) and has not expired\n**Behavior**: the caller joins the community account with the invitation's role and the invitation is used up. The invitation id is `communityInvitation.id` of the `COMMUNITY_INVITATION` notification. A caller already a member keeps their current role. Returns the membership as `GET /api/users/me/communities` lists it.\n**Side effects**: the invitation and its notification disappear; the action is audit-logged.\n**Errors**:\n- 400 `community.member.invalid`: the caller is suspended or is a community account\n- 404 `community.invitation.not_found`: no unexpired invitation with this id was sent to the caller, or the community account is suspended\n",
         "operationId" : "acceptInvitation",
         "parameters" : [ {
           "description" : "Invitation id",
@@ -14382,7 +14256,7 @@
     },
     "/api/community-invitations/{invitationId}/decline" : {
       "post" : {
-        "description" : "**Auth**: required; refused while acting as a community account (`X-Act-As`)\n**Precondition**: the invitation was sent to the caller's email address and has not expired\n**Behavior**: deletes the invitation; the community account can invite the address again.\n**Side effects**: the invitation and its notification disappear; the action is audit-logged.\n**Errors**:\n- 404 `community.invitation.not_found`: no unexpired invitation with this id was sent to the caller's address\n",
+        "description" : "**Auth**: required; refused while acting as a community account (`X-Act-As`)\n**Precondition**: the invitation was sent to the caller (by id or to their email address) and has not expired\n**Behavior**: deletes the invitation; the community account can invite the address again.\n**Side effects**: the invitation and its notification disappear; the action is audit-logged.\n**Errors**:\n- 404 `community.invitation.not_found`: no unexpired invitation with this id was sent to the caller\n",
         "operationId" : "declineInvitation",
         "parameters" : [ {
           "description" : "Invitation id",

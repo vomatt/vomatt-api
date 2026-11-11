@@ -53,7 +53,7 @@ class CommunityInvitationPostgresTest extends PostgresRepositoryTest {
     }
 
     private CommunityInvitationResponse invite(String email, CommunityRole role) {
-        CommunityInvitationResponse invitation = communityService.invite(communityId, email, role, owner.getId().toString());
+        CommunityInvitationResponse invitation = communityService.invite(communityId, null, email, role, owner.getId().toString());
         em.flush();
         return invitation;
     }
@@ -109,7 +109,7 @@ class CommunityInvitationPostgresTest extends PostgresRepositoryTest {
 
     @Test
     void shouldHideNotificationWhenInviteeIsAlreadyMember() {
-        memberRepository.save(new com.vomatt.entity.CommunityMember(communityId, dave.getId(), CommunityRole.ANALYST));
+        em.persist(new com.vomatt.entity.CommunityMember(communityId, dave.getId(), CommunityRole.ANALYST));
         CommunityInvitationResponse invitation = invite(dave.getEmail(), CommunityRole.ADMIN);
 
         assertThat(hasNotification(dave, invitation.id())).isFalse();
@@ -148,13 +148,36 @@ class CommunityInvitationPostgresTest extends PostgresRepositoryTest {
 
     @Test
     void shouldRefuseAdminWhenInvitingOrRevokingOwner() {
-        memberRepository.save(new com.vomatt.entity.CommunityMember(communityId, dave.getId(), CommunityRole.ADMIN));
+        em.persist(new com.vomatt.entity.CommunityMember(communityId, dave.getId(), CommunityRole.ADMIN));
         CommunityInvitationResponse ownerInvite = invite("gina@example.com", CommunityRole.OWNER);
 
-        assertKey(() -> communityService.invite(communityId, "hank@example.com", CommunityRole.OWNER, dave.getId().toString()),
+        assertKey(() -> communityService.invite(communityId, null, "hank@example.com", CommunityRole.OWNER, dave.getId().toString()),
                 MessageKey.COMMUNITY_ROLE_FORBIDDEN);
         assertKey(() -> communityService.revokeInvitation(communityId, UUID.fromString(ownerInvite.id()), dave.getId().toString()),
                 MessageKey.COMMUNITY_ROLE_FORBIDDEN);
         communityService.revokeInvitation(communityId, UUID.fromString(ownerInvite.id()), owner.getId().toString());
+    }
+
+    @Test
+    void shouldNotifyAndJoinOnlyAfterAcceptWhenInvitedById() {
+        User phoneOnly = User.builder().username("ci-p-" + UUID.randomUUID().toString().substring(0, 8)).phoneNumber(String.format("+886912%06d", System.nanoTime() % 1000000)).build();
+        em.persist(phoneOnly);
+        CommunityInvitationResponse invitation = communityService.invite(communityId, phoneOnly.getId(), null,
+                CommunityRole.EDITOR, owner.getId().toString());
+        em.flush();
+
+        assertThat(invitation.username()).isEqualTo(phoneOnly.getUsername());
+        assertThat(invitation.email()).isNull();
+        assertThat(memberRepository.findActiveRole(communityId, phoneOnly.getId())).isEmpty();
+        assertThat(hasNotification(phoneOnly, invitation.id())).isTrue();
+        assertKey(() -> communityService.invite(communityId, phoneOnly.getId(), null, CommunityRole.ADMIN, owner.getId().toString()),
+                MessageKey.COMMUNITY_INVITATION_EXISTS);
+
+        communityService.acceptInvitation(UUID.fromString(invitation.id()), phoneOnly.getId().toString());
+        em.flush();
+
+        assertThat(memberRepository.findActiveRole(communityId, phoneOnly.getId())).contains(CommunityRole.EDITOR);
+        assertKey(() -> communityService.invite(communityId, phoneOnly.getId(), null, CommunityRole.ADMIN, owner.getId().toString()),
+                MessageKey.COMMUNITY_MEMBER_EXISTS);
     }
 }

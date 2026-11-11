@@ -74,8 +74,8 @@ class CommunityAvatarPostgresTest extends PostgresRepositoryTest {
             em.flush();
             communityId = UUID.fromString(communityService.createCommunity(
                     "community_" + UUID.randomUUID().toString().substring(0, 8), "Sunrise Tower", owner.getId()).id());
-            communityService.addMember(communityId, admin.getId(), CommunityRole.ADMIN, owner.getId().toString());
-            communityService.addMember(communityId, editor.getId(), CommunityRole.EDITOR, owner.getId().toString());
+            em.persist(new com.vomatt.entity.CommunityMember(communityId, admin.getId(), CommunityRole.ADMIN));
+            em.persist(new com.vomatt.entity.CommunityMember(communityId, editor.getId(), CommunityRole.EDITOR));
         });
     }
 

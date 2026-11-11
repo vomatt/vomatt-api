@@ -59,11 +59,13 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Slf4j
 @Service
@@ -470,6 +472,20 @@ public class UserService {
     @Transactional
     public UserProfileResponse updateMyProfile(String userId, UpdateProfileRequest request) {
         User user = findUserById(userId);
+        if (user.isCommunity()) {
+            if (request.getUsername() != null && !request.getUsername().equals(user.getUsername())) {
+                throw ApiException.badRequest(MessageKey.COMMUNITY_USERNAME_IMMUTABLE);
+            }
+            if (Stream.of(request.getFirstName(), request.getLastName(), request.getBirthday(), request.getGender()).anyMatch(Objects::nonNull)) {
+                throw ApiException.badRequest(MessageKey.COMMON_BAD_REQUEST);
+            }
+            if (request.getDisplayName() != null) {
+                request.setDisplayName(request.getDisplayName().trim());
+                if (request.getDisplayName().isEmpty()) {
+                    throw ApiException.badRequest(MessageKey.COMMON_VALIDATION_FAILED);
+                }
+            }
+        }
         if (request.getUsername() != null && !request.getUsername().equals(user.getUsername())) {
             if (userRepository.existsByUsername(request.getUsername())) {
                 throw ApiException.conflict(MessageKey.USER_USERNAME_TAKEN);

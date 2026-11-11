@@ -11,7 +11,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 
 | errorCode | HTTP status | zh-TW message | en message | Suggested UI behavior | Used in |
 |-----------|-------------|-----------|---------|--------------|----------|
-| `common.bad_request` | 400 | 請求格式錯誤 | Bad request format | Show message so the user can fix the input | CommunityService, GlobalExceptionHandler, UserController |
+| `common.bad_request` | 400 | 請求格式錯誤 | Bad request format | Show message so the user can fix the input | GlobalExceptionHandler, UserController, UserService |
 | `common.internal_error` | 500 | 伺服器錯誤，請稍後再試 | Internal server error, please try again later | Show a generic error notice | GlobalExceptionHandler |
 | `common.service_unavailable` | 503 | 服務暫時無法使用，請稍後再試 | Service temporarily unavailable, please try again later | Show service temporarily unavailable, retry later | AuthService, GlobalExceptionHandler |
 | `common.unauthorized` | 401 | 未授權的請求 | Unauthorized request | See [auth-flow.md](auth-flow.md) | JwtAuthenticationEntryPoint |
@@ -19,7 +19,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `common.rate_limited` | 429 | 請求過於頻繁，請稍後再試 | Too many requests, please try again later | Retry after the `Retry-After` seconds | ContactService, FeedbackService, RateLimitFilter, UserService, VoteService |
 | `common.not_found` | 404 | 找不到指定資源 | The requested resource was not found | Show resource not found | AvatarController, GlobalExceptionHandler, PasskeyService |
 | `common.conflict` | 409 | 資源衝突，請重試 | Resource conflict, please try again | Show message (resource state conflict) | GlobalExceptionHandler |
-| `common.validation_failed` | 400 | 輸入資料驗證失敗 | Validation failed | Show message so the user can fix the input | AdminUserService, CommunityService, GlobalExceptionHandler |
+| `common.validation_failed` | 400 | 輸入資料驗證失敗 | Validation failed | Show message so the user can fix the input | AdminUserService, GlobalExceptionHandler, UserService |
 | `common.missing_param` | 400 | 缺少必要參數：{0} | Missing required parameter: {0} | Show message so the user can fix the input | GlobalExceptionHandler, UserController |
 | `common.type_mismatch` | 400 | 參數格式錯誤：{0} | Invalid parameter format: {0} | Show message so the user can fix the input | GlobalExceptionHandler |
 | `common.file_required` | 400 | 請選擇要上傳的檔案 | Please select a file to upload | Show message so the user can fix the input | UserService |
@@ -118,15 +118,15 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `admin.last_admin` | 409 | 不能移除最後一位管理員 | Cannot remove the last active admin | Show message (resource state conflict) | UserService |
 | `auth.community_sign_in_not_allowed` | 403 | 社群帳號無法登入，請以成員身分登入後切換 | Community accounts cannot sign in; sign in as a member and switch to the account | Show a permission-denied notice | AuthService |
 | `vote.ballot.community_not_allowed` | 403 | 社群帳號不能投票 | Community accounts cannot vote | Show a permission-denied notice | VoteService |
-| `community.not_member` | 403 | 你不是此社群帳號的成員 | You are not a member of this community account | Show a permission-denied notice | ActAsFilter, CommunityService, PlanService |
-| `community.role_forbidden` | 403 | 你在此社群帳號的角色無權執行此操作 | Your role in this community account does not allow this action | Show a permission-denied notice | ActAsFilter, ActingMember, CommunityService, PlanService, PollReportService |
+| `community.not_member` | 403 | 你不是此社群帳號的成員 | You are not a member of this community account | Show a permission-denied notice | ActAsFilter, CommunityService |
+| `community.role_forbidden` | 403 | 你在此社群帳號的角色無權執行此操作 | Your role in this community account does not allow this action | Show a permission-denied notice | ActAsFilter, ActingMember, CommunityService, PollReportService |
 | `community.member.not_found` | 404 | 此用戶不是該社群帳號的成員 | This user is not a member of the community account | Show resource not found | CommunityService |
 | `community.member.exists` | 409 | 此用戶已是該社群帳號的成員 | This user is already a member of the community account | Show message (resource state conflict) | CommunityService |
 | `community.member.invalid` | 400 | 此用戶無法成為社群帳號成員 | This user cannot become a member of a community account | Show message so the user can fix the input | CommunityService |
 | `community.last_owner` | 409 | 社群帳號至少需保留一位擁有者 | A community account must keep at least one owner | Show message (resource state conflict) | CommunityService, UserService |
 | `community.roles_fixed` | 400 | 社群帳號的角色不能變更 | The roles of a community account cannot be changed | Show message so the user can fix the input | AdminUserService |
 | `community.invitee_not_allowed` | 400 | 社群帳號不能被邀請投票或加入邀請名單 | A community account cannot be invited to a poll or added to an invite list | Show message so the user can fix the input | InviteListService, VoteService |
-| `community.username_immutable` | 400 | 社群帳號的使用者名稱不能變更 | A community account's username cannot be changed | Show message so the user can fix the input | CommunityService |
+| `community.username_immutable` | 400 | 社群帳號的使用者名稱不能變更 | A community account's username cannot be changed | Show message so the user can fix the input | UserService |
 | `vote.reveal_at.before_end` | 400 | 公布結果時間不可早於結束時間 | Reveal time cannot be before the end time | Show message so the user can fix the input | VoteService |
 | `vote.reveal_at.too_late` | 400 | 公布結果時間不可晚於結束時間後 {0} 天 | Reveal time cannot be more than {0} days after the end time | Show message so the user can fix the input | VoteService |
 | `vote.ballot.anonymous_not_allowed` | 400 | Pro 投票不接受匿名投票 | Anonymous ballots are not allowed in a Pro poll | Show message so the user can fix the input | VoteService |

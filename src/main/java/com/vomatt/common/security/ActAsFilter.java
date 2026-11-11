@@ -10,7 +10,6 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -23,7 +22,6 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -51,13 +49,13 @@ public class ActAsFilter extends OncePerRequestFilter {
     public static final String HEADER = "X-Act-As";
 
     private static final RequestMatcher DENIED = new OrRequestMatcher(JwtAuthFilter.anyOf(SecurityEndpoints.ACT_AS_DENIED),
-            on(DELETE, SecurityEndpoints.ACT_AS_DENIED_DELETE));
+            JwtAuthFilter.anyOf(DELETE, SecurityEndpoints.ACT_AS_DENIED_DELETE));
     private static final RequestMatcher PUBLIC_AUTH = JwtAuthFilter.anyOf(SecurityEndpoints.PUBLIC_AUTH);
     private static final RequestMatcher PROFILE = JwtAuthFilter.anyOf(SecurityEndpoints.ACT_AS_PROFILE);
     private static final RequestMatcher ANY_ROLE = new OrRequestMatcher(JwtAuthFilter.anyOf(SecurityEndpoints.ACT_AS_ANY_ROLE),
-            on(POST, SecurityEndpoints.ACT_AS_ANY_ROLE_POST));
+            JwtAuthFilter.anyOf(POST, SecurityEndpoints.ACT_AS_ANY_ROLE_POST));
     private static final RequestMatcher LOCKED_ALLOWED = new OrRequestMatcher(JwtAuthFilter.anyOf(SecurityEndpoints.LOCKED_COMMUNITY_ALLOWED),
-            on(DELETE, SecurityEndpoints.LOCKED_COMMUNITY_ALLOWED_DELETE));
+            JwtAuthFilter.anyOf(DELETE, SecurityEndpoints.LOCKED_COMMUNITY_ALLOWED_DELETE));
     private static final PathPatternRequestMatcher COMMUNITY_PATH = PathPatternRequestMatcher.withDefaults().matcher("/api/communities/{communityId}/**");
     private static final PathPatternRequestMatcher MEMBER_PATH = PathPatternRequestMatcher.withDefaults()
             .matcher(DELETE, "/api/communities/{communityId}/members/{userId}");
@@ -123,11 +121,6 @@ public class ActAsFilter extends OncePerRequestFilter {
             return JwtAuthFilter.READ_METHODS.contains(request.getMethod()) || role.canEditProfile();
         }
         return JwtAuthFilter.READ_METHODS.contains(request.getMethod()) || ANY_ROLE.matches(request) || role.canPublish();
-    }
-
-    private static RequestMatcher on(HttpMethod method, String[] patterns) {
-        return new OrRequestMatcher(Arrays.stream(patterns)
-                .map(p -> PathPatternRequestMatcher.withDefaults().matcher(method, p)).map(RequestMatcher.class::cast).toList());
     }
 
     private static UUID parseUuid(String value) {

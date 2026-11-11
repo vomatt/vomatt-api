@@ -3,7 +3,6 @@ package com.vomatt.users;
 import com.vomatt.common.audit.AuditService;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
-import com.vomatt.entity.CommunityRole;
 import com.vomatt.entity.Plan;
 import com.vomatt.entity.User;
 import com.vomatt.lookups.LookupService;
@@ -22,7 +21,7 @@ import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -59,15 +58,23 @@ public class PlanService {
     private final LockTimeout lockTimeout;
     private final AuditService auditService;
 
-    public int limit(Plan plan) {
-        return lookupService.configInt(plan.limitKey(), plan.defaultLimit());
+    private record Limits(int free, int pro) {
+        int of(Plan plan) {
+            return plan == Plan.PRO ? pro : free;
+        }
+    }
+
+    private Limits limits() {
+        Map<String, Integer> limits = lookupService.configInts(Map.of(Plan.FREE.limitKey(), Plan.FREE.defaultLimit(),
+                Plan.PRO.limitKey(), Plan.PRO.defaultLimit()));
+        return new Limits(limits.get(Plan.FREE.limitKey()), limits.get(Plan.PRO.limitKey()));
     }
 
     /** A selection is required while the user owns more than the limit; {@link #reconcile} keeps the deadline in step. */
     @Transactional(readOnly = true)
     public CommunityQuota quota(User user) {
-        int owned = memberRepository.countOwned(user.getId());
-        int limit = limit(user.getPlan());
+        int owned = memberRepository.findOwnedIds(user.getId(), false).size();
+        int limit = limits().of(user.getPlan());
         OffsetDateTime deadline = owned > limit ? user.getCommunitySelectionDeadline() : null;
         return new CommunityQuota(owned, limit, deadline != null, deadline);
     }
@@ -78,8 +85,12 @@ public class PlanService {
      * caller commits, so two such changes for one user run one after the other and the second counts the first.
      */
     public void requireRoom(UUID userId) {
-        int limit = limit(lockPlan(userId));
-        int owned = memberRepository.countOwned(userId);
+        requireRoom(userId, limits());
+    }
+
+    private void requireRoom(UUID userId, Limits limits) {
+        int limit = limits.of(lockPlan(userId));
+        int owned = memberRepository.findOwnedIds(userId, false).size();
         if (owned >= limit) {
             throw ApiException.withData(HttpStatus.FORBIDDEN, MessageKey.COMMUNITY_LIMIT_REACHED, new LimitReached(limit, owned));
         }
@@ -91,21 +102,22 @@ public class PlanService {
      * room for. A downgrade that leaves the user over the new limit gives them {@link #SELECTION_PERIOD} to
      * {@link #keep} some; until then their community accounts work as before.
      */
-    public void changePlan(UUID userId, Plan plan, Source source, UUID actorId) {
+    public void changePlan(UUID userId, Plan plan, Source source, String actorId) {
         Plan before = lockPlan(userId);
         if (before == plan) {
             return;
         }
+        Limits limits = limits();
         userRepository.setPlan(userId, plan);
         List<UUID> unlocking = List.of();
         if (plan.compareTo(before) > 0) {
             List<UUID> locked = memberRepository.findOwnedIds(userId, true);
-            int room = Math.max(0, limit(plan) - memberRepository.countOwned(userId));
+            int room = Math.max(0, limits.of(plan) - memberRepository.findOwnedIds(userId, false).size());
             unlocking = locked.subList(0, Math.min(room, locked.size()));
             setLocked(unlocking, false, actorId, LockReason.UPGRADE);
         }
-        reconcileWithOwnersOf(userId, unlocking);
-        auditService.logActionNow(Objects.toString(actorId, null), "CHANGE_PLAN", "USER", userId.toString(), "from=" + before + "; to=" + plan + "; source=" + source);
+        reconcileWithOwnersOf(userId, unlocking, limits);
+        auditService.logActionNow(actorId, "CHANGE_PLAN", "USER", userId.toString(), "from=" + before + "; to=" + plan + "; source=" + source);
         log.info("User {} plan changed from {} to {} by {}", userId, before, plan, source);
     }
 
@@ -116,7 +128,8 @@ public class PlanService {
      * fewer), each one the user owns, none twice.
      */
     public void keep(UUID userId, Collection<UUID> keep) {
-        int limit = limit(lockPlan(userId));
+        Limits limits = limits();
+        int limit = limits.of(lockPlan(userId));
         List<UUID> owned = memberRepository.findOwnedIds(userId);
         if (keep.isEmpty() || keep.size() != Math.min(limit, owned.size()) || new HashSet<>(keep).size() != keep.size()
                 || !owned.containsAll(keep)) {
@@ -124,24 +137,19 @@ public class PlanService {
         }
         // Both passes below lock rows; taking them all first keeps the id order across the two
         lockTimeout.within(() -> userRepository.lockIds(owned));
-        setLocked(owned.stream().filter(id -> !keep.contains(id)).toList(), true, userId, LockReason.USER_CHOICE);
-        setLocked(keep, false, userId, LockReason.USER_CHOICE);
-        reconcileWithOwnersOf(userId, owned);
+        setLocked(owned.stream().filter(id -> !keep.contains(id)).toList(), true, userId.toString(), LockReason.USER_CHOICE);
+        setLocked(keep, false, userId.toString(), LockReason.USER_CHOICE);
+        reconcileWithOwnersOf(userId, owned, limits);
     }
 
-    /** An OWNER with room in their plan unlocks a locked community account, which then counts toward their limit. */
-    public void unlock(UUID communityId, UUID callerId) {
-        CommunityRole role = memberRepository.findActiveRole(communityId, callerId)
-                .orElseThrow(() -> ApiException.forbidden(MessageKey.COMMUNITY_NOT_MEMBER));
-        if (role != CommunityRole.OWNER) {
-            throw ApiException.forbidden(MessageKey.COMMUNITY_ROLE_FORBIDDEN);
-        }
+    void unlock(UUID communityId, UUID callerId) {
         if (!userRepository.existsByIdAndLockedAtIsNotNull(communityId)) {
             return;
         }
-        requireRoom(callerId);
-        setLocked(List.of(communityId), false, callerId, LockReason.OWNER_UNLOCK);
-        reconcileWithOwnersOf(callerId, List.of(communityId));
+        Limits limits = limits();
+        requireRoom(callerId, limits);
+        setLocked(List.of(communityId), false, callerId.toString(), LockReason.OWNER_UNLOCK);
+        reconcileWithOwnersOf(callerId, List.of(communityId), limits);
     }
 
     /**
@@ -150,7 +158,8 @@ public class PlanService {
      * second run (another instance) or a choice made meanwhile changes nothing. Returns how many it locked.
      */
     public int expireSelection(UUID userId, OffsetDateTime now) {
-        int limit = limit(lockPlan(userId));
+        Limits limits = limits();
+        int limit = limits.of(lockPlan(userId));
         OffsetDateTime deadline = userRepository.findSelectionDeadline(userId).orElse(null);
         if (deadline == null || deadline.isAfter(now)) {
             return 0;
@@ -158,14 +167,14 @@ public class PlanService {
         List<UUID> unlocked = memberRepository.findOwnedIds(userId, false);
         List<UUID> locking = unlocked.subList(Math.min(limit, unlocked.size()), unlocked.size());
         int locked = setLocked(locking, true, null, LockReason.SELECTION_DEADLINE);
-        reconcileWithOwnersOf(userId, locking);
+        reconcileWithOwnersOf(userId, locking, limits);
         return locked;
     }
 
-    private void reconcileWithOwnersOf(UUID userId, Collection<UUID> communityIds) {
+    private void reconcileWithOwnersOf(UUID userId, Collection<UUID> communityIds, Limits limits) {
         Set<UUID> people = new HashSet<>(communityIds.isEmpty() ? List.of() : memberRepository.findOwnerIds(communityIds));
         people.add(userId);
-        reconcile(people);
+        reconcile(people, limits);
     }
 
     /** {@link #reconcile(Collection)} of every OWNER of the community account, after it was suspended or restored. */
@@ -179,9 +188,12 @@ public class PlanService {
      */
     public void reconcile(Collection<UUID> userIds) {
         if (!userIds.isEmpty()) {
-            userRepository.reconcileSelectionDeadlines(userIds, limit(Plan.FREE), limit(Plan.PRO),
-                    OffsetDateTime.now().plus(SELECTION_PERIOD));
+            reconcile(userIds, limits());
         }
+    }
+
+    private void reconcile(Collection<UUID> userIds, Limits limits) {
+        userRepository.reconcileSelectionDeadlines(userIds, limits.free(), limits.pro(), OffsetDateTime.now().plus(SELECTION_PERIOD));
     }
 
     /**
@@ -189,11 +201,12 @@ public class PlanService {
      * theirs, such as accounts created before plans or an admin lowering a limit. Returns how many deadlines it set or ended.
      */
     public int reconcileAll(OffsetDateTime now) {
-        return userRepository.reconcileAllSelectionDeadlines(limit(Plan.FREE), limit(Plan.PRO), now.plus(SELECTION_PERIOD));
+        Limits limits = limits();
+        return userRepository.reconcileAllSelectionDeadlines(limits.free(), limits.pro(), now.plus(SELECTION_PERIOD));
     }
 
     /** Locks or unlocks those of the community accounts not already so, with one audit entry each; returns how many. */
-    private int setLocked(Collection<UUID> ids, boolean lock, UUID actorId, LockReason reason) {
+    private int setLocked(Collection<UUID> ids, boolean lock, String actorId, LockReason reason) {
         if (ids.isEmpty()) {
             return 0;
         }
@@ -206,7 +219,7 @@ public class PlanService {
         } else {
             userRepository.markUnlocked(changing);
         }
-        changing.forEach(id -> auditService.logActionNow(Objects.toString(actorId, null), lock ? "LOCK" : "UNLOCK", "COMMUNITY",
+        changing.forEach(id -> auditService.logActionNow(actorId, lock ? "LOCK" : "UNLOCK", "COMMUNITY",
                 id.toString(), "reason=" + reason));
         log.info("Community accounts {} {} ({})", changing, lock ? "locked" : "unlocked", reason);
         return changing.size();

@@ -333,7 +333,7 @@ public class UserController {
         Optional<ActingMember> acting = ActingMember.current();
         if (acting.isPresent()) {
             return ResponseEntity.ok(ApiResponse.ok(
-                    communityService.updateProfile(acting.get().communityId(), request, acting.get().memberId().toString())));
+                    communityService.updateProfile(acting.get().communityId(), request, ActingMember.realUserId(principal))));
         }
         UserProfileResponse profile = userService.updateMyProfile(principal.userId(), request);
         log.info("Profile updated for user: {}", principal.userId());
@@ -474,7 +474,7 @@ public class UserController {
             @AuthenticationPrincipal UserPrincipal principal) {
         Optional<ActingMember> acting = ActingMember.current();
         return ResponseEntity.ok(ApiResponse.ok(acting.isPresent()
-                ? communityService.uploadAvatar(acting.get().communityId(), file, acting.get().memberId().toString())
+                ? communityService.uploadAvatar(acting.get().communityId(), file, ActingMember.realUserId(principal))
                 : userService.uploadAvatar(principal.userId(), file)));
     }
 

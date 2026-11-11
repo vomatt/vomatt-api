@@ -88,7 +88,7 @@ class CommunityLimitLockPostgresTest extends PostgresRepositoryTest {
         assertThatThrownBy(() -> second.get(5, TimeUnit.SECONDS)).isInstanceOf(ExecutionException.class)
                 .cause().isInstanceOfSatisfying(ApiException.class,
                         ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMUNITY_LIMIT_REACHED));
-        assertThat(memberRepository.countOwned(owner.getId())).isEqualTo(1);
+        assertThat(memberRepository.findOwnedIds(owner.getId(), false)).hasSize(1);
     }
 
     @Test
@@ -120,7 +120,7 @@ class CommunityLimitLockPostgresTest extends PostgresRepositoryTest {
 
         assertThat(first.get(5, TimeUnit.SECONDS)).isEqualTo(2);
         assertThat(second.get(5, TimeUnit.SECONDS)).isZero();
-        assertThat(memberRepository.countOwned(owner.getId())).isEqualTo(1);
+        assertThat(memberRepository.findOwnedIds(owner.getId(), false)).hasSize(1);
         Object lockAudits = tx.execute(s -> em.createNativeQuery("SELECT count(*) FROM vomatt.audit_logs WHERE action = 'LOCK' AND resource_id IN "
                 + "(SELECT CAST(community_user_id AS text) FROM vomatt.community_members WHERE user_id = :id)")
                 .setParameter("id", owner.getId()).getSingleResult());

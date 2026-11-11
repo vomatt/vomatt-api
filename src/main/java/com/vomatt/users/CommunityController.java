@@ -58,7 +58,6 @@ import java.util.UUID;
 public class CommunityController {
 
     private final CommunityService communityService;
-    private final PlanService planService;
 
     private static final String EX_MEMBER = """
             { "userId": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47", "username": "alice", "displayName": "Alice", "avatarUrl": "bot:boba",
@@ -422,7 +421,7 @@ public class CommunityController {
             @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
             @PathVariable UUID communityId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        planService.unlock(communityId, UUID.fromString(ActingMember.realUserId(principal)));
+        communityService.unlock(communityId, ActingMember.realUserId(principal));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 }

@@ -116,8 +116,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
      */
     @Modifying(flushAutomatically = true)
     @Query(value = "UPDATE vomatt.users u SET community_selection_deadline = " + SELECTION_DEADLINE + " WHERE u.id IN ("
-            + "SELECT u.id FROM vomatt.users u WHERE (u.community_selection_deadline IS NOT NULL OR EXISTS (SELECT 1 FROM "
-            + "vomatt.community_members o WHERE o.user_id = u.id AND o.role = 'OWNER')) "
+            + "SELECT u.id FROM vomatt.users u WHERE u.id IN (SELECT id FROM vomatt.users WHERE community_selection_deadline IS NOT NULL "
+            + "UNION SELECT user_id FROM vomatt.community_members WHERE role = 'OWNER') "
             + "AND (" + SELECTION_DEADLINE + ") IS DISTINCT FROM u.community_selection_deadline "
             + "FOR NO KEY UPDATE SKIP LOCKED)", nativeQuery = true)
     int reconcileAllSelectionDeadlines(@Param("freeLimit") int freeLimit, @Param("proLimit") int proLimit,

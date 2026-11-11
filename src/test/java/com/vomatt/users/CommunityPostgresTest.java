@@ -87,7 +87,7 @@ class CommunityPostgresTest extends PostgresRepositoryTest {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 new UserPrincipal(memberId.toString(), List.of("user"), null), null, List.of()));
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));
-        AspectJProxyFactory factory = new AspectJProxyFactory(new CommunityController(auditedService(auditService), planService));
+        AspectJProxyFactory factory = new AspectJProxyFactory(new CommunityController(auditedService(auditService)));
         factory.addAspect(new AuditAspect(auditService));
         return factory.getProxy();
     }

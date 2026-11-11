@@ -162,7 +162,7 @@ public class AdminUserService {
 
     /** Grants or takes back PRO by hand (testing, compensation); the same path the payment webhook will take. */
     public AdminUserDetail changePlan(UUID userId, Plan plan, String actorId) {
-        planService.changePlan(userId, plan, PlanService.Source.ADMIN, UUID.fromString(actorId));
+        planService.changePlan(userId, plan, PlanService.Source.ADMIN, actorId);
         return detail(findUser(userId));
     }
 

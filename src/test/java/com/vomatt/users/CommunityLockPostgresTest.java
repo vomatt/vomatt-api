@@ -325,12 +325,12 @@ class CommunityLockPostgresTest extends PostgresRepositoryTest {
         downgrade();
         planService.keep(owner.getId(), Set.of(first));
 
-        assertKey(() -> planService.unlock(second, owner.getId()), MessageKey.COMMUNITY_LIMIT_REACHED);
-        assertKey(() -> planService.unlock(second, friend.getId()), MessageKey.COMMUNITY_NOT_MEMBER);
+        assertKey(() -> communityService.unlock(second, owner.getId().toString()), MessageKey.COMMUNITY_LIMIT_REACHED);
+        assertKey(() -> communityService.unlock(second, friend.getId().toString()), MessageKey.COMMUNITY_NOT_MEMBER);
         // Handing the kept one over makes room
         communityService.transferOwner(first, friend.getId(), owner.getId().toString());
-        planService.unlock(second, owner.getId());
-        planService.unlock(second, owner.getId());
+        communityService.unlock(second, owner.getId().toString());
+        communityService.unlock(second, owner.getId().toString());
 
         assertThat(lockedById()).containsOnly(Map.entry(first, false), Map.entry(second, false), Map.entry(third, true));
         assertThat(lockAudits()).filteredOn(a -> a.startsWith("UNLOCK")).containsExactly("UNLOCK reason=OWNER_UNLOCK");
@@ -421,7 +421,7 @@ class CommunityLockPostgresTest extends PostgresRepositoryTest {
             case KEEP -> planService.keep(owner.getId(), Set.of(second));
             case OWNER_UNLOCK -> {
                 communityService.deleteCommunity(first, owner.getId().toString());
-                planService.unlock(second, owner.getId());
+                communityService.unlock(second, owner.getId().toString());
             }
         }
 

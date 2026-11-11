@@ -27,8 +27,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @Tag(name = "Billing", description = "Paid plans (not available yet)")
 @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503", description = "Paid plans are not available yet (errorCode `billing.unavailable`)",
         content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                examples = @ExampleObject(value = """
-                        {"success":false,"data":null,"message":"Paid plans are coming soon","errorCode":"billing.unavailable","error":"Paid plans are coming soon"}""")))
+                examples = @ExampleObject(value = OpenAPIConfig.ERR_MESSAGE + "Paid plans are coming soon" + OpenAPIConfig.ERR_CODE
+                        + "billing.unavailable" + OpenAPIConfig.ERR_ERROR + "Paid plans are coming soon" + OpenAPIConfig.ERR_END)))
 public class BillingController {
 
     private static final String UNAVAILABLE = """

@@ -27,10 +27,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.vomatt.entity.CommunityRole.OWNER;
 
@@ -146,15 +144,11 @@ public class CommunityService {
      * A recipient not yet an OWNER needs room in their plan, checked first: the person's row is locked before OWNER rows.
      */
     public void transferOwner(UUID communityId, UUID userId, String callerId) {
-        if (requireRole(communityId, callerId) != OWNER) {
-            throw ApiException.forbidden(MessageKey.COMMUNITY_ROLE_FORBIDDEN);
-        }
+        requireOwner(communityId, callerId);
         if (findMember(communityId, userId).getRole() != OWNER) {
             planService.requireRoom(userId);
         }
-        if (!lockTimeout.within(() -> memberRepository.lockOwnerIds(communityId)).contains(UUID.fromString(callerId))) {
-            throw ApiException.forbidden(MessageKey.COMMUNITY_ROLE_FORBIDDEN);
-        }
+        requireOwnerLocked(communityId, callerId);
         CommunityMember target = findMember(communityId, userId);
         if (target.getUserId().toString().equals(callerId)) {
             return;
@@ -167,30 +161,20 @@ public class CommunityService {
 
     /**
      * OWNER or ADMIN: display name, bio and bot avatar, from {@code PATCH /api/communities/{id}} or {@code PATCH /api/users/me}
-     * while acting; the audit details hold each changed field before and after. 400 {@code community.username_immutable}
-     * for a new username and {@code common.bad_request} for a person's field (names, birthday, gender).
+     * while acting; the audit details hold each changed field before and after.
      */
     @Auditable(action = "UPDATE", resourceType = "COMMUNITY", resourceIdIndex = 0)
     public UserProfileResponse updateProfile(UUID communityId, UpdateProfileRequest request, String callerId) {
         requireProfileEditor(communityId, callerId);
-        User community = userRepository.findById(communityId).orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
-        if (request.getUsername() != null && !request.getUsername().equals(community.getUsername())) {
-            throw ApiException.badRequest(MessageKey.COMMUNITY_USERNAME_IMMUTABLE);
-        }
-        if (Stream.of(request.getFirstName(), request.getLastName(), request.getBirthday(), request.getGender()).anyMatch(Objects::nonNull)) {
-            throw ApiException.badRequest(MessageKey.COMMON_BAD_REQUEST);
-        }
-        if (request.getDisplayName() != null) {
-            request.setDisplayName(request.getDisplayName().trim());
-            if (request.getDisplayName().isEmpty()) {
-                throw ApiException.badRequest(MessageKey.COMMON_VALIDATION_FAILED);
-            }
-        }
-        List<String> changes = new ArrayList<>();
-        change(changes, "displayName", community.getDisplayName(), request.getDisplayName());
-        change(changes, "bio", community.getBio(), request.getBio());
-        change(changes, "avatarUrl", community.getAvatarUrl(), request.getAvatarUrl());
+        User community = findUser(communityId);
+        String displayName = community.getDisplayName();
+        String bio = community.getBio();
+        String avatarUrl = community.getAvatarUrl();
         UserProfileResponse profile = userService.updateMyProfile(communityId.toString(), request);
+        List<String> changes = new ArrayList<>();
+        change(changes, "displayName", displayName, community.getDisplayName());
+        change(changes, "bio", bio, community.getBio());
+        change(changes, "avatarUrl", avatarUrl, community.getAvatarUrl());
         AuditAspect.recordDetails(changes.isEmpty() ? null : String.join("; ", changes));
         log.info("Community account {}: profile updated by {}", communityId, callerId);
         return profile;
@@ -206,9 +190,7 @@ public class CommunityService {
         requireProfileEditor(communityId, callerId);
         String before = userRepository.findById(communityId).map(User::getAvatarUrl).orElse(null);
         UserProfileResponse profile = userService.uploadAvatar(communityId.toString(), file);
-        List<String> changes = new ArrayList<>();
-        change(changes, "avatarUrl", before, profile.avatarUrl());
-        AuditAspect.recordDetails(String.join("; ", changes));
+        AuditAspect.recordDetails("avatarUrl: " + quote(before) + " -> " + quote(profile.avatarUrl()));
         log.info("Community account {}: avatar uploaded by {}", communityId, callerId);
         return profile;
     }
@@ -221,11 +203,9 @@ public class CommunityService {
      */
     public void deleteCommunity(UUID communityId, String callerId) {
         requireRole(communityId, callerId);
-        if (!lockTimeout.within(() -> memberRepository.lockOwnerIds(communityId)).contains(UUID.fromString(callerId))) {
-            throw ApiException.forbidden(MessageKey.COMMUNITY_ROLE_FORBIDDEN);
-        }
+        requireOwnerLocked(communityId, callerId);
         userRepository.lockForDelete(communityId);
-        User community = userRepository.findById(communityId).orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
+        User community = findUser(communityId);
         String members = memberRepository.findByCommunityUserIdOrderByCreatedAtAscUserIdAsc(communityId).stream()
                 .map(m -> m.getUser().getUsername() + ":" + m.getRole())
                 .collect(Collectors.joining(","));
@@ -233,6 +213,11 @@ public class CommunityService {
         auditService.logActionNow(callerId, "DELETE", "COMMUNITY", communityId.toString(), "username=" + community.getUsername()
                 + "; displayName=" + quote(community.getDisplayName()) + "; members=" + members);
         log.info("Community account {} deleted by {}", communityId, callerId);
+    }
+
+    public void unlock(UUID communityId, String callerId) {
+        requireOwner(communityId, callerId);
+        planService.unlock(communityId, UUID.fromString(callerId));
     }
 
     private static void change(List<String> changes, String field, String before, String after) {
@@ -254,6 +239,18 @@ public class CommunityService {
     private CommunityRole requireRole(UUID communityId, String callerId) {
         return memberRepository.findActiveRole(communityId, UUID.fromString(callerId))
                 .orElseThrow(() -> ApiException.forbidden(MessageKey.COMMUNITY_NOT_MEMBER));
+    }
+
+    private void requireOwner(UUID communityId, String callerId) {
+        if (requireRole(communityId, callerId) != OWNER) {
+            throw ApiException.forbidden(MessageKey.COMMUNITY_ROLE_FORBIDDEN);
+        }
+    }
+
+    private void requireOwnerLocked(UUID communityId, String callerId) {
+        if (!lockTimeout.within(() -> memberRepository.lockOwnerIds(communityId)).contains(UUID.fromString(callerId))) {
+            throw ApiException.forbidden(MessageKey.COMMUNITY_ROLE_FORBIDDEN);
+        }
     }
 
     private CommunityRole requireManager(UUID communityId, String callerId) {
@@ -296,11 +293,15 @@ public class CommunityService {
 
     // A member is a person: an active account that is not itself a community account
     private User requireEligible(UUID userId) {
-        User user = userRepository.findById(userId).orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
+        User user = findUser(userId);
         if (!user.isActive() || user.isCommunity()) {
             throw ApiException.badRequest(MessageKey.COMMUNITY_MEMBER_INVALID);
         }
         return user;
+    }
+
+    private User findUser(UUID id) {
+        return userRepository.findById(id).orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
     }
 
     private static CommunityMemberResponse toResponse(CommunityMember m, User user) {

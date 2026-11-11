@@ -95,7 +95,7 @@ class CommunityAvatarPostgresTest extends PostgresRepositoryTest {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 principal(memberId), null, List.of()));
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));
-        return new CommunityController(auditedService(), planService);
+        return new CommunityController(auditedService());
     }
 
     private CommunityService auditedService() {

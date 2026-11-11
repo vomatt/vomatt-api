@@ -58,6 +58,7 @@ import java.util.UUID;
 public class CommunityController {
 
     private final CommunityService communityService;
+    private final PlanService planService;
 
     private static final String EX_MEMBER = """
             { "userId": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47", "username": "alice", "displayName": "Alice", "avatarUrl": "bot:boba",
@@ -151,7 +152,7 @@ public class CommunityController {
             **Precondition**: none
             **Behavior**: the active community accounts the caller is a member of, with the caller's role, oldest membership first; \
             for the account switcher. Send an account's `communityId` as the `X-Act-As` header to act as it. While acting, the list \
-            is still the real member's.
+            is still the real member's. `locked` accounts are readable, but writes as them answer 403 `community.locked`.
             **Side effects**: none
             **Errors**: none
             """)
@@ -159,7 +160,7 @@ public class CommunityController {
             content = @Content(examples = @ExampleObject(name = "Community accounts", value = """
                     { "success": true, "data": [
                         { "communityId": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48", "username": "sunrise_tower", "displayName": "Sunrise Tower Committee",
-                          "avatarUrl": "/api/avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d49.jpg", "role": "EDITOR" }
+                          "avatarUrl": "/api/avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d49.jpg", "role": "EDITOR", "locked": false }
                       ], "message": null, "errorCode": null, "error": null }
                     """)))
     public ResponseEntity<ApiResponse<List<MyCommunityResponse>>> listMine(@AuthenticationPrincipal UserPrincipal principal) {
@@ -398,6 +399,32 @@ public class CommunityController {
             @Valid @RequestBody CommunityOwnerRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
         communityService.transferOwner(communityId, request.userId(), ActingMember.realUserId(principal));
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
+    @PostMapping("/api/communities/{communityId}/unlock")
+    @CommonApiResponses
+    @Operation(summary = "Unlock a community account", description = """
+            **Auth**: required (OWNER only)
+            **Precondition**: the caller owns fewer unlocked community accounts than their plan allows
+            **Behavior**: unlocks a locked community account, which then counts toward the caller's `communityQuota`. \
+            An account that is not locked changes nothing. It counts toward every other OWNER's limit again too, so one now \
+            over it gets `communityQuota.selectionRequired`.
+            **Side effects**: an unlock is audit-logged as `UNLOCK` on `COMMUNITY` with `reason=OWNER_UNLOCK`.
+            **Errors**:
+            - 403 `community.role_forbidden`: the caller is not an OWNER
+            - 409 `common.conflict`: another change to the caller's community accounts is in progress; retry
+            """ + NOT_MEMBER + LIMIT_REACHED)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Unlocked",
+            content = @Content(examples = @ExampleObject(name = "Unlocked", value = EX_OK)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not an OWNER, or no room in the plan (`community.role_forbidden`, `community.limit_reached`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "community.not_member", value = ERR_NOT_MEMBER)))
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> unlock(
+            @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
+            @PathVariable UUID communityId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        planService.unlock(communityId, UUID.fromString(ActingMember.realUserId(principal)));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 }

@@ -2914,16 +2914,28 @@
         "description" : "How many community accounts the user owns against the plan's limit",
         "properties" : {
           "limit" : {
-            "description" : "The most the plan allows; creating, receiving ownership or being granted OWNER at this count answers 403 `community.limit_reached`",
+            "description" : "The most the plan allows; creating, receiving ownership, being granted OWNER or unlocking one at this count answers 403 `community.limit_reached`",
             "example" : 1,
             "format" : "int32",
             "type" : "integer"
           },
           "owned" : {
-            "description" : "Active community accounts the user is an OWNER of; a suspended one does not count",
-            "example" : 1,
+            "description" : "Active, unlocked community accounts the user is an OWNER of; a suspended one does not count",
+            "example" : 3,
             "format" : "int32",
             "type" : "integer"
+          },
+          "selectionDeadline" : {
+            "description" : "When the earliest created are kept and the rest locked if the user has not chosen; null unless `selectionRequired`",
+            "example" : "2026-11-18T10:00:00Z",
+            "format" : "date-time",
+            "nullable" : true,
+            "type" : "string"
+          },
+          "selectionRequired" : {
+            "description" : "True after a downgrade left the user owning more than `limit`: ask them which to keep (`POST /api/users/me/communities/keep`)",
+            "example" : true,
+            "type" : "boolean"
           }
         },
         "type" : "object"
@@ -3754,6 +3766,23 @@
         },
         "type" : "object"
       },
+      "KeepCommunitiesRequest" : {
+        "description" : "The community accounts to keep unlocked; every other one the caller owns is locked",
+        "properties" : {
+          "communityIds" : {
+            "description" : "Ids of community accounts the caller is an OWNER of: exactly `communityQuota.limit`, or all of them when the caller owns fewer; no id twice",
+            "items" : {
+              "example" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48",
+              "format" : "uuid",
+              "type" : "string"
+            },
+            "minItems" : 1,
+            "type" : "array"
+          }
+        },
+        "required" : [ "communityIds" ],
+        "type" : "object"
+      },
       "LineAuthRequest" : {
         "description" : "LINE login request",
         "properties" : {
@@ -3873,6 +3902,11 @@
             "example" : "Sunrise Tower Committee",
             "nullable" : true,
             "type" : "string"
+          },
+          "locked" : {
+            "description" : "Locked: readable, but writes while acting as it answer 403 `community.locked` (except deleting it, transferring ownership and leaving); an OWNER with room unlocks it with `POST /api/communities/{communityId}/unlock`",
+            "example" : false,
+            "type" : "boolean"
           },
           "role" : {
             "description" : "The caller's role: OWNER, ADMIN, CHIEF_EDITOR, EDITOR or ANALYST",
@@ -4118,14 +4152,14 @@
         "type" : "object"
       },
       "NotificationResponse" : {
-        "description" : "One notification of the feed. Which of `actor`, `poll` and `comment` are set depends on `kind`: RESULT has `poll`; CANCELLED, INVITATION and CLOSING_SOON have `actor` (the Poll's owner) and `poll`; FOLLOWED has `actor` (the new follower); COMMENT and MENTION have `actor` (the author), `poll` and `comment`; LIKE has `actor` (who liked), `poll` and `comment` (your liked Comment); POLL_LIKE has `actor` (who liked) and `poll` (your liked Poll)",
+        "description" : "One notification of the feed. Which of `actor`, `poll` and `comment` are set depends on `kind`: RESULT has `poll`; CANCELLED, INVITATION and CLOSING_SOON have `actor` (the Poll's owner) and `poll`; FOLLOWED has `actor` (the new follower); COMMENT and MENTION have `actor` (the author), `poll` and `comment`; LIKE has `actor` (who liked), `poll` and `comment` (your liked Comment); POLL_LIKE has `actor` (who liked) and `poll` (your liked Poll); COMMUNITY_LOCKED has `actor` (the community account that was locked)",
         "properties" : {
           "actor" : {
             "$ref" : "#/components/schemas/FollowUserDto"
           },
           "category" : {
-            "description" : "The tab it is filed under, fixed by `kind`: CONVERSATION (COMMENT, MENTION), LIKE (LIKE, POLL_LIKE), POLL_END (RESULT, CANCELLED, CLOSING_SOON), INVITATION (INVITATION), FOLLOW (FOLLOWED). Filter the feed with `GET /api/notifications?category=`",
-            "enum" : [ "CONVERSATION", "LIKE", "POLL_END", "INVITATION", "FOLLOW" ],
+            "description" : "The tab it is filed under, fixed by `kind`: CONVERSATION (COMMENT, MENTION), LIKE (LIKE, POLL_LIKE), POLL_END (RESULT, CANCELLED, CLOSING_SOON), INVITATION (INVITATION), FOLLOW (FOLLOWED), COMMUNITY (COMMUNITY_LOCKED). Filter the feed with `GET /api/notifications?category=`",
+            "enum" : [ "CONVERSATION", "LIKE", "POLL_END", "INVITATION", "FOLLOW", "COMMUNITY" ],
             "example" : "CONVERSATION",
             "type" : "string"
           },
@@ -4144,8 +4178,8 @@
             "type" : "string"
           },
           "kind" : {
-            "description" : "RESULT: a Poll you own, hold a Ballot in, are invited to or bookmarked has Ended with at least one Ballot. CANCELLED: an Invite-only Poll you are invited to was Cancelled before it opened. INVITATION: you are invited to a Scheduled or Open Invite-only Poll (replaced by RESULT once it Ends). FOLLOWED: someone followed you. COMMENT: someone commented on your Poll or replied to your Comment. MENTION: someone @mentioned you in a Comment or Reply that is not already your COMMENT. CLOSING_SOON: a Poll you are invited to, or a Public Poll of someone you follow, ends within 24 hours and you hold no Ballot in it. LIKE: someone liked your Comment or Reply. POLL_LIKE: someone liked your Poll",
-            "enum" : [ "RESULT", "CANCELLED", "INVITATION", "FOLLOWED", "COMMENT", "MENTION", "CLOSING_SOON", "LIKE", "POLL_LIKE" ],
+            "description" : "RESULT: a Poll you own, hold a Ballot in, are invited to or bookmarked has Ended with at least one Ballot. CANCELLED: an Invite-only Poll you are invited to was Cancelled before it opened. INVITATION: you are invited to a Scheduled or Open Invite-only Poll (replaced by RESULT once it Ends). FOLLOWED: someone followed you. COMMENT: someone commented on your Poll or replied to your Comment. MENTION: someone @mentioned you in a Comment or Reply that is not already your COMMENT. CLOSING_SOON: a Poll you are invited to, or a Public Poll of someone you follow, ends within 24 hours and you hold no Ballot in it. LIKE: someone liked your Comment or Reply. POLL_LIKE: someone liked your Poll. COMMUNITY_LOCKED: a community account you own was locked because your plan no longer covers it and no one chose which to keep by the deadline",
+            "enum" : [ "RESULT", "CANCELLED", "INVITATION", "FOLLOWED", "COMMENT", "MENTION", "CLOSING_SOON", "LIKE", "POLL_LIKE", "COMMUNITY_LOCKED" ],
             "example" : "COMMENT",
             "type" : "string"
           },
@@ -9206,7 +9240,7 @@
     },
     "/api/admin/users/{userId}/plan" : {
       "patch" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: the account exists\n**Behavior**: puts the account on `plan` (FREE or PRO) and returns it; grants or takes back PRO by hand, for testing and compensation. The same change the payment webhook will make once billing is live. The same plan changes nothing\n**Side effects**: a change is written to the audit log in the same transaction as `CHANGE_PLAN` on `USER`, with `details` `from=<plan>; to=<plan>; source=ADMIN`\n**Errors**:\n- 400 `common.type_mismatch`: `userId` is not a valid UUID\n- 400 `common.validation_failed`: `plan` missing\n- 400 `common.bad_request`: `plan` is not FREE or PRO\n- 404 `user.not_found`: no account with this ID\n- 409 `common.conflict`: another change to the account's plan or community accounts is in progress; retry",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: the account exists\n**Behavior**: puts the account on `plan` (FREE or PRO) and returns it; grants or takes back PRO by hand, for testing and compensation. The same change the payment webhook will make once billing is live. The same plan changes nothing. An upgrade unlocks the earliest created of the account's locked community accounts, as many as the new limit has room for; a downgrade over the new limit sets `communityQuota.selectionRequired` with a 7-day `selectionDeadline`\n**Side effects**: a change is written to the audit log in the same transaction as `CHANGE_PLAN` on `USER`, with `details` `from=<plan>; to=<plan>; source=ADMIN`\n**Errors**:\n- 400 `common.type_mismatch`: `userId` is not a valid UUID\n- 400 `common.validation_failed`: `plan` missing\n- 400 `common.bad_request`: `plan` is not FREE or PRO\n- 404 `user.not_found`: no account with this ID\n- 409 `common.conflict`: another change to the account's plan or community accounts is in progress; retry",
         "operationId" : "changePlan",
         "parameters" : [ {
           "description" : "User ID (UUIDv7)",
@@ -14018,6 +14052,98 @@
         "tags" : [ "Community Account" ]
       }
     },
+    "/api/communities/{communityId}/unlock" : {
+      "post" : {
+        "description" : "**Auth**: required (OWNER only)\n**Precondition**: the caller owns fewer unlocked community accounts than their plan allows\n**Behavior**: unlocks a locked community account, which then counts toward the caller's `communityQuota`. An account that is not locked changes nothing. It counts toward every other OWNER's limit again too, so one now over it gets `communityQuota.selectionRequired`.\n**Side effects**: an unlock is audit-logged as `UNLOCK` on `COMMUNITY` with `reason=OWNER_UNLOCK`.\n**Errors**:\n- 403 `community.role_forbidden`: the caller is not an OWNER\n- 409 `common.conflict`: another change to the caller's community accounts is in progress; retry\n- 403 `community.not_member`: the caller is not a member of this community account, or it does not exist or is suspended\n- 403 `community.limit_reached`: the user who would become an OWNER already owns as many community accounts as their plan allows; `data` is `{ \"limit\": 1, \"owned\": 1 }`\n",
+        "operationId" : "unlock",
+        "parameters" : [ {
+          "description" : "Community account's user id",
+          "example" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48",
+          "in" : "path",
+          "name" : "communityId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "Unlocked" : {
+                    "description" : "Unlocked",
+                    "value" : {
+                      "data" : {
+                        "id" : null,
+                        "message" : null,
+                        "status" : null,
+                        "success" : true
+                      },
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseSimpleResultResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Unlock a community account",
+        "tags" : [ "Community Account" ]
+      }
+    },
     "/api/contact" : {
       "post" : {
         "description" : "**Auth**: none\n**Precondition**: the client IP is under the daily contact limit (UTC day; 5 unless an admin set lookup `config` / `contact_daily_limit`, a positive number or numeric string). A server-side caller names the visitor's IP with `X-Client-IP` and `X-Client-IP-Secret`, as vomatt-web does\n**Behavior**: stores the message for staff to read in the back office; `name` and `email` are trimmed. Responds 201 with the new message id\n**Side effects**: counts toward the client IP's daily contact limit (only once stored)\n**Errors**:\n- 400 `common.validation_failed`: `name` blank or longer than 100 characters, `email` not a valid address or longer than 254 characters, `message` blank or longer than 5000 characters, or `locale` not `en` / `zh`\n- 429 `common.rate_limited`: daily contact limit reached, or too many write requests from this IP",
@@ -15572,7 +15698,7 @@
     },
     "/api/notifications" : {
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: the caller's notifications, newest `createdAt` first, cursor-paged. They are not stored but derived from Polls, Invitations, follows and Comments when read, so an item disappears when what it is about goes away (a Comment deleted, a follow undone, a Poll Deleted). Kinds:\n- RESULT: a Poll the caller owns, holds a Ballot in, is an Invitee of or bookmarked has Ended (end time passed, Closed, or every Invitee voted); one item per Poll whatever the reasons. A Poll that Ended with no Ballots (Turnout 0) gives none. A Participant who made a Retraction and is neither an Invitee nor bookmarked it gets none\n- CANCELLED: an Invite-only Poll the caller is an Invitee of was Cancelled before it opened (only Polls Cancelled before 2026-10-14; a Scheduled Poll is now Deleted, which notifies nobody)\n- INVITATION: the caller is an Invitee of a Scheduled or Open Invite-only Poll; listed until the Poll Ends, when its RESULT takes over. Being removed and invited again is a new, unread INVITATION\n- FOLLOWED: someone followed the caller (one item per follower; group them in the UI)\n- COMMENT: someone else commented on or replied under the caller's Poll, or replied to the caller's Comment, on a Poll the caller can see; not a Reply in a thread started by a user the caller blocked (the Comment lists hide that thread)\n- MENTION: someone else @mentioned the caller (`@<username>`) in a Comment or Reply on a Poll the caller can see, unless that Comment is the caller's COMMENT (one Comment, one notification) and COMMENT is switched on; same thread-starter block rule as COMMENT\n- CLOSING_SOON: an Open Poll ends within 24 hours and the caller holds no Ballot in it, if the caller is its Invitee, or it is a Public Poll of a user the caller follows. Gone once the caller casts a Ballot or the Poll Ends. Off by default\n- LIKE: someone else liked the caller's Comment or Reply, on a Poll the caller can see and not in a thread started by a user the caller blocked (as COMMENT). Gone if the like is taken back; liking again is a new, unread LIKE\n- POLL_LIKE: someone else liked the caller's Poll (`PUT /api/votes/{voteId}/like`). Gone if the like is taken back; liking again is a new, unread POLL_LIKE\nEach kind falls in one `category`: CONVERSATION (COMMENT, MENTION), LIKE (LIKE, POLL_LIKE), POLL_END (RESULT, CANCELLED, CLOSING_SOON), INVITATION (INVITATION), FOLLOW (FOLLOWED). With `category`, only that category is listed; pass the same `category` with every page.\nKinds switched off in the caller's preferences are left out (FOLLOWED cannot be switched off). Nothing from a suspended user, a user the caller blocked or a user who blocked the caller is listed, nor anything about a Poll whose owner blocked the caller. `poll` never carries per-option counts, its outcome (`winningOptionIds`, `winningOptionLabels`, `tie`) stays null until the Poll has Ended, and `actor` is never a voter, so Sealed results and Anonymous Ballots stay hidden. Each item carries what a row needs: the caller's Selection (`poll.myOptionId`), the caller's follows with the actor both ways (`actor.isFollowing`, `actor.followsYou`), and for a Reply the Comment it is under (`comment.parentId`). An item can appear or vanish behind a cursor (a follow, a block); de-duplicate by `id`.\n**Side effects**: none\n**Errors**:\n- 400 `common.cursor_invalid`: `cursor` came from another list\n- 400 `common.type_mismatch`: `category` is not one of the categories",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: the caller's notifications, newest `createdAt` first, cursor-paged. They are not stored but derived from Polls, Invitations, follows and Comments when read, so an item disappears when what it is about goes away (a Comment deleted, a follow undone, a Poll Deleted). Kinds:\n- RESULT: a Poll the caller owns, holds a Ballot in, is an Invitee of or bookmarked has Ended (end time passed, Closed, or every Invitee voted); one item per Poll whatever the reasons. A Poll that Ended with no Ballots (Turnout 0) gives none. A Participant who made a Retraction and is neither an Invitee nor bookmarked it gets none\n- CANCELLED: an Invite-only Poll the caller is an Invitee of was Cancelled before it opened (only Polls Cancelled before 2026-10-14; a Scheduled Poll is now Deleted, which notifies nobody)\n- INVITATION: the caller is an Invitee of a Scheduled or Open Invite-only Poll; listed until the Poll Ends, when its RESULT takes over. Being removed and invited again is a new, unread INVITATION\n- FOLLOWED: someone followed the caller (one item per follower; group them in the UI)\n- COMMENT: someone else commented on or replied under the caller's Poll, or replied to the caller's Comment, on a Poll the caller can see; not a Reply in a thread started by a user the caller blocked (the Comment lists hide that thread)\n- MENTION: someone else @mentioned the caller (`@<username>`) in a Comment or Reply on a Poll the caller can see, unless that Comment is the caller's COMMENT (one Comment, one notification) and COMMENT is switched on; same thread-starter block rule as COMMENT\n- CLOSING_SOON: an Open Poll ends within 24 hours and the caller holds no Ballot in it, if the caller is its Invitee, or it is a Public Poll of a user the caller follows. Gone once the caller casts a Ballot or the Poll Ends. Off by default\n- LIKE: someone else liked the caller's Comment or Reply, on a Poll the caller can see and not in a thread started by a user the caller blocked (as COMMENT). Gone if the like is taken back; liking again is a new, unread LIKE\n- POLL_LIKE: someone else liked the caller's Poll (`PUT /api/votes/{voteId}/like`). Gone if the like is taken back; liking again is a new, unread POLL_LIKE\n- COMMUNITY_LOCKED: a community account the caller is an OWNER of was locked because the selection deadline after a downgrade passed without a choice (`POST /api/users/me/communities/keep`); every OWNER gets one, `actor` is the community account. Kept 180 days\nEach kind falls in one `category`: CONVERSATION (COMMENT, MENTION), LIKE (LIKE, POLL_LIKE), POLL_END (RESULT, CANCELLED, CLOSING_SOON), INVITATION (INVITATION), FOLLOW (FOLLOWED), COMMUNITY (COMMUNITY_LOCKED). With `category`, only that category is listed; pass the same `category` with every page.\nKinds switched off in the caller's preferences are left out (FOLLOWED cannot be switched off). Nothing from a suspended user, a user the caller blocked or a user who blocked the caller is listed, nor anything about a Poll whose owner blocked the caller. `poll` never carries per-option counts, its outcome (`winningOptionIds`, `winningOptionLabels`, `tie`) stays null until the Poll has Ended, and `actor` is never a voter, so Sealed results and Anonymous Ballots stay hidden. Each item carries what a row needs: the caller's Selection (`poll.myOptionId`), the caller's follows with the actor both ways (`actor.isFollowing`, `actor.followsYou`), and for a Reply the Comment it is under (`comment.parentId`). An item can appear or vanish behind a cursor (a follow, a block); de-duplicate by `id`.\n**Side effects**: none\n**Errors**:\n- 400 `common.cursor_invalid`: `cursor` came from another list\n- 400 `common.type_mismatch`: `category` is not one of the categories",
         "operationId" : "list",
         "parameters" : [ {
           "description" : "Only this category's notifications; omit for all",
@@ -15581,7 +15707,7 @@
           "name" : "category",
           "required" : false,
           "schema" : {
-            "enum" : [ "CONVERSATION", "LIKE", "POLL_END", "INVITATION", "FOLLOW" ],
+            "enum" : [ "CONVERSATION", "LIKE", "POLL_END", "INVITATION", "FOLLOW", "COMMUNITY" ],
             "type" : "string"
           }
         }, {
@@ -15885,7 +16011,7 @@
           "name" : "category",
           "required" : false,
           "schema" : {
-            "enum" : [ "CONVERSATION", "LIKE", "POLL_END", "INVITATION", "FOLLOW" ],
+            "enum" : [ "CONVERSATION", "LIKE", "POLL_END", "INVITATION", "FOLLOW", "COMMUNITY" ],
             "type" : "string"
           }
         } ],
@@ -15969,7 +16095,7 @@
           "name" : "category",
           "required" : false,
           "schema" : {
-            "enum" : [ "CONVERSATION", "LIKE", "POLL_END", "INVITATION", "FOLLOW" ],
+            "enum" : [ "CONVERSATION", "LIKE", "POLL_END", "INVITATION", "FOLLOW", "COMMUNITY" ],
             "type" : "string"
           }
         } ],
@@ -17254,7 +17380,7 @@
     },
     "/api/users/me/communities" : {
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: the active community accounts the caller is a member of, with the caller's role, oldest membership first; for the account switcher. Send an account's `communityId` as the `X-Act-As` header to act as it. While acting, the list is still the real member's.\n**Side effects**: none\n**Errors**: none\n",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: the active community accounts the caller is a member of, with the caller's role, oldest membership first; for the account switcher. Send an account's `communityId` as the `X-Act-As` header to act as it. While acting, the list is still the real member's. `locked` accounts are readable, but writes as them answer 403 `community.locked`.\n**Side effects**: none\n**Errors**: none\n",
         "operationId" : "listMine",
         "responses" : {
           "200" : {
@@ -17268,6 +17394,7 @@
                         "avatarUrl" : "/api/avatars/0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d49.jpg",
                         "communityId" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48",
                         "displayName" : "Sunrise Tower Committee",
+                        "locked" : false,
                         "role" : "EDITOR",
                         "username" : "sunrise_tower"
                       } ],
@@ -17332,6 +17459,95 @@
         },
         "summary" : "List my community accounts",
         "tags" : [ "Community Account" ]
+      }
+    },
+    "/api/users/me/communities/keep" : {
+      "post" : {
+        "description" : "**Auth**: required (the real member, also while acting)\n**Precondition**: every id is an active community account the caller is an OWNER of, and there are exactly `communityQuota.limit` of them, or all of them when the caller owns fewer\n**Behavior**: the caller keeps exactly these unlocked: every other community account they own is locked, and a chosen one that was locked is unlocked. Ends `communityQuota.selectionRequired`. Sending the same choice again changes nothing. Used after a downgrade, before `selectionDeadline`; afterwards it swaps which ones stay unlocked.\n**Side effects**: each account locked or unlocked is audit-logged as `LOCK` / `UNLOCK` on `COMMUNITY` with `reason=USER_CHOICE`. A locked account stays readable; writes as it answer 403 `community.locked`. A chosen account that another OWNER also owns counts toward their limit again, so they may get `selectionRequired`\n**Errors**:\n- 400 `common.validation_failed`: `communityIds` missing or empty\n- 400 `community.keep.invalid`: not as many ids as the limit (all owned ones when fewer), an id the caller is not an OWNER of, or an id sent twice\n- 409 `common.conflict`: another change to the caller's community accounts is in progress; retry",
+        "operationId" : "keepCommunities",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "example" : {
+                "communityIds" : [ "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48" ]
+              },
+              "schema" : {
+                "$ref" : "#/components/schemas/KeepCommunitiesRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : {
+                    "id" : null,
+                    "message" : null,
+                    "status" : null,
+                    "success" : true
+                  },
+                  "error" : null,
+                  "errorCode" : null,
+                  "message" : null,
+                  "success" : true
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseSimpleResultResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Choose which community accounts to keep",
+        "tags" : [ "User" ]
       }
     },
     "/api/users/me/export" : {

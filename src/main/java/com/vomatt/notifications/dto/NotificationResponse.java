@@ -14,7 +14,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Schema(description = "One notification of the feed. Which of `actor`, `poll` and `comment` are set depends on `kind`: "
         + "RESULT has `poll`; CANCELLED, INVITATION and CLOSING_SOON have `actor` (the Poll's owner) and `poll`; "
         + "FOLLOWED has `actor` (the new follower); COMMENT and MENTION have `actor` (the author), `poll` and `comment`; "
-        + "LIKE has `actor` (who liked), `poll` and `comment` (your liked Comment); POLL_LIKE has `actor` (who liked) and `poll` (your liked Poll)")
+        + "LIKE has `actor` (who liked), `poll` and `comment` (your liked Comment); POLL_LIKE has `actor` (who liked) and `poll` (your liked Poll); "
+        + "COMMUNITY_LOCKED has `actor` (the community account that was locked)")
 public record NotificationResponse(
         @Schema(description = "Notification id, opaque; pass it to `POST /api/notifications/{id}/read`",
                 example = "comment_0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b")
@@ -28,10 +29,12 @@ public record NotificationResponse(
                 + "CLOSING_SOON: a Poll you are invited to, or a Public Poll of someone you follow, ends within 24 hours "
                 + "and you hold no Ballot in it. "
                 + "LIKE: someone liked your Comment or Reply. "
-                + "POLL_LIKE: someone liked your Poll", example = "COMMENT")
+                + "POLL_LIKE: someone liked your Poll. "
+                + "COMMUNITY_LOCKED: a community account you own was locked because your plan no longer covers it and no one "
+                + "chose which to keep by the deadline", example = "COMMENT")
         NotificationKind kind,
         @Schema(description = "The tab it is filed under, fixed by `kind`: CONVERSATION (COMMENT, MENTION), LIKE (LIKE, POLL_LIKE), "
-                + "POLL_END (RESULT, CANCELLED, CLOSING_SOON), INVITATION (INVITATION), FOLLOW (FOLLOWED). "
+                + "POLL_END (RESULT, CANCELLED, CLOSING_SOON), INVITATION (INVITATION), FOLLOW (FOLLOWED), COMMUNITY (COMMUNITY_LOCKED). "
                 + "Filter the feed with `GET /api/notifications?category=`", example = "CONVERSATION")
         NotificationCategory category,
         @Schema(description = "When it happened: the Poll's end (RESULT, CANCELLED), the Invitation, the follow, the Comment (COMMENT, MENTION), the like, "
@@ -43,7 +46,7 @@ public record NotificationResponse(
         @Schema(description = "Who did it, as public profile fields with the caller's relation to them; null for RESULT",
                 nullable = true)
         FollowUserDto actor,
-        @Schema(description = "The Poll it is about; null for FOLLOWED", nullable = true)
+        @Schema(description = "The Poll it is about; null for FOLLOWED and COMMUNITY_LOCKED", nullable = true)
         PollSummary poll,
         @Schema(description = "The Comment or Reply (for LIKE, yours that was liked); set only for COMMENT, MENTION and LIKE", nullable = true)
         CommentSummary comment

@@ -2,6 +2,7 @@ package com.vomatt.common.security;
 
 import com.vomatt.entity.CommunityRole;
 import com.vomatt.repository.CommunityMemberRepository;
+import com.vomatt.repository.UserRepository;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -26,7 +27,8 @@ import static org.mockito.Mockito.when;
 class ActAsFilterTest {
 
     private final CommunityMemberRepository repository = mock(CommunityMemberRepository.class);
-    private final ActAsFilter filter = new ActAsFilter(repository, SecurityTestSupport.errorWriter());
+    private final UserRepository userRepository = mock(UserRepository.class);
+    private final ActAsFilter filter = new ActAsFilter(repository, userRepository, SecurityTestSupport.errorWriter());
 
     private final UUID memberId = UUID.randomUUID();
     private final UUID communityId = UUID.randomUUID();
@@ -191,5 +193,78 @@ class ActAsFilterTest {
         // Reading a public profile is not account deletion
         signIn();
         assertThat(run(acting("GET", "/api/users/alice"), new MockHttpServletResponse())).isNotNull();
+    }
+
+    private void locked() {
+        when(userRepository.existsByIdAndLockedAtIsNotNull(communityId)).thenReturn(true);
+    }
+
+    private void assertLocked(MockHttpServletRequest request) throws Exception {
+        signIn();
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        assertThat(run(request, response)).as(request.getMethod() + " " + request.getRequestURI()).isNull();
+        assertThat(response.getStatus()).isEqualTo(403);
+        assertThat(response.getContentAsString()).contains("community.locked");
+    }
+
+    private void assertPasses(MockHttpServletRequest request) throws Exception {
+        signIn();
+        assertThat(run(request, new MockHttpServletResponse())).as(request.getMethod() + " " + request.getRequestURI()).isNotNull();
+    }
+
+    @Test
+    void shouldRefuseWritesWhenActingAsLockedCommunity() throws Exception {
+        member(CommunityRole.OWNER);
+        locked();
+        String community = "/api/communities/" + communityId;
+
+        assertLocked(acting("POST", "/api/votes"));
+        assertLocked(acting("POST", "/api/votes/" + UUID.randomUUID() + "/comments"));
+        assertLocked(acting("PATCH", "/api/users/me"));
+        // Member routes and the profile route are refused by their path, with or without the header
+        assertLocked(new MockHttpServletRequest("POST", community + "/members"));
+        assertLocked(new MockHttpServletRequest("PATCH", community + "/members/" + UUID.randomUUID()));
+        assertLocked(new MockHttpServletRequest("DELETE", community + "/members/" + UUID.randomUUID()));
+        assertLocked(new MockHttpServletRequest("PATCH", community));
+    }
+
+    @Test
+    void shouldAllowReadsWhenActingAsLockedCommunity() throws Exception {
+        member(CommunityRole.OWNER);
+        locked();
+
+        assertPasses(acting("GET", "/api/votes/my"));
+        assertPasses(acting("GET", "/api/users/me"));
+        verify(userRepository, never()).existsByIdAndLockedAtIsNotNull(any());
+    }
+
+    @Test
+    void shouldAllowDeleteTransferLeaveUnlockAndKeepWhenCommunityIsLocked() throws Exception {
+        member(CommunityRole.OWNER);
+        locked();
+        String community = "/api/communities/" + communityId;
+
+        assertPasses(new MockHttpServletRequest("DELETE", community));
+        assertPasses(acting("DELETE", community));
+        assertPasses(new MockHttpServletRequest("POST", community + "/owner"));
+        assertPasses(acting("DELETE", community + "/members/" + memberId));
+        assertPasses(new MockHttpServletRequest("POST", community + "/unlock"));
+        assertPasses(acting("POST", "/api/users/me/communities/keep"));
+    }
+
+    @Test
+    void shouldAllowWritesWhenCommunityIsNotLocked() throws Exception {
+        member(CommunityRole.EDITOR);
+
+        assertPasses(acting("POST", "/api/votes"));
+        assertPasses(new MockHttpServletRequest("POST", "/api/communities/" + communityId + "/members"));
+    }
+
+    @Test
+    void shouldNotCheckLockWhenWriteTargetsNoCommunity() throws Exception {
+        assertPasses(new MockHttpServletRequest("POST", "/api/votes/" + UUID.randomUUID() + "/vote"));
+        assertPasses(new MockHttpServletRequest("POST", "/api/communities"));
+
+        verify(userRepository, never()).existsByIdAndLockedAtIsNotNull(any());
     }
 }

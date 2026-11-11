@@ -89,4 +89,15 @@ public final class SecurityEndpoints {
      * with 400 {@code user.follow.community}, so ANALYST gets that answer too instead of 403.
      */
     public static final String[] ACT_AS_ANY_ROLE_POST = { "/api/users/me/follows/*" };
+
+    /**
+     * Writes still allowed on a locked community account (see {@link ActAsFilter}), so its owners can sort out the
+     * accounts their plan no longer covers: transferring ownership, unlocking, and choosing which accounts to keep.
+     * Leaving (a member removing themself) is allowed too.
+     */
+    public static final String[] LOCKED_COMMUNITY_ALLOWED = { "/api/communities/*/owner", "/api/communities/*/unlock",
+            "/api/users/me/communities/keep" };
+
+    /** DELETE-only writes still allowed on a locked community account: deleting it. */
+    public static final String[] LOCKED_COMMUNITY_ALLOWED_DELETE = { "/api/communities/*" };
 }

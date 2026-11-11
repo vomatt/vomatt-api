@@ -84,7 +84,8 @@ public class CommunityService {
         return memberRepository.findByUserIdAndCommunityActiveTrueOrderByCreatedAtAscCommunityUserIdAsc(UUID.fromString(callerId))
                 .stream()
                 .map(m -> new MyCommunityResponse(m.getCommunityUserId().toString(), m.getCommunity().getUsername(),
-                        m.getCommunity().getDisplayName(), m.getCommunity().getAvatarUrl(), m.getRole()))
+                        m.getCommunity().getDisplayName(), m.getCommunity().getAvatarUrl(), m.getRole(),
+                        m.getCommunity().getLockedAt() != null))
                 .toList();
     }
 
@@ -116,6 +117,7 @@ public class CommunityService {
             planService.requireRoom(userId);
         }
         member.setRole(role);
+        planService.reconcile(List.of(userId));
         log.info("Community account {}: {} set {} to {}", communityId, callerId, userId, role);
         return toResponse(member, userRepository.getReferenceById(userId));
     }
@@ -132,6 +134,7 @@ public class CommunityService {
             requireAnotherOwner(communityId, userId);
         }
         memberRepository.delete(member);
+        planService.reconcile(List.of(userId));
         log.info("Community account {}: {} removed {}", communityId, callerId, userId);
     }
 
@@ -156,6 +159,7 @@ public class CommunityService {
         }
         target.setRole(OWNER);
         findMember(communityId, UUID.fromString(callerId)).setRole(CommunityRole.ADMIN);
+        planService.reconcile(List.of(userId, UUID.fromString(callerId)));
         log.info("Community account {}: ownership transferred from {} to {}", communityId, callerId, userId);
     }
 

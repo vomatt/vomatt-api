@@ -147,7 +147,9 @@ public class UserService {
         voteRepository.decrementLikeCountForUserLikes(user.getId());
         auditLogRepository.anonymizeByUserId(userId);
         deleteUploadedAvatarAfterCommit(user.getAvatarUrl());
+        List<UUID> owners = communityMemberRepository.findOwnerIds(List.of(user.getId()));
         userRepository.delete(user);
+        planService.reconcile(owners);
         log.info("User {} deleted by {}", userId, deletedBy);
     }
 

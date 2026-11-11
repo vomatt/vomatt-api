@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -42,8 +43,23 @@ public interface CommunityMemberRepository extends JpaRepository<CommunityMember
             nativeQuery = true)
     boolean isSoleOwnerOfAny(@Param("userId") UUID userId);
 
-    /** How many active community accounts the user is an OWNER of: what their plan limits. A suspended one is not listed, so it does not count. */
+    /** How many active, unlocked community accounts the user is an OWNER of: what their plan limits. A suspended one is not listed, so it does not count. */
     @Query(value = "SELECT count(*) FROM vomatt.community_members m JOIN vomatt.users c ON c.id = m.community_user_id "
-            + "WHERE m.user_id = :userId AND m.role = 'OWNER' AND c.active", nativeQuery = true)
+            + "WHERE m.user_id = :userId AND m.role = 'OWNER' AND c.active AND c.locked_at IS NULL", nativeQuery = true)
     int countOwned(@Param("userId") UUID userId);
+
+    /** The active community accounts the user is an OWNER of, locked or not, earliest created first. */
+    @Query(value = "SELECT c.id FROM vomatt.community_members m JOIN vomatt.users c ON c.id = m.community_user_id "
+            + "WHERE m.user_id = :userId AND m.role = 'OWNER' AND c.active ORDER BY c.created_at, c.id", nativeQuery = true)
+    List<UUID> findOwnedIds(@Param("userId") UUID userId);
+
+    /** {@link #findOwnedIds} of only the locked ones, or only the unlocked ones. */
+    @Query(value = "SELECT c.id FROM vomatt.community_members m JOIN vomatt.users c ON c.id = m.community_user_id "
+            + "WHERE m.user_id = :userId AND m.role = 'OWNER' AND c.active AND (c.locked_at IS NOT NULL) = :locked "
+            + "ORDER BY c.created_at, c.id", nativeQuery = true)
+    List<UUID> findOwnedIds(@Param("userId") UUID userId, @Param("locked") boolean locked);
+
+    @Query(value = "SELECT DISTINCT user_id FROM vomatt.community_members WHERE community_user_id IN (:communityIds) AND role = 'OWNER'",
+           nativeQuery = true)
+    List<UUID> findOwnerIds(@Param("communityIds") Collection<UUID> communityIds);
 }

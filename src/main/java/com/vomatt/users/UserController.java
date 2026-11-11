@@ -22,7 +22,9 @@ import com.vomatt.common.annotation.StorageUnavailableResponse;
 import com.vomatt.users.dto.UserDto;
 import com.vomatt.users.dto.UserProfileResponse;
 import com.vomatt.common.security.RefreshTokenService;
+import com.vomatt.common.security.ActingMember;
 import com.vomatt.common.security.UserPrincipal;
+import com.vomatt.users.dto.KeepCommunitiesRequest;
 import com.vomatt.users.dto.SessionResponse;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import com.vomatt.votes.VoteService;
@@ -61,6 +63,7 @@ public class UserController {
     private final PasskeyService passkeyService;
     private final AuthService authService;
     private final RefreshTokenService refreshTokenService;
+    private final PlanService planService;
 
     @GetMapping("/me")
     @CommonApiResponses
@@ -321,6 +324,38 @@ public class UserController {
         UserProfileResponse profile = userService.updateMyProfile(principal.userId(), request);
         log.info("Profile updated for user: {}", principal.userId());
         return ResponseEntity.ok(ApiResponse.ok(profile));
+    }
+
+    @PostMapping("/me/communities/keep")
+    @CommonApiResponses
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
+            {"communityIds":["0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48"]}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
+            content = @Content(examples = @ExampleObject(value = """
+                    {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Not a valid choice (errorCode `community.keep.invalid`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(value = """
+                            {"success":false,"data":null,"message":"Choose as many community accounts as your plan allows (all of them if you own fewer), all owned by you","errorCode":"community.keep.invalid","error":"Choose as many community accounts as your plan allows (all of them if you own fewer), all owned by you"}""")))
+    @Operation(summary = "Choose which community accounts to keep", description = """
+            **Auth**: required (the real member, also while acting)
+            **Precondition**: every id is an active community account the caller is an OWNER of, and there are exactly \
+            `communityQuota.limit` of them, or all of them when the caller owns fewer
+            **Behavior**: the caller keeps exactly these unlocked: every other community account they own is locked, and a \
+            chosen one that was locked is unlocked. Ends `communityQuota.selectionRequired`. Sending the same choice again \
+            changes nothing. Used after a downgrade, before `selectionDeadline`; afterwards it swaps which ones stay unlocked.
+            **Side effects**: each account locked or unlocked is audit-logged as `LOCK` / `UNLOCK` on `COMMUNITY` with \
+            `reason=USER_CHOICE`. A locked account stays readable; writes as it answer 403 `community.locked`. A chosen \
+            account that another OWNER also owns counts toward their limit again, so they may get `selectionRequired`
+            **Errors**:
+            - 400 `common.validation_failed`: `communityIds` missing or empty
+            - 400 `community.keep.invalid`: not as many ids as the limit (all owned ones when fewer), an id the caller is not \
+            an OWNER of, or an id sent twice
+            - 409 `common.conflict`: another change to the caller's community accounts is in progress; retry""")
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> keepCommunities(@Valid @RequestBody KeepCommunitiesRequest request,
+                                                                             @AuthenticationPrincipal UserPrincipal principal) {
+        planService.keep(UUID.fromString(ActingMember.realUserId(principal)), request.communityIds());
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 
     @PostMapping("/me/phone/send-otp")

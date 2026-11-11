@@ -1,5 +1,6 @@
 package com.vomatt.repository;
 
+import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -13,6 +14,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.vomatt.common.util.LikePattern;
+import com.vomatt.entity.Plan;
 import com.vomatt.entity.User;
 
 @Repository
@@ -89,8 +91,69 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     Optional<String> lockPlan(@Param("id") UUID id);
 
     @Modifying
-    @Query(value = "UPDATE vomatt.users SET plan = :plan WHERE id = :id", nativeQuery = true)
-    void setPlan(@Param("id") UUID id, @Param("plan") String plan);
+    @Query("UPDATE User u SET u.plan = :plan WHERE u.id = :id")
+    void setPlan(@Param("id") UUID id, @Param("plan") Plan plan);
+
+    /**
+     * The selection deadline person {@code u} should have: while they own more active, unlocked community accounts than
+     * their plan's limit, a running one keeps its date and a new one is {@code :deadline}; within the limit, none.
+     */
+    String SELECTION_DEADLINE = """
+            CASE WHEN (SELECT count(*) FROM vomatt.community_members m JOIN vomatt.users c ON c.id = m.community_user_id
+                       WHERE m.user_id = u.id AND m.role = 'OWNER' AND c.active AND c.locked_at IS NULL)
+                      > CASE u.plan WHEN 'PRO' THEN :proLimit ELSE :freeLimit END
+                 THEN COALESCE(u.community_selection_deadline, :deadline) END""";
+
+    @Modifying(flushAutomatically = true)
+    @Query(value = "UPDATE vomatt.users u SET community_selection_deadline = " + SELECTION_DEADLINE + " WHERE u.id IN (:ids)",
+           nativeQuery = true)
+    void reconcileSelectionDeadlines(@Param("ids") Collection<UUID> ids, @Param("freeLimit") int freeLimit,
+                                     @Param("proLimit") int proLimit, @Param("deadline") OffsetDateTime deadline);
+
+    /**
+     * {@link #reconcileSelectionDeadlines} of everyone whose deadline is out of step, returning how many it changed. Rows
+     * another transaction holds are skipped: a plan or ownership change reconciles its own people, and the next run gets the rest.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query(value = "UPDATE vomatt.users u SET community_selection_deadline = " + SELECTION_DEADLINE + " WHERE u.id IN ("
+            + "SELECT u.id FROM vomatt.users u WHERE (u.community_selection_deadline IS NOT NULL OR EXISTS (SELECT 1 FROM "
+            + "vomatt.community_members o WHERE o.user_id = u.id AND o.role = 'OWNER')) "
+            + "AND (" + SELECTION_DEADLINE + ") IS DISTINCT FROM u.community_selection_deadline "
+            + "FOR NO KEY UPDATE SKIP LOCKED)", nativeQuery = true)
+    int reconcileAllSelectionDeadlines(@Param("freeLimit") int freeLimit, @Param("proLimit") int proLimit,
+                                       @Param("deadline") OffsetDateTime deadline);
+
+    @Query("SELECT u.communitySelectionDeadline FROM User u WHERE u.id = :id")
+    Optional<OffsetDateTime> findSelectionDeadline(@Param("id") UUID id);
+
+    /** Users whose community selection deadline has passed: the selection job's work list. */
+    @Query("SELECT u.id FROM User u WHERE u.communitySelectionDeadline <= :now")
+    List<UUID> findSelectionDueBy(@Param("now") OffsetDateTime now);
+
+    boolean existsByIdAndLockedAtIsNotNull(UUID id);
+
+    /**
+     * Locks the community account rows in id order, so two transactions changing overlapping sets never deadlock. Run
+     * it after {@link #lockPlan} and through {@link LockTimeout#within}.
+     */
+    @Query(value = "SELECT id FROM vomatt.users WHERE id IN (:ids) ORDER BY id FOR NO KEY UPDATE", nativeQuery = true)
+    List<UUID> lockIds(@Param("ids") Collection<UUID> ids);
+
+    /**
+     * {@link #lockIds} for only the accounts not yet in the wanted state (locked when {@code lock}), returning them.
+     * A row another transaction changed while this one waited is re-read, so the result is exactly what to change.
+     */
+    @Query(value = "SELECT id FROM vomatt.users WHERE id IN (:ids) AND (locked_at IS NULL) = :lock ORDER BY id FOR NO KEY UPDATE",
+           nativeQuery = true)
+    List<UUID> lockToChange(@Param("ids") Collection<UUID> ids, @Param("lock") boolean lock);
+
+    @Modifying
+    @Query("UPDATE User u SET u.lockedAt = :now WHERE u.id IN :ids")
+    void markLocked(@Param("ids") Collection<UUID> ids, @Param("now") OffsetDateTime now);
+
+    @Modifying
+    @Query("UPDATE User u SET u.lockedAt = NULL WHERE u.id IN :ids")
+    void markUnlocked(@Param("ids") Collection<UUID> ids);
 
     /** Whether the account is active and still holds the admin role; checked per request on /api/admin/**. */
     @Query(value = "SELECT EXISTS (SELECT 1 FROM vomatt.users WHERE id = :id AND active = true AND 'admin' = ANY(roles))",

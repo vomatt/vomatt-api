@@ -118,8 +118,8 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `admin.last_admin` | 409 | 不能移除最後一位管理員 | Cannot remove the last active admin | Show message (resource state conflict) | UserService |
 | `auth.community_sign_in_not_allowed` | 403 | 社群帳號無法登入，請以成員身分登入後切換 | Community accounts cannot sign in; sign in as a member and switch to the account | Show a permission-denied notice | AuthService |
 | `vote.ballot.community_not_allowed` | 403 | 社群帳號不能投票 | Community accounts cannot vote | Show a permission-denied notice | VoteService |
-| `community.not_member` | 403 | 你不是此社群帳號的成員 | You are not a member of this community account | Show a permission-denied notice | ActAsFilter, CommunityService |
-| `community.role_forbidden` | 403 | 你在此社群帳號的角色無權執行此操作 | Your role in this community account does not allow this action | Show a permission-denied notice | ActAsFilter, ActingMember, CommunityService, PollReportService |
+| `community.not_member` | 403 | 你不是此社群帳號的成員 | You are not a member of this community account | Show a permission-denied notice | ActAsFilter, CommunityService, PlanService |
+| `community.role_forbidden` | 403 | 你在此社群帳號的角色無權執行此操作 | Your role in this community account does not allow this action | Show a permission-denied notice | ActAsFilter, ActingMember, CommunityService, PlanService, PollReportService |
 | `community.member.not_found` | 404 | 此用戶不是該社群帳號的成員 | This user is not a member of the community account | Show resource not found | CommunityService |
 | `community.member.exists` | 409 | 此用戶已是該社群帳號的成員 | This user is already a member of the community account | Show message (resource state conflict) | CommunityService |
 | `community.member.invalid` | 400 | 此用戶無法成為社群帳號成員 | This user cannot become a member of a community account | Show message so the user can fix the input | CommunityService |
@@ -134,6 +134,8 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `report.not_ready` | 403 | 投票結束並公布結果後才能查看報告 | The report is available once the poll has ended and its results are revealed | Show a permission-denied notice | PollReportService |
 | `report.cancelled` | 400 | 已取消的投票沒有結果報告 | A cancelled poll has no result report | Show message so the user can fix the input | PollReportService |
 | `community.limit_reached` | 403 | 已達方案可擁有的社群帳號數量上限 | You own as many community accounts as your plan allows | Show a permission-denied notice | PlanService |
+| `community.locked` | 403 | 此社群帳號已鎖定，升級方案或解鎖後才能使用 | This community account is locked; upgrade your plan or unlock it to use it | Show a permission-denied notice | ActAsFilter |
+| `community.keep.invalid` | 400 | 要保留的社群帳號數量須等於方案上限（擁有的較少時須全選），且都是你擁有的社群帳號 | Choose as many community accounts as your plan allows (all of them if you own fewer), all owned by you | Show message so the user can fix the input | PlanService |
 
 ## Success messages and others
 

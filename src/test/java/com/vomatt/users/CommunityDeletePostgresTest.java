@@ -74,8 +74,9 @@ class CommunityDeletePostgresTest extends PostgresRepositoryTest {
             em.flush();
             communityUsername = "community_" + UUID.randomUUID().toString().substring(0, 8);
             communityId = UUID.fromString(communityService.createCommunity(communityUsername, "Sunrise Tower", owner.getId()).id());
-            join(communityId, admin, CommunityRole.ADMIN, owner.getId().toString());
         });
+        // Joins later than the owner, as a real invitation does, so the members are listed in that order
+        tx.executeWithoutResult(s -> join(communityId, admin, CommunityRole.ADMIN, owner.getId().toString()));
     }
 
     @AfterEach

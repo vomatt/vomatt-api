@@ -38,8 +38,7 @@ import java.time.OffsetDateTime;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.function.Function;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -173,7 +172,7 @@ public class CommunityService {
         requireManager(communityId, callerId);
         List<CommunityInvitation> invitations = invitationRepository.findByCommunityUserIdOrderByCreatedAtAscIdAsc(communityId);
         Map<UUID, User> users = userRepository.findAllById(invitations.stream().map(CommunityInvitation::getUserId)
-                .filter(Objects::nonNull).toList()).stream().collect(Collectors.toMap(User::getId, u -> u));
+                .filter(Objects::nonNull).toList()).stream().collect(Collectors.toMap(User::getId, Function.identity()));
         return invitations.stream().map(i -> toResponse(i, i.getUserId() == null ? null : users.get(i.getUserId()))).toList();
     }
 
@@ -199,13 +198,15 @@ public class CommunityService {
         userRepository.lockKeyShare(List.of(invitation.getCommunityUserId(), caller.getId()));
         User community = userRepository.findById(invitation.getCommunityUserId()).filter(User::isActive)
                 .orElseThrow(() -> ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
-        if (invitation.getRole() == OWNER
-                && !memberRepository.existsById(new CommunityMember.Key(community.getId(), caller.getId()))) {
-            planService.requireRoom(caller.getId());
-        }
-        // Insert-or-keep in one statement, so a double-tapped accept cannot fail on the primary key
-        memberRepository.insertIfAbsent(community.getId(), caller.getId(), invitation.getRole().name());
-        CommunityRole role = memberRepository.findByCommunityUserIdAndUserId(community.getId(), caller.getId()).orElseThrow().getRole();
+        // A member keeps their role. Insert-or-keep, so a double-tapped accept cannot fail on the primary key
+        CommunityRole role = memberRepository.findByCommunityUserIdAndUserId(community.getId(), caller.getId())
+                .map(CommunityMember::getRole).orElseGet(() -> {
+                    if (invitation.getRole() == OWNER) {
+                        planService.requireRoom(caller.getId());
+                    }
+                    memberRepository.insertIfAbsent(community.getId(), caller.getId(), invitation.getRole().name());
+                    return invitation.getRole();
+                });
         invitationRepository.deleteForInvitee(community.getId(), caller.getId(), caller.getEmail());
         log.info("Community account {}: {} accepted invitation {} as {}", community.getId(), callerId, invitationId, role);
         return toMine(community, role);

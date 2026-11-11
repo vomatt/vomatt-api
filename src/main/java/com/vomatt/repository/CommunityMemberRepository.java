@@ -21,11 +21,10 @@ public interface CommunityMemberRepository extends JpaRepository<CommunityMember
 
     Optional<CommunityMember> findByCommunityUserIdAndUserId(UUID communityUserId, UUID userId);
 
-    /** Adds the member with the role unless already one, whose role is then kept. Joined at the statement's time, not the transaction's. */
+    /** Adds the member with the role unless already one, whose role is then kept. */
     @Modifying(clearAutomatically = true)
     @Query(value = """
-            INSERT INTO vomatt.community_members (community_user_id, user_id, role, created_at)
-            VALUES (:communityId, :userId, :role, clock_timestamp())
+            INSERT INTO vomatt.community_members (community_user_id, user_id, role) VALUES (:communityId, :userId, :role)
             ON CONFLICT (community_user_id, user_id) DO NOTHING""", nativeQuery = true)
     void insertIfAbsent(@Param("communityId") UUID communityId, @Param("userId") UUID userId, @Param("role") String role);
 

@@ -12888,6 +12888,96 @@
       }
     },
     "/api/communities/{communityId}" : {
+      "delete" : {
+        "description" : "**Auth**: required (OWNER only)\n**Precondition**: none\n**Behavior**: permanently deletes the community account the way `DELETE /api/users/{userId}` deletes a user's: its Polls go with it, together with every Ballot and Comment on them, and so do its own Comments, likes and follows. Every membership is removed, so the account leaves each member's `GET /api/users/me/communities`, `GET /api/users/{username}` answers 404 `user.not_found`, and a later `X-Act-As` with its id gets 403 `community.not_member`.\n**Side effects**: audit-logged as `DELETE` on `COMMUNITY` with the username, display name and members (`username:ROLE`) at deletion in the details; the community account's earlier audit entries are kept\n**Errors**:\n- 403 `community.role_forbidden`: the caller is not an OWNER\n- 409 `common.conflict`: another member change is in progress; retry\n- 403 `community.not_member`: the caller is not a member of this community account, or it does not exist or is suspended\n",
+        "operationId" : "deleteCommunity",
+        "parameters" : [ {
+          "description" : "Community account's user id",
+          "example" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48",
+          "in" : "path",
+          "name" : "communityId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "Deleted" : {
+                    "description" : "Deleted",
+                    "value" : {
+                      "data" : {
+                        "id" : null,
+                        "message" : null,
+                        "status" : null,
+                        "success" : true
+                      },
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseSimpleResultResponse"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Delete a community account",
+        "tags" : [ "Community Account" ]
+      },
       "patch" : {
         "description" : "**Auth**: required (OWNER or ADMIN)\n**Precondition**: none\n**Behavior**: updates `displayName` and/or `bio`. A field that is omitted or `null` is left unchanged; an empty `bio` clears it. `displayName` is stored without surrounding whitespace. The `username` can never change: a `username` in the body is ignored. Returns the community account's profile after the update, as `GET /api/users/{username}` shows it.\n**Side effects**: audit-logged as `UPDATE` on `COMMUNITY`, with each changed field's value before and after in the details\n**Errors**:\n- 400 `common.validation_failed`: `displayName` blank or over 100 characters, or `bio` over 500 characters\n- 403 `community.not_member`: the caller is not a member of this community account, or it does not exist or is suspended\n- 403 `community.role_forbidden`: the caller is not an OWNER or ADMIN\n",
         "operationId" : "updateProfile",

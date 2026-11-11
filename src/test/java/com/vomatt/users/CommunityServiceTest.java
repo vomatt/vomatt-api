@@ -41,6 +41,7 @@ class CommunityServiceTest {
     @Mock UserRepository userRepository;
     @Spy UserMapper userMapper = new UserMapper();
     @Mock UserService userService;
+    @Mock com.vomatt.common.audit.AuditService auditService;
     @Spy LockTimeout lockTimeout = new LockTimeout(mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @InjectMocks CommunityService service;
 
@@ -220,5 +221,14 @@ class CommunityServiceTest {
             assertThatThrownBy(() -> service.uploadAvatar(communityId, file, callerId.toString())).satisfies(ex -> assertKey(ex, error));
             org.mockito.Mockito.verifyNoInteractions(userService);
         }
+    }
+
+    @Test
+    void shouldRefuseDeleteWhenCallerIsNotMember() {
+        when(memberRepository.findActiveRole(communityId, callerId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.deleteCommunity(communityId, callerId.toString()))
+                .satisfies(ex -> assertKey(ex, MessageKey.COMMUNITY_NOT_MEMBER));
+        org.mockito.Mockito.verifyNoInteractions(userService);
     }
 }

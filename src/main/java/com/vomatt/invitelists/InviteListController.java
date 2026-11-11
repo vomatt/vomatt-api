@@ -201,7 +201,10 @@ public class InviteListController {
             **Behavior**: adds the users and email addresses as members. Users already members by ID, addresses already members, duplicates and the owner's own ID / address are ignored. \
             An address is always listed as entered, whether or not it belongs to an account, including one of a user already a member by ID; once someone verifies it at sign-up / sign-in it is tied to that user, \
             still listed by the address. Returns the full member list.
-            **Side effects**: nobody is notified (members never learn about the Invite List); the action is audit-logged.
+            **Side effects**: members get no notification. A new address that belongs to no account at all is mailed, once committed, \
+            an invitation to sign up for Vomatt from the owner, naming no Invite List; the owner mails one address at most once a week, \
+            within the owner's daily invitation email limit (shared with Poll invitations). The response is the same whether or not \
+            an email was sent. The action is audit-logged.
             **Errors**:
             - 400 `invite_list.member.ids_invalid`: one of `userIds` is not an existing user or is suspended (`emails` never cause it)
             - 400 `community.invitee_not_allowed`: one of `userIds` is a community account

@@ -26,7 +26,11 @@ import org.thymeleaf.context.Context;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -65,6 +69,12 @@ public class EmailServiceImpl implements EmailService {
 
     @Value("${app.email.poll-path:/poll/{voteId}}")
     private String pollPath;
+
+    // Where a join invitation's button leads: the sign-up page, as signing up with the address is what joins
+    @Value("${app.email.signup-path:/login}")
+    private String signupPath;
+
+    private static final DateTimeFormatter SENT_AT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     @Value("${otp.ttl-seconds:180}")
     private long otpTtlSeconds;
@@ -173,6 +183,42 @@ public class EmailServiceImpl implements EmailService {
             log.info("Invitation email for vote {} sent to: {}", pollId, TextUtil.maskEmail(to));
         } catch (MessagingException | ResendException | RuntimeException e) {
             log.error("Failed to send invitation email for vote {} to: {}", pollId, TextUtil.maskEmail(to), e);
+        }
+    }
+
+    @Async
+    @Override
+    public void sendSignupInvitationEmails(List<String> recipients, String inviterName, Locale locale) {
+        for (int i = 0; i < recipients.size(); i++) {
+            if (i > 0 && resend != null && !pause(RESEND_SEND_INTERVAL)) {
+                log.warn("Sign-up invitation emails interrupted, {} not sent", recipients.size() - i);
+                return;
+            }
+            sendJoinInvitation(recipients.get(i), "email.join.vomatt.subject", locale,
+                    Map.of("inviterName", Objects.toString(inviterName, "")));
+        }
+    }
+
+    @Async
+    @Override
+    public void sendCommunityInvitationEmail(String to, String inviterName, String inviterUsername, String communityName,
+                                             String role, Duration expiresIn, Locale locale) {
+        sendJoinInvitation(to, "email.join.community.subject", locale,
+                Map.of("inviterName", Objects.toString(inviterName, ""), "inviterUsername", inviterUsername,
+                        "communityName", communityName, "role", role, "expiresDays", expiresIn.toDays()));
+    }
+
+    // Shaped like a team invitation: greeting by address, the invite, a button and its URL, then when and to whom it was sent
+    private void sendJoinInvitation(String to, String subjectKey, Locale locale, Map<String, Object> variables) {
+        Map<String, Object> all = new HashMap<>(variables);
+        all.put("email", to);
+        all.put("joinUrl", siteUrl + signupPath);
+        all.put("sentAt", OffsetDateTime.now(ZoneOffset.UTC).format(SENT_AT));
+        try {
+            send(to, subjectKey, "email/join-invitation-email", locale, all);
+            log.info("Join invitation email ({}) sent to: {}", subjectKey, TextUtil.maskEmail(to));
+        } catch (MessagingException | ResendException | RuntimeException e) {
+            log.error("Failed to send join invitation email ({}) to: {}", subjectKey, TextUtil.maskEmail(to), e);
         }
     }
 

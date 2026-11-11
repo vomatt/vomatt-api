@@ -112,7 +112,11 @@ class VoteServiceTest {
         ReflectionTestUtils.setField(vote, "createdAt", OffsetDateTime.now());
         lenient().when(voteConfig.getDeleteWindow()).thenReturn(Duration.ofMinutes(20));
         lenient().when(voteConfig.getBallotRateLimit()).thenReturn(new VoteConfigurationProperties.BallotRateLimit());
-        ReflectionTestUtils.setField(voteService, "invitationDailyLimit", 200);
+        // Real limiter over the mocked Redis and lookups, so the quota tests still drive it through redisService
+        var limiter = new com.vomatt.common.email.InvitationEmailLimiter(redisService, lookupService,
+                mock(com.vomatt.repository.InvitationEmailRepository.class));
+        ReflectionTestUtils.setField(limiter, "dailyLimit", 200);
+        ReflectionTestUtils.setField(voteService, "invitationEmailLimiter", limiter);
         org.mockito.Mockito.lenient().when(lookupService.configInt(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyInt()))
                 .thenAnswer(inv -> inv.getArgument(1));
         lenient().when(lookupService.configDuration(org.mockito.ArgumentMatchers.anyString(), any(), any()))

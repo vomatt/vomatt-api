@@ -96,6 +96,25 @@ class InviteListPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should record a sign-up invitation for an address with no account once, and not again when removed and re-added")
+    void shouldRecordSignupInvitationOnceWhenAddressReAdded() {
+        addMembers(inviteListId, null, List.of(carolEmail), ownerId);
+        OffsetDateTime firstSent = sentAt(carolEmail);
+        inviteListService.removeEmailMember(inviteListId, carolEmail, ownerId);
+        addMembers(inviteListId, null, List.of(carolEmail, bob.getEmail()), ownerId);
+
+        assertThat(firstSent).isNotNull();
+        assertThat(sentAt(carolEmail)).isEqualTo(firstSent);
+        assertThat(sentAt(bob.getEmail())).as("an address with an account gets no sign-up invitation").isNull();
+    }
+
+    private OffsetDateTime sentAt(String email) {
+        List<?> rows = em.createNativeQuery("SELECT sent_at FROM vomatt.invitation_emails WHERE sender_id = :s AND email = :e")
+                .setParameter("s", owner.getId()).setParameter("e", email).getResultList();
+        return rows.isEmpty() ? null : ((java.time.Instant) rows.getFirst()).atOffset(java.time.ZoneOffset.UTC);
+    }
+
+    @Test
     @DisplayName("should copy the Invite List's current members into the Poll, untouched by later Invite List edits or deletion")
     void shouldCopyMembersWhenInviteListInvitedToPoll() {
         addMembers(inviteListId, List.of(bob.getId(), owner.getId()), List.of(carolEmail.toUpperCase(), owner.getEmail()), ownerId);

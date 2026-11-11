@@ -94,7 +94,7 @@ class NotificationControllerTest {
     void shouldListNotificationsWhenRequested() throws Exception {
         NotificationResponse followed = new NotificationResponse("followed_" + UUID.randomUUID(), NotificationKind.FOLLOWED,
                 NotificationCategory.FOLLOW, OffsetDateTime.now(), false,
-                new FollowUserDto(UUID.randomUUID().toString(), "jtan", null, null, false, true, false), null, null, null);
+                new FollowUserDto(UUID.randomUUID().toString(), "jtan", null, null, null, null, false, true, false), null, null, null);
         when(notificationService.list(USER_ID, NotificationCategory.FOLLOW, "abc", 5))
                 .thenReturn(new CursorResponse<>(List.of(followed), "next"));
 

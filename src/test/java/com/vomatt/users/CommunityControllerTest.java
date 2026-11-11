@@ -63,7 +63,7 @@ class CommunityControllerTest {
     @Test
     void shouldMakeCallerTheOwnerWhenUserCreatesCommunity() throws Exception {
         when(communityService.createCommunity("sunrise_tower", "Sunrise Tower Committee", USER_ID))
-                .thenReturn(new UserDto("o1", "sunrise_tower", "Sunrise Tower Committee", null, true));
+                .thenReturn(new UserDto("o1", "sunrise_tower", "Sunrise Tower Committee", null, null, null, true));
 
         mockMvc.perform(post("/api/communities").contentType(MediaType.APPLICATION_JSON)
                         .content("{ \"username\": \"sunrise_tower\", \"displayName\": \"Sunrise Tower Committee\" }"))

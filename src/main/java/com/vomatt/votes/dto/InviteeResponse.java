@@ -8,6 +8,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record InviteeResponse(
         @Schema(description = "User ID of an Invitee added by ID; always null for one added by email", example = "0199f2a1-2c5d-7f13-9b0e-7d4a1e3f6c82", nullable = true) String userId,
         @Schema(description = "Username of an Invitee added by ID; always null for one added by email", example = "bob", nullable = true) String username,
+        @Schema(description = "Display name of the Invitee; null if they hid it (public by default) or never set one; always null for one added by email", example = "Alice", nullable = true) String displayName,
+        @Schema(description = "First name of the Invitee; null if they hid it (hidden by default) or never set one; always null for one added by email", example = "Alice", nullable = true) String firstName,
+        @Schema(description = "Last name of the Invitee; null if they hid it (hidden by default) or never set one; always null for one added by email", example = "Chen", nullable = true) String lastName,
         @Schema(description = "Avatar of an Invitee added by ID as `bot:<kind>` (the bot cast) or `/api/avatars/<id>.jpg` (an uploaded image, a path on the API origin); older accounts may hold an image URL. Null if never set, and always null for one added by email", example = "bot:boba", nullable = true) String avatarUrl,
         @Schema(description = "Email address an Invitee was added by, for its whole life; null for one added by ID",
                 example = "dave@example.com", nullable = true) String email,

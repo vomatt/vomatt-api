@@ -1,6 +1,7 @@
 package com.vomatt.votes;
 
 import com.vomatt.tags.dto.TagDto;
+import com.vomatt.users.PublicName;
 import com.vomatt.votes.dto.VoteResponse;
 import com.vomatt.votes.dto.VoteResultResponse;
 import com.vomatt.votes.dto.VoterResponse;
@@ -21,7 +22,7 @@ public class VoteMapper {
      * can leak them. Turnout ({@code participantCount}) is always present. Counts come from the stored
      * option counts and the stored Turnout (the Top sort key), so no Ballot rows are loaded.
      */
-    public VoteResponse toResponse(Vote vote, List<VoteOption> options) {
+    public VoteResponse toResponse(Vote vote, List<VoteOption> options, PublicName creatorName) {
         boolean sealed = vote.isResultsSealed();
         VoteResponse response = new VoteResponse();
         response.setId(vote.getId().toString());
@@ -31,6 +32,9 @@ public class VoteMapper {
         response.setCreatorUsername(vote.getCreator().getUsername());
         response.setCreatorAvatarUrl(vote.getCreator().getAvatarUrl());
         response.setCreatorCommunity(vote.getCreator().isCommunity());
+        response.setCreatorDisplayName(creatorName.displayName());
+        response.setCreatorFirstName(creatorName.firstName());
+        response.setCreatorLastName(creatorName.lastName());
         response.setStartTime(vote.getStartTime());
         response.setEndTime(vote.getEndTime());
         response.setDeadline(vote.getDeadline());
@@ -84,7 +88,7 @@ public class VoteMapper {
     }
 
     /** Results of an Ended Poll; Support uses the number of Participants as denominator. */
-    public VoteResultResponse toResultResponse(Vote vote, List<VoteOption> options) {
+    public VoteResultResponse toResultResponse(Vote vote, List<VoteOption> options, PublicName creatorName) {
         long participants = vote.getTurnout();
         VoteResultResponse response = new VoteResultResponse();
         response.setId(vote.getId().toString());
@@ -94,6 +98,9 @@ public class VoteMapper {
         response.setCreatorUsername(vote.getCreator().getUsername());
         response.setCreatorAvatarUrl(vote.getCreator().getAvatarUrl());
         response.setCreatorCommunity(vote.getCreator().isCommunity());
+        response.setCreatorDisplayName(creatorName.displayName());
+        response.setCreatorFirstName(creatorName.firstName());
+        response.setCreatorLastName(creatorName.lastName());
         response.setStartTime(vote.getStartTime());
         response.setEndTime(vote.getEndTime());
         response.setDeadline(vote.getDeadline());
@@ -122,8 +129,9 @@ public class VoteMapper {
     }
 
     /** @param withOption false while the Poll holds Anonymous Ballots: then nobody's option is named (see VoteService.getVoters) */
-    public VoterResponse toVoterResponse(UserVote ballot, boolean withOption) {
-        return new VoterResponse(ballot.getUser().getId().toString(), ballot.getUser().getUsername(), ballot.getUser().getAvatarUrl(),
+    public VoterResponse toVoterResponse(UserVote ballot, boolean withOption, PublicName name) {
+        return new VoterResponse(ballot.getUser().getId().toString(), ballot.getUser().getUsername(),
+                name.displayName(), name.firstName(), name.lastName(), ballot.getUser().getAvatarUrl(),
                 withOption ? ballot.getOption().getId().toString() : null, ballot.getCreatedAt());
     }
 }

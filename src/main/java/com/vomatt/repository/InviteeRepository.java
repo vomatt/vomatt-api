@@ -41,7 +41,8 @@ public interface InviteeRepository extends JpaRepository<Invitee, UUID> {
 
     /** Invitees of a Poll with whether each holds a Ballot ({@link #FIRST_OF_USER}), earliest invited first. */
     @Query(value = """
-            SELECT u.id AS "userId", u.username AS "username", u.avatar_url AS "avatarUrl", i.email AS "email",
+            SELECT u.id AS "userId", u.username AS "username", u.display_name AS "displayName",
+                   u.first_name AS "firstName", u.last_name AS "lastName", u.avatar_url AS "avatarUrl", i.email AS "email",
                    i.created_at AS "invitedAt",
                    (EXISTS (SELECT 1 FROM vomatt.user_votes uv WHERE uv.vote_id = i.vote_id AND uv.user_id = i.user_id)
                     AND """ + FIRST_OF_USER + """

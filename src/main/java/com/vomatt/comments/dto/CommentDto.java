@@ -32,6 +32,15 @@ public class CommentDto {
     @Schema(description = "Whether the author is a community account (a group's page, shown with a badge); false on a deleted placeholder", example = "false")
     private boolean authorCommunity;
 
+    @Schema(description = "Display name of the author; null if they hid it (public by default) or never set one, and on a deleted placeholder (`deleted` = true)", example = "Alice", nullable = true)
+    private String authorDisplayName;
+
+    @Schema(description = "First name of the author; null if they hid it (hidden by default) or never set one, and on a deleted placeholder (`deleted` = true)", example = "Alice", nullable = true)
+    private String authorFirstName;
+
+    @Schema(description = "Last name of the author; null if they hid it (hidden by default) or never set one, and on a deleted placeholder (`deleted` = true)", example = "Chen", nullable = true)
+    private String authorLastName;
+
     @Schema(description = "Comment text (max 2000 characters). Null only on a deleted placeholder (`deleted` = true)",
             example = "I would pick option B, it is the cheaper one.", nullable = true)
     private String text;

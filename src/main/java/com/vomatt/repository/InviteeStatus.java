@@ -7,6 +7,10 @@ import java.util.UUID;
 public interface InviteeStatus {
     UUID getUserId();
     String getUsername();
+    /** The user's own names, before their visibility settings mask them */
+    String getDisplayName();
+    String getFirstName();
+    String getLastName();
     String getAvatarUrl();
     String getEmail();
     Instant getInvitedAt();

@@ -273,37 +273,25 @@ public class UserService {
             page -> toFollowItems(page.stream().map(UserFollow::getFollowed).toList(), viewerId));
     }
 
-    /** Follow list items of a page of users: display name masking as in search, and the viewer's follows both ways in one query. */
+    /** Follow list items of a page of users: names masked as in search, and the viewer's follows both ways in one query. */
     public List<FollowUserDto> toFollowItems(List<User> users, UUID viewerId) {
         if (users.isEmpty()) {
             return List.of();
         }
-        Map<UUID, Boolean> shown = displayNameSettings(users);
-        boolean byDefault = VisibilityField.DISPLAY_NAME.isVisibleByDefault();
+        Map<UUID, PublicName> names = PublicNames.load(users, preferenceRepository);
         List<FollowEdge> edges = followRepository.findEdgesWithViewer(viewerId, users.stream().map(User::getId).toList());
         Set<UUID> followedByViewer = edges.stream().filter(e -> e.followerId().equals(viewerId))
             .map(FollowEdge::followedId).collect(Collectors.toSet());
         Set<UUID> followingViewer = edges.stream().filter(e -> e.followedId().equals(viewerId))
             .map(FollowEdge::followerId).collect(Collectors.toSet());
-        return users.stream().map(u -> userMapper.toFollowItem(u, shown.getOrDefault(u.getId(), byDefault),
+        return users.stream().map(u -> userMapper.toFollowItem(u, names.get(u.getId()),
             followedByViewer.contains(u.getId()), followingViewer.contains(u.getId()))).toList();
     }
 
-    /** Public profile fields of a page of users, display name masked by each owner's setting. */
+    /** Public profile fields of a page of users, names masked by each owner's settings. */
     public List<UserDto> toSearchResults(List<User> users) {
-        Map<UUID, Boolean> shown = displayNameSettings(users);
-        boolean byDefault = VisibilityField.DISPLAY_NAME.isVisibleByDefault();
-        return users.stream().map(u -> userMapper.toSearchResult(u, shown.getOrDefault(u.getId(), byDefault))).toList();
-    }
-
-    /** Display name visibility explicitly set by users on the page, in one query; unset users are absent. */
-    private Map<UUID, Boolean> displayNameSettings(List<User> users) {
-        if (users.isEmpty()) {
-            return Map.of();
-        }
-        return preferenceRepository.findByUserIdInAndKey(users.stream().map(User::getId).toList(),
-                VisibilityField.DISPLAY_NAME.preferenceKey()).stream()
-            .collect(Collectors.toMap(pref -> pref.getUser().getId(), pref -> Boolean.parseBoolean(pref.getValue())));
+        Map<UUID, PublicName> names = PublicNames.load(users, preferenceRepository);
+        return users.stream().map(u -> userMapper.toSearchResult(u, names.get(u.getId()))).toList();
     }
 
     /** Users who follow the given user, most recently followed first, as public profile fields with the caller's relation. */

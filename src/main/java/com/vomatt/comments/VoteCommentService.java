@@ -1,5 +1,8 @@
 package com.vomatt.comments;
 
+import com.vomatt.users.PublicName;
+import com.vomatt.users.PublicNames;
+import com.vomatt.repository.UserPreferenceRepository;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.security.ActingMember;
 import com.vomatt.common.constant.ReservedUsernames;
@@ -47,6 +50,7 @@ public class VoteCommentService {
 
     private final VoteCommentRepository commentRepository;
     private final VoteService voteService;
+    private final UserPreferenceRepository preferenceRepository;
     private final UserRepository userRepository;
     private final CommentLikeRepository commentLikeRepository;
     private final CommentMapper commentMapper;
@@ -113,7 +117,7 @@ public class VoteCommentService {
         log.info("Comment created: {} on vote: {} by user: {}", comment.getId(), voteId, userId);
 
         // A new Comment has no likes yet
-        return commentMapper.toDto(comment, 0, false, mentionedUsernamesById(List.of(comment)));
+        return commentMapper.toDto(comment, 0, false, mentionedUsernamesById(List.of(comment)), PublicNames.load(comment.getUser(), preferenceRepository));
     }
 
     /** A Poll's comments, newest first, cursor-paged; likes are loaded per page, not per comment. */
@@ -298,9 +302,10 @@ public class VoteCommentService {
         Set<UUID> liked = currentUserId == null ? Set.of()
             : Set.copyOf(commentLikeRepository.findLikedCommentIds(UUID.fromString(currentUserId), ids));
         Map<UUID, String> usernames = mentionedUsernamesById(comments);
+        Map<UUID, PublicName> authorNames = PublicNames.load(comments.stream().filter(c -> !c.isDeleted()).map(VoteComment::getUser).toList(), preferenceRepository);
         return comments.stream()
             .map(c -> commentMapper.toDto(c, likeCounts.getOrDefault(c.getId(), 0L), liked.contains(c.getId()),
-                usernames))
+                usernames, c.isDeleted() ? PublicName.NONE : authorNames.get(c.getUser().getId())))
             .toList();
     }
 

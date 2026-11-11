@@ -112,13 +112,14 @@ public class PlanService {
     /**
      * The user keeps exactly {@code keep} of the active community accounts they own unlocked: the others are locked,
      * kept ones that were locked are unlocked, and any selection deadline ends. Sending the same set again changes nothing.
-     * 400 {@code community.keep.invalid} unless the set names as many as the limit allows (all of them when the user
-     * owns fewer), each one the user owns.
+     * 400 {@code community.keep.invalid} unless it names as many as the limit allows (all of them when the user owns
+     * fewer), each one the user owns, none twice.
      */
-    public void keep(UUID userId, Set<UUID> keep) {
+    public void keep(UUID userId, Collection<UUID> keep) {
         int limit = limit(lockPlan(userId));
         List<UUID> owned = memberRepository.findOwnedIds(userId);
-        if (keep.isEmpty() || keep.size() != Math.min(limit, owned.size()) || !owned.containsAll(keep)) {
+        if (keep.isEmpty() || keep.size() != Math.min(limit, owned.size()) || new HashSet<>(keep).size() != keep.size()
+                || !owned.containsAll(keep)) {
             throw ApiException.badRequest(MessageKey.COMMUNITY_KEEP_INVALID);
         }
         // Both passes below lock rows; taking them all first keeps the id order across the two
@@ -181,6 +182,14 @@ public class PlanService {
             userRepository.reconcileSelectionDeadlines(userIds, limit(Plan.FREE), limit(Plan.PRO),
                     OffsetDateTime.now().plus(SELECTION_PERIOD));
         }
+    }
+
+    /**
+     * {@link #reconcile} of everyone, for the selection job: catches up people pushed over their limit by no change of
+     * theirs, such as accounts created before plans or an admin lowering a limit. Returns how many deadlines it set or ended.
+     */
+    public int reconcileAll(OffsetDateTime now) {
+        return userRepository.reconcileAllSelectionDeadlines(limit(Plan.FREE), limit(Plan.PRO), now.plus(SELECTION_PERIOD));
     }
 
     /** Locks or unlocks those of the community accounts not already so, with one audit entry each; returns how many. */

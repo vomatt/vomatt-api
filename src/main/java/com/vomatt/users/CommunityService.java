@@ -1,6 +1,8 @@
 package com.vomatt.users;
 
 import com.vomatt.common.audit.AuditAspect;
+import com.vomatt.common.audit.AuditService;
+import com.vomatt.common.audit.Auditable;
 import com.vomatt.common.constant.ReservedUsernames;
 import com.vomatt.common.constant.UserRole;
 import com.vomatt.common.exception.ApiException;
@@ -13,7 +15,6 @@ import com.vomatt.repository.CommunityMemberRepository;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.users.dto.MyCommunityResponse;
 import com.vomatt.users.dto.CommunityMemberResponse;
-import com.vomatt.users.dto.UpdateCommunityRequest;
 import com.vomatt.users.dto.UpdateProfileRequest;
 import com.vomatt.users.dto.UserDto;
 import com.vomatt.users.dto.UserProfileResponse;
@@ -42,6 +43,7 @@ import java.util.stream.Collectors;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.vomatt.entity.CommunityRole.OWNER;
 
@@ -63,6 +65,8 @@ public class CommunityService {
     private final CommunityInvitationRepository invitationRepository;
     private final InvitationEmailLimiter invitationEmailLimiter;
     private final EmailService emailService;
+    private final AuditService auditService;
+    private final PlanService planService;
 
     /** How long an invitation can be accepted. */
     static final Duration INVITATION_TTL = Duration.ofDays(7);
@@ -76,6 +80,7 @@ public class CommunityService {
             throw ApiException.conflict(MessageKey.USER_USERNAME_TAKEN);
         }
         requireEligible(ownerUserId);
+        planService.requireRoom(ownerUserId);
         User community = userRepository.saveAndFlush(User.builder()
                 .username(username)
                 .displayName(displayName.trim())
@@ -190,8 +195,14 @@ public class CommunityService {
     public MyCommunityResponse acceptInvitation(UUID invitationId, String callerId) {
         User caller = requireEligible(UUID.fromString(callerId));
         CommunityInvitation invitation = findOwnInvitation(invitationId, caller);
+        // Waits for a deletion of either account in flight, so the checks see it and the insert cannot fail its key
+        userRepository.lockKeyShare(List.of(invitation.getCommunityUserId(), caller.getId()));
         User community = userRepository.findById(invitation.getCommunityUserId()).filter(User::isActive)
                 .orElseThrow(() -> ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
+        if (invitation.getRole() == OWNER
+                && !memberRepository.existsById(new CommunityMember.Key(community.getId(), caller.getId()))) {
+            planService.requireRoom(caller.getId());
+        }
         // Insert-or-keep in one statement, so a double-tapped accept cannot fail on the primary key
         memberRepository.insertIfAbsent(community.getId(), caller.getId(), invitation.getRole().name());
         CommunityRole role = memberRepository.findByCommunityUserIdAndUserId(community.getId(), caller.getId()).orElseThrow().getRole();
@@ -210,7 +221,7 @@ public class CommunityService {
 
     private static MyCommunityResponse toMine(User community, CommunityRole role) {
         return new MyCommunityResponse(community.getId().toString(), community.getUsername(), community.getDisplayName(),
-                community.getAvatarUrl(), role);
+                community.getAvatarUrl(), role, community.getLockedAt() != null);
     }
 
     private CommunityInvitation findOwnInvitation(UUID invitationId, User caller) {
@@ -234,7 +245,11 @@ public class CommunityService {
         if (member.getRole() == OWNER && role != OWNER) {
             requireAnotherOwner(communityId, userId);
         }
+        if (role == OWNER && member.getRole() != OWNER) {
+            planService.requireRoom(userId);
+        }
         member.setRole(role);
+        planService.reconcile(List.of(userId));
         log.info("Community account {}: {} set {} to {}", communityId, callerId, userId, role);
         return toResponse(member, userRepository.getReferenceById(userId));
     }
@@ -251,39 +266,47 @@ public class CommunityService {
             requireAnotherOwner(communityId, userId);
         }
         memberRepository.delete(member);
+        planService.reconcile(List.of(userId));
         log.info("Community account {}: {} removed {}", communityId, callerId, userId);
     }
 
     /**
      * OWNER only: the member becomes an OWNER and the caller an ADMIN. Transferring to oneself changes nothing. Takes
      * the OWNER row lock and checks the caller's role under it, so an OWNER demoted concurrently cannot still transfer.
+     * A recipient not yet an OWNER needs room in their plan, checked first: the person's row is locked before OWNER rows.
      */
     public void transferOwner(UUID communityId, UUID userId, String callerId) {
-        requireRole(communityId, callerId);
-        if (!lockTimeout.within(() -> memberRepository.lockOwnerIds(communityId)).contains(UUID.fromString(callerId))) {
-            throw ApiException.forbidden(MessageKey.COMMUNITY_ROLE_FORBIDDEN);
+        requireOwner(communityId, callerId);
+        if (findMember(communityId, userId).getRole() != OWNER) {
+            planService.requireRoom(userId);
         }
+        requireOwnerLocked(communityId, callerId);
         CommunityMember target = findMember(communityId, userId);
         if (target.getUserId().toString().equals(callerId)) {
             return;
         }
         target.setRole(OWNER);
         findMember(communityId, UUID.fromString(callerId)).setRole(CommunityRole.ADMIN);
+        planService.reconcile(List.of(userId, UUID.fromString(callerId)));
         log.info("Community account {}: ownership transferred from {} to {}", communityId, callerId, userId);
     }
 
-    /** OWNER or ADMIN: display name and bio; the audit details hold each changed field before and after. */
-    public UserProfileResponse updateProfile(UUID communityId, UpdateCommunityRequest request, String callerId) {
+    /**
+     * OWNER or ADMIN: display name, bio and bot avatar, from {@code PATCH /api/communities/{id}} or {@code PATCH /api/users/me}
+     * while acting; the audit details hold each changed field before and after.
+     */
+    @Auditable(action = "UPDATE", resourceType = "COMMUNITY", resourceIdIndex = 0)
+    public UserProfileResponse updateProfile(UUID communityId, UpdateProfileRequest request, String callerId) {
         requireProfileEditor(communityId, callerId);
-        User community = userRepository.findById(communityId).orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
-        String displayName = request.displayName() == null ? null : request.displayName().trim();
+        User community = findUser(communityId);
+        String displayName = community.getDisplayName();
+        String bio = community.getBio();
+        String avatarUrl = community.getAvatarUrl();
+        UserProfileResponse profile = userService.updateMyProfile(communityId.toString(), request);
         List<String> changes = new ArrayList<>();
-        change(changes, "displayName", community.getDisplayName(), displayName);
-        change(changes, "bio", community.getBio(), request.bio());
-        UpdateProfileRequest update = new UpdateProfileRequest();
-        update.setDisplayName(displayName);
-        update.setBio(request.bio());
-        UserProfileResponse profile = userService.updateMyProfile(communityId.toString(), update);
+        change(changes, "displayName", displayName, community.getDisplayName());
+        change(changes, "bio", bio, community.getBio());
+        change(changes, "avatarUrl", avatarUrl, community.getAvatarUrl());
         AuditAspect.recordDetails(changes.isEmpty() ? null : String.join("; ", changes));
         log.info("Community account {}: profile updated by {}", communityId, callerId);
         return profile;
@@ -294,15 +317,39 @@ public class CommunityService {
      * outside any transaction; the daily upload limit counts per community account.
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    @Auditable(action = "UPDATE", resourceType = "COMMUNITY", resourceIdIndex = 0)
     public UserProfileResponse uploadAvatar(UUID communityId, MultipartFile file, String callerId) {
         requireProfileEditor(communityId, callerId);
         String before = userRepository.findById(communityId).map(User::getAvatarUrl).orElse(null);
         UserProfileResponse profile = userService.uploadAvatar(communityId.toString(), file);
-        List<String> changes = new ArrayList<>();
-        change(changes, "avatarUrl", before, profile.avatarUrl());
-        AuditAspect.recordDetails(String.join("; ", changes));
+        AuditAspect.recordDetails("avatarUrl: " + quote(before) + " -> " + quote(profile.avatarUrl()));
         log.info("Community account {}: avatar uploaded by {}", communityId, callerId);
         return profile;
+    }
+
+    /**
+     * OWNER only: deletes the community account as {@link UserService#deleteAccount} deletes any account; its memberships
+     * go with it. Checks the role under the OWNER row lock, as {@link #transferOwner} does. The audit entry, written
+     * in this transaction so it cannot be dropped, keeps the username, display name and members, which are gone
+     * afterwards; the account row is locked before members are read, so a member added meanwhile is listed.
+     */
+    public void deleteCommunity(UUID communityId, String callerId) {
+        requireRole(communityId, callerId);
+        requireOwnerLocked(communityId, callerId);
+        userRepository.lockForDelete(communityId);
+        User community = findUser(communityId);
+        String members = memberRepository.findByCommunityUserIdOrderByCreatedAtAscUserIdAsc(communityId).stream()
+                .map(m -> m.getUser().getUsername() + ":" + m.getRole())
+                .collect(Collectors.joining(","));
+        userService.deleteAccount(community, callerId);
+        auditService.logActionNow(callerId, "DELETE", "COMMUNITY", communityId.toString(), "username=" + community.getUsername()
+                + "; displayName=" + quote(community.getDisplayName()) + "; members=" + members);
+        log.info("Community account {} deleted by {}", communityId, callerId);
+    }
+
+    public void unlock(UUID communityId, String callerId) {
+        requireOwner(communityId, callerId);
+        planService.unlock(communityId, UUID.fromString(callerId));
     }
 
     private static void change(List<String> changes, String field, String before, String after) {
@@ -324,6 +371,18 @@ public class CommunityService {
     private CommunityRole requireRole(UUID communityId, String callerId) {
         return memberRepository.findActiveRole(communityId, UUID.fromString(callerId))
                 .orElseThrow(() -> ApiException.forbidden(MessageKey.COMMUNITY_NOT_MEMBER));
+    }
+
+    private void requireOwner(UUID communityId, String callerId) {
+        if (requireRole(communityId, callerId) != OWNER) {
+            throw ApiException.forbidden(MessageKey.COMMUNITY_ROLE_FORBIDDEN);
+        }
+    }
+
+    private void requireOwnerLocked(UUID communityId, String callerId) {
+        if (!lockTimeout.within(() -> memberRepository.lockOwnerIds(communityId)).contains(UUID.fromString(callerId))) {
+            throw ApiException.forbidden(MessageKey.COMMUNITY_ROLE_FORBIDDEN);
+        }
     }
 
     private CommunityRole requireManager(UUID communityId, String callerId) {
@@ -366,11 +425,15 @@ public class CommunityService {
 
     // A member is a person: an active account that is not itself a community account
     private User requireEligible(UUID userId) {
-        User user = userRepository.findById(userId).orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
+        User user = findUser(userId);
         if (!user.isActive() || user.isCommunity()) {
             throw ApiException.badRequest(MessageKey.COMMUNITY_MEMBER_INVALID);
         }
         return user;
+    }
+
+    private User findUser(UUID id) {
+        return userRepository.findById(id).orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
     }
 
     private static CommunityMemberResponse toResponse(CommunityMember m, User user) {

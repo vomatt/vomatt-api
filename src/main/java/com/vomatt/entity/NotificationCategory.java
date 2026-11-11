@@ -11,5 +11,7 @@ public enum NotificationCategory {
     /** Invitations to Invite-only Polls and to community accounts: INVITATION, COMMUNITY_INVITATION. */
     INVITATION,
     /** New followers: FOLLOWED. */
-    FOLLOW
+    FOLLOW,
+    /** Community accounts the user owns: COMMUNITY_LOCKED. */
+    COMMUNITY
 }

@@ -7,11 +7,16 @@ import java.util.concurrent.TimeUnit;
 
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import org.springframework.beans.factory.annotation.Value;
 
+import com.vomatt.common.util.ClientIpResolver;
 import com.vomatt.entity.User;
 import com.vomatt.repository.UserRepository;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,6 +56,30 @@ public class AuditService {
         }
     }
     
+    /**
+     * Written now in the caller's transaction instead of after return by {@link #logAction}, which drops entries when
+     * its writers are busy: it commits or rolls back with the change it records. In a request whose {@code @Auditable}
+     * action is the same, it is that request's success entry and AuditAspect skips its own. A null actor is the system.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void logActionNow(String userId, String action, String resourceType, String resourceId, String details) {
+        if (!auditEnabled) {
+            return;
+        }
+        AuditLog auditLog = new AuditLog(userId, null, action, resourceType, resourceId);
+        HttpServletRequest request = AuditAspect.currentRequest();
+        if (request != null) {
+            auditLog.setIpAddress(ClientIpResolver.resolve(request));
+            auditLog.setUserAgent(request.getHeader("User-Agent"));
+            auditLog.setRequestUri(request.getRequestURI());
+            auditLog.setHttpMethod(request.getMethod());
+        }
+        auditLog.setDetails(AuditAspect.withActingAs(details));
+        resolveActor(auditLog);
+        auditLogRepository.save(auditLog);
+        AuditAspect.markSuccessEntryWritten(action);
+    }
+
     @Async
     public void logFailedAction(String userId, String action, String resourceType, 
                                String resourceId, String errorMessage, String ipAddress, String details) {

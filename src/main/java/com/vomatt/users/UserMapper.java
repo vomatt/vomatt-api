@@ -1,5 +1,6 @@
 package com.vomatt.users;
 
+import com.vomatt.users.dto.CommunityQuota;
 import com.vomatt.users.dto.FollowUserDto;
 import com.vomatt.users.dto.MyProfileResponse;
 import com.vomatt.users.dto.UserDto;
@@ -45,7 +46,8 @@ public class UserMapper {
      */
     public MyProfileResponse toMyProfileResponse(User user, UserProfileProjection stats,
                                                   long createdPollCount, long votedPollCount,
-                                                  Map<String, Boolean> visibilitySettings, boolean anonymousBallotByDefault) {
+                                                  Map<String, Boolean> visibilitySettings, boolean anonymousBallotByDefault,
+                                                  CommunityQuota communityQuota) {
         return new MyProfileResponse(
                 user.getId().toString(),
                 user.getUsername(),
@@ -71,7 +73,9 @@ public class UserMapper {
                 stats.getFollowingCount().intValue(),
                 visibilitySettings,
                 anonymousBallotByDefault,
-                user.isCommunity()
+                user.isCommunity(),
+                user.getPlan(),
+                communityQuota
         );
     }
 

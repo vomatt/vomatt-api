@@ -41,10 +41,12 @@ class CommunityServiceTest {
     @Mock UserRepository userRepository;
     @Spy UserMapper userMapper = new UserMapper();
     @Mock UserService userService;
+    @Mock com.vomatt.common.audit.AuditService auditService;
     @Spy LockTimeout lockTimeout = new LockTimeout(mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
     @Mock com.vomatt.repository.CommunityInvitationRepository invitationRepository;
     @Mock com.vomatt.common.email.InvitationEmailLimiter invitationEmailLimiter;
     @Mock com.vomatt.common.email.EmailService emailService;
+    @Mock PlanService planService;
     @InjectMocks CommunityService service;
 
     final UUID communityId = UUID.randomUUID();
@@ -189,10 +191,11 @@ class CommunityServiceTest {
     void shouldRefuseTransferWhenOwnerWasDemotedBeforeTheLock() {
         caller(OWNER);
         // Read as OWNER, but another OWNER demoted the caller before the OWNER rows were locked
+        CommunityMember target = target(EDITOR);
         when(memberRepository.lockOwnerIds(communityId)).thenReturn(List.of(targetId));
         assertThatThrownBy(() -> service.transferOwner(communityId, targetId, callerId.toString()))
                 .satisfies(ex -> assertKey(ex, MessageKey.COMMUNITY_ROLE_FORBIDDEN));
-        verify(memberRepository, never()).findByCommunityUserIdAndUserId(any(), any());
+        assertThat(target.getRole()).isEqualTo(EDITOR);
     }
 
     // caller role (blank = not a member), expected error (blank = allowed)
@@ -208,7 +211,7 @@ class CommunityServiceTest {
     void shouldAllowOnlyOwnerAndAdminWhenEditingProfile(CommunityRole role, MessageKey error) {
         when(memberRepository.findActiveRole(communityId, callerId)).thenReturn(Optional.ofNullable(role));
         lenient().when(userRepository.findById(communityId)).thenReturn(Optional.of(User.builder().id(communityId).username("sunrise").build()));
-        var update = new com.vomatt.users.dto.UpdateCommunityRequest("Sunrise", null);
+        var update = new com.vomatt.users.dto.UpdateCommunityRequest("Sunrise", null).toProfileUpdate();
         var file = mock(org.springframework.web.multipart.MultipartFile.class);
         lenient().when(userService.uploadAvatar(communityId.toString(), file)).thenReturn(mock(com.vomatt.users.dto.UserProfileResponse.class));
 
@@ -258,5 +261,14 @@ class CommunityServiceTest {
         service.invite(communityId, null, "dave@example.com", CommunityRole.EDITOR, callerId.toString());
 
         org.mockito.Mockito.verifyNoInteractions(invitationEmailLimiter, emailService);
+    }
+
+    @Test
+    void shouldRefuseDeleteWhenCallerIsNotMember() {
+        when(memberRepository.findActiveRole(communityId, callerId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.deleteCommunity(communityId, callerId.toString()))
+                .satisfies(ex -> assertKey(ex, MessageKey.COMMUNITY_NOT_MEMBER));
+        org.mockito.Mockito.verifyNoInteractions(userService);
     }
 }

@@ -6,6 +6,7 @@ import com.vomatt.common.audit.AuditAspect;
 import com.vomatt.common.audit.AuditService;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.common.security.ActingMember;
 import com.vomatt.common.security.RefreshTokenService;
 import com.vomatt.common.security.UserPrincipal;
 import com.vomatt.common.storage.StorageService;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.aspectj.annotation.AspectJProxyFactory;
+import org.springframework.test.util.AopTestUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -49,12 +51,14 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 /** PUT /api/communities/{id}/avatar with real commits: the upload runs outside the caller's transaction. */
 @Import({ CommunityService.class, UserService.class, UserMapper.class, VoteCommentService.class, CommentMapper.class,
-        VoteServiceSlice.class, StorageService.class })
+        VoteServiceSlice.class, StorageService.class, PlanService.class, AuditService.class })
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class CommunityAvatarPostgresTest extends PostgresRepositoryTest {
 
     @Autowired CommunityService communityService;
+    @Autowired PlanService planService;
     @Autowired UserRepository userRepository;
+    @Autowired UserService userService;
     @Autowired TransactionTemplate tx;
     @MockitoBean StorageService storageService;
     @MockitoBean RefreshTokenService refreshTokenService;
@@ -91,9 +95,13 @@ class CommunityAvatarPostgresTest extends PostgresRepositoryTest {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 principal(memberId), null, List.of()));
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));
-        AspectJProxyFactory factory = new AspectJProxyFactory(new CommunityController(communityService));
-        factory.addAspect(new AuditAspect(auditService));
-        return factory.getProxy();
+        return new CommunityController(auditedService());
+    }
+
+    private CommunityService auditedService() {
+        AspectJProxyFactory service = new AspectJProxyFactory((Object) AopTestUtils.getUltimateTargetObject(communityService));
+        service.addAspect(new AuditAspect(auditService));
+        return service.getProxy();
     }
 
     private static UserPrincipal principal(UUID id) {
@@ -120,6 +128,21 @@ class CommunityAvatarPostgresTest extends PostgresRepositoryTest {
         verify(storageService).put(any(), any(), eq("image/jpeg"));
         verify(auditService).logAction(eq(admin.getId().toString()), eq("UPDATE"), eq("COMMUNITY"), eq(communityId.toString()),
                 any(), any(), any(), any(), eq("avatarUrl: null -> \"" + avatarUrl + "\""));
+    }
+
+    @Test
+    void shouldAuditAsCommunityUpdateWhenAdminUploadsThroughUsersMeWhileActing() throws IOException {
+        var acting = new UsernamePasswordAuthenticationToken(principal(communityId), null, List.of());
+        acting.setDetails(new ActingMember(admin.getId(), communityId, CommunityRole.ADMIN));
+        SecurityContextHolder.getContext().setAuthentication(acting);
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));
+        UserController controller = new UserController(userService, null, null, null, null, planService, auditedService());
+
+        String avatarUrl = controller.uploadAvatar(image(), principal(communityId)).getBody().data().avatarUrl();
+
+        assertThat(storedAvatar()).isEqualTo(avatarUrl);
+        verify(auditService).logAction(eq(admin.getId().toString()), eq("UPDATE"), eq("COMMUNITY"), eq(communityId.toString()),
+                any(), any(), any(), any(), eq("actingAs=" + communityId + "; avatarUrl: null -> \"" + avatarUrl + "\""));
     }
 
     @Test

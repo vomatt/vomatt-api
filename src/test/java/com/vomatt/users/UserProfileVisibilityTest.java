@@ -45,6 +45,9 @@ class UserProfileVisibilityTest {
     @Mock
     RefreshTokenService refreshTokenService;
 
+    @Mock
+    PlanService planService;
+
     @InjectMocks
     UserService userService;
 
@@ -128,13 +131,13 @@ class UserProfileVisibilityTest {
                     Map.of("firstName", false, "lastName", false,
                            "location", false),
                     false
-            , false);
+            , false, com.vomatt.entity.Plan.FREE, null);
 
             when(userRepository.findById(USER_UUID)).thenReturn(Optional.of(user));
             when(userRepository.findProfileByUsername(USERNAME)).thenReturn(Optional.of(projection));
             when(preferenceRepository.findByUserIdAndKeyStartingWith(USER_UUID, "visibility."))
                     .thenReturn(Collections.emptyList());
-            when(userMapper.toMyProfileResponse(eq(user), eq(projection), anyLong(), anyLong(), anyMap(), eq(false)))
+            when(userMapper.toMyProfileResponse(eq(user), eq(projection), anyLong(), anyLong(), anyMap(), eq(false), any()))
                     .thenReturn(expectedResponse);
 
             // When
@@ -167,7 +170,7 @@ class UserProfileVisibilityTest {
             verify(userMapper).toMyProfileResponse(eq(user), any(UserProfileProjection.class), anyLong(), anyLong(), argThat(v ->
                     Boolean.TRUE.equals(v.get("displayName")) && Boolean.TRUE.equals(v.get("bio"))
                             && Boolean.FALSE.equals(v.get("firstName")) && Boolean.FALSE.equals(v.get("location"))
-                            && !v.containsKey("email") && !v.containsKey("birthday")), eq(false));
+                            && !v.containsKey("email") && !v.containsKey("birthday")), eq(false), any());
         }
 
         @Test
@@ -185,7 +188,7 @@ class UserProfileVisibilityTest {
 
             // Then
             verify(userMapper).toMyProfileResponse(eq(user), any(UserProfileProjection.class), anyLong(), anyLong(),
-                    argThat(v -> Boolean.FALSE.equals(v.get("displayName")) && Boolean.TRUE.equals(v.get("bio"))), eq(false));
+                    argThat(v -> Boolean.FALSE.equals(v.get("displayName")) && Boolean.TRUE.equals(v.get("bio"))), eq(false), any());
         }
     }
 

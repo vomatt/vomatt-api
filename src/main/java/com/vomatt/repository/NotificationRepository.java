@@ -83,13 +83,13 @@ public class NotificationRepository {
 
     // Branches bind :userId, and :now and :soon where they use them. A row's created_at does not change while it is
     // listed and is at most :now when it joins the feed, which keeps the (created_at, source_id) keyset sound
-    private static final Map<NotificationKind, String> BRANCHES = new EnumMap<>(Map.of(
+    private static final Map<NotificationKind, String> BRANCHES = new EnumMap<>(Map.ofEntries(
             // Ended Polls the user owns, holds a Ballot in, is invited to or bookmarked before they Ended, once each (the
             // arms' rows are equal, so UNION merges them); Polls Cancelled before they opened are CANCELLED. A bookmarked
             // Invite-only Poll counts only through ownership or invitation, so a removed Invitee's bookmark gives nothing.
             // A Poll that Ended with Turnout 0 has no result to announce, so it gives no RESULT. It arrives once the results
             // unseal (RESULT_AT: the reveal time when set, which is fixed once the Poll is Open and never before its end)
-            NotificationKind.RESULT, select(NotificationKind.RESULT, "v.id", RESULT_AT, NONE, "v.id", NONE) + """
+            Map.entry(NotificationKind.RESULT, select(NotificationKind.RESULT, "v.id", RESULT_AT, NONE, "v.id", NONE) + """
                     FROM vomatt.votes v
                     WHERE v.deleted_at IS NULL AND %s <= :now AND v.end_time > v.start_time AND v.turnout > 0 AND v.id IN %s
                     UNION
@@ -97,34 +97,34 @@ public class NotificationRepository {
                     + select(NotificationKind.RESULT, "v.id", RESULT_AT, NONE, "v.id", NONE) + """
                     FROM vomatt.vote_bookmarks bm JOIN vomatt.votes v ON v.id = bm.vote_id
                     WHERE bm.user_id = :userId AND bm.created_at < v.end_time AND v.audience <> 'INVITE_ONLY'
-                      AND v.deleted_at IS NULL AND %s <= :now AND v.end_time > v.start_time AND v.turnout > 0""".formatted(RESULT_AT),
+                      AND v.deleted_at IS NULL AND %s <= :now AND v.end_time > v.start_time AND v.turnout > 0""".formatted(RESULT_AT)),
             // Once per Poll, however many Invitee rows (by ID and by address) the user has there
-            NotificationKind.CANCELLED, select(NotificationKind.CANCELLED, "v.id", "v.end_time", "v.creator_id", "v.id", NONE) + """
+            Map.entry(NotificationKind.CANCELLED, select(NotificationKind.CANCELLED, "v.id", "v.end_time", "v.creator_id", "v.id", NONE) + """
                     FROM vomatt.votes v
                     WHERE EXISTS (SELECT 1 FROM vomatt.vote_invitees i WHERE i.vote_id = v.id AND i.user_id = :userId)
                       AND v.deleted_at IS NULL AND v.audience = 'INVITE_ONLY'
-                      AND v.end_time <= :now AND v.end_time <= v.start_time""",
+                      AND v.end_time <= :now AND v.end_time <= v.start_time"""),
             // Until the Poll Ends; its RESULT takes over then. updated_at is when the user was invited, or when their
             // email Invitee bound to the account. A removed and re-added Invitee is a new row, so a new, unread notification.
             // A user invited both by ID and by address gets one, from their first row (InviteeRepository.FIRST_OF_USER)
-            NotificationKind.INVITATION, select(NotificationKind.INVITATION, "i.id", "i.updated_at", "v.creator_id", "v.id", NONE) + """
+            Map.entry(NotificationKind.INVITATION, select(NotificationKind.INVITATION, "i.id", "i.updated_at", "v.creator_id", "v.id", NONE) + """
                     FROM vomatt.vote_invitees i JOIN vomatt.votes v ON v.id = i.vote_id
                     WHERE i.user_id = :userId AND v.deleted_at IS NULL AND v.audience = 'INVITE_ONLY' AND v.end_time > :now
-                      AND """ + InviteeRepository.FIRST_OF_USER,
-            NotificationKind.FOLLOWED, select(NotificationKind.FOLLOWED, "f.id", "f.created_at", "f.follower_id", NONE, NONE) + """
-                    FROM vomatt.user_follows f WHERE f.followed_id = :userId""",
+                      AND """ + InviteeRepository.FIRST_OF_USER),
+            Map.entry(NotificationKind.FOLLOWED, select(NotificationKind.FOLLOWED, "f.id", "f.created_at", "f.follower_id", NONE, NONE) + """
+                    FROM vomatt.user_follows f WHERE f.followed_id = :userId"""),
             // Others' Comments and Replies on the user's Polls, and others' Replies to the user's live Comments
-            NotificationKind.COMMENT, select(NotificationKind.COMMENT, "c.id", "c.created_at", "c.user_id", "v.id", "c.id")
+            Map.entry(NotificationKind.COMMENT, select(NotificationKind.COMMENT, "c.id", "c.created_at", "c.user_id", "v.id", "c.id")
                     + "FROM vomatt.vote_comments c JOIN vomatt.votes v ON v.id = c.vote_id WHERE c.id IN ("
-                    + COMMENT_IDS + ")" + COMMENT_VISIBLE,
+                    + COMMENT_IDS + ")" + COMMENT_VISIBLE),
             // Others' Comments and Replies that @mention the user. With COMMENT on, branch() also drops the user's
             // COMMENTs (MENTION_NOT_COMMENT)
-            NotificationKind.MENTION, select(NotificationKind.MENTION, "c.id", "c.created_at", "c.user_id", "v.id", "c.id")
+            Map.entry(NotificationKind.MENTION, select(NotificationKind.MENTION, "c.id", "c.created_at", "c.user_id", "v.id", "c.id")
                     + "FROM vomatt.vote_comments c JOIN vomatt.votes v ON v.id = c.vote_id"
-                    + " WHERE c.mentioned_user_ids @> ARRAY[CAST(:userId AS uuid)]" + COMMENT_VISIBLE,
+                    + " WHERE c.mentioned_user_ids @> ARRAY[CAST(:userId AS uuid)]" + COMMENT_VISIBLE),
             // Open Polls ending within the window that the user can cast a Ballot in and has not: Invite-only ones they
             // are invited to, Public ones of users they follow. Listed from when the window opened (or the Poll did)
-            NotificationKind.CLOSING_SOON, select(NotificationKind.CLOSING_SOON, "v.id",
+            Map.entry(NotificationKind.CLOSING_SOON, select(NotificationKind.CLOSING_SOON, "v.id",
                     "GREATEST(v.start_time, v.end_time - INTERVAL '" + CLOSING_SOON_HOURS + " hours')", "v.creator_id", "v.id", NONE) + """
                     FROM vomatt.votes v
                     WHERE v.id IN (SELECT i.vote_id FROM vomatt.vote_invitees i JOIN vomatt.votes iv ON iv.id = i.vote_id
@@ -135,30 +135,34 @@ public class NotificationRepository {
                                      AND fv.end_time > :now AND fv.end_time <= :soon)
                       AND v.deleted_at IS NULL AND v.start_time <= :now AND v.end_time > :now AND v.end_time <= :soon
                       AND v.creator_id <> :userId
-                      AND NOT EXISTS (SELECT 1 FROM vomatt.user_votes uv WHERE uv.vote_id = v.id AND uv.user_id = :userId)""",
+                      AND NOT EXISTS (SELECT 1 FROM vomatt.user_votes uv WHERE uv.vote_id = v.id AND uv.user_id = :userId)"""),
             // Others' likes on the user's Comments and Replies, visible as COMMENT is. An unlike deletes the row, so a
             // re-like is a new one
-            NotificationKind.LIKE, select(NotificationKind.LIKE, "l.id", "l.created_at", "l.user_id", "v.id", "c.id") + """
+            Map.entry(NotificationKind.LIKE, select(NotificationKind.LIKE, "l.id", "l.created_at", "l.user_id", "v.id", "c.id") + """
                     FROM vomatt.vote_comments c
                     JOIN vomatt.comment_likes l ON l.comment_id = c.id
                     JOIN vomatt.votes v ON v.id = c.vote_id
-                    WHERE c.user_id = :userId AND c.is_deleted = FALSE AND l.user_id <> :userId""" + IN_VISIBLE_THREAD,
+                    WHERE c.user_id = :userId AND c.is_deleted = FALSE AND l.user_id <> :userId""" + IN_VISIBLE_THREAD),
             // Others' likes on the user's Polls. The owner always sees their Poll, so only Deleted ones are left out; an
             // unlike deletes the row, so a re-like is a new one
-            NotificationKind.POLL_LIKE, select(NotificationKind.POLL_LIKE, "l.id", "l.created_at", "l.user_id", "v.id", NONE) + """
+            Map.entry(NotificationKind.POLL_LIKE, select(NotificationKind.POLL_LIKE, "l.id", "l.created_at", "l.user_id", "v.id", NONE) + """
                     FROM vomatt.votes v
                     JOIN vomatt.vote_likes l ON l.vote_id = v.id
-                    WHERE v.creator_id = :userId AND v.deleted_at IS NULL AND l.user_id <> :userId""",
+                    WHERE v.creator_id = :userId AND v.deleted_at IS NULL AND l.user_id <> :userId"""),
             // Unexpired community account invitations to the user, by id or to the address of their account (always
             // verified), from the community account; none once the user is a member. Accepting, declining or revoking
             // deletes the row
-            NotificationKind.COMMUNITY_INVITATION, select(NotificationKind.COMMUNITY_INVITATION, "ci.id", "ci.created_at",
+            Map.entry(NotificationKind.COMMUNITY_INVITATION, select(NotificationKind.COMMUNITY_INVITATION, "ci.id", "ci.created_at",
                     "ci.community_user_id", NONE, NONE) + """
                     FROM vomatt.community_invitations ci
                     WHERE (ci.user_id = :userId OR ci.email = (SELECT u.email FROM vomatt.users u WHERE u.id = :userId))
                       AND ci.expires_at > :now
                       AND NOT EXISTS (SELECT 1 FROM vomatt.community_members m
-                                      WHERE m.community_user_id = ci.community_user_id AND m.user_id = :userId)"""));
+                                      WHERE m.community_user_id = ci.community_user_id AND m.user_id = :userId)"""),
+            Map.entry(NotificationKind.COMMUNITY_LOCKED, select(NotificationKind.COMMUNITY_LOCKED, "a.id", "a.created_at", "m.community_user_id", NONE, NONE) + """
+                    FROM vomatt.community_members m
+                    JOIN vomatt.audit_logs a ON a.resource_type = 'COMMUNITY' AND a.resource_id = CAST(m.community_user_id AS text)
+                    WHERE m.user_id = :userId AND m.role = 'OWNER' AND a.action = 'LOCK' AND a.details = 'reason=SELECTION_DEADLINE'""")));
 
     // Inside each branch, before its LIMIT: nothing from a suspended user, nor from someone the user blocked or who
     // blocked the user

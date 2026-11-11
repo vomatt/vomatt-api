@@ -87,6 +87,7 @@ public enum MessageKey {
     USER_BLOCK_SELF("user.block.self"),
     USER_FOLLOW_SELF("user.follow.self"),
     USER_FOLLOW_BLOCKED("user.follow.blocked"),
+    USER_FOLLOW_COMMUNITY("user.follow.community"),
     USER_AVATAR_UNSUPPORTED_IMAGE("user.avatar.unsupported_image"),
 
     // === Vote ===
@@ -156,6 +157,7 @@ public enum MessageKey {
     COMMUNITY_INVITEE_NOT_ALLOWED("community.invitee_not_allowed"),
     COMMUNITY_INVITATION_NOT_FOUND("community.invitation.not_found"),
     COMMUNITY_INVITATION_EXISTS("community.invitation.exists"),
+    COMMUNITY_USERNAME_IMMUTABLE("community.username_immutable"),
     VOTE_REVEAL_BEFORE_END("vote.reveal_at.before_end"),
     VOTE_REVEAL_TOO_LATE("vote.reveal_at.too_late"),
     VOTE_BALLOT_ANONYMOUS_NOT_ALLOWED("vote.ballot.anonymous_not_allowed"),
@@ -165,6 +167,12 @@ public enum MessageKey {
     REPORT_NOT_PRO("report.not_pro"),
     REPORT_NOT_READY("report.not_ready"),
     REPORT_CANCELLED("report.cancelled"),
+
+    // === Plans ===
+    COMMUNITY_LIMIT_REACHED("community.limit_reached"),
+    COMMUNITY_LOCKED("community.locked"),
+    COMMUNITY_KEEP_INVALID("community.keep.invalid"),
+    BILLING_UNAVAILABLE("billing.unavailable"),
     ;
 
     private final String code;

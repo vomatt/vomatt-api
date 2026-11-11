@@ -80,6 +80,17 @@ class OpenApiSnapshotTest {
         mockMvc.perform(get("/api/admin/contact-messages")).andExpect(status().isUnauthorized());
     }
 
+    /** Real filter chain: the payment provider's webhook needs no token, starting a checkout does. */
+    @Test
+    void shouldLetSignedOutCallersReachBillingWebhookOnly() throws Exception {
+        MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(context)
+                .apply(org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity()).build();
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/billing/webhook"))
+                .andExpect(status().isServiceUnavailable());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/billing/checkout"))
+                .andExpect(status().isUnauthorized());
+    }
+
     /** Real filter chain: the follow lists need a token, the profile does not. */
     @Test
     void shouldReturn401WhenReadingFollowListsSignedOut() throws Exception {
@@ -132,6 +143,78 @@ class OpenApiSnapshotTest {
                     "authenticatorData": "d", "publicKey": "e", "publicKeyAlgorithm": -7}}}""",
                 com.vomatt.auth.dto.PasskeyRegistrationVerifyRequest.class);
         org.assertj.core.api.Assertions.assertThat(passkey.credential().response().attestationObject()).isEqualTo("c");
+    }
+
+    @Test
+    void shouldLetOwnerDeleteLockedCommunityAccountWhenActingAsIt(
+            @Autowired com.vomatt.repository.UserRepository users,
+            @Autowired com.vomatt.repository.CommunityMemberRepository members,
+            @Autowired com.vomatt.common.security.JwtUtil jwtUtil) throws Exception {
+        MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(context)
+                .apply(org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity()).build();
+        String suffix = java.util.UUID.randomUUID().toString().substring(0, 8);
+        var owner = users.save(com.vomatt.entity.User.builder().username("owner_" + suffix).email(suffix + "@test.local").build());
+        var community = com.vomatt.entity.User.builder().username("locked_" + suffix).displayName("Locked")
+                .roles(new String[] { com.vomatt.common.constant.UserRole.COMMUNITY }).build();
+        community.setLockedAt(java.time.OffsetDateTime.now());
+        community = users.save(community);
+        members.save(new com.vomatt.entity.CommunityMember(community.getId(), owner.getId(), com.vomatt.entity.CommunityRole.OWNER));
+        String bearer = "Bearer " + jwtUtil.generateToken(owner.getId().toString(), java.util.List.of("user"), false, "s-" + suffix);
+        String path = "/api/communities/" + community.getId();
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(path)
+                        .header("Authorization", bearer).header("X-Act-As", community.getId().toString())
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"displayName\":\"Renamed\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string(
+                        org.hamcrest.Matchers.containsString("community.locked")));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(path)
+                        .header("Authorization", bearer).header("X-Act-As", community.getId().toString()))
+                .andExpect(status().isOk());
+
+        org.assertj.core.api.Assertions.assertThat(users.existsById(community.getId())).isFalse();
+        org.assertj.core.api.Assertions.assertThat(users.existsById(owner.getId())).isTrue();
+    }
+
+    @Test
+    void shouldNeverChangeCommunityUsernameThroughEitherProfileRoute(
+            @Autowired com.vomatt.repository.UserRepository users,
+            @Autowired com.vomatt.repository.CommunityMemberRepository members,
+            @Autowired com.vomatt.common.security.JwtUtil jwtUtil,
+            @Autowired com.vomatt.common.audit.AuditLogRepository audits) throws Exception {
+        MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(context)
+                .apply(org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity()).build();
+        String suffix = java.util.UUID.randomUUID().toString().substring(0, 8);
+        var owner = users.save(com.vomatt.entity.User.builder().username("owner_" + suffix).email(suffix + "@test.local").build());
+        var community = users.save(com.vomatt.entity.User.builder().username("club_" + suffix).displayName("Club")
+                .roles(new String[] { com.vomatt.common.constant.UserRole.COMMUNITY }).build());
+        members.save(new com.vomatt.entity.CommunityMember(community.getId(), owner.getId(), com.vomatt.entity.CommunityRole.OWNER));
+        String bearer = "Bearer " + jwtUtil.generateToken(owner.getId().toString(), java.util.List.of("user"), false, "s-" + suffix);
+        var patch = (java.util.function.BiFunction<String, String, org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder>)
+                (path, body) -> org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(path)
+                        .header("Authorization", bearer).contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(body);
+
+        mockMvc.perform(patch.apply("/api/users/me", "{\"username\":\"renamed_" + suffix + "\"}")
+                        .header("X-Act-As", community.getId().toString()))
+                .andExpect(status().isBadRequest())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.errorCode")
+                        .value("community.username_immutable"));
+        mockMvc.perform(patch.apply("/api/users/me", "{\"username\":\"club_" + suffix + "\",\"displayName\":\"Club A\"}")
+                        .header("X-Act-As", community.getId().toString()))
+                .andExpect(status().isOk());
+        mockMvc.perform(patch.apply("/api/communities/" + community.getId(), "{\"username\":\"renamed_" + suffix + "\",\"displayName\":\"Club B\"}"))
+                .andExpect(status().isOk());
+
+        var stored = users.findById(community.getId()).orElseThrow();
+        org.assertj.core.api.Assertions.assertThat(stored.getUsername()).isEqualTo("club_" + suffix);
+        org.assertj.core.api.Assertions.assertThat(stored.getDisplayName()).isEqualTo("Club B");
+        org.awaitility.Awaitility.await().atMost(java.time.Duration.ofSeconds(5)).untilAsserted(() ->
+                org.assertj.core.api.Assertions.assertThat(audits.findAll()).filteredOn(a -> community.getId().toString().equals(a.getResourceId())
+                                && "UPDATE".equals(a.getAction()) && a.isSuccess())
+                        .extracting(com.vomatt.common.audit.AuditLog::getUserId, com.vomatt.common.audit.AuditLog::getResourceType, com.vomatt.common.audit.AuditLog::getDetails)
+                        .containsExactlyInAnyOrder(
+                                org.assertj.core.groups.Tuple.tuple(owner.getId().toString(), "COMMUNITY", "actingAs=" + community.getId() + "; displayName: \"Club\" -> \"Club A\""),
+                                org.assertj.core.groups.Tuple.tuple(owner.getId().toString(), "COMMUNITY", "displayName: \"Club A\" -> \"Club B\"")));
     }
 
     /** ORDER_MAP_ENTRIES_BY_KEYS ignores ObjectNode, so rebuild the tree through a sorted Map. */

@@ -102,6 +102,20 @@ public class User extends AuditableEntity {
     @Column(name = "bio", columnDefinition = "TEXT")
     private String bio;
 
+    /** Written only by {@code PlanService#changePlan}. */
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "plan", nullable = false, length = 10)
+    private Plan plan = Plan.FREE;
+
+    /** A community account: when it was locked (no writes as it); null while unlocked. Written by {@code PlanService}. */
+    @Column(name = "locked_at")
+    private OffsetDateTime lockedAt;
+
+    /** A person: when the community accounts over their plan's limit get locked unless they choose first; null when none are. */
+    @Column(name = "community_selection_deadline")
+    private OffsetDateTime communitySelectionDeadline;
+
     @Builder.Default
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<UserPreference> preferences = new HashSet<>();

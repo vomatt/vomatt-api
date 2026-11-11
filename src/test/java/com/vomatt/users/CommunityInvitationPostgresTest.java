@@ -29,7 +29,8 @@ import com.vomatt.users.dto.CommunityInvitationResponse;
 import com.vomatt.votes.VoteServiceSlice;
 
 @Import({ CommunityService.class, UserService.class, UserMapper.class, VoteCommentService.class, CommentMapper.class,
-        VoteServiceSlice.class, com.vomatt.common.storage.StorageService.class })
+        VoteServiceSlice.class, com.vomatt.common.storage.StorageService.class, PlanService.class,
+        com.vomatt.common.audit.AuditService.class })
 class CommunityInvitationPostgresTest extends PostgresRepositoryTest {
 
     @Autowired CommunityService communityService;

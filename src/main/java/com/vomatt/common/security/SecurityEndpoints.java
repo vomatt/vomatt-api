@@ -52,8 +52,8 @@ public final class SecurityEndpoints {
             VOTE + "/results", VOTE + "/comments", VOTE + "/comments/*/replies", "/api/users/{username}",
             "/api/users/{username}/votes", AVATAR_FILE };
 
-    /** POST-only public endpoints: the about site's contact form (senders are anonymous) */
-    public static final String[] PUBLIC_POST = { "/api/contact" };
+    /** POST-only public endpoints: the about site's contact form (senders are anonymous) and the payment provider's webhook */
+    public static final String[] PUBLIC_POST = { "/api/contact", "/api/billing/webhook" };
 
     /** Swagger / OpenAPI UI */
     public static final String[] PUBLIC_SWAGGER = { "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**",
@@ -85,4 +85,21 @@ public final class SecurityEndpoints {
      * real member's role) and marking the community account's notifications read.
      */
     public static final String[] ACT_AS_ANY_ROLE = { "/api/communities/**", "/api/notifications/*/read", "/api/notifications/read-all" };
+
+    /**
+     * POST-only routes any role may send while acting: following, which UserService refuses for every community account
+     * with 400 {@code user.follow.community}, so ANALYST gets that answer too instead of 403.
+     */
+    public static final String[] ACT_AS_ANY_ROLE_POST = { "/api/users/me/follows/*" };
+
+    /**
+     * Writes still allowed on a locked community account (see {@link ActAsFilter}), so its owners can sort out the
+     * accounts their plan no longer covers: transferring ownership, unlocking, and choosing which accounts to keep.
+     * Leaving (a member removing themself) is allowed too.
+     */
+    public static final String[] LOCKED_COMMUNITY_ALLOWED = { "/api/communities/*/owner", "/api/communities/*/unlock",
+            "/api/users/me/communities/keep" };
+
+    /** DELETE-only writes still allowed on a locked community account: deleting it. */
+    public static final String[] LOCKED_COMMUNITY_ALLOWED_DELETE = { "/api/communities/*" };
 }

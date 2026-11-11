@@ -42,8 +42,9 @@ public interface EmailService {
     void sendSignupInvitationEmails(List<String> recipients, String inviterName, Locale locale);
 
     /**
-     * Invites an address with no account to join a community account in the background, failures only logged: signing
-     * up with the address makes it a member with {@code role} (an enum name, labelled from {@code community.role.*}).
+     * Invites an address with no account to join a community account in the background, failures only logged: once
+     * signed up with the address, the invitee accepts it like any other ({@code role} is an enum name, labelled from
+     * {@code community.role.*}).
      */
     void sendCommunityInvitationEmail(String to, String inviterName, String inviterUsername, String communityName,
                                       String role, Duration expiresIn, Locale locale);

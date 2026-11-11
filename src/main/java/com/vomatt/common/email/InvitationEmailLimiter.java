@@ -59,14 +59,14 @@ public class InvitationEmailLimiter {
     }
 
     /**
-     * Of the sign-up invitation addresses, those to mail now: not mailed by this sender within {@link #RESEND_AFTER},
-     * within the daily quota.
+     * Of the sign-up invitation addresses, those to mail now: not mailed by this sender about this scope (the Invite
+     * List or community account) within {@link #RESEND_AFTER}, within the daily quota.
      */
-    public List<String> claim(UUID senderId, Collection<String> emails) {
+    public List<String> claim(UUID senderId, UUID scopeId, Collection<String> emails) {
         OffsetDateTime now = OffsetDateTime.now();
         return claim(senderId, emails,
-                unsent -> invitationEmailRepository.findSentSince(senderId, unsent, now.minus(RESEND_AFTER)),
-                recipients -> invitationEmailRepository.recordSent(senderId, recipients, now));
+                unsent -> invitationEmailRepository.findSentSince(senderId, scopeId, unsent, now.minus(RESEND_AFTER)),
+                recipients -> invitationEmailRepository.recordSent(senderId, scopeId, recipients, now));
     }
 
     /**

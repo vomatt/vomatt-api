@@ -156,14 +156,14 @@ public class EmailServiceImpl implements EmailService {
     @Async
     @Override
     public void sendInvitationEmails(List<String> recipients, String inviterName, String pollTitle, UUID pollId, Locale locale) {
-        sendPaced(recipients, to -> sendInvitationEmail(to, inviterName, pollTitle, pollId, locale));
+        sendPaced("vote " + pollId, recipients, to -> sendInvitationEmail(to, inviterName, pollTitle, pollId, locale));
     }
 
     // One after another; over Resend, paced under its per-second rate limit
-    private void sendPaced(List<String> recipients, Consumer<String> send) {
+    private void sendPaced(String batch, List<String> recipients, Consumer<String> send) {
         for (int i = 0; i < recipients.size(); i++) {
             if (i > 0 && resend != null && !pause(RESEND_SEND_INTERVAL)) {
-                log.warn("Invitation emails interrupted, {} not sent", recipients.size() - i);
+                log.warn("Invitation emails for {} interrupted, {} not sent", batch, recipients.size() - i);
                 return;
             }
             send.accept(recipients.get(i));
@@ -195,7 +195,7 @@ public class EmailServiceImpl implements EmailService {
     @Async
     @Override
     public void sendSignupInvitationEmails(List<String> recipients, String inviterName, Locale locale) {
-        sendPaced(recipients, to -> sendJoinInvitation(to, "vomatt", locale, Map.of("inviterName", Objects.toString(inviterName, ""))));
+        sendPaced("sign-up invitations", recipients, to -> sendJoinInvitation(to, "vomatt", locale, Map.of("inviterName", Objects.toString(inviterName, ""))));
     }
 
     @Async

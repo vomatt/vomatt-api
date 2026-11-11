@@ -16,7 +16,7 @@ import lombok.NoArgsConstructor;
 /**
  * An invitation to join a community account, sent to a user picked by id or to a normalized email address (exactly one),
  * with the role the invitee gets. Never
- * updated: accepting, declining or joining at sign-up deletes it, and inviting the address again replaces an expired one.
+ * updated: accepting or declining deletes it, and inviting the address again replaces an expired one.
  */
 @Entity
 @Table(name = "community_invitations")

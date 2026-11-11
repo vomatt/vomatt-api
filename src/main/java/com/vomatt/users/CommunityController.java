@@ -347,8 +347,9 @@ public class CommunityController {
             **Behavior**: the only way to add a member: invites a user picked by `userId` (e.g. from user search) or an \
             `email` address, exactly one, with the role; it can be used for 7 days. Nobody joins without answering: the user, \
             or the account whose email is the address, gets a `COMMUNITY_INVITATION` notification and accepts \
-            (`POST /api/community-invitations/{invitationId}/accept`) or declines it. An address with no account is mailed, and \
-            signing up with it (any sign-in method that verifies the address) joins with the role. For an `email` the response \
+            (`POST /api/community-invitations/{invitationId}/accept`) or declines it. An address with no account is mailed an \
+            invitation to sign up; once they sign up with it (any sign-in method that verifies the address) the notification \
+            waits for them like for anyone else. For an `email` the response \
             is the same whether or not the address belongs to an account, or to a member. An expired invitation of the same \
             user or address is replaced by the new one. \
             """ + ROLES + """
@@ -369,6 +370,14 @@ public class CommunityController {
                     @ExampleObject(name = "Invite an email address", value = """
                             { "email": "dave@example.com", "role": "ANALYST" }
                             """) })))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Invitation sent",
+            content = @Content(examples = @ExampleObject(name = "Invitation", value = "{ \"success\": true, \"data\": " + EX_INVITATION
+                    + ", \"message\": null, \"errorCode\": null, \"error\": null }")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Already invited, or already a member (`community.invitation.exists`, `community.member.exists`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "community.invitation.exists", value = ERR_MESSAGE
+                            + "This invitee already has a pending invitation" + ERR_CODE + "community.invitation.exists"
+                            + ERR_ERROR + "This invitee already has a pending invitation" + ERR_END)))
     public ResponseEntity<ApiResponse<CommunityInvitationResponse>> invite(
             @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
             @PathVariable UUID communityId,
@@ -404,8 +413,8 @@ public class CommunityController {
     @Operation(summary = "Revoke a community account invitation", description = """
             **Auth**: required (OWNER or ADMIN; only an OWNER revokes one that grants OWNER)
             **Precondition**: the invitation belongs to this community account
-            **Behavior**: deletes the invitation, expired or not; its notification disappears and it can no longer be accepted \
-            or joined by signing up. An email already sent stays sent.
+            **Behavior**: deletes the invitation, expired or not; its notification disappears and it can no longer be accepted. \
+            An email already sent stays sent.
             **Side effects**: the action is audit-logged.
             **Errors**:
             - 404 `community.invitation.not_found`: no such invitation of this community account
@@ -431,7 +440,8 @@ public class CommunityController {
     @Operation(summary = "Accept a community account invitation", description = """
             **Auth**: required; refused while acting as a community account (`X-Act-As`)
             **Precondition**: the invitation was sent to the caller (by id or to their email address) and has not expired
-            **Behavior**: the caller joins the community account with the invitation's role and the invitation is used up. \
+            **Behavior**: the caller joins the community account with the invitation's role; every invitation of this community \
+            account to the caller (by id and to their address) is used up. \
             The invitation id is `communityInvitation.id` of the `COMMUNITY_INVITATION` notification. A caller already a \
             member keeps their current role. Returns the membership as `GET /api/users/me/communities` lists it.
             **Side effects**: the invitation and its notification disappear; the action is audit-logged.

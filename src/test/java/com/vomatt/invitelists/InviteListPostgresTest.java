@@ -109,8 +109,8 @@ class InviteListPostgresTest extends PostgresRepositoryTest {
     }
 
     private OffsetDateTime sentAt(String email) {
-        List<?> rows = em.createNativeQuery("SELECT sent_at FROM vomatt.invitation_emails WHERE sender_id = :s AND email = :e")
-                .setParameter("s", owner.getId()).setParameter("e", email).getResultList();
+        List<?> rows = em.createNativeQuery("SELECT sent_at FROM vomatt.invitation_emails WHERE sender_id = :s AND scope_id = CAST(:l AS uuid) AND email = :e")
+                .setParameter("s", owner.getId()).setParameter("l", inviteListId).setParameter("e", email).getResultList();
         return rows.isEmpty() ? null : ((java.time.Instant) rows.getFirst()).atOffset(java.time.ZoneOffset.UTC);
     }
 

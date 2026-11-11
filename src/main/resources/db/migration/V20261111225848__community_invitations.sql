@@ -1,8 +1,8 @@
 -- Invitations to join a community account, the only way in besides creating one, with the role the invitee gets. Sent
 -- to a user picked by id (user_id) or to an email address (email), never both. A user, or the account whose email is the
--- address, sees it as a COMMUNITY_INVITATION notification and accepts or declines; an address with no account is
--- mailed, and signing up with it joins. Accepting, declining or joining deletes the row; an expired one stays until
--- the user or address is invited again, which replaces it.
+-- address (including one signed up after the invitation was mailed), sees it as a COMMUNITY_INVITATION notification and
+-- accepts or declines. Accepting deletes every row of the community account for the invitee, declining deletes the row;
+-- an expired one stays until the user or address is invited again, which replaces it.
 CREATE TABLE IF NOT EXISTS vomatt.community_invitations (
     id                UUID         PRIMARY KEY,
     community_user_id UUID         NOT NULL REFERENCES vomatt.users (id) ON DELETE CASCADE,

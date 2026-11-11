@@ -20,6 +20,7 @@ import com.vomatt.common.email.EmailService;
 import com.vomatt.common.email.InvitationEmailLimiter;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
+import com.vomatt.common.security.ActingMember;
 import com.vomatt.common.util.AfterCommit;
 import com.vomatt.entity.InviteList;
 import com.vomatt.entity.InviteListMember;
@@ -155,13 +156,19 @@ public class InviteListService {
         log.info("{} member(s) added to Invite List {} by user {}", added.size(), inviteListId, userId);
         // Only an address with no account at all is invited to sign up; a suspended account's owner cannot
         Set<String> known = found.stream().map(User::getEmail).collect(Collectors.toSet());
-        inviteToSignUp(inviteList.getOwner(), newEmails.stream().filter(email -> !known.contains(email)).toList());
+        inviteToSignUp(inviteList, newEmails.stream().filter(email -> !known.contains(email)).toList());
         return members(inviteList.getId());
     }
 
-    /** Mails each address a sign-up invitation from the owner, after commit, within the shared invitation email limits. */
-    private void inviteToSignUp(User owner, List<String> emails) {
-        List<String> recipients = invitationEmailLimiter.claim(owner.getId(), emails);
+    /**
+     * Mails each address a sign-up invitation from the owner, after commit, within the shared invitation email limits of
+     * the person adding them: the real member while acting as a community account, so more community accounts never
+     * mean more emails.
+     */
+    private void inviteToSignUp(InviteList inviteList, List<String> emails) {
+        User owner = inviteList.getOwner();
+        UUID sender = ActingMember.current().map(ActingMember::memberId).orElse(owner.getId());
+        List<String> recipients = invitationEmailLimiter.claim(sender, inviteList.getId(), emails);
         if (recipients.isEmpty()) {
             return;
         }

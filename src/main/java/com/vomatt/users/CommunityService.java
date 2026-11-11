@@ -64,7 +64,7 @@ public class CommunityService {
     private final InvitationEmailLimiter invitationEmailLimiter;
     private final EmailService emailService;
 
-    /** How long an invitation can be accepted, or joined by signing up. */
+    /** How long an invitation can be accepted. */
     static final Duration INVITATION_TTL = Duration.ofDays(7);
 
     /**
@@ -107,7 +107,7 @@ public class CommunityService {
      * OWNER or ADMIN invites a user picked by id, or an email address, with a role; an ADMIN never grants OWNER. Nobody
      * joins without accepting: a user by id, or the account of an address, sees a COMMUNITY_INVITATION notification and
      * decides. An address with no account at all is mailed, once committed, within the inviting member's invitation email
-     * limits, and signing up with it joins. For an address the response never tells whether it has an account. An
+     * limits, and sees the notification once they sign up with it. For an address the response never tells whether it has an account. An
      * unexpired invitation of the same user or address is a conflict; an expired one is replaced.
      */
     public CommunityInvitationResponse invite(UUID communityId, UUID userId, String email, CommunityRole role, String callerId) {
@@ -149,7 +149,7 @@ public class CommunityService {
     private void mailInvitation(UUID communityId, String address, CommunityRole role, String callerId) {
         // Counted against the inviting person, not the community account: anyone can create community accounts, so a
         // per-community budget would multiply with each one they make
-        if (invitationEmailLimiter.claim(UUID.fromString(callerId), List.of(address)).isEmpty()) {
+        if (invitationEmailLimiter.claim(UUID.fromString(callerId), communityId, List.of(address)).isEmpty()) {
             return;
         }
         User community = userRepository.getReferenceById(communityId);
@@ -185,19 +185,19 @@ public class CommunityService {
     /**
      * The invitee joins with the invitation's role. Only the user it was sent to, or the account whose (always verified)
      * email it was sent to, can see it; any other caller, an expired invitation or a suspended community account is not found. Already a
-     * member: the membership is kept as it is and the invitation is used up.
+     * member: the membership is kept as it is. Every invitation of the community account to the caller is used up.
      */
     public MyCommunityResponse acceptInvitation(UUID invitationId, String callerId) {
         User caller = requireEligible(UUID.fromString(callerId));
         CommunityInvitation invitation = findOwnInvitation(invitationId, caller);
         User community = userRepository.findById(invitation.getCommunityUserId()).filter(User::isActive)
                 .orElseThrow(() -> ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
-        UUID userId = caller.getId();
-        CommunityMember member = memberRepository.findByCommunityUserIdAndUserId(community.getId(), userId)
-                .orElseGet(() -> memberRepository.save(new CommunityMember(community.getId(), userId, invitation.getRole())));
-        invitationRepository.delete(invitation);
-        log.info("Community account {}: {} accepted invitation {} as {}", community.getId(), callerId, invitationId, member.getRole());
-        return toMine(community, member.getRole());
+        // Insert-or-keep in one statement, so a double-tapped accept cannot fail on the primary key
+        memberRepository.insertIfAbsent(community.getId(), caller.getId(), invitation.getRole().name());
+        CommunityRole role = memberRepository.findByCommunityUserIdAndUserId(community.getId(), caller.getId()).orElseThrow().getRole();
+        invitationRepository.deleteForInvitee(community.getId(), caller.getId(), caller.getEmail());
+        log.info("Community account {}: {} accepted invitation {} as {}", community.getId(), callerId, invitationId, role);
+        return toMine(community, role);
     }
 
     /** The invitee turns the invitation down; it is deleted, and its notification goes with it. */
@@ -206,21 +206,6 @@ public class CommunityService {
                 .orElseThrow(() -> ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
         invitationRepository.delete(findOwnInvitation(invitationId, caller));
         log.info("User {} declined community invitation {}", callerId, invitationId);
-    }
-
-    /**
-     * Sign-up with an invited address joins every active community account that invited it, with the invitation's role,
-     * and uses the address's invitations up. Called only from find-or-create by verified email in auth, for a new account.
-     */
-    public void joinInvitedCommunities(User user) {
-        List<CommunityInvitation> invitations = invitationRepository.findByEmailAndExpiresAtAfter(user.getEmail(), OffsetDateTime.now());
-        Set<UUID> active = userRepository.findAllById(invitations.stream().map(CommunityInvitation::getCommunityUserId).toList())
-                .stream().filter(User::isActive).map(User::getId).collect(Collectors.toSet());
-        invitations.stream().filter(i -> active.contains(i.getCommunityUserId())).forEach(i -> {
-            memberRepository.save(new CommunityMember(i.getCommunityUserId(), user.getId(), i.getRole()));
-            log.info("Community account {}: new user {} joined by invitation {} as {}", i.getCommunityUserId(), user.getId(), i.getId(), i.getRole());
-        });
-        invitationRepository.deleteByEmail(user.getEmail());
     }
 
     private static MyCommunityResponse toMine(User community, CommunityRole role) {

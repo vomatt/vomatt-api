@@ -238,7 +238,7 @@ class CommunityServiceTest {
         caller(CommunityRole.ADMIN);
         savesInvitation();
         when(userRepository.existsByEmail("dave@example.com")).thenReturn(false);
-        when(invitationEmailLimiter.claim(callerId, List.of("dave@example.com"))).thenReturn(List.of("dave@example.com"));
+        when(invitationEmailLimiter.claim(callerId, communityId, List.of("dave@example.com"))).thenReturn(List.of("dave@example.com"));
         when(userRepository.getReferenceById(communityId)).thenReturn(User.builder().id(communityId).username("tower").displayName("Sunrise Tower").build());
         when(userRepository.getReferenceById(callerId)).thenReturn(User.builder().id(callerId).username("amy").build());
 

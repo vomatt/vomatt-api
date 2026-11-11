@@ -17,24 +17,27 @@ public class InvitationEmailRepository {
 
     private final EntityManager em;
 
-    /** The addresses the sender mailed at or after {@code since}. */
+    /** The addresses the sender mailed about the scope at or after {@code since}. */
     @SuppressWarnings("unchecked")
-    public List<String> findSentSince(UUID senderId, Collection<String> emails, OffsetDateTime since) {
+    public List<String> findSentSince(UUID senderId, UUID scopeId, Collection<String> emails, OffsetDateTime since) {
         return em.createNativeQuery("""
-                SELECT email FROM vomatt.invitation_emails WHERE sender_id = :senderId AND email IN (:emails) AND sent_at >= :since""")
+                SELECT email FROM vomatt.invitation_emails
+                WHERE sender_id = :senderId AND scope_id = :scopeId AND email IN (:emails) AND sent_at >= :since""")
                 .setParameter("senderId", senderId)
+                .setParameter("scopeId", scopeId)
                 .setParameter("emails", emails)
                 .setParameter("since", since)
                 .getResultList();
     }
 
-    /** Records the sender mailed the addresses now. */
-    public void recordSent(UUID senderId, Collection<String> emails, OffsetDateTime now) {
+    /** Records the sender mailed the addresses about the scope now. */
+    public void recordSent(UUID senderId, UUID scopeId, Collection<String> emails, OffsetDateTime now) {
         em.createNativeQuery("""
-                INSERT INTO vomatt.invitation_emails (sender_id, email, sent_at)
-                SELECT :senderId, e, :now FROM unnest(CAST(:emails AS text[])) AS e
-                ON CONFLICT (sender_id, email) DO UPDATE SET sent_at = EXCLUDED.sent_at""")
+                INSERT INTO vomatt.invitation_emails (sender_id, scope_id, email, sent_at)
+                SELECT :senderId, :scopeId, e, :now FROM unnest(CAST(:emails AS text[])) AS e
+                ON CONFLICT (sender_id, scope_id, email) DO UPDATE SET sent_at = EXCLUDED.sent_at""")
                 .setParameter("senderId", senderId)
+                .setParameter("scopeId", scopeId)
                 .setParameter("emails", emails.toArray(String[]::new))
                 .setParameter("now", now)
                 .executeUpdate();

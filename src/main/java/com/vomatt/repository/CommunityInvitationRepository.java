@@ -1,6 +1,5 @@
 package com.vomatt.repository;
 
-import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,11 +22,11 @@ public interface CommunityInvitationRepository extends JpaRepository<CommunityIn
     /** A community account's invitations, expired ones included, oldest first. */
     List<CommunityInvitation> findByCommunityUserIdOrderByCreatedAtAscIdAsc(UUID communityUserId);
 
-    /** Joining at sign-up: the address's unexpired invitations. */
-    List<CommunityInvitation> findByEmailAndExpiresAtAfter(String email, OffsetDateTime now);
-
-    /** Uses up every invitation of the address, expired ones included, in one statement. */
+    /**
+     * Uses up every invitation of the community account to the user, by id or to their address, so a second one cannot
+     * bring them back after they leave.
+     */
     @Modifying
-    @Query("DELETE FROM CommunityInvitation i WHERE i.email = :email")
-    void deleteByEmail(@Param("email") String email);
+    @Query("DELETE FROM CommunityInvitation i WHERE i.communityUserId = :communityId AND (i.userId = :userId OR i.email = :email)")
+    void deleteForInvitee(@Param("communityId") UUID communityId, @Param("userId") UUID userId, @Param("email") String email);
 }

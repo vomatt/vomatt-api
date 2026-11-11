@@ -134,16 +134,38 @@ class CommunityInvitationPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    void shouldJoinInvitedCommunitiesWhenAddressSignsUp() {
-        invite("frank@example.com", CommunityRole.CHIEF_EDITOR);
+    void shouldNotifyNotJoinWhenInvitedAddressSignsUpLater() {
+        CommunityInvitationResponse invitation = invite("frank@example.com", CommunityRole.CHIEF_EDITOR);
         User frank = User.builder().username("ci-f-" + UUID.randomUUID().toString().substring(0, 8)).email("frank@example.com").build();
         em.persist(frank);
-
-        communityService.joinInvitedCommunities(frank);
         em.flush();
 
-        assertThat(memberRepository.findActiveRole(communityId, frank.getId())).contains(CommunityRole.CHIEF_EDITOR);
-        assertThat(invitationRepository.findByEmailAndExpiresAtAfter("frank@example.com", OffsetDateTime.now())).isEmpty();
+        assertThat(memberRepository.findActiveRole(communityId, frank.getId())).isEmpty();
+        assertThat(hasNotification(frank, invitation.id())).isTrue();
+    }
+
+    @Test
+    void shouldUseUpEveryInvitationOfInviteeWhenAccepting() {
+        CommunityInvitationResponse byEmail = invite(dave.getEmail(), CommunityRole.ANALYST);
+        CommunityInvitationResponse byId = communityService.invite(communityId, dave.getId(), null, CommunityRole.EDITOR,
+                owner.getId().toString());
+        em.flush();
+
+        assertThat(communityService.acceptInvitation(UUID.fromString(byId.id()), dave.getId().toString()).role())
+                .isEqualTo(CommunityRole.EDITOR);
+        // Accepted twice (a double tap): the membership is kept, nothing fails
+        em.persist(new com.vomatt.entity.CommunityInvitation(communityId, dave.getId(), null, CommunityRole.ADMIN, owner.getId(),
+                OffsetDateTime.now().plusDays(1)));
+        em.flush();
+        var again = invitationRepository.findByCommunityUserIdAndUserId(communityId, dave.getId()).orElseThrow();
+        assertThat(communityService.acceptInvitation(again.getId(), dave.getId().toString()).role()).isEqualTo(CommunityRole.EDITOR);
+        em.flush();
+
+        assertThat(invitationRepository.findById(UUID.fromString(byEmail.id()))).isEmpty();
+        memberRepository.deleteAll(memberRepository.findByCommunityUserIdOrderByCreatedAtAscUserIdAsc(communityId).stream()
+                .filter(m -> m.getUserId().equals(dave.getId())).toList());
+        em.flush();
+        assertThat(hasNotification(dave, byEmail.id())).as("leaving does not bring the other invitation back").isFalse();
     }
 
     @Test

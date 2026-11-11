@@ -1,5 +1,6 @@
 package com.vomatt.repository;
 
+import org.springframework.data.jpa.repository.Modifying;
 import com.vomatt.entity.CommunityMember;
 import com.vomatt.entity.CommunityRole;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -18,6 +19,13 @@ public interface CommunityMemberRepository extends JpaRepository<CommunityMember
     Optional<CommunityRole> findActiveRole(@Param("communityId") UUID communityId, @Param("userId") UUID userId);
 
     Optional<CommunityMember> findByCommunityUserIdAndUserId(UUID communityUserId, UUID userId);
+
+    /** Adds the member with the role unless already one, whose role is then kept. */
+    @Modifying(clearAutomatically = true)
+    @Query(value = """
+            INSERT INTO vomatt.community_members (community_user_id, user_id, role) VALUES (:communityId, :userId, :role)
+            ON CONFLICT (community_user_id, user_id) DO NOTHING""", nativeQuery = true)
+    void insertIfAbsent(@Param("communityId") UUID communityId, @Param("userId") UUID userId, @Param("role") String role);
 
     @EntityGraph(attributePaths = "user")
     List<CommunityMember> findByCommunityUserIdOrderByCreatedAtAscUserIdAsc(UUID communityUserId);

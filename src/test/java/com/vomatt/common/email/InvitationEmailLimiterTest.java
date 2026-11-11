@@ -37,6 +37,7 @@ class InvitationEmailLimiterTest {
     InvitationEmailLimiter limiter;
 
     private final UUID senderId = UUID.randomUUID();
+    private final UUID scopeId = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
@@ -45,12 +46,12 @@ class InvitationEmailLimiterTest {
 
     @Test
     void shouldSkipAddressesMailedThisWeekAndRecordTheRestWhenClaiming() {
-        when(repository.findSentSince(eq(senderId), any(), any())).thenReturn(List.of("a@example.com"));
+        when(repository.findSentSince(eq(senderId), eq(scopeId), any(), any())).thenReturn(List.of("a@example.com"));
         when(lookupService.configInt(anyString(), anyInt())).thenReturn(200);
         when(redisService.incrementAndExpire(eq("email:invitation"), anyString(), eq(1L), any())).thenReturn(1L);
 
-        assertThat(limiter.claim(senderId, List.of("a@example.com", "b@example.com"))).containsExactly("b@example.com");
-        verify(repository).recordSent(eq(senderId), eq(List.of("b@example.com")), any());
+        assertThat(limiter.claim(senderId, scopeId, List.of("a@example.com", "b@example.com"))).containsExactly("b@example.com");
+        verify(repository).recordSent(eq(senderId), eq(scopeId), eq(List.of("b@example.com")), any());
     }
 
     @Test
@@ -59,7 +60,7 @@ class InvitationEmailLimiterTest {
         // 2 already sent today, then 2 more counted: only one fits under 3
         when(redisService.incrementAndExpire(eq("email:invitation"), anyString(), eq(2L), any())).thenReturn(4L);
 
-        assertThat(limiter.claim(senderId, List.of("a@example.com", "b@example.com"))).hasSize(1);
+        assertThat(limiter.claim(senderId, scopeId, List.of("a@example.com", "b@example.com"))).hasSize(1);
     }
 
     @Test
@@ -67,13 +68,13 @@ class InvitationEmailLimiterTest {
         when(lookupService.configInt(anyString(), anyInt())).thenReturn(200);
         when(redisService.incrementAndExpire(anyString(), anyString(), anyLong(), any())).thenThrow(new RuntimeException("down"));
 
-        assertThat(limiter.claim(senderId, List.of("a@example.com"))).isEmpty();
-        verify(repository, never()).recordSent(any(), any(), any());
+        assertThat(limiter.claim(senderId, scopeId, List.of("a@example.com"))).isEmpty();
+        verify(repository, never()).recordSent(any(), any(), any(), any());
     }
 
     @Test
     void shouldTouchNothingWhenNoAddresses() {
-        assertThat(limiter.claim(senderId, List.of())).isEmpty();
+        assertThat(limiter.claim(senderId, scopeId, List.of())).isEmpty();
         verifyNoInteractions(repository, redisService);
     }
 }

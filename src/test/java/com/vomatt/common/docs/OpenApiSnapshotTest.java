@@ -134,7 +134,6 @@ class OpenApiSnapshotTest {
         org.assertj.core.api.Assertions.assertThat(passkey.credential().response().attestationObject()).isEqualTo("c");
     }
 
-    /** Real filter chain and database: an OWNER acting as a locked community account can still delete it, nothing else. */
     @Test
     void shouldLetOwnerDeleteLockedCommunityAccountWhenActingAsIt(
             @Autowired com.vomatt.repository.UserRepository users,

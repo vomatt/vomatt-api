@@ -104,7 +104,7 @@ public class PlanService {
             unlocking = locked.subList(0, Math.min(room, locked.size()));
             setLocked(unlocking, false, actorId, LockReason.UPGRADE);
         }
-        reconcile(userId, unlocking);
+        reconcileWithOwnersOf(userId, unlocking);
         auditService.logActionNow(Objects.toString(actorId, null), "CHANGE_PLAN", "USER", userId.toString(), "from=" + before + "; to=" + plan + "; source=" + source);
         log.info("User {} plan changed from {} to {} by {}", userId, before, plan, source);
     }
@@ -125,7 +125,7 @@ public class PlanService {
         lockTimeout.within(() -> userRepository.lockIds(owned));
         setLocked(owned.stream().filter(id -> !keep.contains(id)).toList(), true, userId, LockReason.USER_CHOICE);
         setLocked(keep, false, userId, LockReason.USER_CHOICE);
-        reconcile(userId, owned);
+        reconcileWithOwnersOf(userId, owned);
     }
 
     /** An OWNER with room in their plan unlocks a locked community account, which then counts toward their limit. */
@@ -140,7 +140,7 @@ public class PlanService {
         }
         requireRoom(callerId);
         setLocked(List.of(communityId), false, callerId, LockReason.OWNER_UNLOCK);
-        reconcile(callerId, List.of(communityId));
+        reconcileWithOwnersOf(callerId, List.of(communityId));
     }
 
     /**
@@ -157,12 +157,11 @@ public class PlanService {
         List<UUID> unlocked = memberRepository.findOwnedIds(userId, false);
         List<UUID> locking = unlocked.subList(Math.min(limit, unlocked.size()), unlocked.size());
         int locked = setLocked(locking, true, null, LockReason.SELECTION_DEADLINE);
-        reconcile(userId, locking);
+        reconcileWithOwnersOf(userId, locking);
         return locked;
     }
 
-    /** {@link #reconcile(Collection)} of the person and every OWNER of the community accounts. */
-    private void reconcile(UUID userId, Collection<UUID> communityIds) {
+    private void reconcileWithOwnersOf(UUID userId, Collection<UUID> communityIds) {
         Set<UUID> people = new HashSet<>(communityIds.isEmpty() ? List.of() : memberRepository.findOwnerIds(communityIds));
         people.add(userId);
         reconcile(people);

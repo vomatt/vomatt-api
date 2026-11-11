@@ -37,6 +37,7 @@ import com.vomatt.entity.CommunityRole;
 import com.vomatt.entity.NotificationKind;
 import com.vomatt.entity.Plan;
 import com.vomatt.entity.User;
+import com.vomatt.notifications.NotificationId;
 import com.vomatt.repository.AdminQueryRepository;
 import com.vomatt.repository.CommunityMemberRepository;
 import com.vomatt.repository.NotificationRepository;
@@ -102,7 +103,6 @@ class CommunityLockPostgresTest extends PostgresRepositoryTest {
         em.clear();
     }
 
-    /** A community account the person owns, made without the limit check, as a plan the limit no longer covers leaves. */
     private UUID adopt(User person, String createdAt) {
         User community = User.builder().username("lock_" + UUID.randomUUID().toString().substring(0, 8)).displayName("Club")
                 .roles(new String[] { UserRole.COMMUNITY }).build();
@@ -131,8 +131,7 @@ class CommunityLockPostgresTest extends PostgresRepositoryTest {
         return planService.quota(userRepository.findById(person.getId()).orElseThrow());
     }
 
-    /** The actors of the person's COMMUNITY_LOCKED notifications. */
-    private List<UUID> lockNotifications(User person) {
+    private List<UUID> lockNotificationActors(User person) {
         em.flush();
         return notificationRepository.findPage(person.getId(), EnumSet.allOf(NotificationKind.class), null, OffsetDateTime.now(), 50)
                 .stream().filter(n -> n.kind().name().equals("COMMUNITY_LOCKED")).map(NotificationRepository.NotificationRow::actorId).toList();
@@ -427,9 +426,15 @@ class CommunityLockPostgresTest extends PostgresRepositoryTest {
 
         assertThat(job.run(now)).isEqualTo(2);
 
-        assertThat(lockNotifications(owner)).containsExactlyInAnyOrder(second, third);
-        assertThat(lockNotifications(coOwner)).containsExactly(third);
+        assertThat(lockNotificationActors(owner)).containsExactlyInAnyOrder(second, third);
+        assertThat(lockNotificationActors(coOwner)).containsExactly(third);
         assertThat(storedDeadline(coOwner)).as("back within the limit").isNull();
+        NotificationRepository.NotificationRow lock = notificationRepository.findPage(coOwner.getId(),
+                EnumSet.of(NotificationKind.COMMUNITY_LOCKED), null, OffsetDateTime.now(), 50).getFirst();
+        NotificationId id = NotificationId.parse(new NotificationId(lock.kind(), lock.sourceId()).toString());
+        notificationRepository.markRead(coOwner.getId(), id.kind(), id.sourceId(), OffsetDateTime.now());
+        assertThat(notificationRepository.findPage(coOwner.getId(), EnumSet.of(NotificationKind.COMMUNITY_LOCKED), null,
+                OffsetDateTime.now(), 50)).singleElement().extracting(NotificationRepository.NotificationRow::read).isEqualTo(true);
     }
 
     @Test
@@ -438,7 +443,7 @@ class CommunityLockPostgresTest extends PostgresRepositoryTest {
 
         planService.keep(owner.getId(), Set.of(first));
 
-        assertThat(lockNotifications(owner)).isEmpty();
+        assertThat(lockNotificationActors(owner)).isEmpty();
     }
 
     private void actAs(UUID communityId) {

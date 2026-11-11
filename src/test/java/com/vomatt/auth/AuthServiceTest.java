@@ -79,6 +79,8 @@ class AuthServiceTest {
     @Mock
     InviteListService inviteListService;
     @Mock
+    com.vomatt.users.CommunityService communityService;
+    @Mock
     TransactionTemplate transactionTemplate;
     @Mock
     RedisService redisService;
@@ -1004,11 +1006,13 @@ class AuthServiceTest {
 
         assertThat(authService.verifyOtp(" Carol@Example.com", null, "123456", IP).isNewUser()).isTrue();
 
-        var order = inOrder(userRepository, voteService, inviteListService);
+        var order = inOrder(userRepository, voteService, inviteListService, communityService);
         order.verify(userRepository).save(any(User.class));
         order.verify(voteService).bindEmailInvitees(argThat(u -> carolId.equals(u.getId()) && "carol@example.com".equals(u.getEmail())));
         // Polls are locked before Invite Lists
         order.verify(inviteListService).bindEmailMembers(argThat(u -> carolId.equals(u.getId())));
+        // A new account joins the community accounts that invited its address, last
+        order.verify(communityService).joinInvitedCommunities(argThat(u -> carolId.equals(u.getId())));
         verify(transactionTemplate).execute(any());
     }
 
@@ -1041,6 +1045,8 @@ class AuthServiceTest {
 
         verify(voteService).bindEmailInvitees(carol);
         verify(inviteListService).bindEmailMembers(carol);
+        // An existing account answers its community invitations itself
+        verify(communityService, never()).joinInvitedCommunities(any());
     }
 
     @Test

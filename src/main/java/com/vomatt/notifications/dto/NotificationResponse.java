@@ -3,6 +3,7 @@ package com.vomatt.notifications.dto;
 import java.time.OffsetDateTime;
 import java.util.List;
 
+import com.vomatt.entity.CommunityRole;
 import com.vomatt.entity.NotificationCategory;
 import com.vomatt.entity.NotificationKind;
 import com.vomatt.entity.VoteStatus;
@@ -14,7 +15,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Schema(description = "One notification of the feed. Which of `actor`, `poll` and `comment` are set depends on `kind`: "
         + "RESULT has `poll`; CANCELLED, INVITATION and CLOSING_SOON have `actor` (the Poll's owner) and `poll`; "
         + "FOLLOWED has `actor` (the new follower); COMMENT and MENTION have `actor` (the author), `poll` and `comment`; "
-        + "LIKE has `actor` (who liked), `poll` and `comment` (your liked Comment); POLL_LIKE has `actor` (who liked) and `poll` (your liked Poll)")
+        + "LIKE has `actor` (who liked), `poll` and `comment` (your liked Comment); POLL_LIKE has `actor` (who liked) and `poll` (your liked Poll); "
+        + "COMMUNITY_INVITATION has `actor` (the community account) and `communityInvitation`")
 public record NotificationResponse(
         @Schema(description = "Notification id, opaque; pass it to `POST /api/notifications/{id}/read`",
                 example = "comment_0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b")
@@ -28,13 +30,16 @@ public record NotificationResponse(
                 + "CLOSING_SOON: a Poll you are invited to, or a Public Poll of someone you follow, ends within 24 hours "
                 + "and you hold no Ballot in it. "
                 + "LIKE: someone liked your Comment or Reply. "
-                + "POLL_LIKE: someone liked your Poll", example = "COMMENT")
+                + "POLL_LIKE: someone liked your Poll. "
+                + "COMMUNITY_INVITATION: a community account invited your email address to join it and waits for your answer "
+                + "(gone once you accept, decline, it is revoked or expires, or you are already a member); not affected by the "
+                + "`invitations` preference", example = "COMMENT")
         NotificationKind kind,
         @Schema(description = "The tab it is filed under, fixed by `kind`: CONVERSATION (COMMENT, MENTION), LIKE (LIKE, POLL_LIKE), "
-                + "POLL_END (RESULT, CANCELLED, CLOSING_SOON), INVITATION (INVITATION), FOLLOW (FOLLOWED). "
+                + "POLL_END (RESULT, CANCELLED, CLOSING_SOON), INVITATION (INVITATION, COMMUNITY_INVITATION), FOLLOW (FOLLOWED). "
                 + "Filter the feed with `GET /api/notifications?category=`", example = "CONVERSATION")
         NotificationCategory category,
-        @Schema(description = "When it happened: the Poll's end (RESULT, CANCELLED), the Invitation, the follow, the Comment (COMMENT, MENTION), the like, "
+        @Schema(description = "When it happened: the Poll's end (RESULT, CANCELLED), the Invitation (INVITATION, COMMUNITY_INVITATION), the follow, the Comment (COMMENT, MENTION), the like, "
                 + "or 24 hours before the Poll's end (CLOSING_SOON; the Poll's start if later). The feed is ordered by it, newest first",
                 example = "2026-10-26T09:30:00+08:00")
         OffsetDateTime createdAt,
@@ -43,11 +48,21 @@ public record NotificationResponse(
         @Schema(description = "Who did it, as public profile fields with the caller's relation to them; null for RESULT",
                 nullable = true)
         FollowUserDto actor,
-        @Schema(description = "The Poll it is about; null for FOLLOWED", nullable = true)
+        @Schema(description = "The Poll it is about; null for FOLLOWED and COMMUNITY_INVITATION", nullable = true)
         PollSummary poll,
         @Schema(description = "The Comment or Reply (for LIKE, yours that was liked); set only for COMMENT, MENTION and LIKE", nullable = true)
-        CommentSummary comment
+        CommentSummary comment,
+        @Schema(description = "The invitation to answer; set only for COMMUNITY_INVITATION", nullable = true)
+        CommunityInvitationSummary communityInvitation
 ) {
+
+    @Schema(description = "A community account invitation waiting for the caller's answer: accept with "
+            + "`POST /api/community-invitations/{id}/accept`, decline with `POST /api/community-invitations/{id}/decline`")
+    public record CommunityInvitationSummary(
+            @Schema(description = "Invitation id", example = "019a6b2c-3d4e-7f50-8a61-b2c3d4e5f607") String id,
+            @Schema(description = "Role the caller gets on accepting", example = "EDITOR") CommunityRole role,
+            @Schema(description = "When it expires", example = "2026-11-18T14:52:00+08:00") OffsetDateTime expiresAt) {
+    }
 
     @Schema(description = "The Poll a notification is about. Carries no per-option counts; the outcome fields are null "
             + "until the Poll has Ended, so Sealed results stay hidden")

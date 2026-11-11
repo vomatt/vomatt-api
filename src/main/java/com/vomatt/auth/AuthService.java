@@ -15,6 +15,7 @@ import com.vomatt.common.sms.SmsService;
 import com.vomatt.common.util.TextUtil;
 import com.vomatt.entity.User;
 import com.vomatt.invitelists.InviteListService;
+import com.vomatt.users.CommunityService;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.users.BotAvatar;
 import com.vomatt.votes.VoteService;
@@ -99,6 +100,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final VoteService voteService;
     private final InviteListService inviteListService;
+    private final CommunityService communityService;
     private final TransactionTemplate transactionTemplate;
     private final RedisService redisService;
     private final EmailService emailService;
@@ -1118,7 +1120,8 @@ public class AuthService {
      *       {@link MessageKey#AUTH_EMAIL_NOT_VERIFIED}.</li>
      * </ul>
      * <p>This is the only place an email is proven to be the user's, so pending email Invitees and Invite List members of it are
-     * tied to the user here, in the same transaction as the find-or-create (Polls locked before Invite Lists); rerunning it binds nothing new.</p>
+     * tied to the user here, in the same transaction as the find-or-create (Polls locked before Invite Lists); rerunning it binds nothing new.
+     * A new account also joins the community accounts that invited its address.</p>
      */
     FoundUser findOrCreateUserByEmail(String email, String fullName, String authMethod, boolean emailVerified) {
         if (!emailVerified) {
@@ -1144,6 +1147,10 @@ public class AuthService {
             });
             voteService.bindEmailInvitees(user);
             inviteListService.bindEmailMembers(user);
+            // Last, after the Poll and Invite List locks; an existing account answers its invitations itself
+            if (created[0]) {
+                communityService.joinInvitedCommunities(user);
+            }
             return new FoundUser(user, created[0]);
         });
     }

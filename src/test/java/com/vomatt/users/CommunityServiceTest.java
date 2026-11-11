@@ -42,6 +42,9 @@ class CommunityServiceTest {
     @Spy UserMapper userMapper = new UserMapper();
     @Mock UserService userService;
     @Spy LockTimeout lockTimeout = new LockTimeout(mock(jakarta.persistence.EntityManager.class, org.mockito.Mockito.RETURNS_DEEP_STUBS));
+    @Mock com.vomatt.repository.CommunityInvitationRepository invitationRepository;
+    @Mock com.vomatt.common.email.InvitationEmailLimiter invitationEmailLimiter;
+    @Mock com.vomatt.common.email.EmailService emailService;
     @InjectMocks CommunityService service;
 
     final UUID communityId = UUID.randomUUID();
@@ -220,5 +223,40 @@ class CommunityServiceTest {
             assertThatThrownBy(() -> service.uploadAvatar(communityId, file, callerId.toString())).satisfies(ex -> assertKey(ex, error));
             org.mockito.Mockito.verifyNoInteractions(userService);
         }
+    }
+
+    private void savesInvitation() {
+        when(invitationRepository.saveAndFlush(org.mockito.ArgumentMatchers.any())).thenAnswer(inv -> {
+            com.vomatt.entity.CommunityInvitation saved = inv.getArgument(0);
+            org.springframework.test.util.ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            return saved;
+        });
+    }
+
+    @Test
+    void shouldMailFromCommunityWhenInvitedAddressHasNoAccount() {
+        caller(CommunityRole.ADMIN);
+        savesInvitation();
+        when(userRepository.existsByEmail("dave@example.com")).thenReturn(false);
+        when(invitationEmailLimiter.claim(communityId, List.of("dave@example.com"))).thenReturn(List.of("dave@example.com"));
+        when(userRepository.getReferenceById(communityId)).thenReturn(User.builder().id(communityId).username("tower").displayName("Sunrise Tower").build());
+        when(userRepository.getReferenceById(callerId)).thenReturn(User.builder().id(callerId).username("amy").build());
+
+        service.invite(communityId, " Dave@Example.com", CommunityRole.EDITOR, callerId.toString());
+
+        verify(emailService).sendCommunityInvitationEmail(org.mockito.ArgumentMatchers.eq("dave@example.com"), org.mockito.ArgumentMatchers.eq("amy"),
+                org.mockito.ArgumentMatchers.eq("amy"), org.mockito.ArgumentMatchers.eq("Sunrise Tower"), org.mockito.ArgumentMatchers.eq("EDITOR"),
+                org.mockito.ArgumentMatchers.eq(CommunityService.INVITATION_TTL), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void shouldNotMailWhenInvitedAddressHasAccount() {
+        caller(CommunityRole.OWNER);
+        savesInvitation();
+        when(userRepository.existsByEmail("dave@example.com")).thenReturn(true);
+
+        service.invite(communityId, "dave@example.com", CommunityRole.EDITOR, callerId.toString());
+
+        org.mockito.Mockito.verifyNoInteractions(invitationEmailLimiter, emailService);
     }
 }

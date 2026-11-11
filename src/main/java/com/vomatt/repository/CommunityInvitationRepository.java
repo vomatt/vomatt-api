@@ -1,0 +1,25 @@
+package com.vomatt.repository;
+
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import com.vomatt.entity.CommunityInvitation;
+
+public interface CommunityInvitationRepository extends JpaRepository<CommunityInvitation, UUID> {
+
+    Optional<CommunityInvitation> findByCommunityUserIdAndEmail(UUID communityUserId, String email);
+
+    Optional<CommunityInvitation> findByIdAndCommunityUserId(UUID id, UUID communityUserId);
+
+    /** A community account's invitations, expired ones included, oldest first. */
+    List<CommunityInvitation> findByCommunityUserIdOrderByCreatedAtAscIdAsc(UUID communityUserId);
+
+    /** Joining at sign-up: the address's unexpired invitations. */
+    List<CommunityInvitation> findByEmailAndExpiresAtAfter(String email, OffsetDateTime now);
+
+    void deleteByEmail(String email);
+}

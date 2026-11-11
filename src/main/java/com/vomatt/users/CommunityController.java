@@ -13,6 +13,8 @@ import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.SimpleResultResponse;
 import com.vomatt.common.security.ActingMember;
 import com.vomatt.common.security.UserPrincipal;
+import com.vomatt.users.dto.CommunityInvitationRequest;
+import com.vomatt.users.dto.CommunityInvitationResponse;
 import com.vomatt.users.dto.MyCommunityResponse;
 import com.vomatt.users.dto.NewCommunityRequest;
 import com.vomatt.users.dto.CommunityMemberRequest;
@@ -359,6 +361,156 @@ public class CommunityController {
             @Valid @RequestBody CommunityOwnerRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
         communityService.transferOwner(communityId, request.userId(), ActingMember.realUserId(principal));
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
+    private static final String EX_INVITATION = """
+            { "id": "019a6b2c-3d4e-7f50-8a61-b2c3d4e5f607", "email": "dave@example.com", "role": "EDITOR",
+              "invitedAt": "2026-11-11T14:52:00+08:00", "expiresAt": "2026-11-18T14:52:00+08:00" }""";
+    private static final String MANAGER_ONLY = "- 403 `community.role_forbidden`: the caller is not an OWNER or ADMIN, "
+            + "or is an ADMIN and the invitation grants OWNER\n";
+    private static final String INVITATION_NOT_FOUND = ERR_MESSAGE + "Invitation not found or expired" + ERR_CODE
+            + "community.invitation.not_found" + ERR_ERROR + "Invitation not found or expired" + ERR_END;
+
+    @PostMapping("/api/communities/{communityId}/invitations")
+    @Auditable(action = "INVITE_MEMBER", resourceType = "COMMUNITY", resourceIdIndex = 0)
+    @CommonApiResponses
+    @Operation(summary = "Invite an email address to a community account", description = """
+            **Auth**: required (OWNER or ADMIN)
+            **Precondition**: the address has no unexpired invitation to this community account
+            **Behavior**: invites the address with the role; it can be used for 7 days. The response is the same whether or not \
+            the address belongs to an account, and whether or not that account is already a member. An address with an account \
+            gets a `COMMUNITY_INVITATION` notification and accepts (`POST /api/community-invitations/{invitationId}/accept`) or \
+            declines it; an address with no account is mailed, and signing up with it (any sign-in method that verifies the \
+            address) joins with the role. An expired invitation of the address is replaced by the new one. \
+            """ + ROLES + """
+
+            **Side effects**: an address with no account at all is mailed once committed; the community account mails one address \
+            at most once a week, within its daily invitation email limit (shared with its Polls' invitations). Audit-logged.
+            **Errors**:
+            - 400 `common.validation_failed`: `email` missing or invalid, or `role` missing or invalid
+            - 409 `community.invitation.exists`: the address already has an unexpired invitation to this community account
+            """ + NOT_MEMBER + MANAGER_ONLY,
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
+                    examples = @ExampleObject(name = "Invite an editor", value = """
+                            { "email": "dave@example.com", "role": "EDITOR" }
+                            """))))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Invitation sent",
+            content = @Content(examples = @ExampleObject(name = "Invitation", value = "{ \"success\": true, \"data\": " + EX_INVITATION
+                    + ", \"message\": null, \"errorCode\": null, \"error\": null }")))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Already invited (`community.invitation.exists`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "community.invitation.exists", value = ERR_MESSAGE
+                            + "This email address already has a pending invitation" + ERR_CODE + "community.invitation.exists"
+                            + ERR_ERROR + "This email address already has a pending invitation" + ERR_END)))
+    public ResponseEntity<ApiResponse<CommunityInvitationResponse>> invite(
+            @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
+            @PathVariable UUID communityId,
+            @Valid @RequestBody CommunityInvitationRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(communityService.invite(communityId,
+                request.email(), request.role(), ActingMember.realUserId(principal))));
+    }
+
+    @GetMapping("/api/communities/{communityId}/invitations")
+    @CommonApiResponses
+    @Operation(summary = "List a community account's invitations", description = """
+            **Auth**: required (OWNER or ADMIN)
+            **Precondition**: none
+            **Behavior**: the invitations not yet accepted, declined or revoked, oldest first; expired ones are included \
+            (compare `expiresAt` with now) until the address is invited again.
+            **Side effects**: none
+            **Errors**:
+            """ + NOT_MEMBER + PROFILE_EDITOR)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Invitations",
+            content = @Content(examples = @ExampleObject(name = "Invitations", value = "{ \"success\": true, \"data\": [" + EX_INVITATION
+                    + "], \"message\": null, \"errorCode\": null, \"error\": null }")))
+    public ResponseEntity<ApiResponse<List<CommunityInvitationResponse>>> listInvitations(
+            @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
+            @PathVariable UUID communityId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(communityService.listInvitations(communityId, ActingMember.realUserId(principal))));
+    }
+
+    @DeleteMapping("/api/communities/{communityId}/invitations/{invitationId}")
+    @Auditable(action = "REVOKE_INVITATION", resourceType = "COMMUNITY", resourceIdIndex = 0)
+    @CommonApiResponses
+    @Operation(summary = "Revoke a community account invitation", description = """
+            **Auth**: required (OWNER or ADMIN; only an OWNER revokes one that grants OWNER)
+            **Precondition**: the invitation belongs to this community account
+            **Behavior**: deletes the invitation, expired or not; its notification disappears and it can no longer be accepted \
+            or joined by signing up. An email already sent stays sent.
+            **Side effects**: the action is audit-logged.
+            **Errors**:
+            - 404 `community.invitation.not_found`: no such invitation of this community account
+            """ + NOT_MEMBER + MANAGER_ONLY)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Invitation revoked",
+            content = @Content(examples = @ExampleObject(name = "Revoked", value = EX_OK)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No such invitation (`community.invitation.not_found`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "community.invitation.not_found", value = INVITATION_NOT_FOUND)))
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> revokeInvitation(
+            @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
+            @PathVariable UUID communityId,
+            @Parameter(description = "Invitation id", required = true, example = "019a6b2c-3d4e-7f50-8a61-b2c3d4e5f607")
+            @PathVariable UUID invitationId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        communityService.revokeInvitation(communityId, invitationId, ActingMember.realUserId(principal));
+        return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
+    @PostMapping("/api/community-invitations/{invitationId}/accept")
+    @Auditable(action = "ACCEPT_INVITATION", resourceType = "COMMUNITY_INVITATION", resourceIdIndex = 0)
+    @CommonApiResponses
+    @Operation(summary = "Accept a community account invitation", description = """
+            **Auth**: required; refused while acting as a community account (`X-Act-As`)
+            **Precondition**: the invitation was sent to the caller's email address and has not expired
+            **Behavior**: the caller joins the community account with the invitation's role and the invitation is used up. \
+            The invitation id is `communityInvitation.id` of the `COMMUNITY_INVITATION` notification. A caller already a \
+            member keeps their current role. Returns the membership as `GET /api/users/me/communities` lists it.
+            **Side effects**: the invitation and its notification disappear; the action is audit-logged.
+            **Errors**:
+            - 400 `community.member.invalid`: the caller is suspended or is a community account
+            - 404 `community.invitation.not_found`: no unexpired invitation with this id was sent to the caller's address, \
+            or the community account is suspended
+            """)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Joined",
+            content = @Content(examples = @ExampleObject(name = "Membership", value = """
+                    { "success": true, "data": { "communityId": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48", "username": "sunrise_tower",
+                        "displayName": "Sunrise Tower Committee", "avatarUrl": null, "role": "EDITOR" },
+                      "message": null, "errorCode": null, "error": null }
+                    """)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No such invitation for the caller (`community.invitation.not_found`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "community.invitation.not_found", value = INVITATION_NOT_FOUND)))
+    public ResponseEntity<ApiResponse<MyCommunityResponse>> acceptInvitation(
+            @Parameter(description = "Invitation id", required = true, example = "019a6b2c-3d4e-7f50-8a61-b2c3d4e5f607")
+            @PathVariable UUID invitationId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(communityService.acceptInvitation(invitationId, ActingMember.realUserId(principal))));
+    }
+
+    @PostMapping("/api/community-invitations/{invitationId}/decline")
+    @Auditable(action = "DECLINE_INVITATION", resourceType = "COMMUNITY_INVITATION", resourceIdIndex = 0)
+    @CommonApiResponses
+    @Operation(summary = "Decline a community account invitation", description = """
+            **Auth**: required; refused while acting as a community account (`X-Act-As`)
+            **Precondition**: the invitation was sent to the caller's email address and has not expired
+            **Behavior**: deletes the invitation; the community account can invite the address again.
+            **Side effects**: the invitation and its notification disappear; the action is audit-logged.
+            **Errors**:
+            - 404 `community.invitation.not_found`: no unexpired invitation with this id was sent to the caller's address
+            """)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Declined",
+            content = @Content(examples = @ExampleObject(name = "Declined", value = EX_OK)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No such invitation for the caller (`community.invitation.not_found`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "community.invitation.not_found", value = INVITATION_NOT_FOUND)))
+    public ResponseEntity<ApiResponse<SimpleResultResponse>> declineInvitation(
+            @Parameter(description = "Invitation id", required = true, example = "019a6b2c-3d4e-7f50-8a61-b2c3d4e5f607")
+            @PathVariable UUID invitationId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        communityService.declineInvitation(invitationId, ActingMember.realUserId(principal));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
     }
 }

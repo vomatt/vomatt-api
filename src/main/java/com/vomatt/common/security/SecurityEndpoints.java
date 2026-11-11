@@ -67,10 +67,12 @@ public final class SecurityEndpoints {
 
     /**
      * Never reachable while acting as a community account ({@code X-Act-As}, see {@link ActAsFilter}): passkeys, sessions,
-     * data export and phone binding belong to a person, not to the group (a community account is never phone-verified). {@link #PUBLIC_AUTH} (sign-in, refresh, logout) ignores the header.
+     * data export, phone binding and answering a community account invitation belong to a person, not to the group (a
+     * community account is never phone-verified). {@link #PUBLIC_AUTH} (sign-in, refresh, logout) ignores the header.
      */
     public static final String[] ACT_AS_DENIED = { "/api/auth/passkey/register/**", "/api/users/me/passkeys", "/api/users/me/passkeys/**",
-            "/api/users/me/sessions", "/api/users/me/sessions/**", "/api/users/me/export", "/api/users/me/phone/**" };
+            "/api/users/me/sessions", "/api/users/me/sessions/**", "/api/users/me/export", "/api/users/me/phone/**",
+            "/api/community-invitations/**" };
 
     /** DELETE-only routes never reachable while acting: account deletion. */
     public static final String[] ACT_AS_DENIED_DELETE = { "/api/users/*" };

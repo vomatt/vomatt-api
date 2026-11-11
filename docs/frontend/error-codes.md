@@ -125,6 +125,8 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `community.last_owner` | 409 | 社群帳號至少需保留一位擁有者 | A community account must keep at least one owner | Show message (resource state conflict) | CommunityService, UserService |
 | `community.roles_fixed` | 400 | 社群帳號的角色不能變更 | The roles of a community account cannot be changed | Show message so the user can fix the input | AdminUserService |
 | `community.invitee_not_allowed` | 400 | 社群帳號不能被邀請投票或加入邀請名單 | A community account cannot be invited to a poll or added to an invite list | Show message so the user can fix the input | InviteListService, VoteService |
+| `community.invitation.not_found` | 404 | 找不到此邀請，或邀請已失效 | Invitation not found or expired | Show resource not found | CommunityService |
+| `community.invitation.exists` | 409 | 已邀請過此電子郵件地址，邀請尚未失效 | This email address already has a pending invitation | Show message (resource state conflict) | CommunityService |
 | `vote.reveal_at.before_end` | 400 | 公布結果時間不可早於結束時間 | Reveal time cannot be before the end time | Show message so the user can fix the input | VoteService |
 | `vote.reveal_at.too_late` | 400 | 公布結果時間不可晚於結束時間後 {0} 天 | Reveal time cannot be more than {0} days after the end time | Show message so the user can fix the input | VoteService |
 | `vote.ballot.anonymous_not_allowed` | 400 | Pro 投票不接受匿名投票 | Anonymous ballots are not allowed in a Pro poll | Show message so the user can fix the input | VoteService |

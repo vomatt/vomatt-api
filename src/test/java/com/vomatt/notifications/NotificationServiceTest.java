@@ -60,6 +60,7 @@ class NotificationServiceTest {
     @Mock VoteCommentRepository commentRepository;
     @Mock UserService userService;
     @Mock VoteService voteService;
+    @Mock com.vomatt.repository.CommunityInvitationRepository invitationRepository;
     @InjectMocks NotificationService notificationService;
 
     private void stored(NotificationPreference preference, boolean on) {

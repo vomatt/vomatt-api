@@ -28,7 +28,12 @@ public enum NotificationKind {
     /** Someone liked the user's Comment or Reply. Source: the like row. */
     LIKE(NotificationCategory.LIKE),
     /** Someone liked the user's Poll. Source: the like row. */
-    POLL_LIKE(NotificationCategory.LIKE);
+    POLL_LIKE(NotificationCategory.LIKE),
+    /**
+     * A community account invited the address of the user's account and the invitation waits for an answer (unexpired,
+     * the user not yet a member). Source: the invitation.
+     */
+    COMMUNITY_INVITATION(NotificationCategory.INVITATION);
 
     private final NotificationCategory category;
 

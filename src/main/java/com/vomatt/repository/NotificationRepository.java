@@ -148,7 +148,15 @@ public class NotificationRepository {
             NotificationKind.POLL_LIKE, select(NotificationKind.POLL_LIKE, "l.id", "l.created_at", "l.user_id", "v.id", NONE) + """
                     FROM vomatt.votes v
                     JOIN vomatt.vote_likes l ON l.vote_id = v.id
-                    WHERE v.creator_id = :userId AND v.deleted_at IS NULL AND l.user_id <> :userId"""));
+                    WHERE v.creator_id = :userId AND v.deleted_at IS NULL AND l.user_id <> :userId""",
+            // Unexpired community account invitations to the address of the user's account (always verified), from the
+            // community account; none once the user is a member. Accepting, declining or revoking deletes the row
+            NotificationKind.COMMUNITY_INVITATION, select(NotificationKind.COMMUNITY_INVITATION, "ci.id", "ci.created_at",
+                    "ci.community_user_id", NONE, NONE) + """
+                    FROM vomatt.community_invitations ci JOIN vomatt.users u ON u.email = ci.email
+                    WHERE u.id = :userId AND ci.expires_at > :now
+                      AND NOT EXISTS (SELECT 1 FROM vomatt.community_members m
+                                      WHERE m.community_user_id = ci.community_user_id AND m.user_id = :userId)"""));
 
     // Inside each branch, before its LIMIT: nothing from a suspended user, nor from someone the user blocked or who
     // blocked the user

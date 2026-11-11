@@ -149,8 +149,6 @@ public class NotificationRepository {
                     FROM vomatt.votes v
                     JOIN vomatt.vote_likes l ON l.vote_id = v.id
                     WHERE v.creator_id = :userId AND v.deleted_at IS NULL AND l.user_id <> :userId""",
-            // The community accounts the user is an OWNER of that the selection job locked (PlanService.expireSelection);
-            // the account is the actor. Listed while the audit entry is kept (RetentionJob)
             NotificationKind.COMMUNITY_LOCKED, select(NotificationKind.COMMUNITY_LOCKED, "a.id", "a.created_at", "m.community_user_id", NONE, NONE) + """
                     FROM vomatt.community_members m
                     JOIN vomatt.audit_logs a ON a.resource_type = 'COMMUNITY' AND a.resource_id = CAST(m.community_user_id AS text)

@@ -19,6 +19,7 @@ import com.vomatt.repository.CommunityMemberRepository;
 import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.users.dto.UpdateCommunityRequest;
+import com.vomatt.users.dto.UpdateProfileRequest;
 import com.vomatt.users.dto.UserDto;
 import com.vomatt.votes.VoteServiceSlice;
 import com.vomatt.votes.dto.CreateVoteRequest;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.aop.aspectj.annotation.AspectJProxyFactory;
+import org.springframework.test.util.AopTestUtils;
 import org.springframework.context.annotation.Import;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -85,9 +87,73 @@ class CommunityPostgresTest extends PostgresRepositoryTest {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 new UserPrincipal(memberId.toString(), List.of("user"), null), null, List.of()));
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));
-        AspectJProxyFactory factory = new AspectJProxyFactory(new CommunityController(communityService, planService));
+        AspectJProxyFactory factory = new AspectJProxyFactory(new CommunityController(auditedService(auditService), planService));
         factory.addAspect(new AuditAspect(auditService));
         return factory.getProxy();
+    }
+
+    private CommunityService auditedService(AuditService auditService) {
+        AspectJProxyFactory factory = new AspectJProxyFactory((Object) AopTestUtils.getUltimateTargetObject(communityService));
+        factory.addAspect(new AuditAspect(auditService));
+        return factory.getProxy();
+    }
+
+    private UserController actingUserController(AuditService auditService, UUID memberId, CommunityRole role) {
+        var auth = new UsernamePasswordAuthenticationToken(principal(communityId), null, List.of());
+        auth.setDetails(new ActingMember(memberId, communityId, role));
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));
+        return new UserController(userService, null, null, null, null, planService, auditedService(auditService));
+    }
+
+    private User addAdmin() {
+        User admin = persistUser("of-admin-" + UUID.randomUUID().toString().substring(0, 8));
+        em.flush();
+        communityService.addMember(communityId, admin.getId(), CommunityRole.ADMIN, owner.getId().toString());
+        em.flush();
+        em.clear();
+        return admin;
+    }
+
+    @Test
+    void shouldRenameAndAuditAsCommunityUpdateWhenAdminEditsProfileWhileActing() {
+        User admin = addAdmin();
+        AuditService auditService = mock(AuditService.class);
+        UpdateProfileRequest rename = new UpdateProfileRequest();
+        rename.setDisplayName(" Sunrise Club ");
+
+        var response = actingUserController(auditService, admin.getId(), CommunityRole.ADMIN).updateMyProfile(rename, principal(communityId));
+
+        assertThat(response.getBody().data().displayName()).isEqualTo("Sunrise Club");
+        verify(auditService).logAction(eq(admin.getId().toString()), eq("UPDATE"), eq("COMMUNITY"), eq(communityId.toString()),
+                any(), any(), any(), any(), eq("actingAs=" + communityId + "; displayName: \"Sunrise Tower\" -> \"Sunrise Club\""));
+    }
+
+    @Test
+    void shouldRefuseUsernameChangeAndPersonFieldsWhenEditingProfileWhileActing() {
+        User admin = addAdmin();
+        String username = userRepository.findById(communityId).orElseThrow().getUsername();
+        UserController controller = actingUserController(mock(AuditService.class), admin.getId(), CommunityRole.ADMIN);
+        UpdateProfileRequest rename = new UpdateProfileRequest();
+        rename.setUsername("renamed_" + UUID.randomUUID().toString().substring(0, 8));
+        UpdateProfileRequest birthday = new UpdateProfileRequest();
+        birthday.setBirthday(java.time.LocalDate.of(2000, 1, 1));
+        UpdateProfileRequest sameName = new UpdateProfileRequest();
+        sameName.setUsername(username);
+        sameName.setBio("Residents");
+
+        assertThatThrownBy(() -> controller.updateMyProfile(rename, principal(communityId))).isInstanceOfSatisfying(ApiException.class,
+                ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMUNITY_USERNAME_IMMUTABLE));
+        assertThatThrownBy(() -> controller.updateMyProfile(birthday, principal(communityId))).isInstanceOfSatisfying(ApiException.class,
+                ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMON_BAD_REQUEST));
+        controller.updateMyProfile(sameName, principal(communityId));
+        em.flush();
+        em.clear();
+
+        User community = userRepository.findById(communityId).orElseThrow();
+        assertThat(community.getUsername()).isEqualTo(username);
+        assertThat(community.getBio()).isEqualTo("Residents");
+        assertThat(community.getBirthday()).isNull();
     }
 
     private static UserPrincipal principal(UUID id) {
@@ -146,7 +212,7 @@ class CommunityPostgresTest extends PostgresRepositoryTest {
         communityService.addMember(communityId, editor.getId(), CommunityRole.EDITOR, owner.getId().toString());
         em.flush();
 
-        assertThatThrownBy(() -> communityService.updateProfile(communityId, new UpdateCommunityRequest("Hijacked", null),
+        assertThatThrownBy(() -> communityService.updateProfile(communityId, new UpdateCommunityRequest("Hijacked", null).toProfileUpdate(),
                 editor.getId().toString()))
                 .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMUNITY_ROLE_FORBIDDEN));
         em.clear();

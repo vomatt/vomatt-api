@@ -426,6 +426,12 @@
             "nullable" : true,
             "type" : "string"
           },
+          "plan" : {
+            "description" : "Plan: FREE or PRO",
+            "enum" : [ "FREE", "PRO" ],
+            "example" : "FREE",
+            "type" : "string"
+          },
           "pollCount" : {
             "description" : "Polls the user created, any Audience, Deleted ones included",
             "example" : 8,
@@ -2662,6 +2668,19 @@
         },
         "type" : "object"
       },
+      "ChangePlanRequest" : {
+        "description" : "The plan to put the account on",
+        "properties" : {
+          "plan" : {
+            "description" : "FREE or PRO",
+            "enum" : [ "FREE", "PRO" ],
+            "example" : "PRO",
+            "type" : "string"
+          }
+        },
+        "required" : [ "plan" ],
+        "type" : "object"
+      },
       "CommentDto" : {
         "description" : "A Comment (top-level) or a Reply (parentId set) on a Poll",
         "nullable" : true,
@@ -2889,6 +2908,24 @@
           }
         },
         "required" : [ "userId" ],
+        "type" : "object"
+      },
+      "CommunityQuota" : {
+        "description" : "How many community accounts the user owns against the plan's limit",
+        "properties" : {
+          "limit" : {
+            "description" : "The most the plan allows; creating, receiving ownership or being granted OWNER at this count answers 403 `community.limit_reached`",
+            "example" : 1,
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "owned" : {
+            "description" : "Active community accounts the user is an OWNER of; a suspended one does not count",
+            "example" : 1,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
         "type" : "object"
       },
       "CommunityRoleRequest" : {
@@ -3888,6 +3925,9 @@
             "example" : false,
             "type" : "boolean"
           },
+          "communityQuota" : {
+            "$ref" : "#/components/schemas/CommunityQuota"
+          },
           "createdPollCount" : {
             "description" : "Number of Polls the caller created, as My Polls lists them: every Audience (Public, Unlisted, Invite-only) and status (Scheduled, Open, Ended, Cancelled); Deleted Polls excluded",
             "example" : 6,
@@ -3971,6 +4011,12 @@
             "description" : "Whether `phoneNumber` was verified by SMS OTP (phone sign-up or `POST /api/users/me/phone/verify`); false when there is no phone number",
             "example" : true,
             "type" : "boolean"
+          },
+          "plan" : {
+            "description" : "The paid plan: FREE or PRO. Set by an admin until billing goes live",
+            "enum" : [ "FREE", "PRO" ],
+            "example" : "FREE",
+            "type" : "string"
           },
           "totalPolls" : {
             "description" : "Number of Polls the user created that have opened (Open and Ended; Scheduled and Cancelled-before-opening excluded)",
@@ -8922,6 +8968,7 @@
                         "lastLoginAt" : "2026-10-16T21:04:11+08:00",
                         "lastName" : "Chen",
                         "phoneNumber" : null,
+                        "plan" : "FREE",
                         "pollCount" : 8,
                         "roles" : [ "user" ],
                         "username" : "alice"
@@ -9157,6 +9204,152 @@
         "tags" : [ "Admin - User" ]
       }
     },
+    "/api/admin/users/{userId}/plan" : {
+      "patch" : {
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: the account exists\n**Behavior**: puts the account on `plan` (FREE or PRO) and returns it; grants or takes back PRO by hand, for testing and compensation. The same change the payment webhook will make once billing is live. The same plan changes nothing\n**Side effects**: a change is written to the audit log in the same transaction as `CHANGE_PLAN` on `USER`, with `details` `from=<plan>; to=<plan>; source=ADMIN`\n**Errors**:\n- 400 `common.type_mismatch`: `userId` is not a valid UUID\n- 400 `common.validation_failed`: `plan` missing\n- 400 `common.bad_request`: `plan` is not FREE or PRO\n- 404 `user.not_found`: no account with this ID\n- 409 `common.conflict`: another change to the account's plan or community accounts is in progress; retry",
+        "operationId" : "changePlan",
+        "parameters" : [ {
+          "description" : "User ID (UUIDv7)",
+          "in" : "path",
+          "name" : "userId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "examples" : {
+                "Pro" : {
+                  "description" : "Pro",
+                  "value" : {
+                    "plan" : "PRO"
+                  }
+                }
+              },
+              "schema" : {
+                "$ref" : "#/components/schemas/ChangePlanRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "PlanChanged" : {
+                    "description" : "PlanChanged",
+                    "value" : {
+                      "data" : {
+                        "active" : true,
+                        "authMethod" : "email_otp",
+                        "ballotCount" : 35,
+                        "birthday" : "1995-04-12",
+                        "blockedByCount" : 1,
+                        "blockingCount" : 2,
+                        "commentCount" : 14,
+                        "createdAt" : "2026-09-01T10:00:00+08:00",
+                        "displayName" : "Alice",
+                        "email" : "alice@example.com",
+                        "firstName" : "Alice",
+                        "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
+                        "lastLoginAt" : "2026-10-16T21:04:11+08:00",
+                        "lastName" : "Chen",
+                        "phoneNumber" : null,
+                        "plan" : "FREE",
+                        "pollCount" : 8,
+                        "roles" : [ "user" ],
+                        "username" : "alice"
+                      },
+                      "error" : null,
+                      "errorCode" : null,
+                      "message" : null,
+                      "success" : true
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseAdminUserDetail"
+                }
+              }
+            },
+            "description" : "Success"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Validation failed or malformed request (errorCode `common.validation_failed`, `common.bad_request`, ...)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Missing, expired or invalid access token (errorCode `common.unauthorized`, `auth.token.expired`, `auth.token.invalid`)"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Authenticated but not allowed (errorCode `common.forbidden`)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "UserNotFound" : {
+                    "description" : "UserNotFound",
+                    "value" : {
+                      "data" : null,
+                      "error" : "User not found",
+                      "errorCode" : "user.not_found",
+                      "message" : "User not found",
+                      "success" : false
+                    }
+                  }
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "User not found (`user.not_found`)"
+          },
+          "429" : {
+            "content" : {
+              "application/json" : {
+                "example" : null,
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          }
+        },
+        "summary" : "Change User Plan",
+        "tags" : [ "Admin - User" ]
+      }
+    },
     "/api/admin/users/{userId}/roles" : {
       "put" : {
         "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: the account exists; when the change drops the admin role, the account is not the caller and not the last active admin\n**Behavior**: replaces the account's roles with `roles` (each `user`, `moderator` or `admin`; duplicates ignored) and returns the account\n**Side effects**: when the role set actually changes, every refresh token of the user is revoked once the change commits, so the new roles apply from their next sign-in; an access token already issued keeps its old roles until it expires, except that a removed admin role stops working on `/api/admin/**` on the next request. An unchanged role set changes nothing. Written to the audit log with the new roles in `details`\n**Errors**:\n- 400 `common.type_mismatch`: `userId` is not a valid UUID\n- 400 `common.validation_failed`: `roles` is empty or holds an unknown role\n- 403 `admin.self_action_forbidden`: the caller tried to drop their own admin role\n- 404 `user.not_found`: no account with this ID\n- 409 `admin.last_admin`: the change would demote the only active admin\n- 409 `common.conflict`: another admin change holds the admin rows; retry",
@@ -9213,6 +9406,7 @@
                         "lastLoginAt" : "2026-10-16T21:04:11+08:00",
                         "lastName" : "Chen",
                         "phoneNumber" : null,
+                        "plan" : "FREE",
                         "pollCount" : 8,
                         "roles" : [ "user" ],
                         "username" : "alice"
@@ -9379,6 +9573,7 @@
                         "lastLoginAt" : "2026-10-16T21:04:11+08:00",
                         "lastName" : "Chen",
                         "phoneNumber" : null,
+                        "plan" : "FREE",
                         "pollCount" : 8,
                         "roles" : [ "user" ],
                         "username" : "alice"
@@ -9657,6 +9852,7 @@
                         "lastLoginAt" : "2026-10-16T21:04:11+08:00",
                         "lastName" : "Chen",
                         "phoneNumber" : null,
+                        "plan" : "FREE",
                         "pollCount" : 8,
                         "roles" : [ "user" ],
                         "username" : "alice"
@@ -12766,7 +12962,7 @@
     },
     "/api/communities" : {
       "post" : {
-        "description" : "**Auth**: required\n**Precondition**: the caller is an active account that is not a community account; the username is free\n**Behavior**: creates a community account (a group's page: `displayName` is the group name, the logo is its avatar) with the caller as its first OWNER, who then adds members. It has no email or phone and can never sign in; members act as it with the `X-Act-As` header. Sent while acting, the real member becomes the OWNER. Returns 201 with the account, `community` true\n**Side effects**: the creation is audit-logged\n**Errors**:\n- 400 `common.validation_failed`: `username` not 3-50 characters of [a-z0-9_] or reserved, `displayName` blank or over 100 characters\n- 400 `community.member.invalid`: the caller is suspended or is a community account\n- 409 `user.username.taken`: the username is in use\n",
+        "description" : "**Auth**: required\n**Precondition**: the caller is an active account that is not a community account; the username is free\n**Behavior**: creates a community account (a group's page: `displayName` is the group name, the logo is its avatar) with the caller as its first OWNER, who then adds members. It has no email or phone and can never sign in; members act as it with the `X-Act-As` header. Sent while acting, the real member becomes the OWNER. Returns 201 with the account, `community` true\n**Side effects**: the creation is audit-logged\n**Errors**:\n- 400 `common.validation_failed`: `username` not 3-50 characters of [a-z0-9_] or reserved, `displayName` blank or over 100 characters\n- 400 `community.member.invalid`: the caller is suspended or is a community account\n- 409 `user.username.taken`: the username is in use\n- 409 `common.conflict`: another change to the caller's community accounts is in progress; retry\n- 403 `community.limit_reached`: the user who would become an OWNER already owns as many community accounts as their plan allows; `data` is `{ \"limit\": 1, \"owned\": 1 }`\n",
         "operationId" : "createOwnCommunity",
         "requestBody" : {
           "content" : {
@@ -13335,7 +13531,7 @@
         "tags" : [ "Community Account" ]
       },
       "post" : {
-        "description" : "**Auth**: required (OWNER or ADMIN)\n**Precondition**: the user is an active account, not a community account, and not yet a member\n**Behavior**: adds the user with the role. Roles: OWNER and ADMIN manage members; an ADMIN never changes or removes an OWNER nor grants OWNER. CHIEF_EDITOR, EDITOR and ANALYST cannot manage members.\n**Side effects**: the action is audit-logged.\n**Errors**:\n- 400 `community.member.invalid`: the user is suspended or is a community account\n- 400 `common.validation_failed`: `userId` or `role` missing or invalid\n- 404 `user.not_found`: no user with this id\n- 409 `community.member.exists`: the user is already a member\n- 403 `community.not_member`: the caller is not a member of this community account, or it does not exist or is suspended\n- 403 `community.role_forbidden`: the caller's role does not allow this change\n",
+        "description" : "**Auth**: required (OWNER or ADMIN)\n**Precondition**: the user is an active account, not a community account, and not yet a member\n**Behavior**: adds the user with the role. Roles: OWNER and ADMIN manage members; an ADMIN never changes or removes an OWNER nor grants OWNER. CHIEF_EDITOR, EDITOR and ANALYST cannot manage members.\n**Side effects**: the action is audit-logged.\n**Errors**:\n- 400 `community.member.invalid`: the user is suspended or is a community account\n- 400 `common.validation_failed`: `userId` or `role` missing or invalid\n- 404 `user.not_found`: no user with this id\n- 409 `community.member.exists`: the user is already a member\n- 403 `community.not_member`: the caller is not a member of this community account, or it does not exist or is suspended\n- 403 `community.role_forbidden`: the caller's role does not allow this change\n- 403 `community.limit_reached`: the user who would become an OWNER already owns as many community accounts as their plan allows; `data` is `{ \"limit\": 1, \"owned\": 1 }`\n",
         "operationId" : "addMember",
         "parameters" : [ {
           "description" : "Community account's user id",
@@ -13570,7 +13766,7 @@
         "tags" : [ "Community Account" ]
       },
       "patch" : {
-        "description" : "**Auth**: required (OWNER or ADMIN)\n**Precondition**: the user is a member\n**Behavior**: sets the member's role. Roles: OWNER and ADMIN manage members; an ADMIN never changes or removes an OWNER nor grants OWNER. CHIEF_EDITOR, EDITOR and ANALYST cannot manage members.\n**Side effects**: the action is audit-logged.\n**Errors**:\n- 400 `common.validation_failed`: `role` missing or invalid\n- 403 `community.not_member`: the caller is not a member of this community account, or it does not exist or is suspended\n- 403 `community.role_forbidden`: the caller's role does not allow this change\n- 404 `community.member.not_found`: the user is not a member\n- 409 `community.last_owner`: the change would leave the community account without an OWNER\n- 409 `common.conflict`: another member change is in progress; retry\n",
+        "description" : "**Auth**: required (OWNER or ADMIN)\n**Precondition**: the user is a member\n**Behavior**: sets the member's role. Roles: OWNER and ADMIN manage members; an ADMIN never changes or removes an OWNER nor grants OWNER. CHIEF_EDITOR, EDITOR and ANALYST cannot manage members.\n**Side effects**: the action is audit-logged.\n**Errors**:\n- 400 `common.validation_failed`: `role` missing or invalid\n- 403 `community.not_member`: the caller is not a member of this community account, or it does not exist or is suspended\n- 403 `community.role_forbidden`: the caller's role does not allow this change\n- 404 `community.member.not_found`: the user is not a member\n- 409 `community.last_owner`: the change would leave the community account without an OWNER\n- 409 `common.conflict`: another member change is in progress; retry\n- 403 `community.limit_reached`: the user who would become an OWNER already owns as many community accounts as their plan allows; `data` is `{ \"limit\": 1, \"owned\": 1 }`\n",
         "operationId" : "changeRole",
         "parameters" : [ {
           "description" : "Community account's user id",
@@ -13714,7 +13910,7 @@
     },
     "/api/communities/{communityId}/owner" : {
       "post" : {
-        "description" : "**Auth**: required (OWNER only)\n**Precondition**: the user is a member\n**Behavior**: the member becomes an OWNER and the caller an ADMIN. Naming oneself changes nothing.\n**Side effects**: the action is audit-logged.\n**Errors**:\n- 400 `common.validation_failed`: `userId` missing\n- 403 `community.role_forbidden`: the caller is not an OWNER\n- 409 `common.conflict`: another member change is in progress; retry\n- 403 `community.not_member`: the caller is not a member of this community account, or it does not exist or is suspended\n- 404 `community.member.not_found`: the user is not a member\n",
+        "description" : "**Auth**: required (OWNER only)\n**Precondition**: the user is a member\n**Behavior**: the member becomes an OWNER and the caller an ADMIN. Naming oneself changes nothing.\n**Side effects**: the action is audit-logged.\n**Errors**:\n- 400 `common.validation_failed`: `userId` missing\n- 403 `community.role_forbidden`: the caller is not an OWNER\n- 409 `common.conflict`: another member change is in progress; retry\n- 403 `community.not_member`: the caller is not a member of this community account, or it does not exist or is suspended\n- 404 `community.member.not_found`: the user is not a member\n- 403 `community.limit_reached`: the user who would become an OWNER already owns as many community accounts as their plan allows; `data` is `{ \"limit\": 1, \"owned\": 1 }`\n",
         "operationId" : "transferOwner",
         "parameters" : [ {
           "description" : "Community account's user id",
@@ -16386,7 +16582,7 @@
     },
     "/api/users/me" : {
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: returns the caller's own profile with every field, ignoring visibility settings. Unlike the public profile, nothing is masked; `visibilitySettings` reports what other users see on `GET /api/users/{username}` (unset fields use their defaults: `displayName` and `bio` public, the rest hidden). `totalPolls` counts Polls the user created that have opened (Open and Ended; not Scheduled or Cancelled before opening), `totalVotes` counts Public, non-Deleted Polls the user holds a Ballot in. `followersCount` / `followingCount` count the users in `GET /api/users/{username}/followers` / `/following` (suspended accounts left out). `anonymousBallotByDefault` is whether Ballots are Anonymous when a Ballot does not say otherwise (false until set).\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: the account no longer exists",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: returns the caller's own profile with every field, ignoring visibility settings. Unlike the public profile, nothing is masked; `visibilitySettings` reports what other users see on `GET /api/users/{username}` (unset fields use their defaults: `displayName` and `bio` public, the rest hidden). `totalPolls` counts Polls the user created that have opened (Open and Ended; not Scheduled or Cancelled before opening), `totalVotes` counts Public, non-Deleted Polls the user holds a Ballot in. `followersCount` / `followingCount` count the users in `GET /api/users/{username}/followers` / `/following` (suspended accounts left out). `anonymousBallotByDefault` is whether Ballots are Anonymous when a Ballot does not say otherwise (false until set). `plan` is FREE or PRO; `communityQuota` counts the community accounts the caller is an OWNER of (`owned`) against the plan's `limit`.\n**Side effects**: none\n**Errors**:\n- 404 `user.not_found`: the account no longer exists",
         "operationId" : "getMyProfile",
         "responses" : {
           "200" : {
@@ -16399,6 +16595,11 @@
                     "avatarUrl" : "bot:boba",
                     "bio" : "Poll enthusiast",
                     "birthday" : "1995-04-12",
+                    "community" : false,
+                    "communityQuota" : {
+                      "limit" : 1,
+                      "owned" : 1
+                    },
                     "displayName" : "Alice",
                     "email" : "alice@example.com",
                     "firstName" : "Alice",
@@ -16412,6 +16613,7 @@
                     "location" : "Taipei",
                     "phoneNumber" : null,
                     "phoneVerified" : false,
+                    "plan" : "FREE",
                     "totalPolls" : 4,
                     "totalVotes" : 17,
                     "username" : "alice",

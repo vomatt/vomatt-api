@@ -33,7 +33,7 @@ import com.vomatt.users.UserService;
 import com.vomatt.votes.dto.VoteResponse;
 
 /** Poll likes: the stored like count, the per-caller flag, and the owner's POLL_LIKE notification. */
-@Import({ NotificationService.class, VoteServiceSlice.class, UserService.class, UserMapper.class,
+@Import({ NotificationService.class, VoteServiceSlice.class, UserService.class, UserMapper.class, com.vomatt.users.PlanService.class, com.vomatt.common.audit.AuditService.class,
         com.vomatt.common.storage.StorageService.class })
 @DisplayName("Poll likes (Postgres)")
 class VoteLikePostgresTest extends PostgresRepositoryTest {

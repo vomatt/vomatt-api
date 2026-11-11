@@ -102,6 +102,12 @@ public class User extends AuditableEntity {
     @Column(name = "bio", columnDefinition = "TEXT")
     private String bio;
 
+    /** Written only by {@code PlanService#changePlan}. */
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "plan", nullable = false, length = 10)
+    private Plan plan = Plan.FREE;
+
     @Builder.Default
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<UserPreference> preferences = new HashSet<>();

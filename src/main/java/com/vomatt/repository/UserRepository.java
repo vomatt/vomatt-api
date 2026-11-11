@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -77,6 +78,19 @@ public interface UserRepository extends JpaRepository<User, UUID> {
      */
     @Query(value = "SELECT id FROM vomatt.users WHERE id IN (:ids) ORDER BY id FOR KEY SHARE", nativeQuery = true)
     List<UUID> lockKeyShare(@Param("ids") Collection<UUID> ids);
+
+    /**
+     * Locks the person's row for a plan or community-ownership change and returns their plan as stored now, so a
+     * check and the write it guards cannot interleave with another (two creations, a plan change).
+     * FOR NO KEY UPDATE, as {@link #lockActiveAdminIds}. Every such change takes this lock before any community row.
+     * Run it through {@link LockTimeout#within}.
+     */
+    @Query(value = "SELECT plan FROM vomatt.users WHERE id = :id FOR NO KEY UPDATE", nativeQuery = true)
+    Optional<String> lockPlan(@Param("id") UUID id);
+
+    @Modifying
+    @Query(value = "UPDATE vomatt.users SET plan = :plan WHERE id = :id", nativeQuery = true)
+    void setPlan(@Param("id") UUID id, @Param("plan") String plan);
 
     /** Whether the account is active and still holds the admin role; checked per request on /api/admin/**. */
     @Query(value = "SELECT EXISTS (SELECT 1 FROM vomatt.users WHERE id = :id AND active = true AND 'admin' = ANY(roles))",

@@ -92,6 +92,8 @@ public class CommunityController {
     private static final String PROFILE_EDITOR = "- 403 `community.role_forbidden`: the caller is not an OWNER or ADMIN\n";
     private static final String ERR_ROLE_FORBIDDEN = ERR_MESSAGE + "Your role in this community account does not allow this action" + ERR_CODE
             + "community.role_forbidden" + ERR_ERROR + "Your role in this community account does not allow this action" + ERR_END;
+    private static final String LIMIT_REACHED = "- 403 `community.limit_reached`: the user who would become an OWNER already owns as many "
+            + "community accounts as their plan allows; `data` is `{ \"limit\": 1, \"owned\": 1 }`\n";
 
     private static final String ERR_NOT_MEMBER = ERR_MESSAGE + "You are not a member of this community account" + ERR_CODE
             + "community.not_member" + ERR_ERROR + "You are not a member of this community account" + ERR_END;
@@ -113,7 +115,8 @@ public class CommunityController {
             - 400 `common.validation_failed`: `username` not 3-50 characters of [a-z0-9_] or reserved, `displayName` blank or over 100 characters
             - 400 `community.member.invalid`: the caller is suspended or is a community account
             - 409 `user.username.taken`: the username is in use
-            """,
+            - 409 `common.conflict`: another change to the caller's community accounts is in progress; retry
+            """ + LIMIT_REACHED,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = @ExampleObject(name = "Create a community account", value = """
                             { "username": "sunrise_tower", "displayName": "Sunrise Tower Committee" }
@@ -124,6 +127,13 @@ public class CommunityController {
                         "displayName": "Sunrise Tower Committee", "avatarUrl": null, "community": true },
                       "message": null, "errorCode": null, "error": null }
                     """)))
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Plan limit reached (`community.limit_reached`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
+                    examples = @ExampleObject(name = "community.limit_reached", value = """
+                            { "success": false, "data": { "limit": 1, "owned": 1 },
+                              "message": "You own as many community accounts as your plan allows",
+                              "errorCode": "community.limit_reached", "error": "You own as many community accounts as your plan allows" }
+                            """)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Username in use (`user.username.taken`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "user.username.taken", value = ERR_MESSAGE + "Username already taken"
@@ -284,7 +294,7 @@ public class CommunityController {
             - 400 `common.validation_failed`: `userId` or `role` missing or invalid
             - 404 `user.not_found`: no user with this id
             - 409 `community.member.exists`: the user is already a member
-            """ + NOT_MEMBER + ROLE_FORBIDDEN,
+            """ + NOT_MEMBER + ROLE_FORBIDDEN + LIMIT_REACHED,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = @ExampleObject(name = "Add an editor", value = """
                             { "userId": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47", "role": "EDITOR" }
@@ -315,7 +325,7 @@ public class CommunityController {
             **Side effects**: the action is audit-logged.
             **Errors**:
             - 400 `common.validation_failed`: `role` missing or invalid
-            """ + NOT_MEMBER + ROLE_FORBIDDEN + MEMBER_NOT_FOUND + LAST_OWNER,
+            """ + NOT_MEMBER + ROLE_FORBIDDEN + MEMBER_NOT_FOUND + LAST_OWNER + LIMIT_REACHED,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = @ExampleObject(name = "Make admin", value = """
                             { "role": "ADMIN" }
@@ -375,7 +385,7 @@ public class CommunityController {
             - 400 `common.validation_failed`: `userId` missing
             - 403 `community.role_forbidden`: the caller is not an OWNER
             - 409 `common.conflict`: another member change is in progress; retry
-            """ + NOT_MEMBER + MEMBER_NOT_FOUND,
+            """ + NOT_MEMBER + MEMBER_NOT_FOUND + LIMIT_REACHED,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = @ExampleObject(name = "Transfer", value = """
                             { "userId": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47" }

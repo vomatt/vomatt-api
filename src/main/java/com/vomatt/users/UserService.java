@@ -91,6 +91,7 @@ public class UserService {
     private final LookupService lookupService;
     private final TransactionTemplate transactionTemplate;
     private final CommunityMemberRepository communityMemberRepository;
+    private final PlanService planService;
 
     /** One export per user per UTC day: the response is the account's whole footprint and is not cheap to build. */
     private static final String EXPORT_COUNTER_NS = "export:daily";
@@ -383,7 +384,7 @@ public class UserService {
         Map<String, Boolean> visibility = loadVisibilitySettings(user.getId());
         boolean anonymousBallotByDefault = preferenceRepository.anonymousBallotByDefault(user.getId());
         return userMapper.toMyProfileResponse(user, projection, userRepository.countCreatedPolls(user.getId()),
-            userRepository.countVotedPolls(user.getId()), visibility, anonymousBallotByDefault);
+            userRepository.countVotedPolls(user.getId()), visibility, anonymousBallotByDefault, planService.quota(user));
     }
 
     /** Data portability: everything stored about the caller, nothing about anyone else. Fails closed when Redis is down. */

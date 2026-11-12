@@ -36,7 +36,6 @@ import com.vomatt.entity.Vote;
 import com.vomatt.lookups.LookupService;
 import com.vomatt.reports.dto.PollReportResponse;
 import com.vomatt.reports.dto.PollReportResponse.Group;
-import com.vomatt.repository.InviteeRepository;
 import com.vomatt.repository.PollReportRepository;
 import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.VoteRepository;
@@ -48,7 +47,6 @@ class PollReportServiceTest {
     @Mock VoteService voteService;
     @Mock VoteRepository voteRepository;
     @Mock VoteOptionRepository voteOptionRepository;
-    @Mock InviteeRepository inviteeRepository;
     @Mock PollReportRepository reportRepository;
     @Mock LookupService lookupService;
     @InjectMocks PollReportService service;

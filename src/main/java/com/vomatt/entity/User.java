@@ -141,7 +141,7 @@ public class User extends AuditableEntity {
     /**
      * The one email normalization: sign-up / sign-in lookups and email Invitees must agree on it. Trims and lower-cases;
      * a Gmail address (gmail.com / googlemail.com) also loses its {@code +tag} and dots and moves to gmail.com, since
-     * all its variants reach one inbox. db/migrations/2026-10-14-canonical-gmail.sql applies the same rule.
+     * all its variants reach one inbox.
      */
     public static String normalizeEmail(String email) {
         String normalized = email.trim().toLowerCase(Locale.ROOT);

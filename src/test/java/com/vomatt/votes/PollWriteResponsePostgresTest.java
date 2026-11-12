@@ -100,9 +100,12 @@ class PollWriteResponsePostgresTest extends PostgresRepositoryTest {
         em.flush();
         em.clear();
 
-        VoteResponse closed = voteService.closeVote(open.getId().toString(), ownerId);
+        voteService.closeVote(open.getId().toString(), ownerId);
+        em.flush();
+        em.clear();
 
+        VoteResponse closed = voteService.getVote(open.getId().toString(), ownerId);
+        assertThat(closed.isVotingActive()).isFalse();
         assertThat(closed.getUpdatedAt()).isAfter(open.getUpdatedAt());
-        assertMatchesFreshRead(closed);
     }
 }

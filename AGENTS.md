@@ -21,7 +21,7 @@ Swagger UI: <http://localhost:8080/swagger-ui.html>. `*PostgresTest` and `OpenAp
 
 ## Architecture
 
-- Packages are split by domain: `auth`, `users`, `votes`, `comments`, `notifications`, `tags`, `invitelists`, `lookups`, `admin`, `feedback`, each with Controller + Service + Mapper + `dto/`. All JPA entities live in `entity/`, all repositories in `repository/`, shared components in `common/`.
+- Packages are split by domain: `auth`, `users`, `votes`, `comments`, `notifications`, `tags`, `invitelists`, `lookups`, `admin`, `feedback`, each with Controller + Service + Mapper + `dto/`. All JPA entities live in `entity/` and all repositories in `repository/`, except the audit log (`common/audit/AuditLog` + `AuditLogRepository`); shared components live in `common/`.
 - When a Service has only one implementation, do not split it into interface / Impl; `@Transactional` goes on the Service layer.
 - Code and API paths keep the `Vote` naming; business terms follow `CONTEXT.md` (Poll, Ballot, Selection, Participant, Sealed, Turnout, Support...). Renaming would break the contract, so it is not renamed.
 - Poll status is not stored in a column; it is derived from time: `Vote.statusAt()`, with Ended taking precedence over Scheduled. Cancelled is an Ended Poll with `endTime <= startTime` (`Vote.isCancelled`).
@@ -43,7 +43,6 @@ Swagger UI: <http://localhost:8080/swagger-ui.html>. `*PostgresTest` and `OpenAp
 - DDL is managed by Flyway in `src/main/resources/db/migration/` (`ddl-auto: none`), run at app startup in every environment, tests included. `V20261027125251__baseline.sql` is the full schema; databases created before Flyway are baselined at its version (`baseline-on-migrate`, `baseline-version`), and `V20261027125252__catch_up.sql` (the last schema.sql, idempotent) brings them up to date. All time columns are `TIMESTAMPTZ` <-> `OffsetDateTime`; primary keys use UUID v7 (`UUIDv7Generator`).
 - Every schema or data change is a new `V<yyyyMMddHHmmss>__<topic>.sql`, versioned by its creation time (UTC+8) so parallel branches do not collide; never edit an applied one, comments included (Flyway checksums fail startup). Data migrations need a `*MigrationPostgresTest`.
 - `beforeMigrate__notification_reads_by_kind.sql` is a Flyway callback that runs before every migrate: it converts a pre-2026-10-26 `notification_reads` (keyed by `vote_id`) to the `(user_id, kind, source_id)` key, which `V20261027125252__catch_up.sql`'s `CREATE TABLE IF NOT EXISTS` skips. It must stay idempotent.
-- `db/migrations/` (plural, date-named) holds pre-Flyway one-off scripts that Flyway never runs; do not add to it. Their tests recreate the old shape on top of the baseline. `2026-10-02-sachmis-arch.sql` and `2026-10-14-canonical-gmail.sql` cannot run against the current schema, so they have no test.
 
 ## API contract and frontend docs
 

@@ -148,9 +148,10 @@ class VoteServiceTest {
         when(voteRepository.findByIdWithOptions(v.getId())).thenReturn(Optional.of(v));
     }
 
-    // Create saves
+    // Create saves, then saves and flushes once the options are added (lenient: a later check may throw first)
     private void stubSaveAssignsId() {
         when(voteRepository.save(any(Vote.class))).thenAnswer(VoteServiceTest::assignIds);
+        lenient().when(voteRepository.saveAndFlush(any(Vote.class))).thenAnswer(VoteServiceTest::assignIds);
     }
 
     // Edit saves and flushes
@@ -387,8 +388,8 @@ class VoteServiceTest {
                     .containsExactlyInAnyOrder("Red", "Blue");
             // a new Poll is Open: counts are Sealed
             assertThat(result.getOptions()).extracting(VoteResponse.VoteOptionResponse::getVotes).containsOnlyNulls();
-            verify(voteRepository, times(2)).save(argThat(v ->
-                    "Favourite Color?".equals(v.getTitle()) && v.getCreator() == user));
+            verify(voteRepository).save(argThat(v -> "Favourite Color?".equals(v.getTitle()) && v.getCreator() == user));
+            verify(voteRepository).saveAndFlush(argThat(v -> "Favourite Color?".equals(v.getTitle()) && v.getCreator() == user));
         }
 
         @Test
@@ -1261,7 +1262,6 @@ class VoteServiceTest {
                     .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_FORBIDDEN));
 
             assertThat(vote.isActive()).isTrue();
-            verify(voteRepository, never()).saveAndFlush(any());
         }
 
         @Test
@@ -1272,14 +1272,12 @@ class VoteServiceTest {
             vote.scheduleEnd(deadline);
             vote.setAudience(Audience.UNLISTED);
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
-            when(voteRepository.saveAndFlush(vote)).thenReturn(vote);
 
             voteService.closeVote(voteId.toString(), userId.toString());
 
             assertThat(vote.getStatus()).isEqualTo(VoteStatus.ENDED);
             assertThat(vote.getEndTime()).isBefore(deadline);
             assertThat(vote.getDeadline()).isEqualTo(deadline);
-            verify(voteRepository).saveAndFlush(vote);
         }
 
         @Test
@@ -1293,7 +1291,6 @@ class VoteServiceTest {
             assertThatThrownBy(() -> voteService.closeVote(voteId.toString(), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_CLOSE_PUBLIC_NOT_ALLOWED));
             assertThat(vote.getEndTime()).isEqualTo(deadline);
-            verify(voteRepository, never()).saveAndFlush(any());
         }
 
         @Test
@@ -1308,7 +1305,6 @@ class VoteServiceTest {
             assertThatThrownBy(() -> voteService.closeVote(voteId.toString(), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_CLOSE_SCHEDULED));
             assertThat(vote.getEndTime()).isEqualTo(deadline);
-            verify(voteRepository, never()).saveAndFlush(any());
         }
 
         @Test
@@ -1318,7 +1314,6 @@ class VoteServiceTest {
             vote.setStartTime(OffsetDateTime.now().minusDays(1));
             vote.setEndTime(ended);
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
-            when(voteRepository.saveAndFlush(vote)).thenReturn(vote);
 
             voteService.closeVote(voteId.toString(), userId.toString());
 

@@ -143,7 +143,8 @@ public class VoteService {
 
         addOptions(vote, request);
 
-        vote = voteRepository.save(vote);
+        // Flushed now so @PreUpdate stamps updated_at before the response is built from this Poll
+        vote = voteRepository.saveAndFlush(vote);
         insertInvitees(vote, concat(request.getInviteeIds(), inviteLists.userIds()), concat(request.getInviteeEmails(), inviteLists.emails()));
         log.info("Vote created: {} by user: {}", vote.getId(), creatorId);
 
@@ -602,16 +603,12 @@ public class VoteService {
             .toList();
     }
 
-    public VoteResponse closeVote(String voteId, String creatorId) {
+    public void closeVote(String voteId, String creatorId) {
         // Exclusive lock: waits for in-flight Ballot changes, and a concurrent Close then sees Ended and keeps its end time
         Vote vote = requireOwned(lockVote(UUID.fromString(voteId)), creatorId);
 
         vote.closeAt(OffsetDateTime.now());
-        // Flushed now so @PreUpdate stamps updated_at before the response is built from this Poll
-        vote = voteRepository.saveAndFlush(vote);
         log.info("Vote {} closed by creator {}", voteId, creatorId);
-
-        return toResponse(vote, creatorId);
     }
 
     /**
@@ -649,7 +646,8 @@ public class VoteService {
             return;
         }
         vote.setDeletedAt(null);
-        voteRepository.save(vote);
+        // Flushed now so @PreUpdate stamps updated_at before the caller builds its response from this Poll
+        voteRepository.saveAndFlush(vote);
         tagRepository.incrementUsageCount(countedTagIds(vote));
     }
 

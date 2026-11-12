@@ -27,12 +27,12 @@ public record PollReportResponse(
 
     @Schema(description = "Turnout")
     public record Turnout(
-            @Schema(description = "Ballots cast") int ballots,
-            @Schema(description = "Invitees of an INVITE_ONLY Poll; null for other Audiences", nullable = true) Integer invitees,
-            @Schema(description = "`ballots / invitees` (0-1); null unless INVITE_ONLY with Invitees", nullable = true) Double rate) {
+            @Schema(description = "Ballots cast, the Poll's `turnout`; the owner's Ballot included") int ballots,
+            @Schema(description = "Distinct Invitees of an INVITE_ONLY Poll (a user invited both by ID and by an address of theirs counts once); null for other Audiences", nullable = true) Integer invitees,
+            @Schema(description = "Invitees holding a Ballot divided by `invitees` (0-1; the owner's Ballot never counts); null unless INVITE_ONLY with Invitees", nullable = true) Double rate) {
     }
 
-    @Schema(description = "One option's Ballot count")
+    @Schema(description = "One option's Ballot count, the same stored count the Poll's results show")
     public record OptionCount(String optionId, String text, int count) {
     }
 

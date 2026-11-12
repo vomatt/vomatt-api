@@ -464,7 +464,7 @@ public class RefreshTokenService {
         return redisService.hasKeyOrThrow(REVOKED_SESSION_NS, sessionId);
     }
 
-    /** Redis key of a token: its SHA-256 hex. The same digest is what db/redis-hash-refresh-keys.sh wrote on migration. */
+    /** Redis key of a token: its SHA-256 hex. */
     static String keyOf(String token) {
         return AppKey.sha256Hex(token);
     }

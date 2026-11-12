@@ -159,10 +159,12 @@ public class NotificationRepository {
                       AND ci.expires_at > :now
                       AND NOT EXISTS (SELECT 1 FROM vomatt.community_members m
                                       WHERE m.community_user_id = ci.community_user_id AND m.user_id = :userId)"""),
-            Map.entry(NotificationKind.COMMUNITY_LOCKED, select(NotificationKind.COMMUNITY_LOCKED, "a.id", "a.created_at", "m.community_user_id", NONE, NONE) + """
+            // Community accounts the user is an OWNER of, locked because the selection deadline passed; listed while the
+            // lock lasts. A later lock of the same account clears its read state (UserRepository.markLocked)
+            Map.entry(NotificationKind.COMMUNITY_LOCKED, select(NotificationKind.COMMUNITY_LOCKED, "c.id", "c.locked_at", "c.id", NONE, NONE) + """
                     FROM vomatt.community_members m
-                    JOIN vomatt.audit_logs a ON a.resource_type = 'COMMUNITY' AND a.resource_id = CAST(m.community_user_id AS text)
-                    WHERE m.user_id = :userId AND m.role = 'OWNER' AND a.action = 'LOCK' AND a.details = 'reason=SELECTION_DEADLINE'""")));
+                    JOIN vomatt.users c ON c.id = m.community_user_id
+                    WHERE m.user_id = :userId AND m.role = 'OWNER' AND c.locked_at IS NOT NULL AND c.lock_reason = 'SELECTION_DEADLINE'""")));
 
     // Inside each branch, before its LIMIT: nothing from a suspended user, nor from someone the user blocked or who
     // blocked the user

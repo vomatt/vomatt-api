@@ -98,7 +98,7 @@ public class NotificationController {
             declined, revoked or expired, or the caller is already a member
             - COMMUNITY_LOCKED: a community account the caller is an OWNER of was locked because the selection deadline \
             after a downgrade passed without a choice (`POST /api/users/me/communities/keep`); every OWNER gets one, `actor` is the \
-            community account. Kept 180 days
+            community account, the time is when it was locked. Listed while it stays locked; a later lock is a new, unread one
             Each kind falls in one `category`: CONVERSATION (COMMENT, MENTION), LIKE (LIKE, POLL_LIKE), POLL_END (RESULT, CANCELLED, CLOSING_SOON), \
             INVITATION (INVITATION, COMMUNITY_INVITATION), FOLLOW (FOLLOWED), COMMUNITY (COMMUNITY_LOCKED). With `category`, only that category is listed; pass the same `category` with \
             every page.

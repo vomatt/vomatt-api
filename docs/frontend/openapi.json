@@ -4441,7 +4441,7 @@
         "type" : "object"
       },
       "OptionCount" : {
-        "description" : "One option's Ballot count",
+        "description" : "One option's Ballot count, the same stored count the Poll's results show",
         "properties" : {
           "count" : {
             "format" : "int32",
@@ -5596,18 +5596,18 @@
         "description" : "Turnout",
         "properties" : {
           "ballots" : {
-            "description" : "Ballots cast",
+            "description" : "Ballots cast, the Poll's `turnout`; the owner's Ballot included",
             "format" : "int32",
             "type" : "integer"
           },
           "invitees" : {
-            "description" : "Invitees of an INVITE_ONLY Poll; null for other Audiences",
+            "description" : "Distinct Invitees of an INVITE_ONLY Poll (a user invited both by ID and by an address of theirs counts once); null for other Audiences",
             "format" : "int32",
             "nullable" : true,
             "type" : "integer"
           },
           "rate" : {
-            "description" : "`ballots / invitees` (0-1); null unless INVITE_ONLY with Invitees",
+            "description" : "Invitees holding a Ballot divided by `invitees` (0-1; the owner's Ballot never counts); null unless INVITE_ONLY with Invitees",
             "format" : "double",
             "nullable" : true,
             "type" : "number"
@@ -5745,19 +5745,21 @@
             "type" : "boolean"
           },
           "lookupKey" : {
-            "description" : "New key; null keeps the current one",
+            "description" : "New key; null keeps the current one, blank is rejected",
             "example" : "48h",
             "maxLength" : 50,
             "minLength" : 0,
             "nullable" : true,
+            "pattern" : "(?s).*\\S.*",
             "type" : "string"
           },
           "lookupType" : {
-            "description" : "New dictionary type; null keeps the current one",
+            "description" : "New dictionary type; null keeps the current one, blank is rejected",
             "example" : "vote_duration",
             "maxLength" : 50,
             "minLength" : 0,
             "nullable" : true,
+            "pattern" : "(?s).*\\S.*",
             "type" : "string"
           },
           "lookupValue" : {
@@ -7942,7 +7944,7 @@
         "tags" : [ "Admin - Lookup" ]
       },
       "post" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: creates an active item; `type` and `key` are trimmed, `seq` defaults to 0 and `frontendUsing` to false. Returns **201**\n**Side effects**: evicts the cached listing of this type, and the frontend dictionary when `frontendUsing` is true\n**Errors**:\n- 409 `lookup.exists`: an item with this type and key already exists",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: creates an active item; `type` and `key` are trimmed, `seq` defaults to 0 and `frontendUsing` to false. Returns **201**\n**Side effects**: evicts the cached listing of this type, and the frontend dictionary when `frontendUsing` is true. Written to the audit log\n**Errors**:\n- 409 `lookup.exists`: an item with this type and key already exists",
         "operationId" : "create",
         "requestBody" : {
           "content" : {
@@ -8080,7 +8082,7 @@
     },
     "/api/admin/lookups/{id}" : {
       "delete" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the item exists\n**Behavior**: permanently removes the item; prefer deactivation when it may be needed again\n**Side effects**: evicts the cached type listing, and the frontend dictionary when the item is flagged `frontendUsing`\n**Errors**:\n- 400 `common.bad_request`: `id` is not a valid UUID\n- 404 `lookup.not_found`: item does not exist",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the item exists\n**Behavior**: permanently removes the item; prefer deactivation when it may be needed again\n**Side effects**: evicts the cached type listing, and the frontend dictionary when the item is flagged `frontendUsing`. Written to the audit log\n**Errors**:\n- 400 `common.bad_request`: `id` is not a valid UUID\n- 404 `lookup.not_found`: item does not exist",
         "operationId" : "delete",
         "parameters" : [ {
           "description" : "Dictionary item ID (UUIDv7)",
@@ -8190,7 +8192,7 @@
         "tags" : [ "Admin - Lookup" ]
       },
       "put" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the item exists\n**Behavior**: partial update despite the PUT verb: only non-null fields are applied, and a field cannot be cleared to null. Changing `lookupType` or `lookupKey` moves the item\n**Side effects**: evicts the cached listings of the old and the new type, and the frontend dictionary when the item is or was flagged `frontendUsing`\n**Errors**:\n- 400 `common.bad_request`: `id` is not a valid UUID\n- 404 `lookup.not_found`: item does not exist\n- 409 `lookup.exists`: the resulting type and key belong to another item",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the item exists\n**Behavior**: partial update despite the PUT verb: only non-null fields are applied, and a field cannot be cleared to null. Changing `lookupType` or `lookupKey` moves the item\n**Side effects**: evicts the cached listings of the old and the new type, and the frontend dictionary when the item is or was flagged `frontendUsing`. Written to the audit log\n**Errors**:\n- 400 `common.bad_request`: `id` is not a valid UUID\n- 400 `common.validation_failed`: `lookupType` or `lookupKey` is blank, or a field is too long\n- 404 `lookup.not_found`: item does not exist\n- 409 `lookup.exists`: the resulting type and key belong to another item",
         "operationId" : "update",
         "parameters" : [ {
           "description" : "Dictionary item ID (UUIDv7)",
@@ -8355,7 +8357,7 @@
     },
     "/api/admin/lookups/{id}/activate" : {
       "patch" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the item exists\n**Behavior**: sets `isActive` to true; idempotent\n**Side effects**: evicts the cached type listing, and the frontend dictionary when the item is flagged `frontendUsing`\n**Errors**:\n- 400 `common.bad_request`: `id` is not a valid UUID\n- 404 `lookup.not_found`: item does not exist",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the item exists\n**Behavior**: sets `isActive` to true; idempotent\n**Side effects**: evicts the cached type listing, and the frontend dictionary when the item is flagged `frontendUsing`. Written to the audit log\n**Errors**:\n- 400 `common.bad_request`: `id` is not a valid UUID\n- 404 `lookup.not_found`: item does not exist",
         "operationId" : "activate",
         "parameters" : [ {
           "description" : "Dictionary item ID (UUIDv7)",
@@ -8467,7 +8469,7 @@
     },
     "/api/admin/lookups/{id}/deactivate" : {
       "patch" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the item exists\n**Behavior**: sets `isActive` to false; the item stays retrievable through the single-item endpoint but leaves type listings and the frontend dictionary. Idempotent\n**Side effects**: evicts the cached type listing, and the frontend dictionary when the item is flagged `frontendUsing`\n**Errors**:\n- 400 `common.bad_request`: `id` is not a valid UUID\n- 404 `lookup.not_found`: item does not exist",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the item exists\n**Behavior**: sets `isActive` to false; the item stays retrievable through the single-item endpoint but leaves type listings and the frontend dictionary. Idempotent\n**Side effects**: evicts the cached type listing, and the frontend dictionary when the item is flagged `frontendUsing`. Written to the audit log\n**Errors**:\n- 400 `common.bad_request`: `id` is not a valid UUID\n- 404 `lookup.not_found`: item does not exist",
         "operationId" : "deactivate",
         "parameters" : [ {
           "description" : "Dictionary item ID (UUIDv7)",
@@ -8663,7 +8665,7 @@
     },
     "/api/admin/tags" : {
       "post" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: creates a tag. `name` is trimmed; `slug` defaults to a slug generated from the name (lowercase, spaces to hyphens, unsupported characters dropped). Returns 200 with the created tag, `usageCount` 0\n**Side effects**: a new tag becomes visible in the public tag lists\n**Errors**:\n- 400 `common.bad_request`: `slug` is omitted and no valid slug can be generated from `name`\n- 409 `tag.name.exists`: another tag already has this name\n- 409 `tag.slug.exists`: another tag already has this slug",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: creates a tag. `name` is trimmed; `slug` defaults to a slug generated from the name (lowercase, spaces to hyphens, unsupported characters dropped). Returns 200 with the created tag, `usageCount` 0\n**Side effects**: a new tag becomes visible in the public tag lists. Written to the audit log\n**Errors**:\n- 400 `common.bad_request`: `slug` is omitted and no valid slug can be generated from `name`\n- 409 `tag.name.exists`: another tag already has this name\n- 409 `tag.slug.exists`: another tag already has this slug",
         "operationId" : "createTag",
         "requestBody" : {
           "content" : {
@@ -8789,7 +8791,7 @@
     },
     "/api/admin/tags/{tagId}" : {
       "delete" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the tag exists and is not used by any Poll\n**Behavior**: hard-deletes the tag; returns `{success: true}`\n**Side effects**: the tag disappears from the public tag lists\n**Errors**:\n- 400 `common.bad_request`: `tagId` is not a valid UUID\n- 404 `tag.not_found`: tag does not exist\n- 409 `tag.in_use`: at least one Poll still references the tag",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the tag exists and is not used by any Poll\n**Behavior**: hard-deletes the tag; returns `{success: true}`\n**Side effects**: the tag disappears from the public tag lists. Written to the audit log\n**Errors**:\n- 400 `common.bad_request`: `tagId` is not a valid UUID\n- 404 `tag.not_found`: tag does not exist\n- 409 `tag.in_use`: at least one Poll still references the tag",
         "operationId" : "deleteTag",
         "parameters" : [ {
           "description" : "Tag ID (UUIDv7)",
@@ -8921,7 +8923,7 @@
         "tags" : [ "Admin Tag" ]
       },
       "put" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the tag exists\n**Behavior**: replaces name, slug, description and displayOrder with the request values (full update: an omitted `description` becomes null and an omitted `displayOrder` becomes 0). `slug` is regenerated from `name` when null or blank, even if the tag already had a custom slug\n**Side effects**: the change is visible in the public tag lists; Polls keep their association with the tag\n**Errors**:\n- 400 `common.bad_request`: `tagId` is not a valid UUID, or no valid slug can be generated from `name`\n- 404 `tag.not_found`: tag does not exist\n- 409 `tag.name.exists`: another tag already has this name\n- 409 `tag.slug.exists`: another tag already has this slug",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the tag exists\n**Behavior**: replaces name, slug, description and displayOrder with the request values (full update: an omitted `description` becomes null and an omitted `displayOrder` becomes 0). `slug` is regenerated from `name` when null or blank, even if the tag already had a custom slug\n**Side effects**: the change is visible in the public tag lists; Polls keep their association with the tag. Written to the audit log\n**Errors**:\n- 400 `common.bad_request`: `tagId` is not a valid UUID, or no valid slug can be generated from `name`\n- 404 `tag.not_found`: tag does not exist\n- 409 `tag.name.exists`: another tag already has this name\n- 409 `tag.slug.exists`: another tag already has this slug",
         "operationId" : "updateTag",
         "parameters" : [ {
           "description" : "Tag ID (UUIDv7)",
@@ -16739,7 +16741,7 @@
     },
     "/api/notifications" : {
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: the caller's notifications, newest `createdAt` first, cursor-paged. They are not stored but derived from Polls, Invitations, follows and Comments when read, so an item disappears when what it is about goes away (a Comment deleted, a follow undone, a Poll Deleted). Kinds:\n- RESULT: a Poll the caller owns, holds a Ballot in, is an Invitee of or bookmarked has Ended (end time passed, Closed, or every Invitee voted); one item per Poll whatever the reasons. A Poll that Ended with no Ballots (Turnout 0) gives none. A Participant who made a Retraction and is neither an Invitee nor bookmarked it gets none\n- CANCELLED: an Invite-only Poll the caller is an Invitee of was Cancelled before it opened (only Polls Cancelled before 2026-10-14; a Scheduled Poll is now Deleted, which notifies nobody)\n- INVITATION: the caller is an Invitee of a Scheduled or Open Invite-only Poll; listed until the Poll Ends, when its RESULT takes over. Being removed and invited again is a new, unread INVITATION\n- FOLLOWED: someone followed the caller (one item per follower; group them in the UI)\n- COMMENT: someone else commented on or replied under the caller's Poll, or replied to the caller's Comment, on a Poll the caller can see; not a Reply in a thread started by a user the caller blocked (the Comment lists hide that thread)\n- MENTION: someone else @mentioned the caller (`@<username>`) in a Comment or Reply on a Poll the caller can see, unless that Comment is the caller's COMMENT (one Comment, one notification) and COMMENT is switched on; same thread-starter block rule as COMMENT\n- CLOSING_SOON: an Open Poll ends within 24 hours and the caller holds no Ballot in it, if the caller is its Invitee, or it is a Public Poll of a user the caller follows. Gone once the caller casts a Ballot or the Poll Ends. Off by default\n- LIKE: someone else liked the caller's Comment or Reply, on a Poll the caller can see and not in a thread started by a user the caller blocked (as COMMENT). Gone if the like is taken back; liking again is a new, unread LIKE\n- POLL_LIKE: someone else liked the caller's Poll (`PUT /api/votes/{voteId}/like`). Gone if the like is taken back; liking again is a new, unread POLL_LIKE\n- COMMUNITY_INVITATION: the caller was invited to join a community account; gone once the invitation is accepted, declined, revoked or expired, or the caller is already a member\n- COMMUNITY_LOCKED: a community account the caller is an OWNER of was locked because the selection deadline after a downgrade passed without a choice (`POST /api/users/me/communities/keep`); every OWNER gets one, `actor` is the community account. Kept 180 days\nEach kind falls in one `category`: CONVERSATION (COMMENT, MENTION), LIKE (LIKE, POLL_LIKE), POLL_END (RESULT, CANCELLED, CLOSING_SOON), INVITATION (INVITATION, COMMUNITY_INVITATION), FOLLOW (FOLLOWED), COMMUNITY (COMMUNITY_LOCKED). With `category`, only that category is listed; pass the same `category` with every page.\nKinds switched off in the caller's preferences are left out (FOLLOWED, COMMUNITY_INVITATION and COMMUNITY_LOCKED cannot be switched off). Nothing from a suspended user, a user the caller blocked or a user who blocked the caller is listed, nor anything about a Poll whose owner blocked the caller. `poll` never carries per-option counts, its outcome (`winningOptionIds`, `winningOptionLabels`, `tie`) stays null until the Poll has Ended, and `actor` is never a voter, so Sealed results and Anonymous Ballots stay hidden. Each item carries what a row needs: the caller's Selection (`poll.myOptionId`), the caller's follows with the actor both ways (`actor.isFollowing`, `actor.followsYou`), and for a Reply the Comment it is under (`comment.parentId`). An item can appear or vanish behind a cursor (a follow, a block); de-duplicate by `id`.\n**Side effects**: none\n**Errors**:\n- 400 `common.cursor_invalid`: `cursor` came from another list\n- 400 `common.type_mismatch`: `category` is not one of the categories",
+        "description" : "**Auth**: required\n**Precondition**: none\n**Behavior**: the caller's notifications, newest `createdAt` first, cursor-paged. They are not stored but derived from Polls, Invitations, follows and Comments when read, so an item disappears when what it is about goes away (a Comment deleted, a follow undone, a Poll Deleted). Kinds:\n- RESULT: a Poll the caller owns, holds a Ballot in, is an Invitee of or bookmarked has Ended (end time passed, Closed, or every Invitee voted); one item per Poll whatever the reasons. A Poll that Ended with no Ballots (Turnout 0) gives none. A Participant who made a Retraction and is neither an Invitee nor bookmarked it gets none\n- CANCELLED: an Invite-only Poll the caller is an Invitee of was Cancelled before it opened (only Polls Cancelled before 2026-10-14; a Scheduled Poll is now Deleted, which notifies nobody)\n- INVITATION: the caller is an Invitee of a Scheduled or Open Invite-only Poll; listed until the Poll Ends, when its RESULT takes over. Being removed and invited again is a new, unread INVITATION\n- FOLLOWED: someone followed the caller (one item per follower; group them in the UI)\n- COMMENT: someone else commented on or replied under the caller's Poll, or replied to the caller's Comment, on a Poll the caller can see; not a Reply in a thread started by a user the caller blocked (the Comment lists hide that thread)\n- MENTION: someone else @mentioned the caller (`@<username>`) in a Comment or Reply on a Poll the caller can see, unless that Comment is the caller's COMMENT (one Comment, one notification) and COMMENT is switched on; same thread-starter block rule as COMMENT\n- CLOSING_SOON: an Open Poll ends within 24 hours and the caller holds no Ballot in it, if the caller is its Invitee, or it is a Public Poll of a user the caller follows. Gone once the caller casts a Ballot or the Poll Ends. Off by default\n- LIKE: someone else liked the caller's Comment or Reply, on a Poll the caller can see and not in a thread started by a user the caller blocked (as COMMENT). Gone if the like is taken back; liking again is a new, unread LIKE\n- POLL_LIKE: someone else liked the caller's Poll (`PUT /api/votes/{voteId}/like`). Gone if the like is taken back; liking again is a new, unread POLL_LIKE\n- COMMUNITY_INVITATION: the caller was invited to join a community account; gone once the invitation is accepted, declined, revoked or expired, or the caller is already a member\n- COMMUNITY_LOCKED: a community account the caller is an OWNER of was locked because the selection deadline after a downgrade passed without a choice (`POST /api/users/me/communities/keep`); every OWNER gets one, `actor` is the community account, the time is when it was locked. Listed while it stays locked; a later lock is a new, unread one\nEach kind falls in one `category`: CONVERSATION (COMMENT, MENTION), LIKE (LIKE, POLL_LIKE), POLL_END (RESULT, CANCELLED, CLOSING_SOON), INVITATION (INVITATION, COMMUNITY_INVITATION), FOLLOW (FOLLOWED), COMMUNITY (COMMUNITY_LOCKED). With `category`, only that category is listed; pass the same `category` with every page.\nKinds switched off in the caller's preferences are left out (FOLLOWED, COMMUNITY_INVITATION and COMMUNITY_LOCKED cannot be switched off). Nothing from a suspended user, a user the caller blocked or a user who blocked the caller is listed, nor anything about a Poll whose owner blocked the caller. `poll` never carries per-option counts, its outcome (`winningOptionIds`, `winningOptionLabels`, `tie`) stays null until the Poll has Ended, and `actor` is never a voter, so Sealed results and Anonymous Ballots stay hidden. Each item carries what a row needs: the caller's Selection (`poll.myOptionId`), the caller's follows with the actor both ways (`actor.isFollowing`, `actor.followsYou`), and for a Reply the Comment it is under (`comment.parentId`). An item can appear or vanish behind a cursor (a follow, a block); de-duplicate by `id`.\n**Side effects**: none\n**Errors**:\n- 400 `common.cursor_invalid`: `cursor` came from another list\n- 400 `common.type_mismatch`: `category` is not one of the categories",
         "operationId" : "list",
         "parameters" : [ {
           "description" : "Only this category's notifications; omit for all",

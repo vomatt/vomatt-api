@@ -18,7 +18,7 @@ COPY --from=build /app ./
 # Small containers get little CPU at startup: C1-only JIT + AOT cache (JEP 514) shorten it
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
 # AOT cache training: exits once the context refreshes; with Flyway off, startup does not connect to DB / Redis, so placeholder env vars are enough
-RUN SPRING_FLYWAY_ENABLED=false DB_URL=jdbc:postgresql://localhost/x DB_PASSWORD=x JWT_SECRET=aot-training-placeholder-secret-0123456789 APP_KEY=aot-training-placeholder-secret-0123456789 \
+RUN PROFILES_ACTIVE=dev SPRING_FLYWAY_ENABLED=false DB_URL=jdbc:postgresql://localhost/x DB_PASSWORD=x JWT_SECRET=aot-training-placeholder-secret-0123456789 APP_KEY=aot-training-placeholder-secret-0123456789 \
     java -XX:AOTCacheOutput=app.aot -Dspring.context.exit=onRefresh -jar vomatt-api-0.0.1-SNAPSHOT.jar
 # Railway sets PORT; 80 is the fallback when it is unset
 CMD ["sh", "-c", "exec java -XX:AOTCache=app.aot -Dserver.port=${PORT:-80} -jar vomatt-api-0.0.1-SNAPSHOT.jar"]

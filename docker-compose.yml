@@ -59,6 +59,7 @@ services:
     # No env_file: .env points DB_URL at localhost, unreachable from inside the container
     environment:
       PORT: 8080
+      PROFILES_ACTIVE: dev
       DB_URL: jdbc:postgresql://postgres:5432/postgres
       DB_PASSWORD: postgres
       DB_SSLMODE: disable

@@ -2,7 +2,9 @@ spring:
   application:
     name: vomatt-api
   profiles:
-    active: ${PROFILES_ACTIVE:dev}
+    # No default: without PROFILES_ACTIVE no profile is active, so the OTP-logging senders stay off (SMS answers 503,
+    # disabled email fails startup). Local runs set dev (.env.example, docker compose, src/test/resources/config)
+    active: ${PROFILES_ACTIVE:}
   threads:
     virtual:
       enabled: true

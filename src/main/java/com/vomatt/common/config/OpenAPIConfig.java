@@ -13,6 +13,7 @@ import io.swagger.v3.oas.models.servers.Server;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -71,7 +72,7 @@ public class OpenAPIConfig {
     private String prodUrl;
 
     @Bean
-    public OpenAPI vomattOpenAPI(@Value("${spring.profiles.active:dev}") String activeProfile) {
+    public OpenAPI vomattOpenAPI(Environment environment) {
         Contact contact = new Contact();
         contact.setName("Vomatt");
         contact.setEmail("yi-hsien@vomatt.com");
@@ -95,7 +96,7 @@ public class OpenAPIConfig {
 
         SecurityRequirement securityRequirement = new SecurityRequirement().addList("bearerAuth");
 
-        List<Server> servers = "dev".equals(activeProfile)
+        List<Server> servers = environment.matchesProfiles("dev")
                 ? List.of(new Server().url(devUrl).description("Development"),
                 new Server().url(prodUrl).description("Production"))
                 : List.of(new Server().url(prodUrl).description("Production"),

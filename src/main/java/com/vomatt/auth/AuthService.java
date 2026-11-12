@@ -220,7 +220,7 @@ public class AuthService {
         if (testAccount) {
             code = otpTestCode;
         }
-        storeOtp(namespace, redisKey, quota, attemptKey, new OtpRecord(otpHash(normalizedEmail, code), otpType, Instant.now(), 0));
+        storeOtp(namespace, redisKey, quota, attemptKey, new OtpRecord(otpHash(normalizedEmail, code), otpType, Instant.now()));
         if (testAccount || !deliver) {
             return;
         }
@@ -254,7 +254,7 @@ public class AuthService {
         acquireResendCooldown(namespace, redisKey);
         DailyQuota quota = DailyQuota.of(redisKey, attemptKey);
         takeDailyQuota(namespace, redisKey, quota, otpDailyLimitPhone);
-        storeOtp(namespace, redisKey, quota, attemptKey, new OtpRecord(otpHash(phone, code), otpType, Instant.now(), 0));
+        storeOtp(namespace, redisKey, quota, attemptKey, new OtpRecord(otpHash(phone, code), otpType, Instant.now()));
 
         try {
             smsService.sendOtp(phone, code);

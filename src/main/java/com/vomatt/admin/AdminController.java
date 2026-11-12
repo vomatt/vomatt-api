@@ -1,11 +1,13 @@
 package com.vomatt.admin;
 
+import com.vomatt.common.annotation.ApiError;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
 import com.vomatt.admin.dto.AdminStatsResponse;
 import com.vomatt.admin.dto.AuditLogResponse;
 import com.vomatt.common.annotation.CommonApiResponses;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -69,8 +71,7 @@ public class AdminController {
                     **Precondition**: caller holds role ADMIN
                     **Behavior**: read-only offset page of audit log entries, newest first. Filters (all optional, exact match, combined with AND): `userId` (actor), `action`, `resourceType`, `resourceId`, and the time range `from` (inclusive) to `to` (exclusive) as ISO-8601 date-times. `page` is 1-based (default 1), `limit` 1-50 (default 20). Entries are written asynchronously, so an action may show up a moment after it returns
                     **Side effects**: none
-                    **Errors**:
-                    - 400 `common.type_mismatch`: `userId` or `resourceId` is not a valid UUID, or `from` / `to` is not an ISO-8601 date-time""")
+                    """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of audit log entries",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "AuditLogs", value = """
                     {
@@ -102,6 +103,7 @@ public class AdminController {
                       "errorCode": null,
                       "error": null
                     }""")))
+    @ApiError(status = 400, key = MessageKey.COMMON_TYPE_MISMATCH, when = "`userId` or `resourceId` is not a valid UUID, or `from` / `to` is not an ISO-8601 date-time", args = { "limit" })
     public ResponseEntity<ApiResponse<PageResponse<AuditLogResponse>>> listAuditLogs(
             @Parameter(description = "Actor's user ID (UUID)") @RequestParam(required = false) UUID userId,
             @Parameter(description = "Action, e.g. DELETE, SUSPEND, FORCE_CLOSE", example = "SUSPEND")

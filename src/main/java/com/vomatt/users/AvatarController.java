@@ -1,8 +1,8 @@
 package com.vomatt.users;
 
+import com.vomatt.common.annotation.ApiError;
 import com.vomatt.common.annotation.PublicApiResponse;
 import com.vomatt.common.annotation.StorageUnavailableResponse;
-import com.vomatt.common.config.OpenAPIConfig;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.security.SecurityEndpoints;
@@ -10,7 +10,6 @@ import com.vomatt.common.storage.StorageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -35,10 +34,6 @@ public class AvatarController {
     @PublicApiResponse
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "The JPEG image",
             content = @Content(mediaType = MediaType.IMAGE_JPEG_VALUE, schema = @Schema(type = "string", format = "binary")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No image at this path, e.g. replaced or deleted (errorCode `common.not_found`)",
-            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"Resource not found","errorCode":"common.not_found","error":"Resource not found"}""")))
     @StorageUnavailableResponse
     @Operation(summary = "Get an uploaded avatar", description = """
             **Auth**: none
@@ -48,9 +43,9 @@ public class AvatarController {
             **Behavior**: streams the image as `image/jpeg` with `Cache-Control: public, max-age=31536000, immutable`: \
             a path never changes content, since every upload gets a new one
             **Side effects**: none
-            **Errors**:
-            - 404 `common.not_found`: no image at this path (the owner replaced or removed it, or deleted the account)
-            - 503 `common.storage_unavailable`: image storage is not configured or unreachable; retry later""")
+            """)
+    @ApiError(status = 404, key = MessageKey.COMMON_NOT_FOUND, when = "no image at this path (the owner replaced or removed it, or deleted the account)")
+    @ApiError(status = 503, key = MessageKey.COMMON_STORAGE_UNAVAILABLE, when = "image storage is not configured or unreachable; retry later")
     public ResponseEntity<InputStreamResource> getAvatar(
             @Parameter(description = "Image file name, `<id>.jpg`", required = true, example = "019a5e3c-2f1d-7b6a-8c4e-5d7f9a1b3c2e.jpg")
             @PathVariable String file) {

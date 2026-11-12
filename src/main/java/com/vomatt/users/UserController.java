@@ -3,12 +3,13 @@ package com.vomatt.users;
 import com.vomatt.auth.AuthService;
 import com.vomatt.auth.PasskeyService;
 import com.vomatt.auth.dto.PhoneVerifyOtpRequest;
+import com.vomatt.common.annotation.ApiError;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.util.ClientIpResolver;
 import com.vomatt.users.dto.BindPhoneSendOtpRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import com.vomatt.auth.dto.PasskeyResponse;
 import com.vomatt.common.exception.ApiException;
-import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.users.dto.FollowUserDto;
 import com.vomatt.users.dto.MyProfileResponse;
 import com.vomatt.users.dto.UpdateProfileRequest;
@@ -76,10 +77,6 @@ public class UserController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value =
                     "{\"success\":true,\"data\":" + MY_PROFILE_EXAMPLE + ",\"message\":null,\"errorCode\":null,\"error\":null}")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Get my profile", description = """
             **Auth**: required
             **Precondition**: none
@@ -93,8 +90,8 @@ public class UserController {
             `plan` is FREE or PRO; `communityQuota` counts the community accounts the caller is an OWNER of (`owned`) against \
             the plan's `limit`.
             **Side effects**: none
-            **Errors**:
-            - 404 `user.not_found`: the account no longer exists""")
+            """)
+    @ApiError(status = 404, key = MessageKey.USER_NOT_FOUND, when = "the account no longer exists")
     public ResponseEntity<ApiResponse<MyProfileResponse>> getMyProfile(@AuthenticationPrincipal UserPrincipal principal) {
         MyProfileResponse profile = userService.getMyProfile(principal.userId());
         return ResponseEntity.ok(ApiResponse.ok(profile));
@@ -105,10 +102,6 @@ public class UserController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = "{\"success\":true,\"data\":{\"exportedAt\":\"2026-10-23T10:00:00+08:00\",\"profile\":" + MY_PROFILE_EXAMPLE + """
                     ,"preferences":{"visibility.location":"true"},"polls":[{"id":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","title":"Lunch?","description":null,"audience":"PUBLIC","startTime":"2026-10-01T12:00:00+08:00","endTime":"2026-10-08T12:00:00+08:00","createdAt":"2026-10-01T12:00:00+08:00","deleted":false,"options":["Ramen","Sushi"]}],"comments":[{"id":"0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b","voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","text":"Ramen!","createdAt":"2026-10-02T09:00:00+08:00"}],"ballots":[{"voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","voteTitle":"Lunch?","optionId":"0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813","optionText":"Ramen","anonymous":false,"castAt":"2026-10-02T08:30:00+08:00"}],"feedback":[{"id":"0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70","content":"Please add dark mode.","createdAt":"2026-10-03T10:00:00+08:00"}],"following":[{"userId":"0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f","username":"bob","since":"2026-10-04T10:00:00+08:00"}],"blocking":[],"bookmarks":[{"voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","createdAt":"2026-10-05T10:00:00+08:00"}],"followedTags":[{"tagId":"0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70","createdAt":"2026-10-06T10:00:00+08:00"}]},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "Already exported today (`common.rate_limited`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"Too many requests, please try again later","errorCode":"common.rate_limited","error":"Too many requests, please try again later"}""")))
     @Operation(summary = "Export my data", description = """
             **Auth**: required
             **Precondition**: not exported yet today (UTC)
@@ -118,9 +111,9 @@ public class UserController {
             (`following`, `blocking`, oldest first, suspended accounts included), the Polls the caller bookmarked (`bookmarks`) and the \
             tags the caller follows (`followedTags`), both oldest first. Of other users, only those follows' and blocks' ids and usernames are included.
             **Side effects**: none; counted toward the one export per UTC day
-            **Errors**:
-            - 404 `user.not_found`: the account no longer exists
-            - 429 `common.rate_limited`: an export was already produced today""")
+            """)
+    @ApiError(status = 404, key = MessageKey.USER_NOT_FOUND, when = "the account no longer exists")
+    @ApiError(status = 429, key = MessageKey.COMMON_RATE_LIMITED, when = "an export was already produced today")
     public ResponseEntity<ApiResponse<com.vomatt.users.dto.UserDataExportResponse>> exportMyData(@AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(userService.exportMyData(principal.userId())));
     }
@@ -130,10 +123,6 @@ public class UserController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"firstName":true,"lastName":true,"location":false,"displayName":true,"bio":true,"gender":false},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Update profile visibility", description = """
             **Auth**: required
             **Precondition**: none
@@ -141,9 +130,9 @@ public class UserController {
             omitted fields keep their current setting and unknown keys are ignored. Returns the complete \
             settings map after the update (one boolean per controllable field).
             **Side effects**: persists the settings; takes effect immediately on `GET /api/users/{username}`
-            **Errors**:
-            - 400 `common.validation_failed`: `visibility` is missing
-            - 404 `user.not_found`: the account no longer exists""")
+            """)
+    @ApiError(status = 400, key = MessageKey.COMMON_VALIDATION_FAILED, when = "`visibility` is missing")
+    @ApiError(status = 404, key = MessageKey.USER_NOT_FOUND, when = "the account no longer exists")
     public ResponseEntity<ApiResponse<Map<String, Boolean>>> updateVisibility(
             @Valid @RequestBody UpdateVisibilityRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -156,10 +145,6 @@ public class UserController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"followersCount":12,"followingCount":8,"firstName":"Alice","lastName":null,"location":null,"gender":null,"isFollowing":true,"followsYou":true,"isBlocked":false,"mutualFollowersCount":3,"mutualFollowersPreview":[{"id":"0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f","username":"jtan","displayName":"J Tan","avatarUrl":"bot:boba"},{"id":"0199c1a3-1a2b-7c3d-8e4f-5a6b7c8d9e0f","username":"mia","displayName":null,"avatarUrl":"bot:pip"},{"id":"0199c1a3-2b3c-7d4e-9f5a-6b7c8d9e0f1a","username":"ken","displayName":"Ken","avatarUrl":null}]},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No user with this username (errorCode `user.not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Get user public profile", description = """
             **Auth**: public; optional login fills `isFollowing`, `followsYou`, `isBlocked`, `mutualFollowersCount` and `mutualFollowersPreview`. An invalid or expired token is treated as signed out
             **Precondition**: none
@@ -174,8 +159,8 @@ public class UserController {
             `firstName`, `lastName`, `location` and `gender` are hidden by default; email, phone number and birthday are never returned. \
             `totalPolls` counts only Polls that have opened (Open and Ended), matching `GET /api/users/{username}/votes`.
             **Side effects**: none
-            **Errors**:
-            - 404 `user.not_found`: no user has this username, or the user is suspended""")
+            """)
+    @ApiError(status = 404, key = MessageKey.USER_NOT_FOUND, when = "no user has this username, or the user is suspended")
     public ResponseEntity<ApiResponse<UserProfileResponse>> getUserProfile(
             @Parameter(description = "Username of the user to look up", required = true, example = "alice")
             @PathVariable String username,
@@ -190,10 +175,6 @@ public class UserController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of followers",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"items":[{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"bob","displayName":"Bob","avatarUrl":"bot:boba","isFollowing":false,"followsYou":true}],"nextCursor":null},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No active user with this username (errorCode `user.not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "List a user's followers", description = """
             **Auth**: required
             **Precondition**: the user exists and is not suspended
@@ -202,9 +183,9 @@ public class UserController {
             Suspended followers are left out. Blocks do not filter this list (they hide only Polls, Comments and notifications). Each item carries the public profile fields of user search, \
             plus `isFollowing` (the caller follows the user) and `followsYou` (the user follows the caller), both `false` on the caller's own entry.
             **Side effects**: none
-            **Errors**:
-            - 404 `user.not_found`: no user has this username, or the user is suspended
-            - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list""")
+            """)
+    @ApiError(status = 404, key = MessageKey.USER_NOT_FOUND, when = "no user has this username, or the user is suspended")
+    @ApiError(status = 400, key = MessageKey.COMMON_CURSOR_INVALID, when = "`cursor` is malformed or was issued by another list")
     public ResponseEntity<ApiResponse<CursorResponse<FollowUserDto>>> listFollowers(
             @Parameter(description = "Username of the followed user", required = true, example = "alice") @PathVariable String username,
             @Parameter(description = "`nextCursor` from the previous page; omit for the first page") @RequestParam(required = false) String cursor,
@@ -218,10 +199,6 @@ public class UserController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of mutual followers",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"items":[{"id":"0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f","username":"jtan","displayName":"J Tan","avatarUrl":"bot:boba","isFollowing":true,"followsYou":false}],"nextCursor":null},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No active user with this username (errorCode `user.not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "List a user's followers whom the caller follows", description = """
             **Auth**: required
             **Precondition**: the user exists and is not suspended
@@ -231,9 +208,9 @@ public class UserController {
             Always empty on the caller's own profile. Items are shaped like the follower list; `isFollowing` is therefore always `true`. \
             `mutualFollowersCount` of `GET /api/users/{username}` is the length of this list.
             **Side effects**: none
-            **Errors**:
-            - 404 `user.not_found`: no user has this username, or the user is suspended
-            - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list""")
+            """)
+    @ApiError(status = 404, key = MessageKey.USER_NOT_FOUND, when = "no user has this username, or the user is suspended")
+    @ApiError(status = 400, key = MessageKey.COMMON_CURSOR_INVALID, when = "`cursor` is malformed or was issued by another list")
     public ResponseEntity<ApiResponse<CursorResponse<FollowUserDto>>> listMutualFollowers(
             @Parameter(description = "Username of the followed user", required = true, example = "alice") @PathVariable String username,
             @Parameter(description = "`nextCursor` from the previous page; omit for the first page") @RequestParam(required = false) String cursor,
@@ -247,10 +224,6 @@ public class UserController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of followed users",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"items":[{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"bob","displayName":"Bob","avatarUrl":"bot:boba","isFollowing":false,"followsYou":true}],"nextCursor":null},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No active user with this username (errorCode `user.not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "List users a user follows", description = """
             **Auth**: required
             **Precondition**: the user exists and is not suspended
@@ -259,9 +232,9 @@ public class UserController {
             Suspended users are left out. Blocks do not filter this list (they hide only Polls, Comments and notifications). Each item carries the public profile fields of user search, \
             plus `isFollowing` (the caller follows the user) and `followsYou` (the user follows the caller), both `false` on the caller's own entry.
             **Side effects**: none
-            **Errors**:
-            - 404 `user.not_found`: no user has this username, or the user is suspended
-            - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list""")
+            """)
+    @ApiError(status = 404, key = MessageKey.USER_NOT_FOUND, when = "no user has this username, or the user is suspended")
+    @ApiError(status = 400, key = MessageKey.COMMON_CURSOR_INVALID, when = "`cursor` is malformed or was issued by another list")
     public ResponseEntity<ApiResponse<CursorResponse<FollowUserDto>>> listFollowing(
             @Parameter(description = "Username of the follower", required = true, example = "alice") @PathVariable String username,
             @Parameter(description = "`nextCursor` from the previous page; omit for the first page") @RequestParam(required = false) String cursor,
@@ -274,10 +247,6 @@ public class UserController {
     @PublicApiResponse
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(name = "Page", value = OpenAPIConfig.EX_PAGE_OF_POLLS)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No active user with this username (errorCode `user.not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Get a user's Polls", description = """
             **Auth**: public (optional login fills the viewer-specific fields of each Poll, e.g. the caller's Ballot)
             **Precondition**: the user exists and is not suspended
@@ -287,9 +256,9 @@ public class UserController {
             the list is empty for a caller the user blocked (`totalPolls` still counts the Polls). \
             `nextCursor` is `null` on the last page.
             **Side effects**: none
-            **Errors**:
-            - 404 `user.not_found`: no user has this username, or the user is suspended
-            - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list or another ordering of this list""")
+            """)
+    @ApiError(status = 404, key = MessageKey.USER_NOT_FOUND, when = "no user has this username, or the user is suspended")
+    @ApiError(status = 400, key = MessageKey.COMMON_CURSOR_INVALID, when = "`cursor` is malformed or was issued by another list or another ordering of this list")
     public ResponseEntity<ApiResponse<CursorResponse<VoteResponse>>> getUserPolls(
             @Parameter(description = "Username of the Poll creator", required = true, example = "alice") @PathVariable String username,
             @Parameter(description = "`nextCursor` from the previous page; omit for the first page") @RequestParam(required = false) String cursor,
@@ -304,14 +273,6 @@ public class UserController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice C.","bio":"Poll enthusiast","avatarUrl":"bot:boba","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"firstName":"Alice","lastName":null,"location":null,"gender":null,"isFollowing":false,"isBlocked":false},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Username already used by another account (errorCode `user.username.taken`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"Username already taken","errorCode":"user.username.taken","error":"Username already taken"}""")))
     @Operation(summary = "Update my profile", description = """
             **Auth**: required
             **Precondition**: none
@@ -323,15 +284,13 @@ public class UserController {
             `displayName` is stored trimmed and cannot be blank, and `firstName`, `lastName`, `birthday` and `gender` are refused.
             **Side effects**: persists the new values; after a `username` change the old public profile path returns 404. \
             While acting, audit-logged as `UPDATE` on `COMMUNITY` (actor the real member, `actingAs` and each changed field before and after in the details)
-            **Errors**:
-            - 400 `common.validation_failed`: `username` is not 3-50 characters of [a-z0-9_] or is a reserved name (see the `username` schema), \
-            `displayName` exceeds 100 characters, `firstName` or `lastName` exceeds 50 characters, `birthday` is before 1900-01-01 or not before today (Asia/Taipei), `bio` exceeds 500 characters, or `avatarUrl` is not a known `bot:<kind>` or `bot:none`
-            - 400 `common.bad_request`: `birthday` is not a valid `yyyy-MM-dd` date, or `gender` is not one of the allowed values; \
-            while acting, `firstName`, `lastName`, `birthday` or `gender` sent
-            - 400 `common.validation_failed`: while acting, a blank `displayName`
-            - 400 `community.username_immutable`: while acting, a `username` other than the community account's own
-            - 404 `user.not_found`: the account no longer exists
-            - 409 `user.username.taken`: another account already uses `username`""")
+            """)
+    @ApiError(status = 400, key = MessageKey.COMMON_VALIDATION_FAILED, when = "`username` is not 3-50 characters of [a-z0-9_] or is a reserved name (see the `username` schema), `displayName` exceeds 100 characters, `firstName` or `lastName` exceeds 50 characters, `birthday` is before 1900-01-01 or not before today (Asia/Taipei), `bio` exceeds 500 characters, or `avatarUrl` is not a known `bot:<kind>` or `bot:none`")
+    @ApiError(status = 400, key = MessageKey.COMMON_BAD_REQUEST, when = "`birthday` is not a valid `yyyy-MM-dd` date, or `gender` is not one of the allowed values; while acting, `firstName`, `lastName`, `birthday` or `gender` sent")
+    @ApiError(status = 400, key = MessageKey.COMMON_VALIDATION_FAILED, when = "while acting, a blank `displayName`")
+    @ApiError(status = 400, key = MessageKey.COMMUNITY_USERNAME_IMMUTABLE, when = "while acting, a `username` other than the community account's own")
+    @ApiError(status = 404, key = MessageKey.USER_NOT_FOUND, when = "the account no longer exists")
+    @ApiError(status = 409, key = MessageKey.USER_USERNAME_TAKEN, when = "another account already uses `username`")
     public ResponseEntity<ApiResponse<UserProfileResponse>> updateMyProfile(
             @Valid @RequestBody UpdateProfileRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -352,10 +311,6 @@ public class UserController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Not a valid choice (errorCode `community.keep.invalid`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"Choose as many community accounts as your plan allows (all of them if you own fewer), all owned by you","errorCode":"community.keep.invalid","error":"Choose as many community accounts as your plan allows (all of them if you own fewer), all owned by you"}""")))
     @Operation(summary = "Choose which community accounts to keep", description = """
             **Auth**: required (the real member, also while acting)
             **Precondition**: every id is an active community account the caller is an OWNER of, and there are exactly \
@@ -366,11 +321,10 @@ public class UserController {
             **Side effects**: each account locked or unlocked is audit-logged as `LOCK` / `UNLOCK` on `COMMUNITY` with \
             `reason=USER_CHOICE`. A locked account stays readable; writes as it answer 403 `community.locked`. A chosen \
             account that another OWNER also owns counts toward their limit again, so they may get `selectionRequired`
-            **Errors**:
-            - 400 `common.validation_failed`: `communityIds` missing or empty
-            - 400 `community.keep.invalid`: not as many ids as the limit (all owned ones when fewer), an id the caller is not \
-            an OWNER of, or an id sent twice
-            - 409 `common.conflict`: another change to the caller's community accounts is in progress; retry""")
+            """)
+    @ApiError(status = 400, key = MessageKey.COMMON_VALIDATION_FAILED, when = "`communityIds` missing or empty")
+    @ApiError(status = 400, key = MessageKey.COMMUNITY_KEEP_INVALID, when = "not as many ids as the limit (all owned ones when fewer), an id the caller is not an OWNER of, or an id sent twice")
+    @ApiError(status = 409, key = MessageKey.COMMON_CONFLICT, when = "another change to the caller's community accounts is in progress; retry")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> keepCommunities(@Valid @RequestBody KeepCommunitiesRequest request,
                                                                              @AuthenticationPrincipal UserPrincipal principal) {
         planService.keep(UUID.fromString(ActingMember.realUserId(principal)), request.communityIds());
@@ -379,11 +333,6 @@ public class UserController {
 
     @PostMapping("/me/phone/send-otp")
     @CommonApiResponses
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503",
-            description = "SMS is not available in this environment (`auth.sms.unavailable`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = OpenAPIConfig.ERR_MESSAGE
-                    + "SMS verification is currently unavailable" + OpenAPIConfig.ERR_CODE + "auth.sms.unavailable"
-                    + OpenAPIConfig.ERR_ERROR + "SMS verification is currently unavailable" + OpenAPIConfig.ERR_END)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"success":true},"message":null,"errorCode":null,"error":null}""")))
@@ -395,13 +344,13 @@ public class UserController {
             **Behavior**: normalizes the number to E.164 (`0912345678` and `+886912345678` are the same number), generates a 6-digit OTP, stores it with a TTL (default 180 s) and sends it by SMS. \
             The code only binds a phone (`POST /api/users/me/phone/verify`); it cannot sign in, and a sign-in code from `POST /api/auth/phone/send-otp` cannot bind
             **Side effects**: sends an SMS; replaces any previous bind OTP for this number. A resend is refused during the cooldown (default 180 s), and each IP can request at most 5 bind OTPs for one number per UTC day, and all IPs together 15
-            **Errors**:
-            - 400 `auth.phone.invalid`: the number is neither a Taiwan mobile number (`09` + 8 digits) nor `+` country code and number (8-15 digits)
-            - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
-            - 400 `auth.sms.send_failed`: the SMS provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
-            - 401 `auth.otp.too_many_attempts`: binding this number is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours)
-            - 429 `auth.otp.daily_limit`: 5 bind OTPs were already requested for this number from this IP today (UTC), or 15 from all IPs
-            - 503 `auth.sms.unavailable`: SMS is not available in this environment (production has no SMS provider yet); nothing is sent""")
+            """)
+    @ApiError(status = 400, key = MessageKey.AUTH_PHONE_INVALID, when = "the number is neither a Taiwan mobile number (`09` + 8 digits) nor `+` country code and number (8-15 digits)")
+    @ApiError(status = 400, key = MessageKey.AUTH_OTP_RESEND_COOLDOWN, when = "an OTP was sent too recently; the message states the seconds left", args = { "180" })
+    @ApiError(status = 400, key = MessageKey.AUTH_SMS_SEND_FAILED, when = "the SMS provider rejected the message; the OTP is dropped and a resend is allowed after 30 s", args = { "provider error" })
+    @ApiError(status = 401, key = MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS, when = "binding this number is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours)")
+    @ApiError(status = 429, key = MessageKey.AUTH_OTP_DAILY_LIMIT, when = "5 bind OTPs were already requested for this number from this IP today (UTC), or 15 from all IPs")
+    @ApiError(status = 503, key = MessageKey.AUTH_SMS_UNAVAILABLE, when = "SMS is not available in this environment (production has no SMS provider yet); nothing is sent")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> sendPhoneBindOtp(
             @Valid @RequestBody BindPhoneSendOtpRequest request, HttpServletRequest httpRequest) {
         authService.sendPhoneBindOtp(request.phone(), ClientIpResolver.resolve(httpRequest));
@@ -415,14 +364,6 @@ public class UserController {
                     "{\"success\":true,\"data\":" + MY_PROFILE_EXAMPLE + ",\"message\":null,\"errorCode\":null,\"error\":null}")))
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
                     {"phone": "0912345678", "code": "123456"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Number already used by another account (errorCode `user.phone.taken`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"Phone number already in use","errorCode":"user.phone.taken","error":"Phone number already in use"}""")))
     @Operation(summary = "Verify phone bind OTP", description = """
             **Auth**: required
             **Precondition**: a bind OTP was sent to this number via `POST /api/users/me/phone/send-otp` and has not expired
@@ -432,14 +373,14 @@ public class UserController {
             **Side effects**: the OTP is consumed on success (also when the number turns out to be taken). Wrong codes are counted per number and client IP as on sign-in: \
             the 3rd wrong code locks binding this number for the caller's IP (5 minutes, doubling up to 24 hours), and one OTP allows 10 guesses in total across all IPs. \
             Once bound, the number also signs in to this account through `POST /api/auth/phone/verify-otp`
-            **Errors**:
-            - 400 `auth.phone.invalid`: the number is not in a supported format (see send-otp)
-            - 401 `auth.otp.invalid_or_expired`: no bind OTP exists for this number (never sent, expired, already used, or its 10 guesses are used up)
-            - 401 `auth.invalid_otp`: the code is wrong
-            - 401 `auth.otp.too_many_attempts`: 3rd wrong code, or binding this number is locked for the caller's IP
-            - 404 `user.not_found`: the account no longer exists
-            - 409 `user.phone.taken`: another account already uses this number
-            - 409 `common.conflict`: another account bound the same number at the same moment""")
+            """)
+    @ApiError(status = 400, key = MessageKey.AUTH_PHONE_INVALID, when = "the number is not in a supported format (see send-otp)")
+    @ApiError(status = 401, key = MessageKey.AUTH_OTP_INVALID_OR_EXPIRED, when = "no bind OTP exists for this number (never sent, expired, already used, or its 10 guesses are used up)")
+    @ApiError(status = 401, key = MessageKey.AUTH_INVALID_OTP, when = "the code is wrong")
+    @ApiError(status = 401, key = MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS, when = "3rd wrong code, or binding this number is locked for the caller's IP")
+    @ApiError(status = 404, key = MessageKey.USER_NOT_FOUND, when = "the account no longer exists")
+    @ApiError(status = 409, key = MessageKey.USER_PHONE_TAKEN, when = "another account already uses this number")
+    @ApiError(status = 409, key = MessageKey.COMMON_CONFLICT, when = "another account bound the same number at the same moment")
     public ResponseEntity<ApiResponse<MyProfileResponse>> verifyPhoneBind(
             @Valid @RequestBody PhoneVerifyOtpRequest request,
             @AuthenticationPrincipal UserPrincipal principal, HttpServletRequest httpRequest) {
@@ -454,10 +395,6 @@ public class UserController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","displayName":"Alice C.","bio":"Poll enthusiast","avatarUrl":"/api/avatars/019a5e3c-2f1d-7b6a-8c4e-5d7f9a1b3c2e.jpg","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"firstName":"Alice","lastName":null,"location":null,"gender":null,"isFollowing":false,"isBlocked":false},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "413", description = "File larger than 2 MB (errorCode `common.file_too_large`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"File size exceeds the limit (2 MB). Please compress and re-upload","errorCode":"common.file_too_large","error":"File size exceeds the limit (2 MB). Please compress and re-upload"}""")))
     @StorageUnavailableResponse
     @Operation(summary = "Upload my avatar", description = """
             **Auth**: required
@@ -470,15 +407,14 @@ public class UserController {
             While acting as a community account (`X-Act-As`, OWNER or ADMIN) this is `PUT /api/communities/{communityId}/avatar`.
             **Side effects**: counts one attempt toward the daily upload limit (before the image is checked); stores the image; once the change commits, the previously uploaded image (if any) is deleted and its path returns 404. \
             While acting, audit-logged as `UPDATE` on `COMMUNITY` with `avatarUrl` before and after
-            **Errors**:
-            - 400 `common.file_required`: part `file` is missing or empty
-            - 400 `common.file_read_failed`: the uploaded file could not be read
-            - 400 `user.avatar.unsupported_image`: the file is not a decodable JPEG, PNG, GIF or BMP, or exceeds 40 megapixels
-            - 413 `common.file_too_large`: the file exceeds 2 MB
-            - 429 `common.rate_limited`: the caller already attempted the daily number of avatar uploads (20 by default, \
-            counted per UTC day, failed attempts included); retry the next UTC day
-            - 404 `user.not_found`: the account no longer exists
-            - 503 `common.storage_unavailable`: image storage is not configured or unreachable; retry later""")
+            """)
+    @ApiError(status = 400, key = MessageKey.COMMON_FILE_REQUIRED, when = "part `file` is missing or empty")
+    @ApiError(status = 400, key = MessageKey.COMMON_FILE_READ_FAILED, when = "the uploaded file could not be read")
+    @ApiError(status = 400, key = MessageKey.USER_AVATAR_UNSUPPORTED_IMAGE, when = "the file is not a decodable JPEG, PNG, GIF or BMP, or exceeds 40 megapixels")
+    @ApiError(status = 413, key = MessageKey.COMMON_FILE_TOO_LARGE, when = "the file exceeds 2 MB", args = { "2MB" })
+    @ApiError(status = 429, key = MessageKey.COMMON_RATE_LIMITED, when = "the caller already attempted the daily number of avatar uploads (20 by default, counted per UTC day, failed attempts included); retry the next UTC day")
+    @ApiError(status = 404, key = MessageKey.USER_NOT_FOUND, when = "the account no longer exists")
+    @ApiError(status = 503, key = MessageKey.COMMON_STORAGE_UNAVAILABLE, when = "image storage is not configured or unreachable; retry later")
     public ResponseEntity<ApiResponse<UserProfileResponse>> uploadAvatar(
             @Parameter(description = "Image file (JPEG, PNG, GIF or BMP), at most 2 MB", required = true)
             @RequestPart(value = "file", required = false) MultipartFile file,
@@ -502,8 +438,8 @@ public class UserController {
             Each item carries only public profile fields (`id`, `username`, `displayName`, `avatarUrl`); \
             `displayName` is `null` when the owner hid it on the public profile. Email, phone number and other private fields are never returned.
             **Side effects**: none
-            **Errors**:
-            - 400 `common.missing_param`: `username` is missing or blank""")
+            """)
+    @ApiError(status = 400, key = MessageKey.COMMON_MISSING_PARAM, when = "`username` is missing or blank", args = { "q" })
     public ResponseEntity<ApiResponse<CursorResponse<UserDto>>> searchUsers(
             @Parameter(description = "Username fragment to search for", required = true, example = "ali")
             @RequestParam String username,
@@ -529,8 +465,8 @@ public class UserController {
             (`limit` 1-50, default 20; out-of-range values are clamped). `nextCursor` is `null` on the last page. \
             Each item carries only public profile fields, like user search.
             **Side effects**: none
-            **Errors**:
-            - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list""")
+            """)
+    @ApiError(status = 400, key = MessageKey.COMMON_CURSOR_INVALID, when = "`cursor` is malformed or was issued by another list")
     public ResponseEntity<ApiResponse<CursorResponse<UserDto>>> listBlockedUsers(
             @Parameter(description = "`nextCursor` returned by the previous page") @RequestParam(required = false) String cursor,
             @Parameter(description = "Page size (1-50, default 20)") @RequestParam(required = false) Integer limit,
@@ -544,14 +480,6 @@ public class UserController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Blocking yourself (errorCode `user.block.self`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"You cannot block yourself","errorCode":"user.block.self","error":"You cannot block yourself"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account does not exist (errorCode `user.not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Block a user", description = """
             **Auth**: required; while acting as a community account (`X-Act-As`), OWNER or ADMIN
             **Precondition**: `userId` is another existing, active account
@@ -566,11 +494,11 @@ public class UserController {
             Follower and following lists and counts are not affected. Idempotent: blocking an already blocked user succeeds.
             **Side effects**: the caller's follow of the user, if any, is removed (and cannot be added back while blocked); \
             the block is written to the audit log
-            **Errors**:
-            - 400 `user.block.self`: `userId` is the caller's own id
-            - 400 `common.bad_request`: `userId` is not a valid id
-            - 403 `community.role_forbidden`: sent while acting as a community account with a role other than OWNER or ADMIN
-            - 404 `user.not_found`: no account with this id, or it is suspended""")
+            """)
+    @ApiError(status = 400, key = MessageKey.USER_BLOCK_SELF, when = "`userId` is the caller's own id")
+    @ApiError(status = 400, key = MessageKey.COMMON_BAD_REQUEST, when = "`userId` is not a valid id")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_ROLE_FORBIDDEN, when = "sent while acting as a community account with a role other than OWNER or ADMIN")
+    @ApiError(status = 404, key = MessageKey.USER_NOT_FOUND, when = "no account with this id, or it is suspended")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> blockUser(
             @Parameter(description = "Id of the user to block", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47")
             @PathVariable String userId,
@@ -591,9 +519,9 @@ public class UserController {
             **Behavior**: removes the caller's block on the user, so their Polls and Comments show again. \
             Idempotent: succeeds when the user was not blocked or does not exist.
             **Side effects**: the unblock is written to the audit log
-            **Errors**:
-            - 400 `common.bad_request`: `userId` is not a valid id
-            - 403 `community.role_forbidden`: sent while acting as a community account with a role other than OWNER or ADMIN""")
+            """)
+    @ApiError(status = 400, key = MessageKey.COMMON_BAD_REQUEST, when = "`userId` is not a valid id")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_ROLE_FORBIDDEN, when = "sent while acting as a community account with a role other than OWNER or ADMIN")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> unblockUser(
             @Parameter(description = "Id of the user to unblock", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47")
             @PathVariable String userId,
@@ -614,7 +542,7 @@ public class UserController {
             signature counter) is never returned; `name` is null when none was given at registration, `lastUsedAt` null until \
             the passkey is first used to sign in
             **Side effects**: none
-            **Errors**: none beyond 401""")
+            **Errors**: none beyond the common ones (in practice only 401)""")
     public ResponseEntity<ApiResponse<List<PasskeyResponse>>> listMyPasskeys(@AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(passkeyService.list(principal.userId())));
     }
@@ -625,10 +553,6 @@ public class UserController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No passkey with this ID belongs to the caller (errorCode `common.not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"The requested resource was not found","errorCode":"common.not_found","error":"The requested resource was not found"}""")))
     @Operation(summary = "Delete one of my passkeys", description = """
             **Auth**: required
             **Precondition**: the passkey belongs to the caller
@@ -636,9 +560,9 @@ public class UserController {
             the account keeps its other sign-in methods. The passkey stays on the device \
             until the user removes it there
             **Side effects**: the delete is written to the audit log
-            **Errors**:
-            - 400 `common.type_mismatch`: `passkeyId` is not a valid UUID
-            - 404 `common.not_found`: no passkey with this ID, or it belongs to another user""")
+            """)
+    @ApiError(status = 400, key = MessageKey.COMMON_TYPE_MISMATCH, when = "`passkeyId` is not a valid UUID", args = { "limit" })
+    @ApiError(status = 404, key = MessageKey.COMMON_NOT_FOUND, when = "no passkey with this ID, or it belongs to another user")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> deleteMyPasskey(
             @Parameter(description = "Id of the passkey to delete", required = true, example = "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70")
             @PathVariable UUID passkeyId,
@@ -661,7 +585,7 @@ public class UserController {
             for sessions signed in before devices were recorded; `userAgent` and `lastSeenAt` fill in on their next refresh. \
             Admin console sign-ins are listed too, with `adminScope` true
             **Side effects**: none
-            **Errors**: none beyond 401""")
+            **Errors**: none beyond the common ones (in practice only 401)""")
     public ResponseEntity<ApiResponse<List<SessionResponse>>> listMySessions(@AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(refreshTokenService.listSessions(principal.userId()).stream()
                 .map(session -> SessionResponse.from(session, principal.sessionId())).toList()));
@@ -674,10 +598,6 @@ public class UserController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No live session with this ID belongs to the caller (errorCode `auth.session_not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"Signed-in device not found","errorCode":"auth.session_not_found","error":"Signed-in device not found"}""")))
     @Operation(summary = "Sign out one of my devices", description = """
             **Auth**: required
             **Precondition**: the session belongs to the caller and can still refresh
@@ -685,8 +605,8 @@ public class UserController {
             `auth.session_revoked` from the next request on instead of when they expire. Signing out the calling session \
             is allowed and works like logout
             **Side effects**: the sign-out is written to the audit log
-            **Errors**:
-            - 404 `auth.session_not_found`: no live session with this ID, or it belongs to another user""")
+            """)
+    @ApiError(status = 404, key = MessageKey.AUTH_SESSION_NOT_FOUND, when = "no live session with this ID, or it belongs to another user")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> revokeMySession(
             @Parameter(description = "Id of the session to sign out, from `GET /api/users/me/sessions`", required = true,
                     example = "0192f3c4-5d6e-7f80-9a1b-2c3d4e5f6a7b")
@@ -710,9 +630,9 @@ public class UserController {
             **Behavior**: ends every session of the caller except the calling one, at once, like \
             `DELETE /api/users/me/sessions/{sessionId}` on each. Succeeds when there is nothing else to sign out
             **Side effects**: the sign-out is written to the audit log
-            **Errors**:
-            - 400 `common.bad_request`: `scope` is not `others`
-            - 400 `common.missing_param`: `scope` is missing""")
+            """)
+    @ApiError(status = 400, key = MessageKey.COMMON_BAD_REQUEST, when = "`scope` is not `others`")
+    @ApiError(status = 400, key = MessageKey.COMMON_MISSING_PARAM, when = "`scope` is missing", args = { "q" })
     public ResponseEntity<ApiResponse<SimpleResultResponse>> revokeMyOtherSessions(
             @Parameter(description = "Which sessions to sign out; only `others` is supported", required = true,
                     schema = @Schema(allowableValues = "others"))
@@ -739,8 +659,8 @@ public class UserController {
             Each item carries the public profile fields of user search, plus `isFollowing` (always `true` here) \
             and `followsYou` (the user follows the caller back).
             **Side effects**: none
-            **Errors**:
-            - 400 `common.cursor_invalid`: `cursor` is malformed or was issued by another list""")
+            """)
+    @ApiError(status = 400, key = MessageKey.COMMON_CURSOR_INVALID, when = "`cursor` is malformed or was issued by another list")
     public ResponseEntity<ApiResponse<CursorResponse<FollowUserDto>>> listFollowedUsers(
             @Parameter(description = "`nextCursor` returned by the previous page") @RequestParam(required = false) String cursor,
             @Parameter(description = "Page size (1-50, default 20)") @RequestParam(required = false) Integer limit,
@@ -754,18 +674,6 @@ public class UserController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Following yourself or a user you blocked, or following as a community account (errorCode `user.follow.self`, `user.follow.blocked`, `user.follow.community`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = {@ExampleObject(name = "Self", value = """
-                            {"success":false,"data":null,"message":"You cannot follow yourself","errorCode":"user.follow.self","error":"You cannot follow yourself"}"""),
-                            @ExampleObject(name = "Blocked", value = """
-                            {"success":false,"data":null,"message":"You cannot follow a user you blocked; unblock them first","errorCode":"user.follow.blocked","error":"You cannot follow a user you blocked; unblock them first"}"""),
-                            @ExampleObject(name = "Community", value = """
-                            {"success":false,"data":null,"message":"A community account cannot follow anyone","errorCode":"user.follow.community","error":"A community account cannot follow anyone"}""")}))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account does not exist (errorCode `user.not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Follow a user", description = """
             **Auth**: required
             **Precondition**: `userId` is another existing, active account the caller has not blocked; the caller is not acting \
@@ -775,12 +683,12 @@ public class UserController {
             the follow shows in `GET /api/users/{username}/followers` and `/following`. \
             Idempotent: following an already followed user succeeds.
             **Side effects**: the follow is written to the audit log
-            **Errors**:
-            - 400 `user.follow.self`: `userId` is the caller's own id
-            - 400 `user.follow.blocked`: the caller has blocked this user; unblock first
-            - 400 `user.follow.community`: sent while acting as a community account
-            - 400 `common.bad_request`: `userId` is not a valid id
-            - 404 `user.not_found`: no account with this id, or it is suspended""")
+            """)
+    @ApiError(status = 400, key = MessageKey.USER_FOLLOW_SELF, when = "`userId` is the caller's own id")
+    @ApiError(status = 400, key = MessageKey.USER_FOLLOW_BLOCKED, when = "the caller has blocked this user; unblock first")
+    @ApiError(status = 400, key = MessageKey.USER_FOLLOW_COMMUNITY, when = "sent while acting as a community account")
+    @ApiError(status = 400, key = MessageKey.COMMON_BAD_REQUEST, when = "`userId` is not a valid id")
+    @ApiError(status = 404, key = MessageKey.USER_NOT_FOUND, when = "no account with this id, or it is suspended")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> followUser(
             @Parameter(description = "Id of the user to follow", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47")
             @PathVariable String userId,
@@ -801,8 +709,8 @@ public class UserController {
             **Behavior**: removes the caller's follow of the user, so their Polls leave `GET /api/votes/following`. \
             Idempotent: succeeds when the user was not followed or does not exist.
             **Side effects**: the unfollow is written to the audit log
-            **Errors**:
-            - 400 `common.bad_request`: `userId` is not a valid id""")
+            """)
+    @ApiError(status = 400, key = MessageKey.COMMON_BAD_REQUEST, when = "`userId` is not a valid id")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> unfollowUser(
             @Parameter(description = "Id of the user to unfollow", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47")
             @PathVariable String userId,
@@ -817,10 +725,6 @@ public class UserController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account does not exist (errorCode `user.not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Delete user account", description = """
             **Auth**: required (own account; an active admin signed in through the admin console may delete any account)
             **Precondition**: `userId` is the caller's own id, or the caller holds an admin console token (`POST /api/auth/admin/verify-otp`) and is an active admin in the database
@@ -828,13 +732,13 @@ public class UserController {
             from the stored option counts and Turnout (a Retraction of every open Ballot), while an Ended Poll's result stays as it closed.
             **Side effects**: once the deletion commits, all refresh tokens of the user are revoked, so the client must discard its tokens and sign out; \
             the deletion is written to the audit log
-            **Errors**:
-            - 403 `user.delete.forbidden`: deleting another user's account without an admin console token, or without being an active admin in the database
-            - 409 `admin.last_admin`: the account is the only active admin
-            - 409 `community.last_owner`: the account is the only OWNER of a community account; transfer or delete it first
-            - 409 `common.conflict`: another admin change is in progress; retry
-            - 404 `user.not_found`: no account with this id
-            - 400 `common.bad_request`: `userId` is not a valid id (admin callers only; other callers get 403 first)""")
+            """)
+    @ApiError(status = 403, key = MessageKey.USER_DELETE_FORBIDDEN, when = "deleting another user's account without an admin console token, or without being an active admin in the database")
+    @ApiError(status = 409, key = MessageKey.ADMIN_LAST_ADMIN, when = "the account is the only active admin")
+    @ApiError(status = 409, key = MessageKey.COMMUNITY_LAST_OWNER, when = "the account is the only OWNER of a community account; transfer or delete it first")
+    @ApiError(status = 409, key = MessageKey.COMMON_CONFLICT, when = "another admin change is in progress; retry")
+    @ApiError(status = 404, key = MessageKey.USER_NOT_FOUND, when = "no account with this id")
+    @ApiError(status = 400, key = MessageKey.COMMON_BAD_REQUEST, when = "`userId` is not a valid id (admin callers only; other callers get 403 first)")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> deleteUser(
             @Parameter(description = "Id of the account to delete", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47")
             @PathVariable String userId,

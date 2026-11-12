@@ -1,11 +1,12 @@
 package com.vomatt.admin;
 
+import com.vomatt.common.annotation.ApiError;
 import java.util.UUID;
 
 import com.vomatt.admin.dto.AdminCommentResponse;
 import com.vomatt.common.annotation.CommonApiResponses;
 import com.vomatt.common.audit.Auditable;
-import com.vomatt.common.config.OpenAPIConfig;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.PageResponse;
 import com.vomatt.common.response.SimpleResultResponse;
@@ -14,7 +15,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -44,8 +44,7 @@ public class AdminCommentController {
                     **Precondition**: caller holds role ADMIN
                     **Behavior**: offset page of Comments and Replies on any Poll (Deleted Polls included), newest first. Filters (all optional, combined with AND): `voteId`, `userId` (author), `q` (case-insensitive contains on the text), `deleted` true for deleted only, false for live only. Deleted Comments keep their author and text here. `page` is 1-based (default 1), `limit` 1-50 (default 20)
                     **Side effects**: none
-                    **Errors**:
-                    - 400 `common.type_mismatch`: `voteId`, `userId` or `deleted` is malformed""")
+                    """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of Comments",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Comments", value = """
                     {
@@ -73,6 +72,7 @@ public class AdminCommentController {
                       "errorCode": null,
                       "error": null
                     }""")))
+    @ApiError(status = 400, key = MessageKey.COMMON_TYPE_MISMATCH, when = "`voteId`, `userId` or `deleted` is malformed", args = { "limit" })
     public ResponseEntity<ApiResponse<PageResponse<AdminCommentResponse>>> listComments(
             @Parameter(description = "Only Comments on this Poll (UUID)") @RequestParam(required = false) UUID voteId,
             @Parameter(description = "Only Comments by this user (UUID)") @RequestParam(required = false) UUID userId,
@@ -93,9 +93,7 @@ public class AdminCommentController {
                     **Precondition**: the Comment exists
                     **Behavior**: soft-deletes any Comment or Reply, as its author's own delete would; a deleted one is left as is (idempotent). Returns `{success: true}`
                     **Side effects**: the text and author disappear from the public Comment lists; a top-level Comment with live Replies stays there as a placeholder. Written to the audit log
-                    **Errors**:
-                    - 400 `common.type_mismatch`: `commentId` is not a valid UUID
-                    - 404 `comment.not_found`: no Comment with this ID""")
+                    """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Comment deleted",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Deleted", value = """
                     {
@@ -110,16 +108,8 @@ public class AdminCommentController {
                       "errorCode": null,
                       "error": null
                     }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Comment not found (`comment.not_found`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "CommentNotFound", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "Comment not found",
-                              "errorCode": "comment.not_found",
-                              "error": "Comment not found"
-                            }""")))
+    @ApiError(status = 400, key = MessageKey.COMMON_TYPE_MISMATCH, when = "`commentId` is not a valid UUID", args = { "limit" })
+    @ApiError(status = 404, key = MessageKey.COMMENT_NOT_FOUND, when = "no Comment with this ID")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> deleteComment(
             @Parameter(description = "Comment ID (UUIDv7)", required = true) @PathVariable UUID commentId,
             @AuthenticationPrincipal UserPrincipal principal) {

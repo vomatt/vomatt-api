@@ -1,5 +1,6 @@
 package com.vomatt.admin;
 
+import com.vomatt.common.annotation.ApiError;
 import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.vomatt.admin.dto.AdminFeedbackResponse;
 import com.vomatt.common.annotation.CommonApiResponses;
 import com.vomatt.common.audit.Auditable;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.PageResponse;
 
@@ -40,8 +42,7 @@ public class AdminFeedbackController {
                     **Precondition**: caller holds role ADMIN
                     **Behavior**: offset page of feedback from all users, newest first; `userId` narrows it to one sender. `page` is 1-based (default 1), `limit` 1-50 (default 20)
                     **Side effects**: written to the audit log (action `VIEW`, resource `FEEDBACK`, resource id = `userId` when given), since feedback text may hold personal data
-                    **Errors**:
-                    - 400 `common.type_mismatch`: `userId` is not a valid UUID""")
+                    """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of feedback",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Feedback", value = """
                     {
@@ -64,6 +65,7 @@ public class AdminFeedbackController {
                       "errorCode": null,
                       "error": null
                     }""")))
+    @ApiError(status = 400, key = MessageKey.COMMON_TYPE_MISMATCH, when = "`userId` is not a valid UUID", args = { "limit" })
     public ResponseEntity<ApiResponse<PageResponse<AdminFeedbackResponse>>> listFeedback(
             @Parameter(description = "Only feedback from this user (UUID)") @RequestParam(required = false) UUID userId,
             @Parameter(description = "Page number, 1-based (default 1)") @RequestParam(required = false) Integer page,

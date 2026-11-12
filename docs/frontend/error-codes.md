@@ -11,135 +11,135 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 
 | errorCode | HTTP status | zh-TW message | en message | Suggested UI behavior | Used in |
 |-----------|-------------|-----------|---------|--------------|----------|
-| `common.bad_request` | 400 | 請求格式錯誤 | Bad request format | Show message so the user can fix the input | GlobalExceptionHandler, UserController, UserService |
+| `common.bad_request` | 400 | 請求格式錯誤 | Bad request format | Show message so the user can fix the input | AdminLookupController, AdminTagController, AdminUserController, GlobalExceptionHandler, TagController, UserController, UserService, VoteCommentController, VoteController |
 | `common.internal_error` | 500 | 伺服器錯誤，請稍後再試 | Internal server error, please try again later | Show a generic error notice | GlobalExceptionHandler |
-| `common.service_unavailable` | 503 | 服務暫時無法使用，請稍後再試 | Service temporarily unavailable, please try again later | Show service temporarily unavailable, retry later | AuthService, GlobalExceptionHandler |
-| `common.unauthorized` | 401 | 未授權的請求 | Unauthorized request | See [auth-flow.md](auth-flow.md) | JwtAuthenticationEntryPoint |
+| `common.service_unavailable` | 503 | 服務暫時無法使用，請稍後再試 | Service temporarily unavailable, please try again later | Show service temporarily unavailable, retry later | AuthController, AuthService, GlobalExceptionHandler |
+| `common.unauthorized` | 401 | 未授權的請求 | Unauthorized request | See [auth-flow.md](auth-flow.md) | JwtAuthenticationEntryPoint, PasskeyController |
 | `common.forbidden` | 403 | 沒有權限執行此操作 | You do not have permission to perform this action | Show a permission-denied notice | GlobalExceptionHandler, JwtAccessDeniedHandler, JwtAuthFilter |
-| `common.rate_limited` | 429 | 請求過於頻繁，請稍後再試 | Too many requests, please try again later | Retry after the `Retry-After` seconds | ContactService, FeedbackService, RateLimitFilter, UserService, VoteService |
-| `common.not_found` | 404 | 找不到指定資源 | The requested resource was not found | Show resource not found | AvatarController, GlobalExceptionHandler, PasskeyService |
-| `common.conflict` | 409 | 資源衝突，請重試 | Resource conflict, please try again | Show message (resource state conflict) | GlobalExceptionHandler |
-| `common.validation_failed` | 400 | 輸入資料驗證失敗 | Validation failed | Show message so the user can fix the input | AdminUserService, GlobalExceptionHandler, UserService |
-| `common.missing_param` | 400 | 缺少必要參數：{0} | Missing required parameter: {0} | Show message so the user can fix the input | GlobalExceptionHandler, UserController |
-| `common.type_mismatch` | 400 | 參數格式錯誤：{0} | Invalid parameter format: {0} | Show message so the user can fix the input | GlobalExceptionHandler |
-| `common.file_required` | 400 | 請選擇要上傳的檔案 | Please select a file to upload | Show message so the user can fix the input | UserService |
-| `common.file_read_failed` | 400 | 檔案讀取失敗 | Failed to read file | Show message so the user can fix the input | UserService |
-| `common.file_too_large` | 413 | 檔案大小超過上限（{0}），請壓縮後重新上傳 | File size exceeds the limit ({0}). Please compress and re-upload | Show message so the user can fix the input | GlobalExceptionHandler |
-| `common.invalid_status` | 400 | 無效的狀態：{0} | Invalid status: {0} | Show message so the user can fix the input | AdminUserService, VoteListOrder, VoteService, VoteStatus |
-| `common.invalid_sort` | 400 | 無效的排序：{0} | Invalid sort: {0} | Show message so the user can fix the input | VoteListOrder |
-| `common.invalid_direction` | 400 | 無效的方向：{0}（應為 blocking 或 blocked-by） | Invalid direction: {0} (expected blocking or blocked-by) | Show message so the user can fix the input | AdminUserService |
-| `common.cursor_invalid` | 400 | 分頁 cursor 無效 | Invalid pagination cursor | Show message so the user can fix the input | Cursor |
-| `common.storage_unavailable` | 503 | 圖片儲存服務暫時無法使用，請稍後再試 | Image storage is temporarily unavailable, please try again later | Show service temporarily unavailable, retry later | StorageService |
+| `common.rate_limited` | 429 | 請求過於頻繁，請稍後再試 | Too many requests, please try again later | Retry after the `Retry-After` seconds | AuthController, CommunityController, ContactController, ContactService, FeedbackController, FeedbackService, RateLimitFilter, UserController, UserService, VoteController, VoteService |
+| `common.not_found` | 404 | 找不到指定資源 | The requested resource was not found | Show resource not found | AvatarController, GlobalExceptionHandler, PasskeyService, UserController |
+| `common.conflict` | 409 | 資源衝突，請重試 | Resource conflict, please try again | Show message (resource state conflict) | AdminUserController, AdminVoteController, CommunityController, GlobalExceptionHandler, PasskeyController, UserController, VoteController |
+| `common.validation_failed` | 400 | 輸入資料驗證失敗 | Validation failed | Show message so the user can fix the input | AdminCommunityController, AdminLookupController, AdminUserController, AdminUserService, AdminVoteController, AuthController, CommunityController, ContactController, FeedbackController, GlobalExceptionHandler, InviteListController, PasskeyController, UserController, UserService, VoteCommentController, VoteController |
+| `common.missing_param` | 400 | 缺少必要參數：{0} | Missing required parameter: {0} | Show message so the user can fix the input | GlobalExceptionHandler, LookupController, UserController |
+| `common.type_mismatch` | 400 | 參數格式錯誤：{0} | Invalid parameter format: {0} | Show message so the user can fix the input | AdminCommentController, AdminController, AdminFeedbackController, AdminLookupController, AdminUserController, AdminVoteController, GlobalExceptionHandler, NotificationController, UserController |
+| `common.file_required` | 400 | 請選擇要上傳的檔案 | Please select a file to upload | Show message so the user can fix the input | CommunityController, UserController, UserService |
+| `common.file_read_failed` | 400 | 檔案讀取失敗 | Failed to read file | Show message so the user can fix the input | CommunityController, UserController, UserService |
+| `common.file_too_large` | 413 | 檔案大小超過上限（{0}），請壓縮後重新上傳 | File size exceeds the limit ({0}). Please compress and re-upload | Show message so the user can fix the input | CommunityController, GlobalExceptionHandler, UserController |
+| `common.invalid_status` | 400 | 無效的狀態：{0} | Invalid status: {0} | Show message so the user can fix the input | AdminUserController, AdminUserService, AdminVoteController, VoteController, VoteListOrder, VoteService, VoteStatus |
+| `common.invalid_sort` | 400 | 無效的排序：{0} | Invalid sort: {0} | Show message so the user can fix the input | VoteController, VoteListOrder |
+| `common.invalid_direction` | 400 | 無效的方向：{0}（應為 blocking 或 blocked-by） | Invalid direction: {0} (expected blocking or blocked-by) | Show message so the user can fix the input | AdminUserController, AdminUserService |
+| `common.cursor_invalid` | 400 | 分頁 cursor 無效 | Invalid pagination cursor | Show message so the user can fix the input | Cursor, NotificationController, TagController, UserController, VoteCommentController, VoteController |
+| `common.storage_unavailable` | 503 | 圖片儲存服務暫時無法使用，請稍後再試 | Image storage is temporarily unavailable, please try again later | Show service temporarily unavailable, retry later | AvatarController, CommunityController, StorageService, UserController |
 | `auth.token.invalid` | 401 | Token 無效 | Invalid token | See [auth-flow.md](auth-flow.md) | JwtAuthFilter |
 | `auth.token.expired` | 401 | 登入已過期，請重新登入 | Session expired, please log in again | See [auth-flow.md](auth-flow.md) | JwtAuthFilter |
-| `auth.invalid_otp` | 401 | 驗證碼錯誤 | Invalid verification code | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.otp.invalid_or_expired` | 401 | 驗證碼錯誤或已過期 | Verification code is invalid or has expired | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.otp.too_many_attempts` | 401 | 驗證次數過多，請稍後再試 | Too many attempts, please try again later | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.otp.resend_cooldown` | 400 | 請等 {0} 秒後再重新發送 | Please wait {0} seconds before resending | Show message so the user can fix the input | AuthService |
-| `auth.otp.daily_limit` | 429 | 今日驗證碼發送次數已達上限，請明天再試 | Daily verification code limit reached, please try again tomorrow | Retry after the `Retry-After` seconds | AuthService |
-| `auth.admin.forbidden` | 403 | 此帳號無管理員權限 | This account does not have admin privileges | Show a permission-denied notice | AuthService |
-| `auth.identifier.required` | 400 | 請提供 email 或手機號碼 | Please provide an email or phone number | Show message so the user can fix the input | AuthService |
-| `auth.email.send_failed` | 400 | 郵件發送失敗：{0} | Email delivery failed: {0} | Show message so the user can fix the input | AuthService |
-| `auth.phone.invalid` | 400 | 手機號碼格式錯誤，請輸入 09 開頭的台灣手機號碼或含國碼的號碼（例如 +886912345678） | Invalid phone number. Use a Taiwan mobile number starting with 09 or a number with a country code (e.g. +886912345678) | Show message so the user can fix the input | User |
-| `auth.sms.send_failed` | 400 | 簡訊發送失敗：{0} | SMS delivery failed: {0} | Show message so the user can fix the input | AuthService |
-| `auth.sms.unavailable` | 503 | 簡訊驗證目前無法使用 | SMS verification is currently unavailable | Show service temporarily unavailable, retry later | SmsServiceUnavailable |
-| `auth.refresh_token.invalid` | 401 | Refresh token 無效或已過期 | Refresh token is invalid or has expired | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.suspicious_login` | 401 | 安全性警告：此登入階段被重複更新，已將其登出，請重新登入 | Security alert: this session was refreshed twice, so it has been signed out. Please log in again | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.google.not_configured` | 400 | Google OAuth 尚未設定 | Google OAuth is not configured | Show message so the user can fix the input | AuthService |
-| `auth.google.no_email` | 401 | Google 驗證失敗：無法取得用戶信箱 | Google verification failed: unable to retrieve email | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.google.invalid_audience` | 401 | Google 驗證失敗：audience 不正確 | Google verification failed: incorrect audience | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.line.not_configured` | 400 | LINE Login 尚未設定 | LINE Login is not configured | Show message so the user can fix the input | AuthService |
-| `auth.line.token_exchange_failed` | 401 | LINE token 交換失敗 | LINE token exchange failed | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.line.profile_failed` | 401 | LINE 用戶資料取得失敗 | Failed to retrieve LINE profile | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.apple.invalid_token` | 401 | Apple token 格式無效 | Invalid Apple token format | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.apple.key_not_found` | 401 | Apple 驗證失敗：找不到對應公鑰 | Apple verification failed: matching public key not found | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.apple.invalid_signature` | 401 | Apple 驗證失敗：簽名無效 | Apple verification failed: invalid signature | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.apple.invalid_issuer` | 401 | Apple 驗證失敗：發行者不正確 | Apple verification failed: incorrect issuer | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.apple.invalid_audience` | 401 | Apple 驗證失敗：audience 不正確 | Apple verification failed: incorrect audience | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.apple.token_expired` | 401 | Apple 驗證失敗：token 已過期 | Apple verification failed: token has expired | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.apple.no_email` | 401 | Apple 驗證失敗：無法取得用戶信箱 | Apple verification failed: unable to retrieve email | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.apple.login_failed` | 401 | Apple 登入失敗 | Apple login failed | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.apple.invalid_nonce` | 401 | Apple 驗證失敗：nonce 不符 | Apple verification failed: nonce mismatch | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.oauth.token_replayed` | 401 | 此登入憑證已使用過，請重新登入 | This sign-in token was already used, please sign in again | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.apple.not_configured` | 400 | Apple 登入尚未設定 | Apple Sign In is not configured | Show message so the user can fix the input | AuthService |
-| `auth.email_not_verified` | 401 | 此 OAuth 帳號的 email 尚未驗證，無法登入或合併既有帳號 | This OAuth account's email is not verified; cannot sign in or merge an existing account | See [auth-flow.md](auth-flow.md) | AuthService |
-| `auth.account_banned` | 403 | 此帳號已被停權，無法登入 | This account has been banned and cannot sign in | Show a permission-denied notice | AuthService, JwtAuthFilter |
-| `auth.passkey.invalid` | 400 / 401 | Passkey 驗證失敗，請重新操作一次 | Passkey verification failed. Please try again | Show message so the user can fix the input; See [auth-flow.md](auth-flow.md) | PasskeyService |
-| `auth.passkey.admin_scope_required` | 403 | 此 Passkey 不能登入管理後台，請先用 email 驗證碼登入，再到管理後台重新註冊 Passkey | This passkey cannot sign in to the admin console. Sign in with an email code, then register a passkey from the admin console | Show a permission-denied notice | PasskeyService |
+| `auth.invalid_otp` | 401 | 驗證碼錯誤 | Invalid verification code | See [auth-flow.md](auth-flow.md) | AuthController, AuthService, UserController |
+| `auth.otp.invalid_or_expired` | 401 | 驗證碼錯誤或已過期 | Verification code is invalid or has expired | See [auth-flow.md](auth-flow.md) | AuthController, AuthService, UserController |
+| `auth.otp.too_many_attempts` | 401 | 驗證次數過多，請稍後再試 | Too many attempts, please try again later | See [auth-flow.md](auth-flow.md) | AuthController, AuthService, UserController |
+| `auth.otp.resend_cooldown` | 400 | 請等 {0} 秒後再重新發送 | Please wait {0} seconds before resending | Show message so the user can fix the input | AuthController, AuthService, UserController |
+| `auth.otp.daily_limit` | 429 | 今日驗證碼發送次數已達上限，請明天再試 | Daily verification code limit reached, please try again tomorrow | Retry after the `Retry-After` seconds | AuthController, AuthService, UserController |
+| `auth.admin.forbidden` | 403 | 此帳號無管理員權限 | This account does not have admin privileges | Show a permission-denied notice | AuthController, AuthService |
+| `auth.identifier.required` | 400 | 請提供 email 或手機號碼 | Please provide an email or phone number | Show message so the user can fix the input | AuthController, AuthService |
+| `auth.email.send_failed` | 400 | 郵件發送失敗：{0} | Email delivery failed: {0} | Show message so the user can fix the input | AuthController, AuthService |
+| `auth.phone.invalid` | 400 | 手機號碼格式錯誤，請輸入 09 開頭的台灣手機號碼或含國碼的號碼（例如 +886912345678） | Invalid phone number. Use a Taiwan mobile number starting with 09 or a number with a country code (e.g. +886912345678) | Show message so the user can fix the input | AuthController, User, UserController |
+| `auth.sms.send_failed` | 400 | 簡訊發送失敗：{0} | SMS delivery failed: {0} | Show message so the user can fix the input | AuthController, AuthService, UserController |
+| `auth.sms.unavailable` | 503 | 簡訊驗證目前無法使用 | SMS verification is currently unavailable | Show service temporarily unavailable, retry later | AuthController, SmsServiceUnavailable, UserController |
+| `auth.refresh_token.invalid` | 401 | Refresh token 無效或已過期 | Refresh token is invalid or has expired | See [auth-flow.md](auth-flow.md) | AuthController, AuthService |
+| `auth.suspicious_login` | 401 | 安全性警告：此登入階段被重複更新，已將其登出，請重新登入 | Security alert: this session was refreshed twice, so it has been signed out. Please log in again | See [auth-flow.md](auth-flow.md) | AuthController, AuthService |
+| `auth.google.not_configured` | 400 | Google OAuth 尚未設定 | Google OAuth is not configured | Show message so the user can fix the input | AuthController, AuthService |
+| `auth.google.no_email` | 401 | Google 驗證失敗：無法取得用戶信箱 | Google verification failed: unable to retrieve email | See [auth-flow.md](auth-flow.md) | AuthController, AuthService |
+| `auth.google.invalid_audience` | 401 | Google 驗證失敗：audience 不正確 | Google verification failed: incorrect audience | See [auth-flow.md](auth-flow.md) | AuthController, AuthService |
+| `auth.line.not_configured` | 400 | LINE Login 尚未設定 | LINE Login is not configured | Show message so the user can fix the input | AuthController, AuthService |
+| `auth.line.token_exchange_failed` | 401 | LINE token 交換失敗 | LINE token exchange failed | See [auth-flow.md](auth-flow.md) | AuthController, AuthService |
+| `auth.line.profile_failed` | 401 | LINE 用戶資料取得失敗 | Failed to retrieve LINE profile | See [auth-flow.md](auth-flow.md) | AuthController, AuthService |
+| `auth.apple.invalid_token` | 401 | Apple token 格式無效 | Invalid Apple token format | See [auth-flow.md](auth-flow.md) | AuthController, AuthService |
+| `auth.apple.key_not_found` | 401 | Apple 驗證失敗：找不到對應公鑰 | Apple verification failed: matching public key not found | See [auth-flow.md](auth-flow.md) | AuthController, AuthService |
+| `auth.apple.invalid_signature` | 401 | Apple 驗證失敗：簽名無效 | Apple verification failed: invalid signature | See [auth-flow.md](auth-flow.md) | AuthController, AuthService |
+| `auth.apple.invalid_issuer` | 401 | Apple 驗證失敗：發行者不正確 | Apple verification failed: incorrect issuer | See [auth-flow.md](auth-flow.md) | AuthController, AuthService |
+| `auth.apple.invalid_audience` | 401 | Apple 驗證失敗：audience 不正確 | Apple verification failed: incorrect audience | See [auth-flow.md](auth-flow.md) | AuthController, AuthService |
+| `auth.apple.token_expired` | 401 | Apple 驗證失敗：token 已過期 | Apple verification failed: token has expired | See [auth-flow.md](auth-flow.md) | AuthController, AuthService |
+| `auth.apple.no_email` | 401 | Apple 驗證失敗：無法取得用戶信箱 | Apple verification failed: unable to retrieve email | See [auth-flow.md](auth-flow.md) | AuthController, AuthService |
+| `auth.apple.login_failed` | 401 | Apple 登入失敗 | Apple login failed | See [auth-flow.md](auth-flow.md) | AuthController, AuthService |
+| `auth.apple.invalid_nonce` | 401 | Apple 驗證失敗：nonce 不符 | Apple verification failed: nonce mismatch | See [auth-flow.md](auth-flow.md) | AuthController, AuthService |
+| `auth.oauth.token_replayed` | 401 | 此登入憑證已使用過，請重新登入 | This sign-in token was already used, please sign in again | See [auth-flow.md](auth-flow.md) | AuthController, AuthService |
+| `auth.apple.not_configured` | 400 | Apple 登入尚未設定 | Apple Sign In is not configured | Show message so the user can fix the input | AuthController, AuthService |
+| `auth.email_not_verified` | 401 | 此 OAuth 帳號的 email 尚未驗證，無法登入或合併既有帳號 | This OAuth account's email is not verified; cannot sign in or merge an existing account | See [auth-flow.md](auth-flow.md) | AuthController, AuthService |
+| `auth.account_banned` | 403 | 此帳號已被停權，無法登入 | This account has been banned and cannot sign in | Show a permission-denied notice | AuthController, AuthService, JwtAuthFilter, PasskeyController |
+| `auth.passkey.invalid` | 400 / 401 | Passkey 驗證失敗，請重新操作一次 | Passkey verification failed. Please try again | Show message so the user can fix the input; See [auth-flow.md](auth-flow.md) | AuthController, PasskeyController, PasskeyService |
+| `auth.passkey.admin_scope_required` | 403 | 此 Passkey 不能登入管理後台，請先用 email 驗證碼登入，再到管理後台重新註冊 Passkey | This passkey cannot sign in to the admin console. Sign in with an email code, then register a passkey from the admin console | Show a permission-denied notice | AuthController, PasskeyService |
 | `auth.session_revoked` | 401 | 此裝置已被登出，請重新登入 | This device has been signed out. Please sign in again | See [auth-flow.md](auth-flow.md) | JwtAuthFilter |
 | `auth.session_not_found` | 404 | 找不到此登入裝置 | Signed-in device not found | Show resource not found | UserController |
-| `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | AdminUserService, AuthService, CommunityService, FeedbackService, InviteListService, JwtAuthFilter, NotificationService, PasskeyService, PlanService, UserGuard, UserService, VoteCommentService, VoteService |
-| `user.username.taken` | 409 | 使用者名稱已被使用 | Username already taken | Show message (resource state conflict) | CommunityService, UserService |
-| `user.phone.taken` | 409 | 手機號碼已被使用 | Phone number already in use | Show message (resource state conflict) | AuthService |
-| `user.delete.forbidden` | 403 | 只能刪除自己的帳號 | You can only delete your own account | Show a permission-denied notice | UserService |
-| `user.follow.blocked` | 400 | 不能追蹤已封鎖的使用者，請先解除封鎖 | You cannot follow a user you blocked; unblock them first | Show message so the user can fix the input | UserService |
-| `user.follow.community` | 400 | 社群帳號不能追蹤別人 | A community account cannot follow anyone | Show message so the user can fix the input | UserService |
-| `user.avatar.unsupported_image` | 400 | 不支援的圖片：請上傳 4000 萬像素以內的 JPEG、PNG、GIF 或 BMP | Unsupported image: upload a JPEG, PNG, GIF or BMP of at most 40 megapixels | Show message so the user can fix the input | AvatarImage |
-| `vote.not_found` | 404 | 找不到投票 | Vote not found | Show resource not found | AdminVoteService, VoteService |
-| `vote.option.not_found` | 404 | 找不到投票選項 | Vote option not found | Show resource not found | VoteService |
-| `vote.option.not_in_vote` | 400 | 選項不屬於此投票 | Option does not belong to this vote | Show message so the user can fix the input | VoteService |
-| `vote.not_allowed` | 400 | 投票尚未開始或已結束 | Voting period has ended or not started | Show message so the user can fix the input | ApiException, VoteService |
-| `vote.ended` | 400 | 投票已結束，無法再投票或撤回 | This poll has ended; ballots can no longer be cast or retracted | Show message so the user can fix the input | Vote, VoteService |
-| `vote.results.sealed` | 403 | 投票結束前無法查看結果 | Results are sealed until the poll ends | Show a permission-denied notice | VoteService |
-| `vote.voters.hidden` | 403 | 你沒有權限查看此投票的投票者 | You are not allowed to see who voted in this poll | Show a permission-denied notice | VoteService |
-| `vote.not_editable` | 400 | 只能在投票開始前編輯 | A poll can only be edited before it opens | Show message so the user can fix the input | Vote, VoteService |
-| `vote.list.sort_not_allowed` | 400 | 已結束的投票固定依結束時間排序，不可指定 sort | Ended polls are always ordered by end time; sort is not allowed | Show message so the user can fix the input | VoteListOrder |
-| `vote.search.query_too_short` | 400 | 搜尋字串至少需要 2 個字 | Search query must be at least 2 characters | Show message so the user can fix the input | VoteService |
-| `vote.multiple.not_allowed` | 400 | 此投票不允許複選 | Multiple choices not allowed for this vote | Show message so the user can fix the input | VoteService |
-| `vote.end_time.past` | 400 | 結束時間不可早於現在 | End time cannot be in the past | Show message so the user can fix the input | VoteService |
-| `vote.end_time.before_start` | 400 | 結束時間不可早於開始時間 | End time cannot be before start time | Show message so the user can fix the input | VoteService |
-| `vote.forbidden` | 403 | 只有投票建立者可執行此操作 | Only the vote creator can perform this action | Show a permission-denied notice | PollReportService, VoteService |
-| `vote.delete.window_passed` | 400 | 投票發布超過 {0} 分鐘後，只有尚未開始的投票可以刪除 | A Poll can only be deleted while it is scheduled or within {0} minutes of posting | Show message so the user can fix the input | VoteService |
-| `vote.close.public_not_allowed` | 400 | 公開投票不可提早結束，會持續到截止時間 | A Public Poll cannot be closed early; it runs until its deadline | Show message so the user can fix the input | Vote |
-| `vote.close.scheduled` | 400 | 尚未開始的投票無法結束，請改為刪除 | A scheduled Poll cannot be closed; delete it instead | Show message so the user can fix the input | Vote |
-| `vote.invitee.not_invite_only` | 400 | 只有僅限受邀者的投票可以設定受邀者 | Invitees can only be set on an Invite-only Poll | Show message so the user can fix the input | Vote, VoteService |
-| `vote.invitee.ids_invalid` | 400 | 部分受邀使用者不存在或已停權 | One or more invited users do not exist or are suspended | Show message so the user can fix the input | VoteService |
-| `vote.invitee.has_ballot` | 400 | 已投票的受邀者無法移除 | An Invitee who holds a Ballot cannot be removed | Show message so the user can fix the input | VoteService |
-| `vote.options.min` | 400 | 至少需要 {0} 個選項 | Minimum {0} options required | Show message so the user can fix the input | VoteService |
-| `vote.options.max` | 400 | 最多只能有 {0} 個選項 | Maximum {0} options allowed | Show message so the user can fix the input | VoteService |
-| `vote.duration.exceeded` | 400 | 投票期間不可超過 {0} 天 | Vote duration cannot exceed {0} days | Show message so the user can fix the input | VoteService |
-| `vote.report.self` | 400 | 不能檢舉自己的投票 | You cannot report your own poll | Show message so the user can fix the input | VoteService |
-| `comment.not_found` | 404 | 找不到留言 | Comment not found | Show resource not found | AdminCommentService, VoteCommentService |
-| `comment.forbidden` | 403 | 只能修改或刪除自己的留言 | You can only modify your own comments | Show a permission-denied notice | VoteCommentService |
-| `comment.parent.invalid` | 400 | 要回覆的留言不存在或不屬於此投票 | The comment being replied to does not exist in this poll | Show message so the user can fix the input | VoteCommentService |
-| `comment.report.self` | 400 | 不能檢舉自己的留言 | You cannot report your own comment | Show message so the user can fix the input | VoteCommentService |
-| `notification.not_found` | 404 | 找不到此通知 | Notification not found | Show resource not found | NotificationId, NotificationService |
-| `invite_list.not_found` | 404 | 找不到邀請名單 | Invite List not found | Show resource not found | InviteListService |
-| `invite_list.max_reached` | 400 | 最多只能建立 {0} 份邀請名單 | You can keep at most {0} Invite Lists | Show message so the user can fix the input | InviteListService |
-| `invite_list.members.max` | 400 | 每份邀請名單最多 {0} 位成員 | An Invite List can hold at most {0} members | Show message so the user can fix the input | InviteListService |
-| `invite_list.member.ids_invalid` | 400 | 部分使用者不存在或已停權 | One or more users do not exist or are suspended | Show message so the user can fix the input | InviteListService |
-| `tag.not_found` | 404 | 找不到標籤 | Tag not found | Show resource not found | TagService |
-| `tag.name.exists` | 409 | 標籤名稱已存在：{0} | Tag name already exists: {0} | Show message (resource state conflict) | TagService |
-| `tag.slug.exists` | 409 | 標籤 slug 已存在：{0} | Slug already exists: {0} | Show message (resource state conflict) | TagService |
-| `tag.in_use` | 409 | 標籤仍被投票使用，無法刪除 | Cannot delete tag that is referenced by votes | Show message (resource state conflict) | TagService |
-| `tag.ids.invalid` | 400 | 部分標籤 ID 不存在 | Some tag IDs do not exist | Show message so the user can fix the input | VoteService |
-| `lookup.not_found` | 404 | 找不到字典資料 | Lookup not found | Show resource not found | LookupService |
-| `lookup.exists` | 409 | 字典資料已存在：{0}/{1} | Dictionary item already exists: {0}/{1} | Show message (resource state conflict) | LookupService |
-| `admin.self_action_forbidden` | 403 | 不能停權自己或移除自己的管理員角色 | You cannot suspend yourself or remove your own admin role | Show a permission-denied notice | AdminUserService |
-| `admin.last_admin` | 409 | 不能移除最後一位管理員 | Cannot remove the last active admin | Show message (resource state conflict) | UserService |
+| `user.not_found` | 404 | 找不到此用戶 | User not found | Show resource not found | AdminCommunityController, AdminUserController, AdminUserService, AuthService, CommunityController, CommunityService, FeedbackController, FeedbackService, InviteListController, InviteListService, JwtAuthFilter, NotificationPreferenceController, NotificationService, PasskeyController, PasskeyService, PlanService, TagController, UserController, UserGuard, UserService, VoteCommentController, VoteCommentService, VoteController, VoteService |
+| `user.username.taken` | 409 | 使用者名稱已被使用 | Username already taken | Show message (resource state conflict) | AdminCommunityController, CommunityController, CommunityService, UserController, UserService |
+| `user.phone.taken` | 409 | 手機號碼已被使用 | Phone number already in use | Show message (resource state conflict) | AuthService, UserController |
+| `user.delete.forbidden` | 403 | 只能刪除自己的帳號 | You can only delete your own account | Show a permission-denied notice | UserController, UserService |
+| `user.follow.blocked` | 400 | 不能追蹤已封鎖的使用者，請先解除封鎖 | You cannot follow a user you blocked; unblock them first | Show message so the user can fix the input | UserController, UserService |
+| `user.follow.community` | 400 | 社群帳號不能追蹤別人 | A community account cannot follow anyone | Show message so the user can fix the input | UserController, UserService |
+| `user.avatar.unsupported_image` | 400 | 不支援的圖片：請上傳 4000 萬像素以內的 JPEG、PNG、GIF 或 BMP | Unsupported image: upload a JPEG, PNG, GIF or BMP of at most 40 megapixels | Show message so the user can fix the input | AvatarImage, CommunityController, UserController |
+| `vote.not_found` | 404 | 找不到投票 | Vote not found | Show resource not found | AdminVoteController, AdminVoteService, NotificationController, PollReportController, VoteCommentController, VoteController, VoteService |
+| `vote.option.not_found` | 404 | 找不到投票選項 | Vote option not found | Show resource not found | VoteController, VoteService |
+| `vote.option.not_in_vote` | 400 | 選項不屬於此投票 | Option does not belong to this vote | Show message so the user can fix the input | VoteController, VoteService |
+| `vote.not_allowed` | 400 | 投票尚未開始或已結束 | Voting period has ended or not started | Show message so the user can fix the input | ApiException, VoteController, VoteService |
+| `vote.ended` | 400 | 投票已結束，無法再投票或撤回 | This poll has ended; ballots can no longer be cast or retracted | Show message so the user can fix the input | Vote, VoteController, VoteService |
+| `vote.results.sealed` | 403 | 投票結束前無法查看結果 | Results are sealed until the poll ends | Show a permission-denied notice | VoteController, VoteService |
+| `vote.voters.hidden` | 403 | 你沒有權限查看此投票的投票者 | You are not allowed to see who voted in this poll | Show a permission-denied notice | VoteController, VoteService |
+| `vote.not_editable` | 400 | 只能在投票開始前編輯 | A poll can only be edited before it opens | Show message so the user can fix the input | Vote, VoteController, VoteService |
+| `vote.list.sort_not_allowed` | 400 | 已結束的投票固定依結束時間排序，不可指定 sort | Ended polls are always ordered by end time; sort is not allowed | Show message so the user can fix the input | VoteController, VoteListOrder |
+| `vote.search.query_too_short` | 400 | 搜尋字串至少需要 2 個字 | Search query must be at least 2 characters | Show message so the user can fix the input | AdminVoteController, VoteController, VoteService |
+| `vote.multiple.not_allowed` | 400 | 此投票不允許複選 | Multiple choices not allowed for this vote | Show message so the user can fix the input | VoteController, VoteService |
+| `vote.end_time.past` | 400 | 結束時間不可早於現在 | End time cannot be in the past | Show message so the user can fix the input | VoteController, VoteService |
+| `vote.end_time.before_start` | 400 | 結束時間不可早於開始時間 | End time cannot be before start time | Show message so the user can fix the input | VoteController, VoteService |
+| `vote.forbidden` | 403 | 只有投票建立者可執行此操作 | Only the vote creator can perform this action | Show a permission-denied notice | PollReportController, PollReportService, VoteController, VoteService |
+| `vote.delete.window_passed` | 400 | 投票發布超過 {0} 分鐘後，只有尚未開始的投票可以刪除 | A Poll can only be deleted while it is scheduled or within {0} minutes of posting | Show message so the user can fix the input | VoteController, VoteService |
+| `vote.close.public_not_allowed` | 400 | 公開投票不可提早結束，會持續到截止時間 | A Public Poll cannot be closed early; it runs until its deadline | Show message so the user can fix the input | AdminVoteController, Vote, VoteController |
+| `vote.close.scheduled` | 400 | 尚未開始的投票無法結束，請改為刪除 | A scheduled Poll cannot be closed; delete it instead | Show message so the user can fix the input | AdminVoteController, Vote, VoteController |
+| `vote.invitee.not_invite_only` | 400 | 只有僅限受邀者的投票可以設定受邀者 | Invitees can only be set on an Invite-only Poll | Show message so the user can fix the input | Vote, VoteController, VoteService |
+| `vote.invitee.ids_invalid` | 400 | 部分受邀使用者不存在或已停權 | One or more invited users do not exist or are suspended | Show message so the user can fix the input | VoteController, VoteService |
+| `vote.invitee.has_ballot` | 400 | 已投票的受邀者無法移除 | An Invitee who holds a Ballot cannot be removed | Show message so the user can fix the input | VoteController, VoteService |
+| `vote.options.min` | 400 | 至少需要 {0} 個選項 | Minimum {0} options required | Show message so the user can fix the input | VoteController, VoteService |
+| `vote.options.max` | 400 | 最多只能有 {0} 個選項 | Maximum {0} options allowed | Show message so the user can fix the input | VoteController, VoteService |
+| `vote.duration.exceeded` | 400 | 投票期間不可超過 {0} 天 | Vote duration cannot exceed {0} days | Show message so the user can fix the input | VoteController, VoteService |
+| `vote.report.self` | 400 | 不能檢舉自己的投票 | You cannot report your own poll | Show message so the user can fix the input | VoteController, VoteService |
+| `comment.not_found` | 404 | 找不到留言 | Comment not found | Show resource not found | AdminCommentController, AdminCommentService, VoteCommentController, VoteCommentService |
+| `comment.forbidden` | 403 | 只能修改或刪除自己的留言 | You can only modify your own comments | Show a permission-denied notice | VoteCommentController, VoteCommentService |
+| `comment.parent.invalid` | 400 | 要回覆的留言不存在或不屬於此投票 | The comment being replied to does not exist in this poll | Show message so the user can fix the input | VoteCommentController, VoteCommentService |
+| `comment.report.self` | 400 | 不能檢舉自己的留言 | You cannot report your own comment | Show message so the user can fix the input | VoteCommentController, VoteCommentService |
+| `notification.not_found` | 404 | 找不到此通知 | Notification not found | Show resource not found | NotificationController, NotificationId, NotificationService |
+| `invite_list.not_found` | 404 | 找不到邀請名單 | Invite List not found | Show resource not found | InviteListController, InviteListService, VoteController |
+| `invite_list.max_reached` | 400 | 最多只能建立 {0} 份邀請名單 | You can keep at most {0} Invite Lists | Show message so the user can fix the input | InviteListController, InviteListService |
+| `invite_list.members.max` | 400 | 每份邀請名單最多 {0} 位成員 | An Invite List can hold at most {0} members | Show message so the user can fix the input | InviteListController, InviteListService |
+| `invite_list.member.ids_invalid` | 400 | 部分使用者不存在或已停權 | One or more users do not exist or are suspended | Show message so the user can fix the input | InviteListController, InviteListService |
+| `tag.not_found` | 404 | 找不到標籤 | Tag not found | Show resource not found | AdminTagController, TagController, TagService |
+| `tag.name.exists` | 409 | 標籤名稱已存在：{0} | Tag name already exists: {0} | Show message (resource state conflict) | AdminTagController, TagService |
+| `tag.slug.exists` | 409 | 標籤 slug 已存在：{0} | Slug already exists: {0} | Show message (resource state conflict) | AdminTagController, TagService |
+| `tag.in_use` | 409 | 標籤仍被投票使用，無法刪除 | Cannot delete tag that is referenced by votes | Show message (resource state conflict) | AdminTagController, TagService |
+| `tag.ids.invalid` | 400 | 部分標籤 ID 不存在 | Some tag IDs do not exist | Show message so the user can fix the input | VoteController, VoteService |
+| `lookup.not_found` | 404 | 找不到字典資料 | Lookup not found | Show resource not found | AdminLookupController, LookupController, LookupService |
+| `lookup.exists` | 409 | 字典資料已存在：{0}/{1} | Dictionary item already exists: {0}/{1} | Show message (resource state conflict) | AdminLookupController, LookupService |
+| `admin.self_action_forbidden` | 403 | 不能停權自己或移除自己的管理員角色 | You cannot suspend yourself or remove your own admin role | Show a permission-denied notice | AdminUserController, AdminUserService |
+| `admin.last_admin` | 409 | 不能移除最後一位管理員 | Cannot remove the last active admin | Show message (resource state conflict) | AdminUserController, UserController, UserService |
 | `auth.community_sign_in_not_allowed` | 403 | 社群帳號無法登入，請以成員身分登入後切換 | Community accounts cannot sign in; sign in as a member and switch to the account | Show a permission-denied notice | AuthService |
-| `vote.ballot.community_not_allowed` | 403 | 社群帳號不能投票 | Community accounts cannot vote | Show a permission-denied notice | VoteService |
-| `community.not_member` | 403 | 你不是此社群帳號的成員 | You are not a member of this community account | Show a permission-denied notice | ActAsFilter, CommunityService |
-| `community.role_forbidden` | 403 | 你在此社群帳號的角色無權執行此操作 | Your role in this community account does not allow this action | Show a permission-denied notice | ActAsFilter, ActingMember, CommunityService, PollReportService |
-| `community.member.not_found` | 404 | 此用戶不是該社群帳號的成員 | This user is not a member of the community account | Show resource not found | CommunityService |
-| `community.member.exists` | 409 | 此用戶已是該社群帳號的成員 | This user is already a member of the community account | Show message (resource state conflict) | CommunityService |
-| `community.member.invalid` | 400 | 此用戶無法成為社群帳號成員 | This user cannot become a member of a community account | Show message so the user can fix the input | CommunityService |
-| `community.last_owner` | 409 | 社群帳號至少需保留一位擁有者 | A community account must keep at least one owner | Show message (resource state conflict) | CommunityService, UserService |
+| `vote.ballot.community_not_allowed` | 403 | 社群帳號不能投票 | Community accounts cannot vote | Show a permission-denied notice | VoteController, VoteService |
+| `community.not_member` | 403 | 你不是此社群帳號的成員 | You are not a member of this community account | Show a permission-denied notice | ActAsFilter, CommunityController, CommunityService |
+| `community.role_forbidden` | 403 | 你在此社群帳號的角色無權執行此操作 | Your role in this community account does not allow this action | Show a permission-denied notice | ActAsFilter, ActingMember, CommunityController, CommunityService, NotificationPreferenceController, PollReportController, PollReportService, UserController, VoteCommentController, VoteController |
+| `community.member.not_found` | 404 | 此用戶不是該社群帳號的成員 | This user is not a member of the community account | Show resource not found | CommunityController, CommunityService |
+| `community.member.exists` | 409 | 此用戶已是該社群帳號的成員 | This user is already a member of the community account | Show message (resource state conflict) | CommunityController, CommunityService |
+| `community.member.invalid` | 400 | 此用戶無法成為社群帳號成員 | This user cannot become a member of a community account | Show message so the user can fix the input | AdminCommunityController, CommunityController, CommunityService |
+| `community.last_owner` | 409 | 社群帳號至少需保留一位擁有者 | A community account must keep at least one owner | Show message (resource state conflict) | CommunityController, CommunityService, UserController, UserService |
 | `community.roles_fixed` | 400 | 社群帳號的角色不能變更 | The roles of a community account cannot be changed | Show message so the user can fix the input | AdminUserService |
-| `community.invitee_not_allowed` | 400 | 社群帳號不能被邀請投票或加入邀請名單 | A community account cannot be invited to a poll or added to an invite list | Show message so the user can fix the input | InviteListService, VoteService |
-| `community.invitation.not_found` | 404 | 找不到此邀請，或邀請已失效 | Invitation not found or expired | Show resource not found | CommunityService |
-| `community.invitation.exists` | 409 | 已邀請過此對象，邀請尚未失效 | This invitee already has a pending invitation | Show message (resource state conflict) | CommunityService |
-| `community.username_immutable` | 400 | 社群帳號的使用者名稱不能變更 | A community account's username cannot be changed | Show message so the user can fix the input | UserService |
-| `vote.reveal_at.before_end` | 400 | 公布結果時間不可早於結束時間 | Reveal time cannot be before the end time | Show message so the user can fix the input | VoteService |
-| `vote.reveal_at.too_late` | 400 | 公布結果時間不可晚於結束時間後 {0} 天 | Reveal time cannot be more than {0} days after the end time | Show message so the user can fix the input | VoteService |
-| `vote.ballot.anonymous_not_allowed` | 400 | Pro 投票不接受匿名投票 | Anonymous ballots are not allowed in a Pro poll | Show message so the user can fix the input | VoteService |
-| `vote.ballot.phone_verification_required` | 403 | 請先驗證手機號碼才能參與此投票 | Verify your phone number to vote in this poll | Show a permission-denied notice | VoteService |
-| `report.not_pro` | 400 | 只有 Pro 投票提供結果報告 | Result reports are available only for Pro polls | Show message so the user can fix the input | PollReportService |
-| `report.not_ready` | 403 | 投票結束並公布結果後才能查看報告 | The report is available once the poll has ended and its results are revealed | Show a permission-denied notice | PollReportService |
-| `report.cancelled` | 400 | 已取消的投票沒有結果報告 | A cancelled poll has no result report | Show message so the user can fix the input | PollReportService |
-| `community.limit_reached` | 403 | 已達方案可擁有的社群帳號數量上限 | You own as many community accounts as your plan allows | Show a permission-denied notice | PlanService |
-| `community.locked` | 403 | 此社群帳號已鎖定，升級方案或解鎖後才能使用 | This community account is locked; upgrade your plan or unlock it to use it | Show a permission-denied notice | ActAsFilter, CommunityService |
-| `community.keep.invalid` | 400 | 要保留的社群帳號數量須等於方案上限（擁有的較少時須全選），且都是你擁有的社群帳號 | Choose as many community accounts as your plan allows (all of them if you own fewer), all owned by you | Show message so the user can fix the input | PlanService |
+| `community.invitee_not_allowed` | 400 | 社群帳號不能被邀請投票或加入邀請名單 | A community account cannot be invited to a poll or added to an invite list | Show message so the user can fix the input | InviteListController, InviteListService, VoteController, VoteService |
+| `community.invitation.not_found` | 404 | 找不到此邀請，或邀請已失效 | Invitation not found or expired | Show resource not found | CommunityController, CommunityService |
+| `community.invitation.exists` | 409 | 已邀請過此對象，邀請尚未失效 | This invitee already has a pending invitation | Show message (resource state conflict) | CommunityController, CommunityService |
+| `community.username_immutable` | 400 | 社群帳號的使用者名稱不能變更 | A community account's username cannot be changed | Show message so the user can fix the input | UserController, UserService |
+| `vote.reveal_at.before_end` | 400 | 公布結果時間不可早於結束時間 | Reveal time cannot be before the end time | Show message so the user can fix the input | VoteController, VoteService |
+| `vote.reveal_at.too_late` | 400 | 公布結果時間不可晚於結束時間後 {0} 天 | Reveal time cannot be more than {0} days after the end time | Show message so the user can fix the input | VoteController, VoteService |
+| `vote.ballot.anonymous_not_allowed` | 400 | Pro 投票不接受匿名投票 | Anonymous ballots are not allowed in a Pro poll | Show message so the user can fix the input | VoteController, VoteService |
+| `vote.ballot.phone_verification_required` | 403 | 請先驗證手機號碼才能參與此投票 | Verify your phone number to vote in this poll | Show a permission-denied notice | VoteController, VoteService |
+| `report.not_pro` | 400 | 只有 Pro 投票提供結果報告 | Result reports are available only for Pro polls | Show message so the user can fix the input | PollReportController, PollReportService |
+| `report.not_ready` | 403 | 投票結束並公布結果後才能查看報告 | The report is available once the poll has ended and its results are revealed | Show a permission-denied notice | PollReportController, PollReportService |
+| `report.cancelled` | 400 | 已取消的投票沒有結果報告 | A cancelled poll has no result report | Show message so the user can fix the input | PollReportController, PollReportService |
+| `community.limit_reached` | 403 | 已達方案可擁有的社群帳號數量上限 | You own as many community accounts as your plan allows | Show a permission-denied notice | CommunityController, PlanService |
+| `community.locked` | 403 | 此社群帳號已鎖定，升級方案或解鎖後才能使用 | This community account is locked; upgrade your plan or unlock it to use it | Show a permission-denied notice | ActAsFilter, CommunityController, CommunityService |
+| `community.keep.invalid` | 400 | 要保留的社群帳號數量須等於方案上限（擁有的較少時須全選），且都是你擁有的社群帳號 | Choose as many community accounts as your plan allows (all of them if you own fewer), all owned by you | Show message so the user can fix the input | PlanService, UserController |
 
 ## Success messages and others
 
@@ -147,5 +147,5 @@ Keys not found on any error path (mostly success-response `message` values, e.g.
 
 | key | zh-TW message | en message | Used in |
 |-----|-----------|---------|----------|
-| `user.block.self` | 不能封鎖自己 | You cannot block yourself | UserService |
-| `user.follow.self` | 不能追蹤自己 | You cannot follow yourself | UserService |
+| `user.block.self` | 不能封鎖自己 | You cannot block yourself | UserController, UserService |
+| `user.follow.self` | 不能追蹤自己 | You cannot follow yourself | UserController, UserService |

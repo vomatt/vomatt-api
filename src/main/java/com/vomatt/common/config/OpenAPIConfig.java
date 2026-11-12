@@ -31,13 +31,6 @@ public class OpenAPIConfig {
     public static final String EX_RATE_LIMITED = "RateLimited";
     public static final String ERROR_REF = "#/components/schemas/" + ERROR_SCHEMA;
 
-    // Error example pieces for annotations, which need compile-time constants:
-    // ERR_MESSAGE + message + ERR_CODE + errorCode + ERR_ERROR + message + ERR_END (same shape as ApiResponse.error)
-    public static final String ERR_MESSAGE = "{ \"success\": false, \"data\": null, \"message\": \"";
-    public static final String ERR_CODE = "\", \"errorCode\": \"";
-    public static final String ERR_ERROR = "\", \"error\": \"";
-    public static final String ERR_END = "\" }";
-
     /** Page of Poll summaries, shared by the Poll listing and user Poll listing endpoints. */
     public static final String EX_PAGE_OF_POLLS = "{ \"success\": true, \"data\": { \"items\": [ { \"id\": \"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05\", "
             + "\"title\": \"Which language should we use for the next side project?\", \"creatorUsername\": \"alice\", "

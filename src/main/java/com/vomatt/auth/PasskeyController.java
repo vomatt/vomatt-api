@@ -1,16 +1,16 @@
 package com.vomatt.auth;
 
+import com.vomatt.common.annotation.ApiError;
 import com.vomatt.auth.dto.PasskeyRegistrationOptionsResponse;
 import com.vomatt.auth.dto.PasskeyRegistrationVerifyRequest;
 import com.vomatt.auth.dto.PasskeyResponse;
 import com.vomatt.common.annotation.CommonApiResponses;
-import com.vomatt.common.config.OpenAPIConfig;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.security.UserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -58,20 +58,12 @@ public class PasskeyController {
               "error": null
             }""";
 
-    private static final String PASSKEY_INVALID = """
-            {"success": false, "data": null, "message": "Passkey verification failed. Please try again", "errorCode": "auth.passkey.invalid", "error": "Passkey verification failed. Please try again"}""";
-
-    private static final String PASSKEY_CONFLICT = """
-            {"success": false, "data": null, "message": "Resource conflict, please try again", "errorCode": "common.conflict", "error": "Resource conflict, please try again"}""";
-
     private final PasskeyService passkeyService;
 
     @PostMapping("/register/options")
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = OK_REGISTER_OPTIONS)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = USER_NOT_FOUND)))
     @Operation(summary = "Get passkey registration options",
             description = """
                     **Auth**: required (Bearer token)
@@ -81,10 +73,10 @@ public class PasskeyController {
                     `rp.id` is always vomatt.com (the configured RP ID), so the passkey works on vomatt.com, admin.vomatt.com and the iOS app. \
                     The passkey must be discoverable (`residentKey: required`); `excludeCredentials` lists the caller's existing passkeys
                     **Side effects**: issues a one-time challenge that expires after 5 minutes; calling again issues another one and leaves earlier ones valid until they expire or are spent
-                    **Errors**:
-                    - 401 `common.unauthorized`: no or invalid access token
-                    - 403 `auth.account_banned`: the account is suspended
-                    - 404 `user.not_found`: the account no longer exists""")
+                    """)
+    @ApiError(status = 401, key = MessageKey.COMMON_UNAUTHORIZED, when = "no or invalid access token")
+    @ApiError(status = 403, key = MessageKey.AUTH_ACCOUNT_BANNED, when = "the account is suspended")
+    @ApiError(status = 404, key = MessageKey.USER_NOT_FOUND, when = "the account no longer exists")
     public ResponseEntity<ApiResponse<PasskeyRegistrationOptionsResponse>> registrationOptions(
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(passkeyService.registrationOptions(principal.userId())));
@@ -110,13 +102,6 @@ public class PasskeyController {
                       },
                       "name": "iPhone"
                     }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-            description = "The passkey was not accepted (`auth.passkey.invalid`), or the body is malformed (`common.validation_failed`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = PASSKEY_INVALID)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = USER_NOT_FOUND)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "This passkey is already registered (errorCode `common.conflict`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = PASSKEY_CONFLICT)))
     @Operation(summary = "Register a passkey",
             description = """
                     **Auth**: required (Bearer token), the same user who got the options
@@ -128,13 +113,13 @@ public class PasskeyController {
                     Only a passkey registered with an admin console access token (from `POST /api/auth/admin/verify-otp` or the admin passkey sign-in) \
                     can sign in to the admin console; one registered with any other token signs in to the consumer apps only
                     **Side effects**: the challenge is spent whether or not verification succeeds, so a retry needs new options; a new passkey row
-                    **Errors**:
-                    - 400 `auth.passkey.invalid`: the response is malformed or fails verification (wrong origin or RP ID, unknown, spent, expired or another user's challenge, unsupported algorithm); get new options and retry
-                    - 400 `common.validation_failed`: `credential` or one of its required fields is missing, or `name` is too long
-                    - 401 `common.unauthorized`: no or invalid access token
-                    - 403 `auth.account_banned`: the account is suspended
-                    - 404 `user.not_found`: the account no longer exists
-                    - 409 `common.conflict`: this passkey is already registered (to this or another account)""")
+                    """)
+    @ApiError(status = 400, key = MessageKey.AUTH_PASSKEY_INVALID, when = "the response is malformed or fails verification (wrong origin or RP ID, unknown, spent, expired or another user's challenge, unsupported algorithm); get new options and retry")
+    @ApiError(status = 400, key = MessageKey.COMMON_VALIDATION_FAILED, when = "`credential` or one of its required fields is missing, or `name` is too long")
+    @ApiError(status = 401, key = MessageKey.COMMON_UNAUTHORIZED, when = "no or invalid access token")
+    @ApiError(status = 403, key = MessageKey.AUTH_ACCOUNT_BANNED, when = "the account is suspended")
+    @ApiError(status = 404, key = MessageKey.USER_NOT_FOUND, when = "the account no longer exists")
+    @ApiError(status = 409, key = MessageKey.COMMON_CONFLICT, when = "this passkey is already registered (to this or another account)")
     public ResponseEntity<ApiResponse<PasskeyResponse>> verifyRegistration(
             @Valid @RequestBody PasskeyRegistrationVerifyRequest request, @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(passkeyService.verifyRegistration(principal.userId(), principal.grantsAdmin(), request)));

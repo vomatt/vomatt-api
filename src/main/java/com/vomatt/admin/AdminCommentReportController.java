@@ -38,7 +38,7 @@ public class AdminCommentReportController {
                     **Precondition**: caller holds role ADMIN
                     **Behavior**: offset page of reports from all users, newest first, each with the reported Comment as it is now (text and author kept when deleted), its author, the reporter, `reason` and `note`. A user reports a Comment at most once. Reports go away with the Comment's or the reporter's account. `page` is 1-based (default 1), `limit` 1-50 (default 20)
                     **Side effects**: written to the audit log (action `VIEW`, resource `COMMENT_REPORT`), since notes may hold personal data
-                    **Errors**: none specific to this endpoint""")
+                    **Errors**: none beyond the common ones""")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of reports",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Reports", value = """
                     {

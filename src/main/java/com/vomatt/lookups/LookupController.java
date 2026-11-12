@@ -1,14 +1,14 @@
 package com.vomatt.lookups;
 
+import com.vomatt.common.annotation.ApiError;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.annotation.CommonApiResponses;
-import com.vomatt.common.config.OpenAPIConfig;
 import com.vomatt.lookups.dto.LookupDto;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -35,7 +35,7 @@ public class LookupController {
                     The result is cached server-side for 2 hours and evicted whenever an admin changes a frontend item, so clients may cache it for the session. \
                     A type with no matching items is absent from the map
                     **Side effects**: none
-                    **Errors**: none specific to this endpoint (only the shared errors below)""")
+                    **Errors**: none beyond the common ones""")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "FrontendLookups", value = """
                     {
@@ -74,7 +74,7 @@ public class LookupController {
                     **Behavior**: returns the active items of `lookupType` ordered by `seq`; an unknown type yields an empty list, not 404. \
                     Cached server-side for 2 hours per type and evicted when an admin changes an item of that type
                     **Side effects**: none
-                    **Errors**: none specific to this endpoint (only the shared errors below)""")
+                    **Errors**: none beyond the common ones""")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "LookupsByType", value = """
                     {
@@ -112,8 +112,7 @@ public class LookupController {
                     **Precondition**: none
                     **Behavior**: returns the item with the given type and key, including inactive items (check `isActive`). Not cached
                     **Side effects**: none
-                    **Errors**:
-                    - 404 `lookup.not_found`: no item with this type and key""")
+                    """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Lookup", value = """
                     {
@@ -134,16 +133,7 @@ public class LookupController {
                       "errorCode": null,
                       "error": null
                     }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Dictionary item not found (`lookup.not_found`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "LookupNotFound", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "Dictionary item not found",
-                              "errorCode": "lookup.not_found",
-                              "error": "Dictionary item not found"
-                            }""")))
+    @ApiError(status = 404, key = MessageKey.LOOKUP_NOT_FOUND, when = "no item with this type and key")
     public ResponseEntity<ApiResponse<LookupDto>> getByTypeAndKey(
             @Parameter(description = "Dictionary type", required = true, example = "vote_duration") @PathVariable String lookupType,
             @Parameter(description = "Dictionary key", required = true, example = "24h") @PathVariable String lookupKey) {
@@ -160,8 +150,7 @@ public class LookupController {
                     **Behavior**: returns the active items of `lookupType` whose parent is (`parentType`, `parentKey`), ordered by `seq`; \
                     no match yields an empty list. Not cached
                     **Side effects**: none
-                    **Errors**:
-                    - 400 `common.missing_param`: `parentType` or `parentKey` is missing""")
+                    """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "ChildLookups", value = """
                     {
@@ -184,6 +173,7 @@ public class LookupController {
                       "errorCode": null,
                       "error": null
                     }""")))
+    @ApiError(status = 400, key = MessageKey.COMMON_MISSING_PARAM, when = "`parentType` or `parentKey` is missing", args = { "q" })
     public ResponseEntity<ApiResponse<List<LookupDto>>> getChildren(
             @Parameter(description = "Dictionary type of the children", required = true, example = "vote_subcategory") @PathVariable String lookupType,
             @Parameter(description = "Parent item's type", required = true, example = "vote_category") @RequestParam String parentType,

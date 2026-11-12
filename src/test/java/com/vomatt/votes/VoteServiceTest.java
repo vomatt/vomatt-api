@@ -148,9 +148,10 @@ class VoteServiceTest {
         when(voteRepository.findByIdWithOptions(v.getId())).thenReturn(Optional.of(v));
     }
 
-    // Create saves
+    // Create saves, then saves and flushes once the options are added (lenient: a later check may throw first)
     private void stubSaveAssignsId() {
         when(voteRepository.save(any(Vote.class))).thenAnswer(VoteServiceTest::assignIds);
+        lenient().when(voteRepository.saveAndFlush(any(Vote.class))).thenAnswer(VoteServiceTest::assignIds);
     }
 
     // Edit saves and flushes
@@ -387,8 +388,8 @@ class VoteServiceTest {
                     .containsExactlyInAnyOrder("Red", "Blue");
             // a new Poll is Open: counts are Sealed
             assertThat(result.getOptions()).extracting(VoteResponse.VoteOptionResponse::getVotes).containsOnlyNulls();
-            verify(voteRepository, times(2)).save(argThat(v ->
-                    "Favourite Color?".equals(v.getTitle()) && v.getCreator() == user));
+            verify(voteRepository).save(argThat(v -> "Favourite Color?".equals(v.getTitle()) && v.getCreator() == user));
+            verify(voteRepository).saveAndFlush(argThat(v -> "Favourite Color?".equals(v.getTitle()) && v.getCreator() == user));
         }
 
         @Test

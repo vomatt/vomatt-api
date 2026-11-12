@@ -143,7 +143,8 @@ public class VoteService {
 
         addOptions(vote, request);
 
-        vote = voteRepository.save(vote);
+        // Flushed now so @PreUpdate stamps updated_at before the response is built from this Poll
+        vote = voteRepository.saveAndFlush(vote);
         insertInvitees(vote, concat(request.getInviteeIds(), inviteLists.userIds()), concat(request.getInviteeEmails(), inviteLists.emails()));
         log.info("Vote created: {} by user: {}", vote.getId(), creatorId);
 

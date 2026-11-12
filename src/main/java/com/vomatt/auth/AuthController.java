@@ -360,6 +360,11 @@ public class AuthController {
 
     @PostMapping("/phone/send-otp")
     @PublicApiResponse
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503",
+            description = "SMS is not available in this environment (`auth.sms.unavailable`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = OpenAPIConfig.ERR_MESSAGE
+                    + "SMS verification is currently unavailable" + OpenAPIConfig.ERR_CODE + "auth.sms.unavailable"
+                    + OpenAPIConfig.ERR_ERROR + "SMS verification is currently unavailable" + OpenAPIConfig.ERR_END)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = OK_RESULT)))
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
@@ -376,7 +381,8 @@ public class AuthController {
                     - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
                     - 400 `auth.sms.send_failed`: the SMS provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
                     - 401 `auth.otp.too_many_attempts`: this number is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected
-                    - 429 `auth.otp.daily_limit`: 5 OTPs were already requested for this number from this IP today (UTC), or 15 from all IPs""")
+                    - 429 `auth.otp.daily_limit`: 5 OTPs were already requested for this number from this IP today (UTC), or 15 from all IPs
+                    - 503 `auth.sms.unavailable`: SMS is not available in this environment (production has no SMS provider yet); nothing is sent""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> phoneSendOtp(@Valid @RequestBody PhoneSendOtpRequest req, HttpServletRequest httpRequest) {
         authService.sendOtp(null, req.phone(), req.type(), ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));

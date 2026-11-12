@@ -9,7 +9,7 @@ public final class LoginUnlock {
 
     /** Consumer email OTP login */
     public static final String CHANNEL_EMAIL = "email";
-    /** Consumer phone OTP login */
+    /** Consumer phone OTP login, and the phone bind OTP for the same number */
     public static final String CHANNEL_PHONE = "phone";
     /** Admin console email OTP login */
     public static final String CHANNEL_ADMIN = "admin";

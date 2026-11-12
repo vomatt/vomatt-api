@@ -36,6 +36,7 @@ public enum MessageKey {
     AUTH_EMAIL_SEND_FAILED("auth.email.send_failed"),
     AUTH_PHONE_INVALID("auth.phone.invalid"),
     AUTH_SMS_SEND_FAILED("auth.sms.send_failed"),
+    AUTH_SMS_UNAVAILABLE("auth.sms.unavailable"),
     AUTH_REFRESH_TOKEN_INVALID("auth.refresh_token.invalid"),
     AUTH_SUSPICIOUS_LOGIN("auth.suspicious_login"),
     AUTH_GOOGLE_NOT_CONFIGURED("auth.google.not_configured"),

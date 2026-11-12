@@ -1,7 +1,8 @@
 package com.vomatt.common.sms;
 
 /**
- * SMS sending interface. Currently only a NoOp implementation exists; can be wired to Twilio / AWS SNS, etc.
+ * SMS sending interface: {@link SmsServiceNoOp} outside prod, {@link SmsServiceUnavailable} in prod until a provider
+ * (Twilio / AWS SNS...) is wired.
  */
 public interface SmsService {
 

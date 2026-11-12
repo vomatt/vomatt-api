@@ -44,10 +44,8 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ApiResponse<Object>> handleApiException(ApiException ex) {
-        String message = ex.getMessageKey() != null
-                ? messageService.resolve(ex.getMessageKey(), ex.getMessageArgs())
-                : ex.getMessage();
-        String errorCode = ex.getMessageKey() != null ? ex.getMessageKey().code() : null;
+        String message = messageService.resolve(ex.getMessageKey(), ex.getMessageArgs());
+        String errorCode = ex.getMessageKey().code();
         ApiResponse<Object> body = ex.getData() != null
                 ? new ApiResponse<>(false, ex.getData(), message, errorCode, message)
                 : ApiResponse.error(message, errorCode);

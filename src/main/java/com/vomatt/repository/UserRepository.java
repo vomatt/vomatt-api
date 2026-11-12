@@ -12,6 +12,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.vomatt.common.util.LikePattern;
 import com.vomatt.entity.Plan;
@@ -146,6 +147,16 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Query(value = "SELECT id FROM vomatt.users WHERE id IN (:ids) AND (locked_at IS NULL) = :lock ORDER BY id FOR NO KEY UPDATE",
            nativeQuery = true)
     List<UUID> lockToChange(@Param("ids") Collection<UUID> ids, @Param("lock") boolean lock);
+
+    /**
+     * Records a sign-in in one UPDATE of those two columns: a merge of the signed-in User would SELECT first and could
+     * write a stale {@code active} back over a suspension committed in between. Its own transaction, since sign-in
+     * runs outside one; a bulk UPDATE skips {@code @PreUpdate}, so {@code updated_at} is set here.
+     */
+    @Transactional
+    @Modifying
+    @Query("UPDATE User u SET u.lastLoginAt = :now, u.updatedAt = :now WHERE u.id = :id")
+    void recordLogin(@Param("id") UUID id, @Param("now") OffsetDateTime now);
 
     @Modifying
     @Query("UPDATE User u SET u.lockedAt = :now WHERE u.id IN :ids")

@@ -42,6 +42,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.email.send_failed` | 400 | 郵件發送失敗：{0} | Email delivery failed: {0} | Show message so the user can fix the input | AuthService |
 | `auth.phone.invalid` | 400 | 手機號碼格式錯誤，請輸入 09 開頭的台灣手機號碼或含國碼的號碼（例如 +886912345678） | Invalid phone number. Use a Taiwan mobile number starting with 09 or a number with a country code (e.g. +886912345678) | Show message so the user can fix the input | User |
 | `auth.sms.send_failed` | 400 | 簡訊發送失敗：{0} | SMS delivery failed: {0} | Show message so the user can fix the input | AuthService |
+| `auth.sms.unavailable` | 503 | 簡訊驗證目前無法使用 | SMS verification is currently unavailable | Show service temporarily unavailable, retry later | SmsServiceUnavailable |
 | `auth.refresh_token.invalid` | 401 | Refresh token 無效或已過期 | Refresh token is invalid or has expired | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.suspicious_login` | 401 | 安全性警告：此登入階段被重複更新，已將其登出，請重新登入 | Security alert: this session was refreshed twice, so it has been signed out. Please log in again | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.google.not_configured` | 400 | Google OAuth 尚未設定 | Google OAuth is not configured | Show message so the user can fix the input | AuthService |

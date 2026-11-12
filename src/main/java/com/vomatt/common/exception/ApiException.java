@@ -18,12 +18,9 @@ public class ApiException extends RuntimeException {
      * it is put into the response's {@code ApiResponse.data} ({@code success} stays false;
      * semantically it is "extra information attached to an error response", not success data).</p>
      *
-     * <p>Backward compatible: the existing constructors/static factories that never carry data ({@link #badRequest}, {@link #notFound}, etc.)
-     * all set this field to null, behaving exactly as before; only exceptions created via {@link #withData} carry data.</p>
+     * <p>Only exceptions created via {@link #withData} carry data; every other factory leaves it null.</p>
      */
     private final Object data;
-
-    // === New usage (i18n, recommended) ===
 
     public ApiException(HttpStatus status, MessageKey key, Object... args) {
         this(status, key, null, args);

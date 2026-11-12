@@ -70,7 +70,8 @@ class SecurityErrorHandlersTest {
 
     @Test
     void shouldReturn401TokenExpiredWhenTokenExpired() throws Exception {
-        String expired = Jwts.builder().subject("u1").claim("roles", List.of("user"))
+        String expired = Jwts.builder().header().keyId(AppKey.sha256Hex(SECRET).substring(0, 8)).and()
+                .subject("u1").claim("roles", List.of("user"))
                 .expiration(new Date(System.currentTimeMillis() - 60_000))
                 .signWith(Keys.hmacShaKeyFor(SECRET.getBytes())).compact();
 
@@ -428,7 +429,8 @@ class SecurityErrorHandlersTest {
 
     @Test
     void shouldSetUserPrincipalWhenValidTokenOnPublicPath() throws Exception {
-        String token = Jwts.builder().subject("u1").claim("roles", List.of("user")).claim("sid", "s1")
+        String token = Jwts.builder().header().keyId(AppKey.sha256Hex(SECRET).substring(0, 8)).and()
+                .subject("u1").claim("roles", List.of("user")).claim("sid", "s1")
                 .expiration(new Date(System.currentTimeMillis() + 60_000))
                 .signWith(Keys.hmacShaKeyFor(SECRET.getBytes())).compact();
 

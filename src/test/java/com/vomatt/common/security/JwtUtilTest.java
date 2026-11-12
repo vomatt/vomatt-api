@@ -53,4 +53,14 @@ class JwtUtilTest {
         assertThatThrownBy(() -> new JwtUtil(SECRET, 900).parseToken(signedByOld)).isInstanceOf(io.jsonwebtoken.JwtException.class);
         assertThatThrownBy(() -> new JwtUtil(SECRET + ",short", 900)).isInstanceOf(IllegalStateException.class);
     }
+
+    @Test
+    void shouldRejectTokenWhenHeaderHasNoKid() {
+        // Signed with the right key and fully valid otherwise: only the missing kid refuses it
+        String noKid = Jwts.builder().subject("user-3").claim("roles", List.of("user")).claim("sid", "s1")
+                .expiration(new java.util.Date(System.currentTimeMillis() + 60_000))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8))).compact();
+
+        assertThatThrownBy(() -> jwtUtil.parseToken(noKid)).isInstanceOf(io.jsonwebtoken.JwtException.class);
+    }
 }

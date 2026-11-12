@@ -447,16 +447,9 @@ public class UserService {
         return loadVisibilitySettings(user.getId());
     }
 
+    // One statement, so two concurrent first writes of a key do not hit the unique key
     private void savePreference(User user, String key, String value) {
-        UserPreference pref = preferenceRepository.findByUserIdAndKey(user.getId(), key)
-                .orElseGet(() -> {
-                    UserPreference newPref = new UserPreference();
-                    newPref.setUser(user);
-                    newPref.setKey(key);
-                    return newPref;
-                });
-        pref.setValue(value);
-        preferenceRepository.save(pref);
+        preferenceRepository.upsert(UUIDv7Generator.generateId(), user.getId(), key, value);
     }
 
     @Transactional

@@ -8,7 +8,7 @@ import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.security.ActingMember;
 import com.vomatt.common.util.AfterCommit;
 import com.vomatt.common.util.TextUtil;
-import com.vomatt.common.util.UUIDv7Generator;
+import com.vomatt.entity.common.BaseEntity;
 import com.vomatt.common.util.UserGuard;
 import com.vomatt.common.email.EmailService;
 import com.vomatt.common.email.InvitationEmailLimiter;
@@ -241,7 +241,7 @@ public class VoteService {
             throw ApiException.badRequest(MessageKey.VOTE_REPORT_SELF);
         }
         UUID reporterId = UUID.fromString(userId);
-        if (voteReportRepository.insertIfAbsent(UUIDv7Generator.generateId(), vote.getId(), reporterId,
+        if (voteReportRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(), vote.getId(), reporterId,
                 request.reason().name(), request.note()) > 0) {
             log.info("User {} reported vote {} as {}", userId, voteId, request.reason());
         } else if (!voteReportRepository.existsByVoteIdAndReporterIdAndVoteDeletedAtIsNull(vote.getId(), reporterId)) {
@@ -254,7 +254,7 @@ public class VoteService {
     public void bookmark(String voteId, String userId) {
         Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
         UUID userUuid = UUID.fromString(userId);
-        if (bookmarkRepository.insertIfAbsent(UUIDv7Generator.generateId(), userUuid, vote.getId()) > 0) {
+        if (bookmarkRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(), userUuid, vote.getId()) > 0) {
             log.info("User {} bookmarked vote {}", userId, voteId);
         } else if (!bookmarkRepository.existsByUserIdAndVoteIdAndVoteDeletedAtIsNull(userUuid, vote.getId())) {
             requireLiveVote(vote.getId(), userUuid);
@@ -277,7 +277,7 @@ public class VoteService {
     public void like(String voteId, String userId) {
         Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
         UUID userUuid = UUID.fromString(userId);
-        if (voteRepository.insertLikeIfAbsent(UUIDv7Generator.generateId(), userUuid, vote.getId()) > 0) {
+        if (voteRepository.insertLikeIfAbsent(BaseEntity.newTimeOrderedId(), userUuid, vote.getId()) > 0) {
             log.info("User {} liked vote {}", userId, voteId);
         } else if (!voteRepository.existsLiveLike(userUuid, vote.getId())) {
             requireLiveVote(vote.getId(), userUuid);

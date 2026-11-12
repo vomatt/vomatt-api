@@ -18,7 +18,7 @@ import com.vomatt.admin.AdminVoteReportService;
 import com.vomatt.admin.dto.AdminVoteReportResponse;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
-import com.vomatt.common.util.UUIDv7Generator;
+import com.vomatt.entity.common.BaseEntity;
 import com.vomatt.entity.Audience;
 import com.vomatt.entity.ReportReason;
 import com.vomatt.entity.User;
@@ -142,7 +142,7 @@ class VoteReportPostgresTest extends PostgresRepositoryTest {
         em.createNativeQuery("UPDATE vomatt.votes SET deleted_at = now() WHERE id = :id").setParameter("id", poll.getId())
                 .executeUpdate();
 
-        assertThat(reportRepository.insertIfAbsent(UUIDv7Generator.generateId(), poll.getId(), reporter.getId(),
+        assertThat(reportRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(), poll.getId(), reporter.getId(),
                 ReportReason.SPAM.name(), null)).isZero();
     }
 

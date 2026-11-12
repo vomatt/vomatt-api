@@ -19,7 +19,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.security.RefreshTokenService;
-import com.vomatt.common.util.UUIDv7Generator;
+import com.vomatt.entity.common.BaseEntity;
 import com.vomatt.entity.Audience;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserBlock;
@@ -322,8 +322,8 @@ class UserFollowPostgresTest extends PostgresRepositoryTest {
     @Test
     @DisplayName("should insert a follow once and ignore the duplicate")
     void shouldIgnoreDuplicateWhenInsertingExistingFollow() {
-        assertThat(followRepository.insertIfAbsent(UUIDv7Generator.generateId(), viewer.getId(), other.getId())).isEqualTo(1);
-        assertThat(followRepository.insertIfAbsent(UUIDv7Generator.generateId(), viewer.getId(), other.getId())).isEqualTo(0);
+        assertThat(followRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(), viewer.getId(), other.getId())).isEqualTo(1);
+        assertThat(followRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(), viewer.getId(), other.getId())).isEqualTo(0);
         assertThat(followRepository.deleteByFollowerIdAndFollowedId(viewer.getId(), other.getId())).isEqualTo(1);
         assertThat(followRepository.deleteByFollowerIdAndFollowedId(viewer.getId(), other.getId())).isEqualTo(0);
     }

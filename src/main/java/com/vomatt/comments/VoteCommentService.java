@@ -17,7 +17,7 @@ import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
 import com.vomatt.common.response.Cursor;
 import com.vomatt.common.response.CursorResponse;
-import com.vomatt.common.util.UUIDv7Generator;
+import com.vomatt.entity.common.BaseEntity;
 import com.vomatt.common.util.UserGuard;
 import com.vomatt.repository.CommentLikeRepository;
 import com.vomatt.repository.CommentReportRepository;
@@ -251,7 +251,7 @@ public class VoteCommentService {
     public void likeComment(UUID commentId, String userId) {
         findVisibleComment(commentId, userId);
         UUID userUuid = UUID.fromString(userId);
-        if (commentLikeRepository.insertIfAbsent(UUIDv7Generator.generateId(), commentId, userUuid) > 0) {
+        if (commentLikeRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(), commentId, userUuid) > 0) {
             log.info("User {} liked comment {}", userId, commentId);
         } else if (!commentLikeRepository.existsByCommentIdAndUserIdAndCommentIsDeletedFalse(commentId, userUuid)) {
             // Not a repeat on a live Comment (the common no-op): the Comment or the user is gone
@@ -266,7 +266,7 @@ public class VoteCommentService {
         if (comment.getUser().getId().equals(reporterId)) {
             throw ApiException.badRequest(MessageKey.COMMENT_REPORT_SELF);
         }
-        if (commentReportRepository.insertIfAbsent(UUIDv7Generator.generateId(), commentId, reporterId,
+        if (commentReportRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(), commentId, reporterId,
                 request.reason().name(), request.note()) > 0) {
             log.info("User {} reported comment {} as {}", userId, commentId, request.reason());
         } else if (!commentReportRepository.existsByCommentIdAndReporterIdAndCommentIsDeletedFalse(commentId, reporterId)) {

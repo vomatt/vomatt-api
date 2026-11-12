@@ -41,7 +41,7 @@ import com.vomatt.repository.LockTimeout;
 import com.vomatt.repository.CommunityMemberRepository;
 import com.vomatt.common.util.AfterCommit;
 import com.vomatt.common.util.TextUtil;
-import com.vomatt.common.util.UUIDv7Generator;
+import com.vomatt.entity.common.BaseEntity;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Limit;
@@ -205,7 +205,7 @@ public class UserService {
     public void blockUser(String userId, String targetId) {
         User target = findOtherActiveUser(userId, targetId, MessageKey.USER_BLOCK_SELF);
         followRepository.lockPair(UUID.fromString(userId), target.getId());
-        if (blockRepository.insertIfAbsent(UUIDv7Generator.generateId(), UUID.fromString(userId), target.getId()) > 0) {
+        if (blockRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(), UUID.fromString(userId), target.getId()) > 0) {
             log.info("User {} blocked user {}", userId, targetId);
         }
         if (followRepository.deleteByFollowerIdAndFollowedId(UUID.fromString(userId), target.getId()) > 0) {
@@ -244,7 +244,7 @@ public class UserService {
         if (blockRepository.existsByBlockerIdAndBlockedId(UUID.fromString(userId), target.getId())) {
             throw ApiException.badRequest(MessageKey.USER_FOLLOW_BLOCKED);
         }
-        if (followRepository.insertIfAbsent(UUIDv7Generator.generateId(), UUID.fromString(userId), target.getId()) > 0) {
+        if (followRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(), UUID.fromString(userId), target.getId()) > 0) {
             log.info("User {} followed user {}", userId, targetId);
         }
     }
@@ -449,7 +449,7 @@ public class UserService {
 
     // One statement, so two concurrent first writes of a key do not hit the unique key
     private void savePreference(User user, String key, String value) {
-        preferenceRepository.upsert(UUIDv7Generator.generateId(), user.getId(), key, value);
+        preferenceRepository.upsert(BaseEntity.newTimeOrderedId(), user.getId(), key, value);
     }
 
     @Transactional
@@ -529,7 +529,7 @@ public class UserService {
         } catch (IOException e) {
             throw ApiException.badRequest(MessageKey.COMMON_FILE_READ_FAILED);
         }
-        String name = UUIDv7Generator.generateId() + ".jpg";
+        String name = BaseEntity.newTimeOrderedId() + ".jpg";
         String key = AVATAR_KEY_PREFIX + name;
         storageService.put(key, jpeg, "image/jpeg");
         try {

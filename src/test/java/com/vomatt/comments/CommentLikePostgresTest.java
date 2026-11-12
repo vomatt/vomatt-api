@@ -25,7 +25,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
-import com.vomatt.common.util.UUIDv7Generator;
+import com.vomatt.entity.common.BaseEntity;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
 import com.vomatt.entity.VoteComment;
@@ -156,7 +156,7 @@ class CommentLikePostgresTest extends PostgresRepositoryTest {
 
     // The insert alone, as the service runs it once the Comment lookup has passed
     private int insertLike() {
-        return tx.execute(s -> likeRepository.insertIfAbsent(UUIDv7Generator.generateId(), comment.getId(), liker.getId()));
+        return tx.execute(s -> likeRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(), comment.getId(), liker.getId()));
     }
 
     private long likeCount() {

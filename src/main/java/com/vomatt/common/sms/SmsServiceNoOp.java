@@ -6,8 +6,8 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 /**
- * SmsService that only logs the OTP, for local development. Never loaded under the prod profile: without a real
- * provider (Twilio / AWS SNS...) production must fail to start rather than print codes into the logs.
+ * SmsService that only logs the OTP, for local development. Never loaded under the prod profile, where
+ * {@link SmsServiceUnavailable} refuses instead of printing codes into the logs.
  */
 @Slf4j
 @Service

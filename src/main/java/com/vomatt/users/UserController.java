@@ -390,7 +390,8 @@ public class UserController {
             - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
             - 400 `auth.sms.send_failed`: the SMS provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
             - 401 `auth.otp.too_many_attempts`: binding this number is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours)
-            - 429 `auth.otp.daily_limit`: 5 bind OTPs were already requested for this number from this IP today (UTC), or 15 from all IPs""")
+            - 429 `auth.otp.daily_limit`: 5 bind OTPs were already requested for this number from this IP today (UTC), or 15 from all IPs
+            - 503 `auth.sms.unavailable`: SMS is not available in this environment (production has no SMS provider yet); nothing is sent""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> sendPhoneBindOtp(
             @Valid @RequestBody BindPhoneSendOtpRequest request, HttpServletRequest httpRequest) {
         authService.sendPhoneBindOtp(request.phone(), ClientIpResolver.resolve(httpRequest));

@@ -308,6 +308,21 @@ class AuthServiceTest {
         verify(redisService, never()).delete("otp:phone:cooldown", k("+886912345678"));
     }
 
+    @Test
+    void shouldAnswer503AndReleaseOtpWhenSmsIsUnavailable() {
+        org.mockito.Mockito.doThrow(ApiException.serviceUnavailable(MessageKey.AUTH_SMS_UNAVAILABLE))
+                .when(smsService).sendOtp(anyString(), anyString());
+
+        assertThatThrownBy(() -> authService.sendPhoneBindOtp("0912345678", IP))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> {
+                    ApiException api = (ApiException) ex;
+                    assertThat(api.getStatus()).isEqualTo(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE);
+                    assertThat(api.getMessageKey()).isEqualTo(MessageKey.AUTH_SMS_UNAVAILABLE);
+                });
+        verify(redisService).delete("otp:phone-bind", k("+886912345678"));
+    }
+
     // ── verifyOtp ────────────────────────────────────────────────────
 
     @Test

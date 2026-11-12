@@ -258,6 +258,10 @@ public class AuthService {
 
         try {
             smsService.sendOtp(phone, code);
+        } catch (ApiException ex) {
+            // SMS unavailable in this environment (SmsServiceUnavailable): nothing was sent, keep the service's status
+            releaseUndeliveredOtp(namespace, redisKey, quota);
+            throw ex;
         } catch (Exception ex) {
             releaseUndeliveredOtp(namespace, redisKey, quota);
             log.warn("Failed to send OTP SMS: {}", ex.getMessage());

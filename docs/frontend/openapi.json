@@ -5745,19 +5745,21 @@
             "type" : "boolean"
           },
           "lookupKey" : {
-            "description" : "New key; null keeps the current one",
+            "description" : "New key; null keeps the current one, blank is rejected",
             "example" : "48h",
             "maxLength" : 50,
             "minLength" : 0,
             "nullable" : true,
+            "pattern" : "(?s).*\\S.*",
             "type" : "string"
           },
           "lookupType" : {
-            "description" : "New dictionary type; null keeps the current one",
+            "description" : "New dictionary type; null keeps the current one, blank is rejected",
             "example" : "vote_duration",
             "maxLength" : 50,
             "minLength" : 0,
             "nullable" : true,
+            "pattern" : "(?s).*\\S.*",
             "type" : "string"
           },
           "lookupValue" : {
@@ -8190,7 +8192,7 @@
         "tags" : [ "Admin - Lookup" ]
       },
       "put" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the item exists\n**Behavior**: partial update despite the PUT verb: only non-null fields are applied, and a field cannot be cleared to null. Changing `lookupType` or `lookupKey` moves the item\n**Side effects**: evicts the cached listings of the old and the new type, and the frontend dictionary when the item is or was flagged `frontendUsing`. Written to the audit log\n**Errors**:\n- 400 `common.bad_request`: `id` is not a valid UUID\n- 404 `lookup.not_found`: item does not exist\n- 409 `lookup.exists`: the resulting type and key belong to another item",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the item exists\n**Behavior**: partial update despite the PUT verb: only non-null fields are applied, and a field cannot be cleared to null. Changing `lookupType` or `lookupKey` moves the item\n**Side effects**: evicts the cached listings of the old and the new type, and the frontend dictionary when the item is or was flagged `frontendUsing`. Written to the audit log\n**Errors**:\n- 400 `common.bad_request`: `id` is not a valid UUID\n- 400 `common.validation_failed`: `lookupType` or `lookupKey` is blank, or a field is too long\n- 404 `lookup.not_found`: item does not exist\n- 409 `lookup.exists`: the resulting type and key belong to another item",
         "operationId" : "update",
         "parameters" : [ {
           "description" : "Dictionary item ID (UUIDv7)",

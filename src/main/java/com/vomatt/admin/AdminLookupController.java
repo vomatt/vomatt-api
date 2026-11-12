@@ -150,6 +150,7 @@ public class AdminLookupController {
                     **Side effects**: evicts the cached listings of the old and the new type, and the frontend dictionary when the item is or was flagged `frontendUsing`. Written to the audit log
                     **Errors**:
                     - 400 `common.bad_request`: `id` is not a valid UUID
+                    - 400 `common.validation_failed`: `lookupType` or `lookupKey` is blank, or a field is too long
                     - 404 `lookup.not_found`: item does not exist
                     - 409 `lookup.exists`: the resulting type and key belong to another item""")
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(mediaType = "application/json",

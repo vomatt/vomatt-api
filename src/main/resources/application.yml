@@ -178,6 +178,10 @@ app:
   retention:
     # Daily data retention run (RetentionJob), UTC; one instance does the work, the others skip via advisory lock
     cron: ${RETENTION_CRON:0 30 4 * * *}
+  community:
+    # CommunitySelectionJob, UTC: gives owners over their community limit a selection deadline, then locks the
+    # accounts of those who let it pass; runs on every instance, each user under their own row lock
+    selection-cron: ${COMMUNITY_SELECTION_CRON:0 */10 * * * *}
 
 otp:
   ttl-seconds: ${OTP_TTL_SECONDS:180}

@@ -215,6 +215,25 @@ class CommunityServiceTest {
     }
 
     @Test
+    void shouldRecordNewAccountInAuditDetailsWhenCreatingCommunity() {
+        UUID newId = UUID.randomUUID();
+        when(userRepository.findById(callerId)).thenReturn(Optional.of(User.builder().id(callerId).username("alice").build()));
+        when(userRepository.saveAndFlush(any())).thenAnswer(inv -> User.builder().id(newId)
+                .username(inv.<User>getArgument(0).getUsername()).displayName("Sunrise").build());
+        var request = new org.springframework.mock.web.MockHttpServletRequest("POST", "/api/communities");
+        org.springframework.web.context.request.RequestContextHolder.setRequestAttributes(
+                new org.springframework.web.context.request.ServletRequestAttributes(request));
+        try {
+            service.createCommunity("sunrise", "Sunrise", callerId);
+        } finally {
+            org.springframework.web.context.request.RequestContextHolder.resetRequestAttributes();
+        }
+
+        assertThat(request.getAttribute(com.vomatt.common.audit.AuditAspect.class.getName() + ".details"))
+                .isEqualTo("id=" + newId + "; username=sunrise");
+    }
+
+    @Test
     void shouldRefuseTransferWhenCallerIsNotOwner() {
         caller(ADMIN);
         target(EDITOR);

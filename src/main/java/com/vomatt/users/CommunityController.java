@@ -111,7 +111,7 @@ public class CommunityController {
             with the caller as its first OWNER, who then invites members (`POST /api/communities/{communityId}/invitations`). It has no email or phone and can never sign in; members \
             act as it with the `X-Act-As` header. Sent while acting, the real member becomes the OWNER. Returns 201 with the \
             account, `community` true
-            **Side effects**: the creation is audit-logged
+            **Side effects**: the creation is audit-logged as `CREATE` on `COMMUNITY`, with the new account's id and username in the details
             **Errors**:
             - 400 `common.validation_failed`: `username` not 3-50 characters of [a-z0-9_] or reserved, `displayName` blank or over 100 characters
             - 400 `community.member.invalid`: the caller is suspended or is a community account

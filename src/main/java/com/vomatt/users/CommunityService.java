@@ -88,6 +88,8 @@ public class CommunityService {
                 .roles(new String[] { UserRole.COMMUNITY })
                 .build());
         memberRepository.save(new CommunityMember(community.getId(), ownerUserId, OWNER));
+        // The CREATE audit entry has no id argument to name the new account by
+        AuditAspect.recordDetails("id=" + community.getId() + "; username=" + community.getUsername());
         log.info("Community account {} created with owner {}", community.getId(), ownerUserId);
         return userMapper.toSearchResult(community, new PublicName(community.getDisplayName(), null, null));
     }

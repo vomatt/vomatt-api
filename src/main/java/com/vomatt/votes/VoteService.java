@@ -646,7 +646,8 @@ public class VoteService {
             return;
         }
         vote.setDeletedAt(null);
-        voteRepository.save(vote);
+        // Flushed now so @PreUpdate stamps updated_at before the caller builds its response from this Poll
+        voteRepository.saveAndFlush(vote);
         tagRepository.incrementUsageCount(countedTagIds(vote));
     }
 

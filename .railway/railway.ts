@@ -22,7 +22,7 @@ export default defineRailway(() => {
       PROFILES_ACTIVE: "dev",
       LOG_LEVEL: "INFO",
       SWAGGER_ENABLED: "true",
-      // RAILWAY_PUBLIC_DOMAIN is injected once a domain is generated (Railway's VERCEL_URL)
+      // RAILWAY_PUBLIC_DOMAIN is injected once a domain is generated
       OPENAPI_DEV_URL: "https://${{RAILWAY_PUBLIC_DOMAIN}}",
       OPENAPI_PROD_URL: "https://${{RAILWAY_PUBLIC_DOMAIN}}",
       JWT_EXPIRATION_SECONDS: "3600",

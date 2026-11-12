@@ -381,7 +381,7 @@ public class UserService {
             userRepository.countVotedPolls(user.getId()), visibility, anonymousBallotByDefault, planService.quota(user));
     }
 
-    /** Data portability: everything stored about the caller, nothing about anyone else. Fails closed when Redis is down. */
+    /** Data portability: the caller's own data as GET /api/users/me/export lists it, nothing about anyone else. Fails closed when Redis is down. */
     @Transactional(readOnly = true)
     public UserDataExportResponse exportMyData(String userId) {
         String counterKey = userId + ":" + TextUtil.utcDay();

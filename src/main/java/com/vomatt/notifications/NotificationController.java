@@ -1,5 +1,6 @@
 package com.vomatt.notifications;
 
+import com.vomatt.common.annotation.ApiError;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -10,7 +11,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.vomatt.common.annotation.CommonApiResponses;
-import com.vomatt.common.config.OpenAPIConfig;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.common.response.SimpleResultResponse;
@@ -24,7 +25,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 
@@ -65,11 +65,6 @@ public class NotificationController {
                     "winningOptionLabels":["Dumplings","Noodles"],"tie":true},"comment":null}],\
                     "nextCursor":"Tk9USUZJQ0FUSU9OU3wwMTk5ZjJhMy0xYTJiLTdjM2QtOGU0Zi05YTBiMWMyZDNlNGZ8MjAyNi0xMC0yNVQxMDowMDowMFo"},\
                     "message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "`cursor` was not issued by this list "
-            + "(errorCode `common.cursor_invalid`), or `category` is not a category (`common.type_mismatch`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"Invalid cursor","errorCode":"common.cursor_invalid","error":"Invalid cursor"}""")))
     @Operation(summary = "List notifications", description = """
             **Auth**: required
             **Precondition**: none
@@ -110,9 +105,9 @@ public class NotificationController {
             and for a Reply the Comment it is under (`comment.parentId`). \
             An item can appear or vanish behind a cursor (a follow, a block); de-duplicate by `id`.
             **Side effects**: none
-            **Errors**:
-            - 400 `common.cursor_invalid`: `cursor` came from another list
-            - 400 `common.type_mismatch`: `category` is not one of the categories""")
+            """)
+    @ApiError(status = 400, key = MessageKey.COMMON_CURSOR_INVALID, when = "`cursor` came from another list")
+    @ApiError(status = 400, key = MessageKey.COMMON_TYPE_MISMATCH, when = "`category` is not one of the categories", args = { "limit" })
     public ResponseEntity<ApiResponse<CursorResponse<NotificationResponse>>> list(
             @Parameter(description = "Only this category's notifications; omit for all", example = "CONVERSATION")
             @RequestParam(required = false) NotificationCategory category,
@@ -127,10 +122,6 @@ public class NotificationController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"count":3},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "`category` is not a category (errorCode `common.type_mismatch`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"Invalid parameter format: category","errorCode":"common.type_mismatch","error":"Invalid parameter format: category"}""")))
     @Operation(summary = "Unread notification count", description = """
             **Auth**: required
             **Precondition**: none
@@ -139,8 +130,8 @@ public class NotificationController {
             `100` means 100 or more (show it as "99+"). \
             Poll this endpoint (for example on app focus and about once a minute) to drive a badge; there is no push.
             **Side effects**: none
-            **Errors**:
-            - 400 `common.type_mismatch`: `category` is not one of the categories""")
+            """)
+    @ApiError(status = 400, key = MessageKey.COMMON_TYPE_MISMATCH, when = "`category` is not one of the categories", args = { "limit" })
     public ResponseEntity<ApiResponse<UnreadCountResponse>> unreadCount(
             @Parameter(description = "Only this category's notifications; omit for all", example = "LIKE")
             @RequestParam(required = false) NotificationCategory category,
@@ -153,10 +144,6 @@ public class NotificationController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"ids":["comment_0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b","result_0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05"]},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "`category` is not a category (errorCode `common.type_mismatch`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"Invalid parameter format: category","errorCode":"common.type_mismatch","error":"Invalid parameter format: category"}""")))
     @Operation(summary = "Unread notification ids", description = """
             **Auth**: required
             **Precondition**: none
@@ -165,8 +152,8 @@ public class NotificationController {
             newest ones. Call it before `POST /api/notifications/read-all` to keep highlighting what was unread while the \
             feed is paged afterwards (every item then comes back with `read` true).
             **Side effects**: none
-            **Errors**:
-            - 400 `common.type_mismatch`: `category` is not one of the categories""")
+            """)
+    @ApiError(status = 400, key = MessageKey.COMMON_TYPE_MISMATCH, when = "`category` is not one of the categories", args = { "limit" })
     public ResponseEntity<ApiResponse<UnreadIdsResponse>> unreadIds(
             @Parameter(description = "Only this category's notifications; omit for all", example = "CONVERSATION")
             @RequestParam(required = false) NotificationCategory category,
@@ -179,11 +166,6 @@ public class NotificationController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "The caller has no such notification (errorCode `notification.not_found`); "
-            + "with a deprecated Poll id, the Poll does not exist or is Deleted (`vote.not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(value = """
-                            {"success":false,"data":null,"message":"Notification not found","errorCode":"notification.not_found","error":"Notification not found"}""")))
     @Operation(summary = "Mark a notification read", description = """
             **Auth**: required
             **Precondition**: the caller has the notification now (it would be listed by `GET /api/notifications` with its kind switched on)
@@ -193,9 +175,9 @@ public class NotificationController {
             **Side effects**: the unread count drops by 1 (first call only); `read` becomes true in the feed. For a Poll's RESULT \
             or INVITATION, `unread` becomes false on that Poll in `GET /api/votes/my`. A Poll's later RESULT is a separate \
             notification, unread until read itself. A Comment read as COMMENT is also read as MENTION, and the other way round, when switching `comments` moves it between the two.
-            **Errors**:
-            - 404 `notification.not_found`: no such notification for the caller now (unknown or malformed id, a Comment deleted, a follow undone, a `mention_` id the feed lists as `comment_`...)
-            - 404 `vote.not_found`: deprecated Poll id only; the Poll does not exist or is Deleted""")
+            """)
+    @ApiError(status = 404, key = MessageKey.NOTIFICATION_NOT_FOUND, when = "no such notification for the caller now (unknown or malformed id, a Comment deleted, a follow undone, a `mention_` id the feed lists as `comment_`...)")
+    @ApiError(status = 404, key = MessageKey.VOTE_NOT_FOUND, when = "deprecated Poll id only; the Poll does not exist or is Deleted")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> markRead(
             @Parameter(description = "Notification id from the feed (deprecated: a Poll id)", required = true,
                     example = "comment_0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b") @PathVariable String id,
@@ -215,7 +197,7 @@ public class NotificationController {
             **Behavior**: marks read every notification whose `createdAt` is at or before now, of every kind (switched-off \
             kinds included, so turning one back on does not bring back old unread items). Idempotent.
             **Side effects**: the unread count becomes 0; notifications created later arrive unread
-            **Errors**: none specific to this endpoint""")
+            **Errors**: none beyond the common ones""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> markAllRead(@AuthenticationPrincipal UserPrincipal principal) {
         notificationService.markAllRead(principal.userId());
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));

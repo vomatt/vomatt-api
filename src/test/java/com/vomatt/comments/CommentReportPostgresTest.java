@@ -19,7 +19,7 @@ import com.vomatt.admin.dto.AdminCommentReportResponse;
 import com.vomatt.common.dto.ReportRequest;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
-import com.vomatt.common.util.UUIDv7Generator;
+import com.vomatt.entity.common.BaseEntity;
 import com.vomatt.entity.ReportReason;
 import com.vomatt.entity.User;
 import com.vomatt.entity.Vote;
@@ -144,7 +144,7 @@ class CommentReportPostgresTest extends PostgresRepositoryTest {
 
     // The insert alone, as the service runs it once the Comment lookup has passed
     private int insertReport() {
-        return reportRepository.insertIfAbsent(UUIDv7Generator.generateId(), comment.getId(), reporter.getId(),
+        return reportRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(), comment.getId(), reporter.getId(),
                 ReportReason.SPAM.name(), null);
     }
 

@@ -22,7 +22,7 @@ import com.vomatt.comments.dto.CommentDto;
 import com.vomatt.comments.dto.CreateCommentRequest;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
-import com.vomatt.common.util.UUIDv7Generator;
+import com.vomatt.entity.common.BaseEntity;
 import com.vomatt.entity.Audience;
 import com.vomatt.entity.Invitee;
 import com.vomatt.entity.User;
@@ -254,8 +254,8 @@ class UserBlockPostgresTest extends PostgresRepositoryTest {
     @Test
     @DisplayName("should insert a block once and ignore the duplicate")
     void shouldIgnoreDuplicateWhenInsertingExistingBlock() {
-        assertThat(blockRepository.insertIfAbsent(UUIDv7Generator.generateId(), viewer.getId(), other.getId())).isEqualTo(1);
-        assertThat(blockRepository.insertIfAbsent(UUIDv7Generator.generateId(), viewer.getId(), other.getId())).isEqualTo(0);
+        assertThat(blockRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(), viewer.getId(), other.getId())).isEqualTo(1);
+        assertThat(blockRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(), viewer.getId(), other.getId())).isEqualTo(0);
         assertThat(blockRepository.deleteByBlockerIdAndBlockedId(viewer.getId(), other.getId())).isEqualTo(1);
         assertThat(blockRepository.deleteByBlockerIdAndBlockedId(viewer.getId(), other.getId())).isEqualTo(0);
     }

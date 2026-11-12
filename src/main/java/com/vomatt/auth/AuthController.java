@@ -1,5 +1,6 @@
 package com.vomatt.auth;
 
+import com.vomatt.common.annotation.ApiError;
 import com.vomatt.auth.dto.AppleAuthRequest;
 import com.vomatt.auth.dto.AuthResponse;
 import com.vomatt.auth.dto.GoogleAuthRequest;
@@ -12,14 +13,13 @@ import com.vomatt.auth.dto.RefreshRequest;
 import com.vomatt.auth.dto.SendOtpRequest;
 import com.vomatt.auth.dto.VerifyOtpRequest;
 import com.vomatt.common.annotation.PublicApiResponse;
-import com.vomatt.common.config.OpenAPIConfig;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.SimpleResultResponse;
 import com.vomatt.common.util.ClientIpResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -98,9 +98,6 @@ public class AuthController {
               "error": null
             }""";
 
-    private static final String ADMIN_FORBIDDEN = """
-            {"success": false, "data": null, "message": "This account does not have admin privileges", "errorCode": "auth.admin.forbidden", "error": "This account does not have admin privileges"}""";
-
     private static final String OK_PASSKEY_LOGIN_OPTIONS = """
             {
               "success": true,
@@ -128,14 +125,6 @@ public class AuthController {
                       }
                     }""";
 
-    private static final String PASSKEY_INVALID = """
-            {"success": false, "data": null, "message": "Passkey verification failed. Please try again", "errorCode": "auth.passkey.invalid", "error": "Passkey verification failed. Please try again"}""";
-    private static final String PASSKEY_ADMIN_SCOPE_REQUIRED = """
-            {"success": false, "data": null, "message": "This passkey cannot sign in to the admin console. Sign in with an email code, then register a passkey from the admin console", "errorCode": "auth.passkey.admin_scope_required", "error": "This passkey cannot sign in to the admin console. Sign in with an email code, then register a passkey from the admin console"}""";
-
-    private static final String ACCOUNT_BANNED = """
-            {"success": false, "data": null, "message": "This account has been banned and cannot sign in", "errorCode": "auth.account_banned", "error": "This account has been banned and cannot sign in"}""";
-
     private final AuthService authService;
     private final PasskeyService passkeyService;
 
@@ -152,12 +141,12 @@ public class AuthController {
                     **Behavior**: generates a 6-digit OTP, stores it with a TTL (default 180 s) and emails it. The email is lower-cased and trimmed; a Gmail address (gmail.com / googlemail.com) also loses its +tag and dots and moves to gmail.com. \
                     The admin console signs in with `POST /api/auth/admin/send-otp` instead
                     **Side effects**: sends an email; replaces any previous OTP for this address. A resend is refused during the cooldown (default 180 s), and each IP can request at most 20 OTPs for one address per UTC day, and all IPs together 60
-                    **Errors**:
-                    - 400 `auth.identifier.required`: `email` is missing or blank
-                    - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
-                    - 400 `auth.email.send_failed`: the email provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
-                    - 401 `auth.otp.too_many_attempts`: this email is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected
-                    - 429 `auth.otp.daily_limit`: 20 OTPs were already requested for this address from this IP today (UTC), or 60 from all IPs""")
+                    """)
+    @ApiError(status = 400, key = MessageKey.AUTH_IDENTIFIER_REQUIRED, when = "`email` is missing or blank")
+    @ApiError(status = 400, key = MessageKey.AUTH_OTP_RESEND_COOLDOWN, when = "an OTP was sent too recently; the message states the seconds left", args = { "180" })
+    @ApiError(status = 400, key = MessageKey.AUTH_EMAIL_SEND_FAILED, when = "the email provider rejected the message; the OTP is dropped and a resend is allowed after 30 s", args = { "SMTP timeout" })
+    @ApiError(status = 401, key = MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS, when = "this email is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected")
+    @ApiError(status = 429, key = MessageKey.AUTH_OTP_DAILY_LIMIT, when = "20 OTPs were already requested for this address from this IP today (UTC), or 60 from all IPs")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> sendOtp(@Valid @RequestBody SendOtpRequest req, HttpServletRequest httpRequest) {
         authService.sendOtp(req.email(), null, null, ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
@@ -169,14 +158,6 @@ public class AuthController {
             content = @Content(examples = @ExampleObject(value = OK_AUTH)))
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
                     {"email": "user@example.com", "code": "123456"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
-            description = "OTP missing/expired, wrong, or too many wrong attempts",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
-                    {"success": false, "data": null, "message": "Invalid verification code", "errorCode": "auth.invalid_otp", "error": "Invalid verification code"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-            description = "Account suspended (`auth.account_banned`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
-                    {"success": false, "data": null, "message": "This account has been banned and cannot sign in", "errorCode": "auth.account_banned", "error": "This account has been banned and cannot sign in"}""")))
     @Operation(summary = "Verify email OTP and sign in",
             description = """
                     **Auth**: public
@@ -189,12 +170,12 @@ public class AuthController {
                     the doubling is forgotten 24 hours after the last lock ends, and a successful sign-in from that IP resets it. \
                     While locked, sending or verifying an OTP from that IP is refused; other IPs are not affected and the OTP stays valid. \
                     One OTP allows 10 guesses in total across all IPs; after the 10th wrong guess it no longer verifies and a new OTP can be requested only after 15 minutes
-                    **Errors**:
-                    - 400 `auth.identifier.required`: `email` is missing or blank
-                    - 401 `auth.otp.invalid_or_expired`: no OTP exists for this email (never sent, expired, already used, or its 10 guesses are used up)
-                    - 401 `auth.invalid_otp`: the code is wrong
-                    - 401 `auth.otp.too_many_attempts`: 3rd wrong code, or this identifier is locked for the caller's IP (even a correct code is refused until the lock ends)
-                    - 403 `auth.account_banned`: the user is suspended (`active=false`)""")
+                    """)
+    @ApiError(status = 400, key = MessageKey.AUTH_IDENTIFIER_REQUIRED, when = "`email` is missing or blank")
+    @ApiError(status = 401, key = MessageKey.AUTH_OTP_INVALID_OR_EXPIRED, when = "no OTP exists for this email (never sent, expired, already used, or its 10 guesses are used up)")
+    @ApiError(status = 401, key = MessageKey.AUTH_INVALID_OTP, when = "the code is wrong")
+    @ApiError(status = 401, key = MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS, when = "3rd wrong code, or this identifier is locked for the caller's IP (even a correct code is refused until the lock ends)")
+    @ApiError(status = 403, key = MessageKey.AUTH_ACCOUNT_BANNED, when = "the user is suspended (`active=false`)")
     public ResponseEntity<ApiResponse<AuthResponse>> verifyOtp(@Valid @RequestBody VerifyOtpRequest req, HttpServletRequest httpRequest) {
         AuthResponse response = authService.verifyOtp(req.email(), null, req.code(), ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(response));
@@ -214,11 +195,11 @@ public class AuthController {
                     Every other email gets the same 200, cooldown and daily count with no email sent, so the response never tells whether an email is an admin. \
                     Its OTPs, wrong-code counters, lockouts and resend cooldown are separate from the consumer login, so a code from `send-otp` does not work here and vice versa
                     **Side effects**: sends an email (to an active admin only, after the response; a provider failure is only logged, so retry after the cooldown if no email arrives); replaces any previous admin console OTP for this address. A resend is refused during the cooldown (default 180 s), and each IP can request at most 20 OTPs for one address per UTC day, and all IPs together 60
-                    **Errors**:
-                    - 400 `auth.identifier.required`: `email` is missing or blank
-                    - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
-                    - 401 `auth.otp.too_many_attempts`: this email is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected
-                    - 429 `auth.otp.daily_limit`: 20 OTPs were already requested for this address from this IP today (UTC), or 60 from all IPs""")
+                    """)
+    @ApiError(status = 400, key = MessageKey.AUTH_IDENTIFIER_REQUIRED, when = "`email` is missing or blank")
+    @ApiError(status = 400, key = MessageKey.AUTH_OTP_RESEND_COOLDOWN, when = "an OTP was sent too recently; the message states the seconds left", args = { "180" })
+    @ApiError(status = 401, key = MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS, when = "this email is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected")
+    @ApiError(status = 429, key = MessageKey.AUTH_OTP_DAILY_LIMIT, when = "20 OTPs were already requested for this address from this IP today (UTC), or 60 from all IPs")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> adminSendOtp(@Valid @RequestBody SendOtpRequest req, HttpServletRequest httpRequest) {
         authService.sendAdminOtp(req.email(), ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
@@ -230,13 +211,6 @@ public class AuthController {
             content = @Content(examples = @ExampleObject(value = OK_ADMIN_AUTH)))
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
                     {"email": "admin@example.com", "code": "123456"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
-            description = "OTP missing/expired, wrong, or too many wrong attempts",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
-                    {"success": false, "data": null, "message": "Invalid verification code", "errorCode": "auth.invalid_otp", "error": "Invalid verification code"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-            description = "Not an existing admin account (`auth.admin.forbidden`) or account suspended (`auth.account_banned`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = ADMIN_FORBIDDEN)))
     @Operation(summary = "Verify admin console email OTP and sign in",
             description = """
                     **Auth**: public
@@ -244,13 +218,13 @@ public class AuthController {
                     **Behavior**: the only sign-in whose tokens grant the admin role (`/api/admin/**`). Verifies the OTP first (an email that is not an active admin never received one, so it fails like a wrong code), then checks the account is an active admin, and returns an access token and refresh token; \
                     refreshing them keeps the admin scope. Never creates an account. Wrong-code counting, lockouts and the 10-guess budget work as in `POST /api/auth/verify-otp`, separately from it
                     **Side effects**: the OTP is consumed on success; `lastLoginAt` is updated
-                    **Errors**:
-                    - 400 `auth.identifier.required`: `email` is missing or blank
-                    - 401 `auth.otp.invalid_or_expired`: no admin console OTP exists for this email (never sent, expired, already used, or its 10 guesses are used up)
-                    - 401 `auth.invalid_otp`: the code is wrong
-                    - 401 `auth.otp.too_many_attempts`: 3rd wrong code, or this email is locked for the caller's IP (even a correct code is refused until the lock ends)
-                    - 403 `auth.admin.forbidden`: the code was right but the account is no longer an admin (only possible for a code sent while it was one)
-                    - 403 `auth.account_banned`: the code was right but the admin was suspended since (`active=false`)""")
+                    """)
+    @ApiError(status = 400, key = MessageKey.AUTH_IDENTIFIER_REQUIRED, when = "`email` is missing or blank")
+    @ApiError(status = 401, key = MessageKey.AUTH_OTP_INVALID_OR_EXPIRED, when = "no admin console OTP exists for this email (never sent, expired, already used, or its 10 guesses are used up)")
+    @ApiError(status = 401, key = MessageKey.AUTH_INVALID_OTP, when = "the code is wrong")
+    @ApiError(status = 401, key = MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS, when = "3rd wrong code, or this email is locked for the caller's IP (even a correct code is refused until the lock ends)")
+    @ApiError(status = 403, key = MessageKey.AUTH_ADMIN_FORBIDDEN, when = "the code was right but the account is no longer an admin (only possible for a code sent while it was one)")
+    @ApiError(status = 403, key = MessageKey.AUTH_ACCOUNT_BANNED, when = "the code was right but the admin was suspended since (`active=false`)")
     public ResponseEntity<ApiResponse<AuthResponse>> adminVerifyOtp(@Valid @RequestBody VerifyOtpRequest req, HttpServletRequest httpRequest) {
         return ResponseEntity.ok(ApiResponse.ok(authService.verifyAdminOtp(req.email(), req.code(), ClientIpResolver.resolve(httpRequest))));
     }
@@ -267,8 +241,8 @@ public class AuthController {
                     and then `navigator.credentials.get({ publicKey })`, and send `credential.toJSON()` to `POST /api/auth/passkey/login/verify`. \
                     `allowCredentials` is always empty, so the user picks any passkey for vomatt.com. The admin console uses `POST /api/auth/admin/passkey/login/options` instead
                     **Side effects**: issues a one-time challenge that expires after 5 minutes
-                    **Errors**:
-                    - 429 `common.rate_limited`: too many auth requests from this IP""")
+                    """)
+    @ApiError(status = 429, key = MessageKey.COMMON_RATE_LIMITED, when = "too many auth requests from this IP")
     public ResponseEntity<ApiResponse<PasskeyLoginOptionsResponse>> passkeyLoginOptions() {
         return ResponseEntity.ok(ApiResponse.ok(passkeyService.loginOptions()));
     }
@@ -278,12 +252,6 @@ public class AuthController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = OK_AUTH)))
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = PASSKEY_LOGIN_BODY)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
-            description = "The passkey sign-in was not accepted (`auth.passkey.invalid`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = PASSKEY_INVALID)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-            description = "Account suspended (`auth.account_banned`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = ACCOUNT_BANNED)))
     @Operation(summary = "Sign in with a passkey",
             description = """
                     **Auth**: public
@@ -294,15 +262,14 @@ public class AuthController {
                     (`isNewUser` is always false). The tokens never grant the admin role, even for an admin; the admin console uses `POST /api/auth/admin/passkey/login/verify`
                     **Side effects**: the challenge is spent whether or not the sign-in succeeds; the passkey's sign count and last use, and the user's `lastLoginAt`, are updated. \
                     A sign count that did not increase is logged, not rejected
-                    **Errors**:
-                    - 400 `common.validation_failed`: `credential` or one of its required fields is missing
-                    - 401 `auth.passkey.invalid`: the response is malformed or fails verification (unknown passkey, wrong signature, origin or RP ID, unknown, spent or expired challenge); get new options and retry
-                    - 403 `auth.account_banned`: the account is suspended
-                    - 429 `common.rate_limited`: too many auth requests from this IP""")
+                    """)
+    @ApiError(status = 400, key = MessageKey.COMMON_VALIDATION_FAILED, when = "`credential` or one of its required fields is missing")
+    @ApiError(status = 401, key = MessageKey.AUTH_PASSKEY_INVALID, when = "the response is malformed or fails verification (unknown passkey, wrong signature, origin or RP ID, unknown, spent or expired challenge); get new options and retry")
+    @ApiError(status = 403, key = MessageKey.AUTH_ACCOUNT_BANNED, when = "the account is suspended")
+    @ApiError(status = 429, key = MessageKey.COMMON_RATE_LIMITED, when = "too many auth requests from this IP")
     public ResponseEntity<ApiResponse<AuthResponse>> passkeyLoginVerify(@Valid @RequestBody PasskeyLoginVerifyRequest req) {
         return ResponseEntity.ok(ApiResponse.ok(authService.verifyPasskey(req)));
     }
-
 
     @PostMapping("/admin/passkey/login/options")
     @PublicApiResponse
@@ -317,8 +284,8 @@ public class AuthController {
                     and send `credential.toJSON()` to `POST /api/auth/admin/passkey/login/verify`. The challenge is accepted only there, \
                     and that endpoint accepts no other challenge
                     **Side effects**: issues a one-time challenge that expires after 5 minutes
-                    **Errors**:
-                    - 429 `common.rate_limited`: too many auth requests from this IP""")
+                    """)
+    @ApiError(status = 429, key = MessageKey.COMMON_RATE_LIMITED, when = "too many auth requests from this IP")
     public ResponseEntity<ApiResponse<PasskeyLoginOptionsResponse>> adminPasskeyLoginOptions() {
         return ResponseEntity.ok(ApiResponse.ok(passkeyService.adminLoginOptions()));
     }
@@ -328,14 +295,6 @@ public class AuthController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = OK_ADMIN_AUTH)))
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = PASSKEY_LOGIN_BODY)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
-            description = "The passkey sign-in was not accepted (`auth.passkey.invalid`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = PASSKEY_INVALID)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-            description = "The passkey was not registered from the admin console (`auth.passkey.admin_scope_required`), not an admin account (`auth.admin.forbidden`) or account suspended (`auth.account_banned`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = {
-                    @ExampleObject(name = "admin_scope_required", value = PASSKEY_ADMIN_SCOPE_REQUIRED),
-                    @ExampleObject(name = "admin_forbidden", value = ADMIN_FORBIDDEN)}))
     @Operation(summary = "Sign in to the admin console with a passkey",
             description = """
                     **Auth**: public
@@ -345,26 +304,19 @@ public class AuthController {
                     but accepts only the admin console origin (https://admin.vomatt.com), then requires a passkey registered from the admin console \
                     and an active admin owner, and returns tokens that grant the admin role (`/api/admin/**`); refreshing them keeps the admin scope
                     **Side effects**: the challenge is spent whether or not the sign-in succeeds, also when the owner is not an admin; on success the passkey's sign count and last use, and `lastLoginAt`, are updated
-                    **Errors**:
-                    - 400 `common.validation_failed`: `credential` or one of its required fields is missing
-                    - 401 `auth.passkey.invalid`: the response is malformed or fails verification (including a consumer sign-in challenge or a non-admin-console origin); get new options and retry
-                    - 403 `auth.passkey.admin_scope_required`: the passkey was registered outside the admin console (including every passkey registered before this check existed); \
-                    sign in with `POST /api/auth/admin/send-otp`, then register a passkey from the admin console
-                    - 403 `auth.admin.forbidden`: the passkey's owner is not an admin (same response as `POST /api/auth/admin/verify-otp`)
-                    - 403 `auth.account_banned`: the admin is suspended
-                    - 429 `common.rate_limited`: too many auth requests from this IP""")
+                    """)
+    @ApiError(status = 400, key = MessageKey.COMMON_VALIDATION_FAILED, when = "`credential` or one of its required fields is missing")
+    @ApiError(status = 401, key = MessageKey.AUTH_PASSKEY_INVALID, when = "the response is malformed or fails verification (including a consumer sign-in challenge or a non-admin-console origin); get new options and retry")
+    @ApiError(status = 403, key = MessageKey.AUTH_PASSKEY_ADMIN_SCOPE_REQUIRED, when = "the passkey was registered outside the admin console (including every passkey registered before this check existed); sign in with `POST /api/auth/admin/send-otp`, then register a passkey from the admin console")
+    @ApiError(status = 403, key = MessageKey.AUTH_ADMIN_FORBIDDEN, when = "the passkey's owner is not an admin (same response as `POST /api/auth/admin/verify-otp`)")
+    @ApiError(status = 403, key = MessageKey.AUTH_ACCOUNT_BANNED, when = "the admin is suspended")
+    @ApiError(status = 429, key = MessageKey.COMMON_RATE_LIMITED, when = "too many auth requests from this IP")
     public ResponseEntity<ApiResponse<AuthResponse>> adminPasskeyLoginVerify(@Valid @RequestBody PasskeyLoginVerifyRequest req) {
         return ResponseEntity.ok(ApiResponse.ok(authService.verifyAdminPasskey(req)));
     }
 
-
     @PostMapping("/phone/send-otp")
     @PublicApiResponse
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503",
-            description = "SMS is not available in this environment (`auth.sms.unavailable`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = OpenAPIConfig.ERR_MESSAGE
-                    + "SMS verification is currently unavailable" + OpenAPIConfig.ERR_CODE + "auth.sms.unavailable"
-                    + OpenAPIConfig.ERR_ERROR + "SMS verification is currently unavailable" + OpenAPIConfig.ERR_END)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = OK_RESULT)))
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
@@ -376,13 +328,13 @@ public class AuthController {
                     **Behavior**: normalizes the number to E.164 (`0912345678` and `+886912345678` are the same number), generates a 6-digit OTP, stores it with a TTL (default 180 s) and sends it by SMS. \
                     `type` ("login" or "signup") is informational only; `POST /api/auth/phone/verify-otp` signs in an existing account or creates one and reports which in `isNewUser`
                     **Side effects**: sends an SMS; replaces any previous OTP for this number. A resend is refused during the cooldown (default 180 s), and each IP can request at most 5 OTPs for one number per UTC day, and all IPs together 15
-                    **Errors**:
-                    - 400 `auth.phone.invalid`: the number is neither a Taiwan mobile number (`09` + 8 digits) nor `+` country code and number (8-15 digits)
-                    - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
-                    - 400 `auth.sms.send_failed`: the SMS provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
-                    - 401 `auth.otp.too_many_attempts`: this number is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected
-                    - 429 `auth.otp.daily_limit`: 5 OTPs were already requested for this number from this IP today (UTC), or 15 from all IPs
-                    - 503 `auth.sms.unavailable`: SMS is not available in this environment (production has no SMS provider yet); nothing is sent""")
+                    """)
+    @ApiError(status = 400, key = MessageKey.AUTH_PHONE_INVALID, when = "the number is neither a Taiwan mobile number (`09` + 8 digits) nor `+` country code and number (8-15 digits)")
+    @ApiError(status = 400, key = MessageKey.AUTH_OTP_RESEND_COOLDOWN, when = "an OTP was sent too recently; the message states the seconds left", args = { "180" })
+    @ApiError(status = 400, key = MessageKey.AUTH_SMS_SEND_FAILED, when = "the SMS provider rejected the message; the OTP is dropped and a resend is allowed after 30 s", args = { "provider error" })
+    @ApiError(status = 401, key = MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS, when = "this number is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours); other IPs are not affected")
+    @ApiError(status = 429, key = MessageKey.AUTH_OTP_DAILY_LIMIT, when = "5 OTPs were already requested for this number from this IP today (UTC), or 15 from all IPs")
+    @ApiError(status = 503, key = MessageKey.AUTH_SMS_UNAVAILABLE, when = "SMS is not available in this environment (production has no SMS provider yet); nothing is sent")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> phoneSendOtp(@Valid @RequestBody PhoneSendOtpRequest req, HttpServletRequest httpRequest) {
         authService.sendOtp(null, req.phone(), req.type(), ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
@@ -394,14 +346,6 @@ public class AuthController {
             content = @Content(examples = @ExampleObject(value = OK_AUTH)))
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
                     {"phone": "0912345678", "code": "123456"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
-            description = "OTP missing/expired, wrong, or too many wrong attempts",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
-                    {"success": false, "data": null, "message": "Invalid verification code", "errorCode": "auth.invalid_otp", "error": "Invalid verification code"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-            description = "Account suspended (`auth.account_banned`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
-                    {"success": false, "data": null, "message": "This account has been banned and cannot sign in", "errorCode": "auth.account_banned", "error": "This account has been banned and cannot sign in"}""")))
     @Operation(summary = "Verify phone OTP and sign in",
             description = """
                     **Auth**: public
@@ -412,12 +356,12 @@ public class AuthController {
                     the doubling is forgotten 24 hours after the last lock ends, and a successful sign-in from that IP resets it. \
                     While locked, sending or verifying an OTP from that IP is refused; other IPs are not affected and the OTP stays valid. \
                     One OTP allows 10 guesses in total across all IPs; after the 10th wrong guess it no longer verifies and a new OTP can be requested only after 15 minutes
-                    **Errors**:
-                    - 400 `auth.phone.invalid`: the number is not in a supported format (see send-otp)
-                    - 401 `auth.otp.invalid_or_expired`: no OTP exists for this number (never sent, expired, already used, or its 10 guesses are used up)
-                    - 401 `auth.invalid_otp`: the code is wrong
-                    - 401 `auth.otp.too_many_attempts`: 3rd wrong code, or this identifier is locked for the caller's IP (even a correct code is refused until the lock ends)
-                    - 403 `auth.account_banned`: the user is suspended (`active=false`)""")
+                    """)
+    @ApiError(status = 400, key = MessageKey.AUTH_PHONE_INVALID, when = "the number is not in a supported format (see send-otp)")
+    @ApiError(status = 401, key = MessageKey.AUTH_OTP_INVALID_OR_EXPIRED, when = "no OTP exists for this number (never sent, expired, already used, or its 10 guesses are used up)")
+    @ApiError(status = 401, key = MessageKey.AUTH_INVALID_OTP, when = "the code is wrong")
+    @ApiError(status = 401, key = MessageKey.AUTH_OTP_TOO_MANY_ATTEMPTS, when = "3rd wrong code, or this identifier is locked for the caller's IP (even a correct code is refused until the lock ends)")
+    @ApiError(status = 403, key = MessageKey.AUTH_ACCOUNT_BANNED, when = "the user is suspended (`active=false`)")
     public ResponseEntity<ApiResponse<AuthResponse>> phoneVerifyOtp(@Valid @RequestBody PhoneVerifyOtpRequest req, HttpServletRequest httpRequest) {
         AuthResponse response = authService.verifyOtp(null, req.phone(), req.code(), ClientIpResolver.resolve(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(response));
@@ -429,18 +373,6 @@ public class AuthController {
             content = @Content(examples = @ExampleObject(value = OK_AUTH)))
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
                     {"idToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6Ij..."}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
-            description = "Google ID token rejected, or its email is not verified",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
-                    {"success": false, "data": null, "message": "This OAuth account's email is not verified; cannot sign in or merge an existing account", "errorCode": "auth.email_not_verified", "error": "This OAuth account's email is not verified; cannot sign in or merge an existing account"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-            description = "Account suspended (`auth.account_banned`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
-                    {"success": false, "data": null, "message": "This account has been banned and cannot sign in", "errorCode": "auth.account_banned", "error": "This account has been banned and cannot sign in"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503",
-            description = "Google's key endpoint is unreachable; safe to retry (`common.service_unavailable`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
-                    {"success": false, "data": null, "message": "Service temporarily unavailable, please try again later", "errorCode": "common.service_unavailable", "error": "Service temporarily unavailable, please try again later"}""")))
     @Operation(summary = "Sign in with Google",
             description = """
                     **Auth**: public
@@ -448,14 +380,14 @@ public class AuthController {
                     **Behavior**: verifies the ID token signature against Google's public keys, then its issuer, audience and expiry. Each ID token signs in once; presenting it again is refused. \
                     Signs in the user with that email, creating the user if new. An existing account with the same email is reused only when Google reports the email as verified
                     **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated; the token is marked used until it expires
-                    **Errors**:
-                    - 400 `auth.google.not_configured`: Google login is not configured on the server
-                    - 401 `auth.google.no_email`: the token is invalid (malformed, bad signature, wrong issuer, expired) or carries no email
-                    - 401 `auth.google.invalid_audience`: the token was issued for a different client ID
-                    - 401 `auth.oauth.token_replayed`: this ID token was already used to sign in
-                    - 401 `auth.email_not_verified`: Google reports the email as unverified
-                    - 403 `auth.account_banned`: the user is suspended (`active=false`)
-                    - 503 `common.service_unavailable`: Google's key endpoint is unreachable""")
+                    """)
+    @ApiError(status = 400, key = MessageKey.AUTH_GOOGLE_NOT_CONFIGURED, when = "Google login is not configured on the server")
+    @ApiError(status = 401, key = MessageKey.AUTH_GOOGLE_NO_EMAIL, when = "the token is invalid (malformed, bad signature, wrong issuer, expired) or carries no email")
+    @ApiError(status = 401, key = MessageKey.AUTH_GOOGLE_INVALID_AUDIENCE, when = "the token was issued for a different client ID")
+    @ApiError(status = 401, key = MessageKey.AUTH_OAUTH_TOKEN_REPLAYED, when = "this ID token was already used to sign in")
+    @ApiError(status = 401, key = MessageKey.AUTH_EMAIL_NOT_VERIFIED, when = "Google reports the email as unverified")
+    @ApiError(status = 403, key = MessageKey.AUTH_ACCOUNT_BANNED, when = "the user is suspended (`active=false`)")
+    @ApiError(status = 503, key = MessageKey.COMMON_SERVICE_UNAVAILABLE, when = "Google's key endpoint is unreachable")
     public ResponseEntity<ApiResponse<AuthResponse>> googleLogin(@Valid @RequestBody GoogleAuthRequest req) {
         return ResponseEntity.ok(ApiResponse.ok(authService.googleLogin(req.idToken())));
     }
@@ -466,18 +398,6 @@ public class AuthController {
             content = @Content(examples = @ExampleObject(value = OK_AUTH)))
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
                     {"code": "abc123def456", "redirectUri": "https://app.example.com/auth/line/callback"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
-            description = "LINE rejected the code or the access token, rejected the id_token or returned an unusable one (`auth.line.token_exchange_failed`), or the LINE profile could not be read (`auth.line.profile_failed`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
-                    {"success": false, "data": null, "message": "LINE token exchange failed", "errorCode": "auth.line.token_exchange_failed", "error": "LINE token exchange failed"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-            description = "Account suspended (`auth.account_banned`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
-                    {"success": false, "data": null, "message": "This account has been banned and cannot sign in", "errorCode": "auth.account_banned", "error": "This account has been banned and cannot sign in"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503",
-            description = "LINE failed (5xx), rate limited (429 / 408), did not answer in time, or returned an empty or malformed id_token verify body (`common.service_unavailable`). The authorization code may already be spent, so restart LINE Login for a new code instead of resending this request",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
-                    {"success": false, "data": null, "message": "Service temporarily unavailable, please try again later", "errorCode": "common.service_unavailable", "error": "Service temporarily unavailable, please try again later"}""")))
     @Operation(summary = "Sign in with LINE",
             description = """
                     **Auth**: public
@@ -487,14 +407,12 @@ public class AuthController {
                     A synthetic `line_<userId>@line.oauth` email is used only when LINE returns no id_token, or verifies it but returns no email \
                     (the user granted no email scope), so `user.email` in the response is never null for LINE logins
                     **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated
-                    **Errors**:
-                    - 400 `auth.line.not_configured`: LINE login is not configured on the server
-                    - 401 `auth.line.token_exchange_failed`: LINE rejected the code or the id_token (4xx), returned no access token or an unusable id_token, \
-                    or the id_token belongs to another LINE user than the profile
-                    - 401 `auth.line.profile_failed`: LINE rejected the access token (4xx) or returned no profile
-                    - 403 `auth.account_banned`: the user is suspended (`active=false`)
-                    - 503 `common.service_unavailable`: LINE's token, profile or id_token verify endpoint failed (5xx), \
                     rate limited (429 / 408), did not answer in time or returned an empty or malformed verify body. The code is single-use and may already be spent: restart LINE Login for a new code""")
+    @ApiError(status = 400, key = MessageKey.AUTH_LINE_NOT_CONFIGURED, when = "LINE login is not configured on the server")
+    @ApiError(status = 401, key = MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED, when = "LINE rejected the code or the id_token (4xx), returned no access token or an unusable id_token, or the id_token belongs to another LINE user than the profile")
+    @ApiError(status = 401, key = MessageKey.AUTH_LINE_PROFILE_FAILED, when = "LINE rejected the access token (4xx) or returned no profile")
+    @ApiError(status = 403, key = MessageKey.AUTH_ACCOUNT_BANNED, when = "the user is suspended (`active=false`)")
+    @ApiError(status = 503, key = MessageKey.COMMON_SERVICE_UNAVAILABLE, when = "LINE's token, profile or id_token verify endpoint failed (5xx), rate limited (429 / 408), did not answer in time or returned an empty or malformed verify body. The code is single-use and may already be spent: restart LINE Login for a new code")
     public ResponseEntity<ApiResponse<AuthResponse>> lineLogin(@Valid @RequestBody LineAuthRequest req) {
         return ResponseEntity.ok(ApiResponse.ok(authService.lineLogin(req.code(), req.redirectUri())));
     }
@@ -505,18 +423,6 @@ public class AuthController {
             content = @Content(examples = @ExampleObject(value = OK_AUTH)))
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
                     {"idToken": "eyJraWQiOiJZdXl1eVoxIiwiYWxnIjoiUlMyNTYifQ...", "fullName": "Ming Wang", "nonce": "f3a9c2b4e1d8a7c6b5e4d3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
-            description = "Apple identity token rejected (malformed, bad signature, wrong issuer/audience, expired, no email, or unverified email)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
-                    {"success": false, "data": null, "message": "Apple verification failed: invalid signature", "errorCode": "auth.apple.invalid_signature", "error": "Apple verification failed: invalid signature"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-            description = "Account suspended (`auth.account_banned`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
-                    {"success": false, "data": null, "message": "This account has been banned and cannot sign in", "errorCode": "auth.account_banned", "error": "This account has been banned and cannot sign in"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503",
-            description = "Apple's key endpoint is unreachable; safe to retry (`common.service_unavailable`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
-                    {"success": false, "data": null, "message": "Service temporarily unavailable, please try again later", "errorCode": "common.service_unavailable", "error": "Service temporarily unavailable, please try again later"}""")))
     @Operation(summary = "Sign in with Apple",
             description = """
                     **Auth**: public
@@ -525,21 +431,21 @@ public class AuthController {
                     Each identity token signs in once; presenting it again is refused. Signs in the user with the token's email, creating it if new. \
                     `fullName` is used only when a new user is created. An existing account with the same email is reused only when Apple reports the email as verified
                     **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated; the token is marked used until it expires
-                    **Errors**:
-                    - 400 `auth.apple.not_configured`: Apple login is not configured on the server
-                    - 401 `auth.apple.invalid_token`: the token is malformed or has no key ID
-                    - 401 `auth.apple.key_not_found`: no Apple public key matches the token
-                    - 401 `auth.apple.invalid_signature`: the signature does not verify
-                    - 401 `auth.apple.invalid_issuer`: the issuer is not Apple
-                    - 401 `auth.apple.invalid_audience`: the token was issued for a different client ID
-                    - 401 `auth.apple.token_expired`: the token has expired
-                    - 401 `auth.apple.invalid_nonce`: the token's `nonce` claim is missing or is not SHA-256 of the given `nonce`
-                    - 401 `auth.oauth.token_replayed`: this identity token was already used to sign in
-                    - 401 `auth.apple.no_email`: the token carries no email
-                    - 401 `auth.email_not_verified`: Apple reports the email as unverified
-                    - 401 `auth.apple.login_failed`: any other failure while processing the token
-                    - 403 `auth.account_banned`: the user is suspended (`active=false`)
-                    - 503 `common.service_unavailable`: Apple's key endpoint failed or returned an unusable response""")
+                    """)
+    @ApiError(status = 400, key = MessageKey.AUTH_APPLE_NOT_CONFIGURED, when = "Apple login is not configured on the server")
+    @ApiError(status = 401, key = MessageKey.AUTH_APPLE_INVALID_TOKEN, when = "the token is malformed or has no key ID")
+    @ApiError(status = 401, key = MessageKey.AUTH_APPLE_KEY_NOT_FOUND, when = "no Apple public key matches the token")
+    @ApiError(status = 401, key = MessageKey.AUTH_APPLE_INVALID_SIGNATURE, when = "the signature does not verify")
+    @ApiError(status = 401, key = MessageKey.AUTH_APPLE_INVALID_ISSUER, when = "the issuer is not Apple")
+    @ApiError(status = 401, key = MessageKey.AUTH_APPLE_INVALID_AUDIENCE, when = "the token was issued for a different client ID")
+    @ApiError(status = 401, key = MessageKey.AUTH_APPLE_TOKEN_EXPIRED, when = "the token has expired")
+    @ApiError(status = 401, key = MessageKey.AUTH_APPLE_INVALID_NONCE, when = "the token's `nonce` claim is missing or is not SHA-256 of the given `nonce`")
+    @ApiError(status = 401, key = MessageKey.AUTH_OAUTH_TOKEN_REPLAYED, when = "this identity token was already used to sign in")
+    @ApiError(status = 401, key = MessageKey.AUTH_APPLE_NO_EMAIL, when = "the token carries no email")
+    @ApiError(status = 401, key = MessageKey.AUTH_EMAIL_NOT_VERIFIED, when = "Apple reports the email as unverified")
+    @ApiError(status = 401, key = MessageKey.AUTH_APPLE_LOGIN_FAILED, when = "any other failure while processing the token")
+    @ApiError(status = 403, key = MessageKey.AUTH_ACCOUNT_BANNED, when = "the user is suspended (`active=false`)")
+    @ApiError(status = 503, key = MessageKey.COMMON_SERVICE_UNAVAILABLE, when = "Apple's key endpoint failed or returned an unusable response")
     public ResponseEntity<ApiResponse<AuthResponse>> appleLogin(@Valid @RequestBody AppleAuthRequest req) {
         return ResponseEntity.ok(ApiResponse.ok(authService.appleLogin(req.idToken(), req.fullName(), req.nonce())));
     }
@@ -550,14 +456,6 @@ public class AuthController {
             content = @Content(examples = @ExampleObject(value = OK_REFRESH)))
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
                     {"refreshToken": "8c7e3f4a-1234-5678-90ab-cdef12345678"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
-            description = "Refresh token invalid/expired/revoked (`auth.refresh_token.invalid`), or reuse of an already-rotated token detected (`auth.suspicious_login`); either way the client must sign in again",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
-                    {"success": false, "data": null, "message": "Security alert: this session was refreshed twice, so it has been signed out. Please log in again", "errorCode": "auth.suspicious_login", "error": "Security alert: this session was refreshed twice, so it has been signed out. Please log in again"}""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503",
-            description = "Redis is unavailable, so the token couldn't be checked; it is not spent. Keep the tokens and retry later (`common.service_unavailable`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = """
-                    {"success": false, "data": null, "message": "Service temporarily unavailable, please try again later", "errorCode": "common.service_unavailable", "error": "Service temporarily unavailable, please try again later"}""")))
     @Operation(summary = "Refresh access token",
             description = """
                     **Auth**: public (authenticated by the refresh token in the body, not by the Authorization header)
@@ -569,10 +467,11 @@ public class AuthController {
                     **Side effects**: the old refresh token is spent. If a spent token is presented again after the grace window, that sign-in is ended: \
                     its latest refresh token can no longer be refreshed (401 `auth.refresh_token.invalid`), so it must sign in again once its access token expires; the user's other devices stay signed in. \
                     If the user is missing or suspended, all their refresh tokens are revoked too
-                    **Errors**:
-                    - 401 `auth.refresh_token.invalid`: the token is unknown, expired, revoked, or its user is missing or suspended
-                    - 401 `auth.suspicious_login`: a spent token was reused after the grace window; the session it belonged to is now signed out
-                    - 429 `common.rate_limited` / 503 `common.service_unavailable`: the token was not checked or spent; keep the tokens and retry later. Only the two 401s end the session""")
+                    """)
+    @ApiError(status = 401, key = MessageKey.AUTH_REFRESH_TOKEN_INVALID, when = "the token is unknown, expired, revoked, or its user is missing or suspended")
+    @ApiError(status = 401, key = MessageKey.AUTH_SUSPICIOUS_LOGIN, when = "a spent token was reused after the grace window; the session it belonged to is now signed out")
+    @ApiError(status = 429, key = MessageKey.COMMON_RATE_LIMITED, when = "the token was not checked or spent; keep the tokens and retry later. Only the two 401s end the session")
+    @ApiError(status = 503, key = MessageKey.COMMON_SERVICE_UNAVAILABLE, when = "the token was not checked or spent; keep the tokens and retry later. Only the two 401s end the session")
     public ResponseEntity<ApiResponse<AuthResponse>> refresh(@Valid @RequestBody RefreshRequest req) {
         return ResponseEntity.ok(ApiResponse.ok(authService.refresh(req.refreshToken())));
     }
@@ -589,8 +488,8 @@ public class AuthController {
                     **Precondition**: none; an unknown or already-revoked token is not an error
                     **Behavior**: revokes the given refresh token. A token that was already refreshed signs out the sign-in it belongs to: the refresh token that replaced it can no longer be refreshed. Other devices' refresh tokens stay valid
                     **Side effects**: the refresh token can no longer be refreshed, and the sign-in's access tokens get 401 `auth.session_revoked` from the next request on. A logout with an already refreshed token cuts the access tokens of the refresh token that replaced it
-                    **Errors**:
-                    - 400 `common.validation_failed`: `refreshToken` is blank""")
+                    """)
+    @ApiError(status = 400, key = MessageKey.COMMON_VALIDATION_FAILED, when = "`refreshToken` is blank")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> logout(@Valid @RequestBody RefreshRequest req) {
         authService.logout(req.refreshToken());
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));

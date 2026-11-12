@@ -1,10 +1,6 @@
 package com.vomatt.reports;
 
-import static com.vomatt.common.config.OpenAPIConfig.ERR_CODE;
-import static com.vomatt.common.config.OpenAPIConfig.ERR_END;
-import static com.vomatt.common.config.OpenAPIConfig.ERR_ERROR;
-import static com.vomatt.common.config.OpenAPIConfig.ERR_MESSAGE;
-
+import com.vomatt.common.annotation.ApiError;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
@@ -15,7 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.vomatt.common.annotation.CommonApiResponses;
-import com.vomatt.common.config.OpenAPIConfig;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.security.UserPrincipal;
 import com.vomatt.reports.dto.PollReportResponse;
@@ -46,15 +42,6 @@ public class PollReportController {
             Option totals are not suppressed. Pre-Pro Anonymous Ballots count like any Ballot; no user id or name appears.
             **Side effects**: the first read after the Poll Ended stores the snapshot
             """;
-    private static final String ERRORS = """
-            **Errors**:
-            - 404 `vote.not_found`: Poll does not exist or is Deleted
-            - 403 `vote.forbidden`: the caller is not the Poll's owner
-            - 403 `community.role_forbidden`: acting as the community account with a role that may not read reports (`CHIEF_EDITOR`, `EDITOR`)
-            - 400 `report.not_pro`: the Poll is not a Pro poll
-            - 400 `report.cancelled`: the Poll was Cancelled (Ended before it opened); it has no report
-            - 403 `report.not_ready`: the Poll has not Ended or its `revealAt` has not passed
-            """;
     private static final String EX_REPORT = """
             { "voteId": "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05", "title": "Renovate the lobby this year?",
               "generatedAt": "2026-10-20T04:30:00Z", "minCellSize": 5,
@@ -66,30 +53,21 @@ public class PollReportController {
                             { "group": "MERGED", "voters": 6, "counts": [ 4, 2 ] } ],
               "genders": [ { "group": "MALE", "voters": 11, "counts": [ 7, 4 ] }, { "group": "FEMALE", "voters": 9, "counts": [ 5, 4 ] },
                            { "group": "MERGED", "voters": null, "counts": null } ] }""";
-    private static final String ERR_EXAMPLE = ERR_MESSAGE + "The report is available once the poll has ended and its results are revealed"
-            + ERR_CODE + "report.not_ready" + ERR_ERROR + "The report is available once the poll has ended and its results are revealed" + ERR_END;
-
-    private static final String ERR_NOT_PRO = ERR_MESSAGE + "Result reports are available only for Pro polls" + ERR_CODE + "report.not_pro"
-            + ERR_ERROR + "Result reports are available only for Pro polls" + ERR_END;
-    private static final String ERR_CANCELLED = ERR_MESSAGE + "A cancelled poll has no result report" + ERR_CODE + "report.cancelled"
-            + ERR_ERROR + "A cancelled poll has no result report" + ERR_END;
-    private static final String ERR_NOT_FOUND = ERR_MESSAGE + "Poll not found" + ERR_CODE + "vote.not_found" + ERR_ERROR + "Poll not found" + ERR_END;
 
     private final PollReportService reportService;
 
     @GetMapping("/{voteId}/report")
     @CommonApiResponses
-    @Operation(summary = "Get the result report of a Pro poll", description = ACCESS + BEHAVIOR + ERRORS)
+    @Operation(summary = "Get the result report of a Pro poll", description = ACCESS + BEHAVIOR)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "The report",
             content = @Content(examples = @ExampleObject(name = "Report", value = "{ \"success\": true, \"data\": " + EX_REPORT
                     + ", \"message\": null, \"errorCode\": null, \"error\": null }")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not the owner (`vote.forbidden`), role may not read reports (`community.role_forbidden`), or not revealed yet (`report.not_ready`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(name = "report.not_ready", value = ERR_EXAMPLE)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Not a Pro poll (`report.not_pro`), or Cancelled (`report.cancelled`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = {
-                    @ExampleObject(name = "report.not_pro", value = ERR_NOT_PRO), @ExampleObject(name = "report.cancelled", value = ERR_CANCELLED) }))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist or is Deleted (`vote.not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(name = "vote.not_found", value = ERR_NOT_FOUND)))
+    @ApiError(status = 404, key = MessageKey.VOTE_NOT_FOUND, when = "Poll does not exist or is Deleted")
+    @ApiError(status = 403, key = MessageKey.VOTE_FORBIDDEN, when = "the caller is not the Poll's owner")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_ROLE_FORBIDDEN, when = "acting as the community account with a role that may not read reports (`CHIEF_EDITOR`, `EDITOR`)")
+    @ApiError(status = 400, key = MessageKey.REPORT_NOT_PRO, when = "the Poll is not a Pro poll")
+    @ApiError(status = 400, key = MessageKey.REPORT_CANCELLED, when = "the Poll was Cancelled (Ended before it opened); it has no report")
+    @ApiError(status = 403, key = MessageKey.REPORT_NOT_READY, when = "the Poll has not Ended or its `revealAt` has not passed")
     public ResponseEntity<ApiResponse<PollReportResponse>> getReport(
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05") @PathVariable String voteId,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -105,7 +83,7 @@ public class PollReportController {
             Ballots, Invitees, Turnout rate, Minimum group size; then a blank line and `Option,Ballots` rows; then `Age band,Voters,<option>...` and \
             `Gender,Voters,<option>...` sections (suppressed cells empty). Text starting with `=`, `+`, `-` or `@` gets a leading `'`.
             **Side effects**: the first read after the Poll Ended stores the snapshot
-            """ + ERRORS)
+            """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "The report as CSV",
             content = @Content(mediaType = "text/csv", schema = @Schema(type = "string"), examples = @ExampleObject(name = "Report", value = """
                     Poll,Renovate the lobby this year?\r
@@ -120,13 +98,12 @@ public class PollReportController {
                     30-39,8,5,3\r
                     MERGED,,,\r
                     """)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not the owner (`vote.forbidden`), role may not read reports (`community.role_forbidden`), or not revealed yet (`report.not_ready`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(name = "report.not_ready", value = ERR_EXAMPLE)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Not a Pro poll (`report.not_pro`), or Cancelled (`report.cancelled`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = {
-                    @ExampleObject(name = "report.not_pro", value = ERR_NOT_PRO), @ExampleObject(name = "report.cancelled", value = ERR_CANCELLED) }))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist or is Deleted (`vote.not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(name = "vote.not_found", value = ERR_NOT_FOUND)))
+    @ApiError(status = 404, key = MessageKey.VOTE_NOT_FOUND, when = "Poll does not exist or is Deleted")
+    @ApiError(status = 403, key = MessageKey.VOTE_FORBIDDEN, when = "the caller is not the Poll's owner")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_ROLE_FORBIDDEN, when = "acting as the community account with a role that may not read reports (`CHIEF_EDITOR`, `EDITOR`)")
+    @ApiError(status = 400, key = MessageKey.REPORT_NOT_PRO, when = "the Poll is not a Pro poll")
+    @ApiError(status = 400, key = MessageKey.REPORT_CANCELLED, when = "the Poll was Cancelled (Ended before it opened); it has no report")
+    @ApiError(status = 403, key = MessageKey.REPORT_NOT_READY, when = "the Poll has not Ended or its `revealAt` has not passed")
     public ResponseEntity<byte[]> getReportCsv(
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05") @PathVariable String voteId,
             @AuthenticationPrincipal UserPrincipal principal) {

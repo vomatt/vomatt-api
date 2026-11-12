@@ -1,13 +1,14 @@
 package com.vomatt.admin;
 
+import com.vomatt.common.annotation.ApiError;
 import com.vomatt.common.audit.Auditable;
 import java.util.List;
 
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.util.TextUtil;
 import com.vomatt.common.response.SimpleResultResponse;
 import com.vomatt.common.annotation.CommonApiResponses;
-import com.vomatt.common.config.OpenAPIConfig;
 import com.vomatt.lookups.dto.CreateLookupRequest;
 import com.vomatt.lookups.dto.LookupDto;
 import com.vomatt.lookups.dto.UpdateLookupRequest;
@@ -16,7 +17,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -51,8 +51,7 @@ public class AdminLookupController {
                     **Precondition**: caller holds role ADMIN
                     **Behavior**: lists the items of `type` (every type when omitted), ordered by type then `seq`. Unlike the public listing, `includeInactive` (default true) also returns deactivated items so they can be re-activated. Not cached, not paged
                     **Side effects**: none
-                    **Errors**:
-                    - 400 `common.type_mismatch`: `includeInactive` is not a boolean""")
+                    """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Dictionary items",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Lookups", value = """
                     {
@@ -75,6 +74,7 @@ public class AdminLookupController {
                       "errorCode": null,
                       "error": null
                     }""")))
+    @ApiError(status = 400, key = MessageKey.COMMON_TYPE_MISMATCH, when = "`includeInactive` is not a boolean", args = { "limit" })
     public ResponseEntity<ApiResponse<List<LookupDto>>> listLookups(
             @Parameter(description = "Dictionary type; omit for every type", example = "vote_duration")
             @RequestParam(required = false) String type,
@@ -92,8 +92,7 @@ public class AdminLookupController {
                     **Precondition**: caller holds role ADMIN
                     **Behavior**: creates an active item; `type` and `key` are trimmed, `seq` defaults to 0 and `frontendUsing` to false. Returns **201**
                     **Side effects**: evicts the cached listing of this type, and the frontend dictionary when `frontendUsing` is true. Written to the audit log
-                    **Errors**:
-                    - 409 `lookup.exists`: an item with this type and key already exists""")
+                    """)
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(mediaType = "application/json",
             examples = @ExampleObject(name = "CreateLookup", value = """
                             {
@@ -124,16 +123,7 @@ public class AdminLookupController {
                       "errorCode": null,
                       "error": null
                     }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Type and key already used by another item (`lookup.exists`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "LookupExists", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "Dictionary item already exists: vote_duration/24h",
-                              "errorCode": "lookup.exists",
-                              "error": "Dictionary item already exists: vote_duration/24h"
-                            }""")))
+    @ApiError(status = 409, key = MessageKey.LOOKUP_EXISTS, when = "an item with this type and key already exists", args = { "vote_duration", "24h" })
     public ResponseEntity<ApiResponse<LookupDto>> create(
             @Valid @RequestBody CreateLookupRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(lookupService.create(request)));
@@ -148,11 +138,7 @@ public class AdminLookupController {
                     **Precondition**: caller holds role ADMIN; the item exists
                     **Behavior**: partial update despite the PUT verb: only non-null fields are applied, and a field cannot be cleared to null. Changing `lookupType` or `lookupKey` moves the item
                     **Side effects**: evicts the cached listings of the old and the new type, and the frontend dictionary when the item is or was flagged `frontendUsing`. Written to the audit log
-                    **Errors**:
-                    - 400 `common.bad_request`: `id` is not a valid UUID
-                    - 400 `common.validation_failed`: `lookupType` or `lookupKey` is blank, or a field is too long
-                    - 404 `lookup.not_found`: item does not exist
-                    - 409 `lookup.exists`: the resulting type and key belong to another item""")
+                    """)
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(mediaType = "application/json",
             examples = @ExampleObject(name = "UpdateLookup", value = """
                             {
@@ -179,36 +165,10 @@ public class AdminLookupController {
                       "errorCode": null,
                       "error": null
                     }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Malformed ID in the path (`common.bad_request`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "BadRequest", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "Invalid request",
-                              "errorCode": "common.bad_request",
-                              "error": "Invalid request"
-                            }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Dictionary item not found (`lookup.not_found`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "LookupNotFound", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "Dictionary item not found",
-                              "errorCode": "lookup.not_found",
-                              "error": "Dictionary item not found"
-                            }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Type and key already used by another item (`lookup.exists`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "LookupExists", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "Dictionary item already exists: vote_duration/24h",
-                              "errorCode": "lookup.exists",
-                              "error": "Dictionary item already exists: vote_duration/24h"
-                            }""")))
+    @ApiError(status = 400, key = MessageKey.COMMON_BAD_REQUEST, when = "`id` is not a valid UUID")
+    @ApiError(status = 400, key = MessageKey.COMMON_VALIDATION_FAILED, when = "`lookupType` or `lookupKey` is blank, or a field is too long")
+    @ApiError(status = 404, key = MessageKey.LOOKUP_NOT_FOUND, when = "item does not exist")
+    @ApiError(status = 409, key = MessageKey.LOOKUP_EXISTS, when = "the resulting type and key belong to another item", args = { "vote_duration", "24h" })
     public ResponseEntity<ApiResponse<LookupDto>> update(
             @Parameter(description = "Dictionary item ID (UUIDv7)", required = true) @PathVariable String id,
             @Valid @RequestBody UpdateLookupRequest request) {
@@ -224,9 +184,7 @@ public class AdminLookupController {
                     **Precondition**: caller holds role ADMIN; the item exists
                     **Behavior**: sets `isActive` to true; idempotent
                     **Side effects**: evicts the cached type listing, and the frontend dictionary when the item is flagged `frontendUsing`. Written to the audit log
-                    **Errors**:
-                    - 400 `common.bad_request`: `id` is not a valid UUID
-                    - 404 `lookup.not_found`: item does not exist""")
+                    """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Dictionary item activated",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Activated", value = """
                     {
@@ -241,26 +199,8 @@ public class AdminLookupController {
                       "errorCode": null,
                       "error": null
                     }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Malformed ID in the path (`common.bad_request`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "BadRequest", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "Invalid request",
-                              "errorCode": "common.bad_request",
-                              "error": "Invalid request"
-                            }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Dictionary item not found (`lookup.not_found`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "LookupNotFound", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "Dictionary item not found",
-                              "errorCode": "lookup.not_found",
-                              "error": "Dictionary item not found"
-                            }""")))
+    @ApiError(status = 400, key = MessageKey.COMMON_BAD_REQUEST, when = "`id` is not a valid UUID")
+    @ApiError(status = 404, key = MessageKey.LOOKUP_NOT_FOUND, when = "item does not exist")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> activate(
             @Parameter(description = "Dictionary item ID (UUIDv7)", required = true) @PathVariable String id) {
         lookupService.activate(id);
@@ -276,9 +216,7 @@ public class AdminLookupController {
                     **Precondition**: caller holds role ADMIN; the item exists
                     **Behavior**: sets `isActive` to false; the item stays retrievable through the single-item endpoint but leaves type listings and the frontend dictionary. Idempotent
                     **Side effects**: evicts the cached type listing, and the frontend dictionary when the item is flagged `frontendUsing`. Written to the audit log
-                    **Errors**:
-                    - 400 `common.bad_request`: `id` is not a valid UUID
-                    - 404 `lookup.not_found`: item does not exist""")
+                    """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Dictionary item deactivated",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Deactivated", value = """
                     {
@@ -293,26 +231,8 @@ public class AdminLookupController {
                       "errorCode": null,
                       "error": null
                     }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Malformed ID in the path (`common.bad_request`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "BadRequest", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "Invalid request",
-                              "errorCode": "common.bad_request",
-                              "error": "Invalid request"
-                            }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Dictionary item not found (`lookup.not_found`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "LookupNotFound", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "Dictionary item not found",
-                              "errorCode": "lookup.not_found",
-                              "error": "Dictionary item not found"
-                            }""")))
+    @ApiError(status = 400, key = MessageKey.COMMON_BAD_REQUEST, when = "`id` is not a valid UUID")
+    @ApiError(status = 404, key = MessageKey.LOOKUP_NOT_FOUND, when = "item does not exist")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> deactivate(
             @Parameter(description = "Dictionary item ID (UUIDv7)", required = true) @PathVariable String id) {
         lookupService.deactivate(id);
@@ -328,9 +248,7 @@ public class AdminLookupController {
                     **Precondition**: caller holds role ADMIN; the item exists
                     **Behavior**: permanently removes the item; prefer deactivation when it may be needed again
                     **Side effects**: evicts the cached type listing, and the frontend dictionary when the item is flagged `frontendUsing`. Written to the audit log
-                    **Errors**:
-                    - 400 `common.bad_request`: `id` is not a valid UUID
-                    - 404 `lookup.not_found`: item does not exist""")
+                    """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Dictionary item deleted",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Deleted", value = """
                     {
@@ -345,26 +263,8 @@ public class AdminLookupController {
                       "errorCode": null,
                       "error": null
                     }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Malformed ID in the path (`common.bad_request`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "BadRequest", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "Invalid request",
-                              "errorCode": "common.bad_request",
-                              "error": "Invalid request"
-                            }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Dictionary item not found (`lookup.not_found`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "LookupNotFound", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "Dictionary item not found",
-                              "errorCode": "lookup.not_found",
-                              "error": "Dictionary item not found"
-                            }""")))
+    @ApiError(status = 400, key = MessageKey.COMMON_BAD_REQUEST, when = "`id` is not a valid UUID")
+    @ApiError(status = 404, key = MessageKey.LOOKUP_NOT_FOUND, when = "item does not exist")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> delete(
             @Parameter(description = "Dictionary item ID (UUIDv7)", required = true) @PathVariable String id) {
         lookupService.delete(id);

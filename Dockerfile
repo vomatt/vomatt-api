@@ -1,5 +1,5 @@
-# Production image: Railway builds this file (.railway/railway.ts dockerfilePath); the name is kept because Railway points at it
-# Local check: docker build -f Dockerfile.vercel -t vomatt-api .
+# Production image: Railway builds this file (.railway/railway.ts dockerfilePath); docker compose builds it too
+# Local check: docker build -t vomatt-api .
 
 # ---- build ----
 FROM eclipse-temurin:25-jdk@sha256:2d5d5e9b533342a565907c84f47a2ec298c40cde7b13a3ca85d4950fa456a641 AS build
@@ -18,7 +18,7 @@ COPY --from=build /app ./
 # Small containers get little CPU at startup: C1-only JIT + AOT cache (JEP 514) shorten it
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
 # AOT cache training: exits once the context refreshes; with Flyway off, startup does not connect to DB / Redis, so placeholder env vars are enough
-RUN SPRING_FLYWAY_ENABLED=false DB_URL=jdbc:postgresql://localhost/x DB_PASSWORD=x JWT_SECRET=aot-training-placeholder-secret-0123456789 APP_KEY=aot-training-placeholder-secret-0123456789 \
+RUN PROFILES_ACTIVE=dev SPRING_FLYWAY_ENABLED=false DB_URL=jdbc:postgresql://localhost/x DB_PASSWORD=x JWT_SECRET=aot-training-placeholder-secret-0123456789 APP_KEY=aot-training-placeholder-secret-0123456789 \
     java -XX:AOTCacheOutput=app.aot -Dspring.context.exit=onRefresh -jar vomatt-api-0.0.1-SNAPSHOT.jar
 # Railway sets PORT; 80 is the fallback when it is unset
 CMD ["sh", "-c", "exec java -XX:AOTCache=app.aot -Dserver.port=${PORT:-80} -jar vomatt-api-0.0.1-SNAPSHOT.jar"]

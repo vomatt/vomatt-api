@@ -15,7 +15,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class AuditServiceTest {
@@ -31,7 +30,6 @@ class AuditServiceTest {
     @Test
     @DisplayName("should resolve the actor on the writer and anonymize entries of an actor that no longer exists")
     void shouldResolveActorWhenWritingEntry() {
-        ReflectionTestUtils.setField(auditService, "auditEnabled", true);
         java.util.UUID id = java.util.UUID.randomUUID();
         java.util.UUID gone = java.util.UUID.randomUUID();
         when(userRepository.findById(id)).thenReturn(java.util.Optional.of(com.vomatt.entity.User.builder().id(id).username("alice").build()));
@@ -70,7 +68,6 @@ class AuditServiceTest {
     @Test
     @DisplayName("should look the actor up only after a write permit is held")
     void shouldResolveActorUnderWritePermit() throws Exception {
-        ReflectionTestUtils.setField(auditService, "auditEnabled", true);
         auditService.permitWaitMillis = 10;
         java.util.UUID id = java.util.UUID.randomUUID();
         CountDownLatch started = new CountDownLatch(2);
@@ -95,7 +92,6 @@ class AuditServiceTest {
     @Test
     @DisplayName("should drop the audit write when both writers stay busy")
     void shouldDropAuditWriteWhenWritersBusy() throws Exception {
-        ReflectionTestUtils.setField(auditService, "auditEnabled", true);
         auditService.permitWaitMillis = 10;
         CountDownLatch started = new CountDownLatch(2);
         CountDownLatch release = new CountDownLatch(1);

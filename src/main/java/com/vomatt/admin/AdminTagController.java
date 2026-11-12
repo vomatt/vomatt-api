@@ -1,19 +1,19 @@
 package com.vomatt.admin;
 
+import com.vomatt.common.annotation.ApiError;
 import com.vomatt.common.audit.Auditable;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.tags.dto.CreateTagRequest;
 import com.vomatt.tags.dto.UpdateTagRequest;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.SimpleResultResponse;
 import com.vomatt.common.annotation.CommonApiResponses;
-import com.vomatt.common.config.OpenAPIConfig;
 import com.vomatt.tags.dto.TagDto;
 import com.vomatt.tags.TagService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -45,10 +45,7 @@ public class AdminTagController {
                     **Precondition**: caller holds role ADMIN
                     **Behavior**: creates a tag. `name` is trimmed; `slug` defaults to a slug generated from the name (lowercase, spaces to hyphens, unsupported characters dropped). Returns 200 with the created tag, `usageCount` 0
                     **Side effects**: a new tag becomes visible in the public tag lists. Written to the audit log
-                    **Errors**:
-                    - 400 `common.bad_request`: `slug` is omitted and no valid slug can be generated from `name`
-                    - 409 `tag.name.exists`: another tag already has this name
-                    - 409 `tag.slug.exists`: another tag already has this slug""")
+                    """)
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(mediaType = "application/json",
             examples = @ExampleObject(name = "CreateTag", value = """
                             {
@@ -73,26 +70,9 @@ public class AdminTagController {
                       "errorCode": null,
                       "error": null
                     }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "`slug` cannot be generated from the name (`common.bad_request`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "BadRequest", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "Invalid request",
-                              "errorCode": "common.bad_request",
-                              "error": "Invalid request"
-                            }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Tag name already exists (`tag.name.exists`) or slug already exists (`tag.slug.exists`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "TagNameExists", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "Tag name already exists: Technology",
-                              "errorCode": "tag.name.exists",
-                              "error": "Tag name already exists: Technology"
-                            }""")))
+    @ApiError(status = 400, key = MessageKey.COMMON_BAD_REQUEST, when = "`slug` is omitted and no valid slug can be generated from `name`")
+    @ApiError(status = 409, key = MessageKey.TAG_NAME_EXISTS, when = "another tag already has this name", args = { "Technology" })
+    @ApiError(status = 409, key = MessageKey.TAG_SLUG_EXISTS, when = "another tag already has this slug", args = { "technology" })
     public ResponseEntity<ApiResponse<TagDto>> createTag(
             @Valid @RequestBody CreateTagRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(tagService.createTag(request)));
@@ -107,11 +87,7 @@ public class AdminTagController {
                     **Precondition**: caller holds role ADMIN; the tag exists
                     **Behavior**: replaces name, slug, description and displayOrder with the request values (full update: an omitted `description` becomes null and an omitted `displayOrder` becomes 0). `slug` is regenerated from `name` when null or blank, even if the tag already had a custom slug
                     **Side effects**: the change is visible in the public tag lists; Polls keep their association with the tag. Written to the audit log
-                    **Errors**:
-                    - 400 `common.bad_request`: `tagId` is not a valid UUID, or no valid slug can be generated from `name`
-                    - 404 `tag.not_found`: tag does not exist
-                    - 409 `tag.name.exists`: another tag already has this name
-                    - 409 `tag.slug.exists`: another tag already has this slug""")
+                    """)
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(mediaType = "application/json",
             examples = @ExampleObject(name = "UpdateTag", value = """
                             {
@@ -136,36 +112,10 @@ public class AdminTagController {
                       "errorCode": null,
                       "error": null
                     }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Malformed `tagId`, or `slug` cannot be generated (`common.bad_request`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "BadRequest", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "Invalid request",
-                              "errorCode": "common.bad_request",
-                              "error": "Invalid request"
-                            }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Tag not found (`tag.not_found`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "TagNotFound", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "Tag not found",
-                              "errorCode": "tag.not_found",
-                              "error": "Tag not found"
-                            }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Tag name already exists (`tag.name.exists`) or slug already exists (`tag.slug.exists`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "TagNameExists", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "Tag name already exists: Technology",
-                              "errorCode": "tag.name.exists",
-                              "error": "Tag name already exists: Technology"
-                            }""")))
+    @ApiError(status = 400, key = MessageKey.COMMON_BAD_REQUEST, when = "`tagId` is not a valid UUID, or no valid slug can be generated from `name`")
+    @ApiError(status = 404, key = MessageKey.TAG_NOT_FOUND, when = "tag does not exist")
+    @ApiError(status = 409, key = MessageKey.TAG_NAME_EXISTS, when = "another tag already has this name", args = { "Technology" })
+    @ApiError(status = 409, key = MessageKey.TAG_SLUG_EXISTS, when = "another tag already has this slug", args = { "technology" })
     public ResponseEntity<ApiResponse<TagDto>> updateTag(
             @Parameter(description = "Tag ID (UUIDv7)", required = true)
             @PathVariable String tagId,
@@ -182,10 +132,7 @@ public class AdminTagController {
                     **Precondition**: caller holds role ADMIN; the tag exists and is not used by any Poll
                     **Behavior**: hard-deletes the tag; returns `{success: true}`
                     **Side effects**: the tag disappears from the public tag lists. Written to the audit log
-                    **Errors**:
-                    - 400 `common.bad_request`: `tagId` is not a valid UUID
-                    - 404 `tag.not_found`: tag does not exist
-                    - 409 `tag.in_use`: at least one Poll still references the tag""")
+                    """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Tag deleted",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Deleted", value = """
                     {
@@ -200,36 +147,9 @@ public class AdminTagController {
                       "errorCode": null,
                       "error": null
                     }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Malformed ID in the path (`common.bad_request`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "BadRequest", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "Invalid request",
-                              "errorCode": "common.bad_request",
-                              "error": "Invalid request"
-                            }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Tag not found (`tag.not_found`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "TagNotFound", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "Tag not found",
-                              "errorCode": "tag.not_found",
-                              "error": "Tag not found"
-                            }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Tag is referenced by a Poll (`tag.in_use`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "TagInUse", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "Tag is in use and cannot be deleted",
-                              "errorCode": "tag.in_use",
-                              "error": "Tag is in use and cannot be deleted"
-                            }""")))
+    @ApiError(status = 400, key = MessageKey.COMMON_BAD_REQUEST, when = "`tagId` is not a valid UUID")
+    @ApiError(status = 404, key = MessageKey.TAG_NOT_FOUND, when = "tag does not exist")
+    @ApiError(status = 409, key = MessageKey.TAG_IN_USE, when = "at least one Poll still references the tag")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> deleteTag(
             @Parameter(description = "Tag ID (UUIDv7)", required = true)
             @PathVariable String tagId) {

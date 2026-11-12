@@ -8,7 +8,7 @@ import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.security.ActingMember;
 import com.vomatt.common.util.AfterCommit;
 import com.vomatt.common.util.TextUtil;
-import com.vomatt.common.util.UUIDv7Generator;
+import com.vomatt.entity.common.BaseEntity;
 import com.vomatt.common.util.UserGuard;
 import com.vomatt.common.email.EmailService;
 import com.vomatt.common.email.InvitationEmailLimiter;
@@ -95,7 +95,6 @@ public class VoteService {
     private final UserVoteRepository userVoteRepository;
     private final UserRepository userRepository;
     private final TagRepository tagRepository;
-    private final VoteConfigurationProperties voteConfig;
     private final VoteMapper voteMapper;
     private final VoteListRepository voteListRepository;
     private final VoteCommentRepository voteCommentRepository;
@@ -119,6 +118,15 @@ public class VoteService {
     static final String MAX_OPTIONS_KEY = "vote_max_options";
     static final String MAX_DURATION_DAYS_KEY = "vote_max_duration_days";
     static final String DELETE_WINDOW_MINUTES_KEY = "vote_delete_window_minutes";
+    static final int MIN_OPTIONS = 2;
+    // Fallbacks when the config lookups above are unset or invalid
+    static final int DEFAULT_MAX_OPTIONS = 10;
+    static final Duration DEFAULT_MAX_DURATION = Duration.ofDays(365);
+    /** How long after posting an Open Poll can still be Deleted (ADR 0004). */
+    static final Duration DEFAULT_DELETE_WINDOW = Duration.ofMinutes(20);
+    /** Per-user fixed-window cap on Ballot writes (cast, Retract, remove Selection). */
+    static final int BALLOT_RATE_LIMIT_CAPACITY = 30;
+    static final Duration BALLOT_RATE_LIMIT_WINDOW = Duration.ofSeconds(60);
 
     public VoteResponse createVote(CreateVoteRequest request, String creatorId) {
         validateCreateVoteRequest(request, request.getStartTime(), request.getRevealAt());
@@ -241,7 +249,7 @@ public class VoteService {
             throw ApiException.badRequest(MessageKey.VOTE_REPORT_SELF);
         }
         UUID reporterId = UUID.fromString(userId);
-        if (voteReportRepository.insertIfAbsent(UUIDv7Generator.generateId(), vote.getId(), reporterId,
+        if (voteReportRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(), vote.getId(), reporterId,
                 request.reason().name(), request.note()) > 0) {
             log.info("User {} reported vote {} as {}", userId, voteId, request.reason());
         } else if (!voteReportRepository.existsByVoteIdAndReporterIdAndVoteDeletedAtIsNull(vote.getId(), reporterId)) {
@@ -254,7 +262,7 @@ public class VoteService {
     public void bookmark(String voteId, String userId) {
         Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
         UUID userUuid = UUID.fromString(userId);
-        if (bookmarkRepository.insertIfAbsent(UUIDv7Generator.generateId(), userUuid, vote.getId()) > 0) {
+        if (bookmarkRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(), userUuid, vote.getId()) > 0) {
             log.info("User {} bookmarked vote {}", userId, voteId);
         } else if (!bookmarkRepository.existsByUserIdAndVoteIdAndVoteDeletedAtIsNull(userUuid, vote.getId())) {
             requireLiveVote(vote.getId(), userUuid);
@@ -277,7 +285,7 @@ public class VoteService {
     public void like(String voteId, String userId) {
         Vote vote = findAccessibleVote(UUID.fromString(voteId), userId);
         UUID userUuid = UUID.fromString(userId);
-        if (voteRepository.insertLikeIfAbsent(UUIDv7Generator.generateId(), userUuid, vote.getId()) > 0) {
+        if (voteRepository.insertLikeIfAbsent(BaseEntity.newTimeOrderedId(), userUuid, vote.getId()) > 0) {
             log.info("User {} liked vote {}", userId, voteId);
         } else if (!voteRepository.existsLiveLike(userUuid, vote.getId())) {
             requireLiveVote(vote.getId(), userUuid);
@@ -824,15 +832,14 @@ public class VoteService {
 
     // Runs before any row lock so throttled requests never touch the Poll; fails open like RateLimitFilter's write path
     private void checkBallotRateLimit(String userId) {
-        VoteConfigurationProperties.BallotRateLimit limit = voteConfig.getBallotRateLimit();
         long count;
         try {
-            count = redisService.incrementAndExpire(BALLOT_RATE_LIMIT_NS, userId, limit.getWindow());
+            count = redisService.incrementAndExpire(BALLOT_RATE_LIMIT_NS, userId, BALLOT_RATE_LIMIT_WINDOW);
         } catch (RuntimeException e) {
             log.warn("Ballot rate limit check failed for user {}: {}", userId, e.getMessage());
             return;
         }
-        if (count > limit.getCapacity()) {
+        if (count > BALLOT_RATE_LIMIT_CAPACITY) {
             throw ApiException.tooManyRequests(MessageKey.COMMON_RATE_LIMITED);
         }
     }
@@ -982,9 +989,9 @@ public class VoteService {
         }).toList();
     }
 
-    /** Admin override {@code config / vote_delete_window_minutes}, else {@code app.vote.delete-window} (ADR 0004). */
+    /** Admin override {@code config / vote_delete_window_minutes}, else {@link #DEFAULT_DELETE_WINDOW} (ADR 0004). */
     private Duration deleteWindow() {
-        return lookupService.configDuration(DELETE_WINDOW_MINUTES_KEY, ChronoUnit.MINUTES, voteConfig.getDeleteWindow());
+        return lookupService.configDuration(DELETE_WINDOW_MINUTES_KEY, ChronoUnit.MINUTES, DEFAULT_DELETE_WINDOW);
     }
 
     private static List<VoteOption> sortedOptions(Vote vote) {
@@ -1100,13 +1107,13 @@ public class VoteService {
             throw ApiException.badRequest(MessageKey.VOTE_MULTIPLE_NOT_ALLOWED);
         }
 
-        if (request.getOptions().size() < voteConfig.getMinOptionsPerVote()) {
-            throw ApiException.badRequest(MessageKey.VOTE_OPTIONS_MIN, voteConfig.getMinOptionsPerVote());
+        if (request.getOptions().size() < MIN_OPTIONS) {
+            throw ApiException.badRequest(MessageKey.VOTE_OPTIONS_MIN, MIN_OPTIONS);
         }
 
         // Never below the minimum, or no Poll could be created
-        int maxOptions = Math.max(lookupService.configInt(MAX_OPTIONS_KEY, voteConfig.getMaxOptionsPerVote()),
-                voteConfig.getMinOptionsPerVote());
+        int maxOptions = Math.max(lookupService.configInt(MAX_OPTIONS_KEY, DEFAULT_MAX_OPTIONS),
+                MIN_OPTIONS);
         if (request.getOptions().size() > maxOptions) {
             throw ApiException.badRequest(MessageKey.VOTE_OPTIONS_MAX, maxOptions);
         }
@@ -1121,7 +1128,7 @@ public class VoteService {
                 throw ApiException.badRequest(MessageKey.VOTE_END_BEFORE_START);
             }
 
-            Duration maxDuration = lookupService.configDuration(MAX_DURATION_DAYS_KEY, ChronoUnit.DAYS, voteConfig.getMaxVoteDuration());
+            Duration maxDuration = lookupService.configDuration(MAX_DURATION_DAYS_KEY, ChronoUnit.DAYS, DEFAULT_MAX_DURATION);
             OffsetDateTime maxEndTime = (startTime != null ? startTime : OffsetDateTime.now()).plus(maxDuration);
             if (request.getEndTime().isAfter(maxEndTime)) {
                 throw ApiException.badRequest(MessageKey.VOTE_DURATION_EXCEEDED, maxDuration.toDays());

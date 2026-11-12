@@ -20,7 +20,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import com.vomatt.common.util.UUIDv7Generator;
+import com.vomatt.entity.common.BaseEntity;
 import com.vomatt.entity.Tag;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserVote;
@@ -86,12 +86,12 @@ class UserGuardLockPostgresTest extends PostgresRepositoryTest {
 
         UUID userId = me.getId();
         List<Future<Integer>> inserts = List.of(
-                insert(() -> bookmarkRepository.insertIfAbsent(UUIDv7Generator.generateId(), userId, poll.getId())),
-                insert(() -> voteReportRepository.insertIfAbsent(UUIDv7Generator.generateId(), poll.getId(), userId,
+                insert(() -> bookmarkRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(), userId, poll.getId())),
+                insert(() -> voteReportRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(), poll.getId(), userId,
                         "SPAM", null)),
                 insert(() -> tagRepository.follow(userId, tag.getId())),
-                insert(() -> likeRepository.insertIfAbsent(UUIDv7Generator.generateId(), comment.getId(), userId)),
-                insert(() -> commentReportRepository.insertIfAbsent(UUIDv7Generator.generateId(), comment.getId(),
+                insert(() -> likeRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(), comment.getId(), userId)),
+                insert(() -> commentReportRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(), comment.getId(),
                         userId, "SPAM", null)));
         Thread.sleep(500);
         assertThat(inserts).noneMatch(Future::isDone);
@@ -121,7 +121,7 @@ class UserGuardLockPostgresTest extends PostgresRepositoryTest {
         assertThat(pollLocked.await(5, TimeUnit.SECONDS)).isTrue();
 
         // Before the user-row lock the report took users then waited on the Poll that deletion held: a cycle
-        Future<Integer> report = insert(() -> voteReportRepository.insertIfAbsent(UUIDv7Generator.generateId(),
+        Future<Integer> report = insert(() -> voteReportRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(),
                 poll.getId(), userId, "SPAM", null));
         Thread.sleep(300);
         assertThat(report.isDone()).isFalse();
@@ -147,7 +147,7 @@ class UserGuardLockPostgresTest extends PostgresRepositoryTest {
         }));
         assertThat(userLocked.await(5, TimeUnit.SECONDS)).isTrue();
 
-        Future<Integer> bookmark = insert(() -> bookmarkRepository.insertIfAbsent(UUIDv7Generator.generateId(), userId,
+        Future<Integer> bookmark = insert(() -> bookmarkRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(), userId,
                 own.getId()));
         Thread.sleep(300);
         assertThat(bookmark.isDone()).isFalse();
@@ -160,12 +160,12 @@ class UserGuardLockPostgresTest extends PostgresRepositoryTest {
     @Test
     void shouldNotBookmarkDeletedPollAndNotCountOldBookmarkAsRepeat() {
         UUID userId = me.getId();
-        tx.executeWithoutResult(s -> bookmarkRepository.insertIfAbsent(UUIDv7Generator.generateId(), userId,
+        tx.executeWithoutResult(s -> bookmarkRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(), userId,
                 poll.getId()));
         tx.executeWithoutResult(s -> em.createNativeQuery("UPDATE vomatt.votes SET deleted_at = now() WHERE id = :id")
                 .setParameter("id", poll.getId()).executeUpdate());
 
-        Integer inserted = tx.execute(s -> bookmarkRepository.insertIfAbsent(UUIDv7Generator.generateId(),
+        Integer inserted = tx.execute(s -> bookmarkRepository.insertIfAbsent(BaseEntity.newTimeOrderedId(),
                 owner.getId(), poll.getId()));
         assertThat(inserted).isZero();
         assertThat(bookmarkRepository.existsByUserIdAndVoteIdAndVoteDeletedAtIsNull(userId, poll.getId())).isFalse();

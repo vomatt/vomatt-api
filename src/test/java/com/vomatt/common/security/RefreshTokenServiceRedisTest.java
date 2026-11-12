@@ -3,7 +3,7 @@ package com.vomatt.common.security;
 import com.vomatt.common.config.RedisConfig;
 import com.vomatt.common.redis.RedisOperationException;
 import com.vomatt.common.redis.RedisService;
-import com.vomatt.common.redis.RedisServiceImpl;
+import com.vomatt.common.redis.RedisService;
 import com.vomatt.entity.User;
 import com.vomatt.repository.UserRepository;
 import org.junit.jupiter.api.AfterAll;
@@ -41,7 +41,7 @@ class RefreshTokenServiceRedisTest {
     static LettuceConnectionFactory connectionFactory;
     static RedisTemplate<String, Object> template;
 
-    RedisServiceImpl redisService;
+    RedisService redisService;
     RefreshTokenService service;
     String userId = UUID.randomUUID().toString();
 
@@ -68,7 +68,7 @@ class RefreshTokenServiceRedisTest {
             c.serverCommands().flushAll();
             return null;
         });
-        redisService = new RedisServiceImpl(template, JsonMapper.builder().build());
+        redisService = new RedisService(template, JsonMapper.builder().build());
         JwtUtil jwtUtil = mock(JwtUtil.class);
         when(jwtUtil.generateToken(anyString(), any(), anyBoolean(), any())).thenReturn("access");
         UserRepository userRepository = mock(UserRepository.class);

@@ -1,12 +1,13 @@
 package com.vomatt.admin;
 
+import com.vomatt.common.annotation.ApiError;
 import java.util.UUID;
 
 import com.vomatt.admin.dto.AdminVoteResponse;
 import com.vomatt.admin.dto.SetProRequest;
 import com.vomatt.common.annotation.CommonApiResponses;
 import com.vomatt.common.audit.Auditable;
-import com.vomatt.common.config.OpenAPIConfig;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.PageResponse;
 import com.vomatt.common.response.SimpleResultResponse;
@@ -16,7 +17,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -80,15 +80,6 @@ public class AdminVoteController {
                 "creatorActive": true
               }""";
 
-    private static final String VOTE_NOT_FOUND_EXAMPLE = """
-            {
-              "success": false,
-              "data": null,
-              "message": "Vote not found",
-              "errorCode": "vote.not_found",
-              "error": "Vote not found"
-            }""";
-
     private final AdminVoteService adminVoteService;
 
     @GetMapping
@@ -99,10 +90,7 @@ public class AdminVoteController {
                     **Precondition**: caller holds role ADMIN
                     **Behavior**: offset page of every Poll, any Audience and Deleted ones included, newest created first. Filters (all optional, combined with AND): `q` searches title and description (at least 2 characters); `status` is `scheduled`, `open` or `ended`, derived from the times; `creatorId`; `audience` (`PUBLIC`, `UNLISTED`, `INVITE_ONLY`); `deleted` true for Deleted only, false for not Deleted only. Results stay Sealed: `vote.options[].votes` is null until the Poll has Ended. `page` is 1-based (default 1), `limit` 1-50 (default 20)
                     **Side effects**: none
-                    **Errors**:
-                    - 400 `common.invalid_status`: `status` is not `scheduled`, `open` or `ended`
-                    - 400 `common.type_mismatch`: `creatorId`, `audience` or `deleted` is malformed
-                    - 400 `vote.search.query_too_short`: `q` is a single character""")
+                    """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Page of Polls",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Polls", value = """
                     {
@@ -120,6 +108,9 @@ public class AdminVoteController {
                       "errorCode": null,
                       "error": null
                     }""")))
+    @ApiError(status = 400, key = MessageKey.COMMON_INVALID_STATUS, when = "`status` is not `scheduled`, `open` or `ended`", args = { "archived" })
+    @ApiError(status = 400, key = MessageKey.COMMON_TYPE_MISMATCH, when = "`creatorId`, `audience` or `deleted` is malformed", args = { "limit" })
+    @ApiError(status = 400, key = MessageKey.VOTE_SEARCH_QUERY_TOO_SHORT, when = "`q` is a single character")
     public ResponseEntity<ApiResponse<PageResponse<AdminVoteResponse>>> listVotes(
             @Parameter(description = "Search text on title and description, at least 2 characters", example = "language")
             @RequestParam(required = false) String q,
@@ -144,9 +135,7 @@ public class AdminVoteController {
                     **Precondition**: caller holds role ADMIN
                     **Behavior**: returns any Poll, Deleted and Invite-only included, with when it was Deleted and the owner's email and suspension state. Results stay Sealed until the Poll has Ended
                     **Side effects**: none
-                    **Errors**:
-                    - 400 `common.type_mismatch`: `voteId` is not a valid UUID
-                    - 404 `vote.not_found`: no Poll with this ID""")
+                    """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "The Poll",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Poll", value = """
                     {
@@ -157,9 +146,8 @@ public class AdminVoteController {
                       "errorCode": null,
                       "error": null
                     }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll not found (`vote.not_found`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "VoteNotFound", value = VOTE_NOT_FOUND_EXAMPLE)))
+    @ApiError(status = 400, key = MessageKey.COMMON_TYPE_MISMATCH, when = "`voteId` is not a valid UUID", args = { "limit" })
+    @ApiError(status = 404, key = MessageKey.VOTE_NOT_FOUND, when = "no Poll with this ID")
     public ResponseEntity<ApiResponse<AdminVoteResponse>> getVote(
             @Parameter(description = "Poll ID (UUIDv7)", required = true) @PathVariable UUID voteId) {
         return ResponseEntity.ok(ApiResponse.ok(adminVoteService.getVote(voteId)));
@@ -174,12 +162,7 @@ public class AdminVoteController {
                     **Precondition**: the Poll exists, is not Deleted, and is Open with Audience UNLISTED or INVITE_ONLY, the same rules as the owner's Close (to take down a Public or Scheduled Poll, Delete it)
                     **Behavior**: Closes the Poll for its owner: it Ends now and keeps its Deadline. An Ended Poll is left as is (idempotent). Returns the Poll, whose results are now unsealed unless its `revealAt` is still ahead
                     **Side effects**: Participants see the Poll Ended in their notifications. Written to the audit log
-                    **Errors**:
-                    - 400 `common.type_mismatch`: `voteId` is not a valid UUID
-                    - 400 `vote.close.public_not_allowed`: the Poll is Public
-                    - 400 `vote.close.scheduled`: the Poll is Scheduled
-                    - 404 `vote.not_found`: no Poll with this ID, or the Poll is Deleted (Restore it first)
-                    - 409 `common.conflict`: the Poll is busy (a Ballot or another change holds it); retry""")
+                    """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Poll Closed",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Closed", value = """
                     {
@@ -190,29 +173,11 @@ public class AdminVoteController {
                       "errorCode": null,
                       "error": null
                     }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Public (`vote.close.public_not_allowed`) or Scheduled (`vote.close.scheduled`) Poll, or malformed `voteId` (`common.type_mismatch`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "ClosePublic", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "A Public Poll cannot be closed early; it runs until its deadline",
-                              "errorCode": "vote.close.public_not_allowed",
-                              "error": "A Public Poll cannot be closed early; it runs until its deadline"
-                            }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll not found (`vote.not_found`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "VoteNotFound", value = VOTE_NOT_FOUND_EXAMPLE)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Poll busy (`common.conflict`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "Conflict", value = """
-                            {
-                              "success": false,
-                              "data": null,
-                              "message": "Resource conflict, please try again",
-                              "errorCode": "common.conflict",
-                              "error": "Resource conflict, please try again"
-                            }""")))
+    @ApiError(status = 400, key = MessageKey.COMMON_TYPE_MISMATCH, when = "`voteId` is not a valid UUID", args = { "limit" })
+    @ApiError(status = 400, key = MessageKey.VOTE_CLOSE_PUBLIC_NOT_ALLOWED, when = "the Poll is Public")
+    @ApiError(status = 400, key = MessageKey.VOTE_CLOSE_SCHEDULED, when = "the Poll is Scheduled")
+    @ApiError(status = 404, key = MessageKey.VOTE_NOT_FOUND, when = "no Poll with this ID, or the Poll is Deleted (Restore it first)")
+    @ApiError(status = 409, key = MessageKey.COMMON_CONFLICT, when = "the Poll is busy (a Ballot or another change holds it); retry")
     public ResponseEntity<ApiResponse<AdminVoteResponse>> closeVote(
             @Parameter(description = "Poll ID (UUIDv7)", required = true) @PathVariable UUID voteId,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -228,11 +193,7 @@ public class AdminVoteController {
                     **Precondition**: the Poll exists and is not Deleted; any status
                     **Behavior**: turns Pro on or off (idempotent). A Pro poll takes Ballots only from users with a verified phone number, refuses Anonymous Ballots and has Voter Visibility NOBODY. Turning Pro on sets Voter Visibility to NOBODY (and the deprecated `anonymous` to true); Anonymous Ballots already cast stay as they are, and Ballots already cast by users without a verified phone number are kept but cannot be changed or retracted until they verify one. Turning Pro off keeps the Voter Visibility. Returns the Poll
                     **Side effects**: Written to the audit log (action `SET_PRO`, details `pro=true` / `pro=false`)
-                    **Errors**:
-                    - 400 `common.type_mismatch`: `voteId` is not a valid UUID
-                    - 400 `common.validation_failed`: `pro` is missing
-                    - 404 `vote.not_found`: no Poll with this ID, or the Poll is Deleted (Restore it first)
-                    - 409 `common.conflict`: the Poll is busy; retry""")
+                    """)
     @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true,
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "ProOn", value = """
                     { "pro": true }""")))
@@ -246,9 +207,10 @@ public class AdminVoteController {
                       "errorCode": null,
                       "error": null
                     }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll not found (`vote.not_found`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "VoteNotFound", value = VOTE_NOT_FOUND_EXAMPLE)))
+    @ApiError(status = 400, key = MessageKey.COMMON_TYPE_MISMATCH, when = "`voteId` is not a valid UUID", args = { "limit" })
+    @ApiError(status = 400, key = MessageKey.COMMON_VALIDATION_FAILED, when = "`pro` is missing")
+    @ApiError(status = 404, key = MessageKey.VOTE_NOT_FOUND, when = "no Poll with this ID, or the Poll is Deleted (Restore it first)")
+    @ApiError(status = 409, key = MessageKey.COMMON_CONFLICT, when = "the Poll is busy; retry")
     public ResponseEntity<ApiResponse<AdminVoteResponse>> setPro(
             @Parameter(description = "Poll ID (UUIDv7)", required = true) @PathVariable UUID voteId,
             @Valid @RequestBody SetProRequest request,
@@ -265,10 +227,7 @@ public class AdminVoteController {
                     **Precondition**: the Poll exists; any status, regardless of the owner's delete window
                     **Behavior**: Deletes the Poll (soft: the row and its Ballots are kept, `deletedAt` is set). A Deleted Poll is left as is (idempotent). Returns `{success: true}`
                     **Side effects**: the Poll is hidden from everyone, owner included, and its tags stop counting it. Nobody is notified. Reversible with Restore. Written to the audit log
-                    **Errors**:
-                    - 400 `common.type_mismatch`: `voteId` is not a valid UUID
-                    - 404 `vote.not_found`: no Poll with this ID
-                    - 409 `common.conflict`: the Poll is busy; retry""")
+                    """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Poll Deleted",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Deleted", value = """
                     {
@@ -283,9 +242,9 @@ public class AdminVoteController {
                       "errorCode": null,
                       "error": null
                     }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll not found (`vote.not_found`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "VoteNotFound", value = VOTE_NOT_FOUND_EXAMPLE)))
+    @ApiError(status = 400, key = MessageKey.COMMON_TYPE_MISMATCH, when = "`voteId` is not a valid UUID", args = { "limit" })
+    @ApiError(status = 404, key = MessageKey.VOTE_NOT_FOUND, when = "no Poll with this ID")
+    @ApiError(status = 409, key = MessageKey.COMMON_CONFLICT, when = "the Poll is busy; retry")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> deleteVote(
             @Parameter(description = "Poll ID (UUIDv7)", required = true) @PathVariable UUID voteId,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -302,10 +261,7 @@ public class AdminVoteController {
                     **Precondition**: the Poll exists
                     **Behavior**: undoes a Delete by clearing `deletedAt`; a Poll that is not Deleted is left as is (idempotent). Its times are unchanged, so it comes back in whatever status they give. Returns the Poll
                     **Side effects**: the Poll is visible again to everyone who could reach it before, and its tags count it again. Written to the audit log
-                    **Errors**:
-                    - 400 `common.type_mismatch`: `voteId` is not a valid UUID
-                    - 404 `vote.not_found`: no Poll with this ID
-                    - 409 `common.conflict`: the Poll is busy; retry""")
+                    """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Poll restored",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Restored", value = """
                     {
@@ -316,9 +272,9 @@ public class AdminVoteController {
                       "errorCode": null,
                       "error": null
                     }""")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll not found (`vote.not_found`)",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "VoteNotFound", value = VOTE_NOT_FOUND_EXAMPLE)))
+    @ApiError(status = 400, key = MessageKey.COMMON_TYPE_MISMATCH, when = "`voteId` is not a valid UUID", args = { "limit" })
+    @ApiError(status = 404, key = MessageKey.VOTE_NOT_FOUND, when = "no Poll with this ID")
+    @ApiError(status = 409, key = MessageKey.COMMON_CONFLICT, when = "the Poll is busy; retry")
     public ResponseEntity<ApiResponse<AdminVoteResponse>> restoreVote(
             @Parameter(description = "Poll ID (UUIDv7)", required = true) @PathVariable UUID voteId,
             @AuthenticationPrincipal UserPrincipal principal) {

@@ -21,7 +21,6 @@
         <jjwt.version>0.13.0</jjwt.version>
         <springdoc.version>3.2.0</springdoc.version>
         <lombok.version>1.18.48</lombok.version>
-        <uuid-generator.version>5.2.0</uuid-generator.version>
         <postgresql.version>42.7.7</postgresql.version>
         <resend.version>4.29.0</resend.version>
         <webauthn4j.version>0.31.11.RELEASE</webauthn4j.version>
@@ -131,12 +130,6 @@
             <artifactId>lombok</artifactId>
             <version>${lombok.version}</version>
             <scope>provided</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>com.fasterxml.uuid</groupId>
-            <artifactId>java-uuid-generator</artifactId>
-            <version>${uuid-generator.version}</version>
         </dependency>
 
         <!-- Redis -->

@@ -2,7 +2,9 @@ spring:
   application:
     name: vomatt-api
   profiles:
-    active: ${PROFILES_ACTIVE:dev}
+    # No default: without PROFILES_ACTIVE no profile is active, so the OTP-logging senders stay off (SMS answers 503,
+    # disabled email fails startup). Local runs set dev (.env.example, docker compose, src/test/resources/config)
+    active: ${PROFILES_ACTIVE:}
   threads:
     virtual:
       enabled: true
@@ -142,8 +144,6 @@ app:
     poll-path: ${EMAIL_POLL_PATH:/poll/{voteId}}
     # Frontend sign-up page, appended to site-url in invitations for addresses with no account
     signup-path: ${EMAIL_SIGNUP_PATH:/login}
-    # Invitation emails one owner may trigger per UTC day; over it the Invitees are still added, only the email is skipped
-    invitation-daily-limit: ${EMAIL_INVITATION_DAILY_LIMIT:200}
   security:
     # Comma-separated frontend origins; * is not allowed
     cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
@@ -152,14 +152,6 @@ app:
     # Shared with vomatt-web (same name there), which sends it in X-Client-IP-Secret with the user's IP in X-Client-IP.
     # At least 32 characters; blank ignores X-Client-IP, so every user behind vomatt-web shares its IP for rate limits
     client-ip-secret: ${CLIENT_IP_SECRET:}
-  vote:
-    max-options-per-vote: ${VOTE_MAX_OPTIONS:10}
-    min-options-per-vote: ${VOTE_MIN_OPTIONS:2}
-    max-vote-duration: ${VOTE_MAX_DURATION:P365D}
-    delete-window: ${VOTE_DELETE_WINDOW:PT20M}
-    ballot-rate-limit:
-      capacity: ${VOTE_BALLOT_RATE_LIMIT_CAPACITY:30}
-      window: ${VOTE_BALLOT_RATE_LIMIT_WINDOW:PT60S}
   storage:
     # S3-compatible bucket for uploaded avatars (Railway Bucket; the s3 service in docker compose). Unset endpoint or bucket:
     # the app starts, avatar uploads answer 503 common.storage_unavailable
@@ -170,11 +162,6 @@ app:
     secret-access-key: ${STORAGE_SECRET_ACCESS_KEY:}
     # true for the docker compose s3 service; virtual-hosted style (bucket.endpoint) otherwise
     path-style: ${STORAGE_PATH_STYLE:false}
-  audit:
-    enabled: ${AUDIT_ENABLED:true}
-  billing:
-    # Paid plans through Stripe; off until it is integrated (vomatt-web docs/release/stripe-go-live.md)
-    enabled: ${BILLING_ENABLED:false}
   retention:
     # Daily data retention run (RetentionJob), UTC; one instance does the work, the others skip via advisory lock
     cron: ${RETENTION_CRON:0 30 4 * * *}
@@ -186,8 +173,6 @@ app:
 otp:
   ttl-seconds: ${OTP_TTL_SECONDS:180}
   resend-cooldown-seconds: ${OTP_RESEND_COOLDOWN_SECONDS:180}
-  # Fixed 6-digit code @vomatt.test (load-test) accounts sign in with, emailed nowhere; unset in normal operation
-  test-code: ${OTP_TEST_CODE:}
   # OTPs one identifier may be sent per UTC day; SMS costs money, so phone is tighter
   daily-limit:
     email: ${OTP_DAILY_LIMIT_EMAIL:20}
@@ -220,16 +205,6 @@ line:
 
 apple:
   client-id: ${APPLE_CLIENT_ID:}
-
-oauth:
-  google:
-    jwks-url: ${GOOGLE_JWKS_URL:https://www.googleapis.com/oauth2/v3/certs}
-  line:
-    token-url: ${LINE_TOKEN_URL:https://api.line.me/oauth2/v2.1/token}
-    verify-url: ${LINE_VERIFY_URL:https://api.line.me/oauth2/v2.1/verify}
-    profile-url: ${LINE_PROFILE_URL:https://api.line.me/v2/profile}
-  apple:
-    jwks-url: ${APPLE_JWKS_URL:https://appleid.apple.com/auth/keys}
 
 logging:
   level:

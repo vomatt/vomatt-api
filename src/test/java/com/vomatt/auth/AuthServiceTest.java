@@ -142,9 +142,7 @@ class AuthServiceTest {
         ReflectionTestUtils.setField(authService, "otpResendCooldownSeconds", 180L);
         ReflectionTestUtils.setField(authService, "otpDailyLimitEmail", 20L);
         ReflectionTestUtils.setField(authService, "otpDailyLimitPhone", 5L);
-        ReflectionTestUtils.setField(authService, "appleJwksUrl", "https://appleid.apple.com/auth/keys");
         ReflectionTestUtils.setField(authService, "appleClientId", "com.vomatt.app");
-        ReflectionTestUtils.setField(authService, "googleJwksUrl", "https://www.googleapis.com/oauth2/v3/certs");
         // Resend cooldown slot is free unless a test says otherwise
         lenient().when(redisService.setIfAbsent(anyString(), anyString(), any(), any(Duration.class))).thenReturn(true);
         // Runs the find-or-create callback as if a transaction were open
@@ -197,30 +195,6 @@ class AuthServiceTest {
         authService.sendOtp("user@example.com", null, null, IP);
 
         storedOtp("otp:email", k("user@example.com"));
-        verify(emailService).sendVerificationEmail(eq("user@example.com"), anyString());
-    }
-
-    @Test
-    void shouldStoreTestCodeAndSendNothingWhenTestAccountAndTestCodeSet() {
-        ReflectionTestUtils.setField(authService, "otpTestCode", "246810");
-        when(userRepository.existsByEmail("loadtest-0001@vomatt.test")).thenReturn(true);
-
-        authService.sendOtp("loadtest-0001@vomatt.test", null, null, IP);
-
-        assertThat(storedOtp("otp:email", k("loadtest-0001@vomatt.test")).codeHash())
-                .isEqualTo(h("loadtest-0001@vomatt.test", "246810"));
-        org.mockito.Mockito.verifyNoInteractions(emailService);
-    }
-
-    @Test
-    void shouldSendRandomCodeWhenTestCodeSetButNotTestAccount() {
-        ReflectionTestUtils.setField(authService, "otpTestCode", "246810");
-        when(userRepository.existsByEmail("user@example.com")).thenReturn(true);
-
-        authService.sendOtp("user@example.com", null, null, IP);
-
-        assertThat(storedOtp("otp:email", k("user@example.com")).codeHash())
-                .isNotEqualTo(h("user@example.com", "246810"));
         verify(emailService).sendVerificationEmail(eq("user@example.com"), anyString());
     }
 
@@ -1669,9 +1643,9 @@ class AuthServiceTest {
 
     // ── lineLogin ────────────────────────────────────────────────────
 
-    private static final String LINE_TOKEN_URL = "https://api.line.me/oauth2/v2.1/token";
-    private static final String LINE_VERIFY_URL = "https://api.line.me/oauth2/v2.1/verify";
-    private static final String LINE_PROFILE_URL = "https://api.line.me/v2/profile";
+    private static final String LINE_TOKEN_URL = AuthService.LINE_TOKEN_URL;
+    private static final String LINE_VERIFY_URL = AuthService.LINE_VERIFY_URL;
+    private static final String LINE_PROFILE_URL = AuthService.LINE_PROFILE_URL;
     private static final String TOKEN_OK = "{\"access_token\":\"at\"}";
     private static final String TOKEN_WITH_ID_TOKEN = "{\"access_token\":\"at\",\"id_token\":\"it\"}";
     private static final String PROFILE_OK = "{\"userId\":\"U123\",\"displayName\":\"Dave\"}";
@@ -1680,9 +1654,6 @@ class AuthServiceTest {
     private MockRestServiceServer lineServer() {
         ReflectionTestUtils.setField(authService, "lineChannelId", "channel-id");
         ReflectionTestUtils.setField(authService, "lineChannelSecret", "channel-secret");
-        ReflectionTestUtils.setField(authService, "lineTokenUrl", LINE_TOKEN_URL);
-        ReflectionTestUtils.setField(authService, "lineVerifyUrl", LINE_VERIFY_URL);
-        ReflectionTestUtils.setField(authService, "lineProfileUrl", LINE_PROFILE_URL);
         var builder = RestClient.builder();
         var server = MockRestServiceServer.bindTo(builder).build();
         ReflectionTestUtils.setField(authService, "restClient", builder.build());

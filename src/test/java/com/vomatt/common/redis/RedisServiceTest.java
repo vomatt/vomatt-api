@@ -19,13 +19,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** execScript passes pre-serialized values to Lua, so it is checked against a real Redis 7. */
-class RedisServiceImplTest {
+class RedisServiceTest {
 
     static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7").withExposedPorts(6379);
     static LettuceConnectionFactory connectionFactory;
     static RedisTemplate<String, Object> template;
 
-    RedisServiceImpl redisService;
+    RedisService redisService;
 
     @BeforeAll
     static void startRedis() {
@@ -50,7 +50,7 @@ class RedisServiceImplTest {
             c.serverCommands().flushAll();
             return null;
         });
-        redisService = new RedisServiceImpl(template, JsonMapper.builder().build());
+        redisService = new RedisService(template, JsonMapper.builder().build());
     }
 
     private static final org.springframework.data.redis.core.script.RedisScript<Long> SET_AND_HSET =

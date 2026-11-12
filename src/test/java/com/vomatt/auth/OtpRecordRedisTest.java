@@ -16,7 +16,7 @@ import org.testcontainers.containers.GenericContainer;
 
 import com.vomatt.common.config.RedisConfig;
 import com.vomatt.common.redis.CacheKeyUtil;
-import com.vomatt.common.redis.RedisServiceImpl;
+import com.vomatt.common.redis.RedisService;
 
 import tools.jackson.databind.json.JsonMapper;
 
@@ -55,7 +55,7 @@ class OtpRecordRedisTest {
         String key = CacheKeyUtil.buildKey("otp:email", "k1");
         template.execute(c -> c.stringCommands().set(key.getBytes(StandardCharsets.UTF_8), old.getBytes(StandardCharsets.UTF_8)), true);
 
-        assertThat(new RedisServiceImpl(template, JsonMapper.builder().build()).get("otp:email", "k1", OtpRecord.class))
+        assertThat(new RedisService(template, JsonMapper.builder().build()).get("otp:email", "k1", OtpRecord.class))
                 .isEqualTo(record);
     }
 }

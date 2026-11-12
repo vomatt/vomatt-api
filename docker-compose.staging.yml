@@ -12,7 +12,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile.vercel
+      dockerfile: Dockerfile
     ports:
       - "8080:8080"
     depends_on:
@@ -20,6 +20,7 @@ services:
         condition: service_healthy
     environment:
       PORT: 8080
+      PROFILES_ACTIVE: ${PROFILES_ACTIVE:-dev}
       DB_URL: ${DB_URL:?set DB_URL in .env.staging}
       DB_USER: ${DB_USER:?set DB_USER in .env.staging}
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env.staging}

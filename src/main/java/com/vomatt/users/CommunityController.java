@@ -1,14 +1,10 @@
 package com.vomatt.users;
 
-import static com.vomatt.common.config.OpenAPIConfig.ERR_CODE;
-import static com.vomatt.common.config.OpenAPIConfig.ERR_END;
-import static com.vomatt.common.config.OpenAPIConfig.ERR_ERROR;
-import static com.vomatt.common.config.OpenAPIConfig.ERR_MESSAGE;
-
+import com.vomatt.common.annotation.ApiError;
 import com.vomatt.common.annotation.CommonApiResponses;
 import com.vomatt.common.annotation.StorageUnavailableResponse;
 import com.vomatt.common.audit.Auditable;
-import com.vomatt.common.config.OpenAPIConfig;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.SimpleResultResponse;
 import com.vomatt.common.security.ActingMember;
@@ -27,7 +23,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -84,22 +79,6 @@ public class CommunityController {
     private static final String ROLES = """
             Roles: OWNER and ADMIN manage members; an ADMIN never changes or removes an OWNER nor grants OWNER. \
             CHIEF_EDITOR, EDITOR and ANALYST cannot manage members.""";
-    private static final String NOT_MEMBER = "- 403 `community.not_member`: the caller is not a member of this community account, or it does not exist or is suspended\n";
-    private static final String ROLE_FORBIDDEN = "- 403 `community.role_forbidden`: the caller's role does not allow this change\n";
-    private static final String MEMBER_NOT_FOUND = "- 404 `community.member.not_found`: the user is not a member\n";
-    private static final String LAST_OWNER = "- 409 `community.last_owner`: the change would leave the community account without an OWNER\n"
-            + "- 409 `common.conflict`: another member change is in progress; retry\n";
-
-    private static final String PROFILE_EDITOR = "- 403 `community.role_forbidden`: the caller is not an OWNER or ADMIN\n";
-    private static final String ERR_ROLE_FORBIDDEN = ERR_MESSAGE + "Your role in this community account does not allow this action" + ERR_CODE
-            + "community.role_forbidden" + ERR_ERROR + "Your role in this community account does not allow this action" + ERR_END;
-    private static final String LIMIT_REACHED = "- 403 `community.limit_reached`: the user who would become an OWNER already owns as many "
-            + "community accounts as their plan allows; `data` is `{ \"limit\": 1, \"owned\": 1 }`\n";
-
-    private static final String ERR_NOT_MEMBER = ERR_MESSAGE + "You are not a member of this community account" + ERR_CODE
-            + "community.not_member" + ERR_ERROR + "You are not a member of this community account" + ERR_END;
-    private static final String ERR_LAST_OWNER = ERR_MESSAGE + "A community account must keep at least one owner" + ERR_CODE
-            + "community.last_owner" + ERR_ERROR + "A community account must keep at least one owner" + ERR_END;
 
     @PostMapping("/api/communities")
     @Auditable(action = "CREATE", resourceType = "COMMUNITY")
@@ -112,12 +91,7 @@ public class CommunityController {
             act as it with the `X-Act-As` header. Sent while acting, the real member becomes the OWNER. Returns 201 with the \
             account, `community` true
             **Side effects**: the creation is audit-logged as `CREATE` on `COMMUNITY`, with the new account's id and username in the details
-            **Errors**:
-            - 400 `common.validation_failed`: `username` not 3-50 characters of [a-z0-9_] or reserved, `displayName` blank or over 100 characters
-            - 400 `community.member.invalid`: the caller is suspended or is a community account
-            - 409 `user.username.taken`: the username is in use
-            - 409 `common.conflict`: another change to the caller's community accounts is in progress; retry
-            """ + LIMIT_REACHED,
+            """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = @ExampleObject(name = "Create a community account", value = """
                             { "username": "sunrise_tower", "displayName": "Sunrise Tower Committee" }
@@ -128,17 +102,11 @@ public class CommunityController {
                         "displayName": "Sunrise Tower Committee", "avatarUrl": null, "community": true },
                       "message": null, "errorCode": null, "error": null }
                     """)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Plan limit reached (`community.limit_reached`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "community.limit_reached", value = """
-                            { "success": false, "data": { "limit": 1, "owned": 1 },
-                              "message": "You own as many community accounts as your plan allows",
-                              "errorCode": "community.limit_reached", "error": "You own as many community accounts as your plan allows" }
-                            """)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Username in use (`user.username.taken`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "user.username.taken", value = ERR_MESSAGE + "Username already taken"
-                            + ERR_CODE + "user.username.taken" + ERR_ERROR + "Username already taken" + ERR_END)))
+    @ApiError(status = 400, key = MessageKey.COMMON_VALIDATION_FAILED, when = "`username` not 3-50 characters of [a-z0-9_] or reserved, `displayName` blank or over 100 characters")
+    @ApiError(status = 400, key = MessageKey.COMMUNITY_MEMBER_INVALID, when = "the caller is suspended or is a community account")
+    @ApiError(status = 409, key = MessageKey.USER_USERNAME_TAKEN, when = "the username is in use")
+    @ApiError(status = 409, key = MessageKey.COMMON_CONFLICT, when = "another change to the caller's community accounts is in progress; retry")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_LIMIT_REACHED, when = "the user who would become an OWNER already owns as many community accounts as their plan allows; `data` is `{ \"limit\": 1, \"owned\": 1 }`")
     public ResponseEntity<ApiResponse<UserDto>> createOwnCommunity(@Valid @RequestBody NewCommunityRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(communityService.createCommunity(
@@ -154,7 +122,7 @@ public class CommunityController {
             for the account switcher. Send an account's `communityId` as the `X-Act-As` header to act as it. While acting, the list \
             is still the real member's. `locked` accounts are readable, but writes as them answer 403 `community.locked`.
             **Side effects**: none
-            **Errors**: none
+            **Errors**: none beyond the common ones
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "The caller's community accounts",
             content = @Content(examples = @ExampleObject(name = "Community accounts", value = """
@@ -176,18 +144,16 @@ public class CommunityController {
             `displayName` is stored without surrounding whitespace. The `username` can never change: a `username` in the body is ignored. \
             Returns the community account's profile after the update, as `GET /api/users/{username}` shows it.
             **Side effects**: audit-logged as `UPDATE` on `COMMUNITY`, with each changed field's value before and after in the details
-            **Errors**:
-            - 400 `common.validation_failed`: `displayName` blank or over 100 characters, or `bio` over 500 characters
-            """ + NOT_MEMBER + PROFILE_EDITOR,
+            """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = @ExampleObject(name = "Rename", value = """
                             { "displayName": "Sunrise Tower Committee", "bio": "Residents' committee of Sunrise Tower" }
                             """))))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Profile after the update",
             content = @Content(examples = @ExampleObject(name = "Profile", value = EX_PROFILE_RESPONSE)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not a member, or not an OWNER or ADMIN (`community.not_member`, `community.role_forbidden`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "community.role_forbidden", value = ERR_ROLE_FORBIDDEN)))
+    @ApiError(status = 400, key = MessageKey.COMMON_VALIDATION_FAILED, when = "`displayName` blank or over 100 characters, or `bio` over 500 characters")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_NOT_MEMBER, when = "the caller is not a member of this community account, or it does not exist or is suspended")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_ROLE_FORBIDDEN, when = "the caller is not an OWNER or ADMIN")
     public ResponseEntity<ApiResponse<UserProfileResponse>> updateProfile(
             @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
             @PathVariable UUID communityId,
@@ -206,19 +172,17 @@ public class CommunityController {
             `/api/avatars/<id>.jpg`). The daily upload limit counts per community account. Returns the community account's profile after the update.
             **Side effects**: audit-logged as `UPDATE` on `COMMUNITY`, with `avatarUrl` before and after in the details; once the change \
             commits, the previously uploaded image (if any) is deleted
-            **Errors**:
-            - 400 `common.file_required`: part `file` is missing or empty
-            - 400 `common.file_read_failed`: the uploaded file could not be read
-            - 400 `user.avatar.unsupported_image`: the file is not a decodable JPEG, PNG, GIF or BMP, or exceeds 40 megapixels
-            - 413 `common.file_too_large`: the file exceeds 2 MB
-            - 429 `common.rate_limited`: the community account already attempted the daily number of avatar uploads
-            - 503 `common.storage_unavailable`: image storage is not configured or unreachable; retry later
-            """ + NOT_MEMBER + PROFILE_EDITOR)
+            """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Profile after the update",
             content = @Content(examples = @ExampleObject(name = "Profile", value = EX_PROFILE_RESPONSE)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not a member, or not an OWNER or ADMIN (`community.not_member`, `community.role_forbidden`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "community.role_forbidden", value = ERR_ROLE_FORBIDDEN)))
+    @ApiError(status = 400, key = MessageKey.COMMON_FILE_REQUIRED, when = "part `file` is missing or empty")
+    @ApiError(status = 400, key = MessageKey.COMMON_FILE_READ_FAILED, when = "the uploaded file could not be read")
+    @ApiError(status = 400, key = MessageKey.USER_AVATAR_UNSUPPORTED_IMAGE, when = "the file is not a decodable JPEG, PNG, GIF or BMP, or exceeds 40 megapixels")
+    @ApiError(status = 413, key = MessageKey.COMMON_FILE_TOO_LARGE, when = "the file exceeds 2 MB", args = { "2MB" })
+    @ApiError(status = 429, key = MessageKey.COMMON_RATE_LIMITED, when = "the community account already attempted the daily number of avatar uploads")
+    @ApiError(status = 503, key = MessageKey.COMMON_STORAGE_UNAVAILABLE, when = "image storage is not configured or unreachable; retry later")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_NOT_MEMBER, when = "the caller is not a member of this community account, or it does not exist or is suspended")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_ROLE_FORBIDDEN, when = "the caller is not an OWNER or ADMIN")
     public ResponseEntity<ApiResponse<UserProfileResponse>> uploadAvatar(
             @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
             @PathVariable UUID communityId,
@@ -240,15 +204,12 @@ public class CommunityController {
             `GET /api/users/{username}` answers 404 `user.not_found`, and a later `X-Act-As` with its id gets 403 `community.not_member`.
             **Side effects**: audit-logged as `DELETE` on `COMMUNITY` with the username, display name and members (`username:ROLE`) \
             at deletion in the details; the community account's earlier audit entries are kept
-            **Errors**:
-            - 403 `community.role_forbidden`: the caller is not an OWNER
-            - 409 `common.conflict`: another member change is in progress; retry
-            """ + NOT_MEMBER)
+            """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Community account deleted",
             content = @Content(examples = @ExampleObject(name = "Deleted", value = EX_OK)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not a member, or not an OWNER (`community.not_member`, `community.role_forbidden`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "community.role_forbidden", value = ERR_ROLE_FORBIDDEN)))
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_ROLE_FORBIDDEN, when = "the caller is not an OWNER")
+    @ApiError(status = 409, key = MessageKey.COMMON_CONFLICT, when = "another member change is in progress; retry")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_NOT_MEMBER, when = "the caller is not a member of this community account, or it does not exist or is suspended")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> deleteCommunity(
             @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
             @PathVariable UUID communityId,
@@ -264,13 +225,10 @@ public class CommunityController {
             **Precondition**: none
             **Behavior**: every member with their role, earliest first.
             **Side effects**: none
-            **Errors**:
-            """ + NOT_MEMBER)
+            """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Members",
             content = @Content(examples = @ExampleObject(name = "Members", value = EX_MEMBERS_RESPONSE)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not a member (`community.not_member`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "community.not_member", value = ERR_NOT_MEMBER)))
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_NOT_MEMBER, when = "the caller is not a member of this community account, or it does not exist or is suspended")
     public ResponseEntity<ApiResponse<List<CommunityMemberResponse>>> listMembers(
             @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
             @PathVariable UUID communityId,
@@ -288,18 +246,20 @@ public class CommunityController {
             """ + ROLES + """
 
             **Side effects**: the action is audit-logged.
-            **Errors**:
-            - 400 `common.validation_failed`: `role` missing or invalid
-            """ + NOT_MEMBER + ROLE_FORBIDDEN + MEMBER_NOT_FOUND + LAST_OWNER + LIMIT_REACHED,
+            """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = @ExampleObject(name = "Make admin", value = """
                             { "role": "ADMIN" }
                             """))))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Member after the change",
             content = @Content(examples = @ExampleObject(name = "Member", value = EX_MEMBER_RESPONSE)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Would leave no OWNER (`community.last_owner`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "community.last_owner", value = ERR_LAST_OWNER)))
+    @ApiError(status = 400, key = MessageKey.COMMON_VALIDATION_FAILED, when = "`role` missing or invalid")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_NOT_MEMBER, when = "the caller is not a member of this community account, or it does not exist or is suspended")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_ROLE_FORBIDDEN, when = "the caller's role does not allow this change")
+    @ApiError(status = 404, key = MessageKey.COMMUNITY_MEMBER_NOT_FOUND, when = "the user is not a member")
+    @ApiError(status = 409, key = MessageKey.COMMUNITY_LAST_OWNER, when = "the change would leave the community account without an OWNER")
+    @ApiError(status = 409, key = MessageKey.COMMON_CONFLICT, when = "another member change is in progress; retry")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_LIMIT_REACHED, when = "the user who would become an OWNER already owns as many community accounts as their plan allows; `data` is `{ \"limit\": 1, \"owned\": 1 }`")
     public ResponseEntity<ApiResponse<CommunityMemberResponse>> changeRole(
             @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
             @PathVariable UUID communityId,
@@ -321,13 +281,14 @@ public class CommunityController {
             """ + ROLES + """
 
             **Side effects**: the action is audit-logged.
-            **Errors**:
-            """ + NOT_MEMBER + ROLE_FORBIDDEN + MEMBER_NOT_FOUND + LAST_OWNER)
+            """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Member removed",
             content = @Content(examples = @ExampleObject(name = "Removed", value = EX_OK)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Would leave no OWNER (`community.last_owner`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "community.last_owner", value = ERR_LAST_OWNER)))
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_NOT_MEMBER, when = "the caller is not a member of this community account, or it does not exist or is suspended")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_ROLE_FORBIDDEN, when = "the caller's role does not allow this change")
+    @ApiError(status = 404, key = MessageKey.COMMUNITY_MEMBER_NOT_FOUND, when = "the user is not a member")
+    @ApiError(status = 409, key = MessageKey.COMMUNITY_LAST_OWNER, when = "the change would leave the community account without an OWNER")
+    @ApiError(status = 409, key = MessageKey.COMMON_CONFLICT, when = "another member change is in progress; retry")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> removeMember(
             @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
             @PathVariable UUID communityId,
@@ -347,17 +308,19 @@ public class CommunityController {
             **Behavior**: the member becomes an OWNER and the caller an ADMIN. Naming oneself changes nothing. A locked \
             community account does not count toward the plan's limit, so receiving one needs no room (unlocking it later does).
             **Side effects**: the action is audit-logged.
-            **Errors**:
-            - 400 `common.validation_failed`: `userId` missing
-            - 403 `community.role_forbidden`: the caller is not an OWNER
-            - 409 `common.conflict`: another member change is in progress; retry
-            """ + NOT_MEMBER + MEMBER_NOT_FOUND + LIMIT_REACHED,
+            """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = @ExampleObject(name = "Transfer", value = """
                             { "userId": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47" }
                             """))))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Ownership transferred",
             content = @Content(examples = @ExampleObject(name = "Transferred", value = EX_OK)))
+    @ApiError(status = 400, key = MessageKey.COMMON_VALIDATION_FAILED, when = "`userId` missing")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_ROLE_FORBIDDEN, when = "the caller is not an OWNER")
+    @ApiError(status = 409, key = MessageKey.COMMON_CONFLICT, when = "another member change is in progress; retry")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_NOT_MEMBER, when = "the caller is not a member of this community account, or it does not exist or is suspended")
+    @ApiError(status = 404, key = MessageKey.COMMUNITY_MEMBER_NOT_FOUND, when = "the user is not a member")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_LIMIT_REACHED, when = "the user who would become an OWNER already owns as many community accounts as their plan allows; `data` is `{ \"limit\": 1, \"owned\": 1 }`")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> transferOwner(
             @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
             @PathVariable UUID communityId,
@@ -371,10 +334,6 @@ public class CommunityController {
             { "id": "019a6b2c-3d4e-7f50-8a61-b2c3d4e5f607", "userId": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47", "username": "dave",
               "displayName": "Dave", "avatarUrl": "bot:boba", "email": null, "role": "EDITOR",
               "invitedAt": "2026-11-11T14:52:00+08:00", "expiresAt": "2026-11-18T14:52:00+08:00" }""";
-    private static final String MANAGER_ONLY = "- 403 `community.role_forbidden`: the caller is not an OWNER or ADMIN, "
-            + "or is an ADMIN and the invitation grants OWNER\n";
-    private static final String INVITATION_NOT_FOUND = ERR_MESSAGE + "Invitation not found or expired" + ERR_CODE
-            + "community.invitation.not_found" + ERR_ERROR + "Invitation not found or expired" + ERR_END;
 
     @PostMapping("/api/communities/{communityId}/invitations")
     @Auditable(action = "INVITE_MEMBER", resourceType = "COMMUNITY", resourceIdIndex = 0)
@@ -394,13 +353,7 @@ public class CommunityController {
 
             **Side effects**: an address with no account at all is mailed once committed; one member mails one address at most \
             once a week, within the member's own daily invitation email limit (shared with their Poll and Invite List invitations). Audit-logged.
-            **Errors**:
-            - 400 `common.validation_failed`: neither or both of `userId` and `email`, `email` invalid, or `role` missing or invalid
-            - 400 `community.member.invalid`: the `userId` is suspended or is a community account
-            - 404 `user.not_found`: no user with this `userId`
-            - 409 `community.member.exists`: the `userId` is already a member
-            - 409 `community.invitation.exists`: the user or address already has an unexpired invitation to this community account
-            """ + NOT_MEMBER + MANAGER_ONLY,
+            """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = {
                     @ExampleObject(name = "Invite a user", value = """
                             { "userId": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47", "role": "EDITOR" }
@@ -411,11 +364,13 @@ public class CommunityController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Invitation sent",
             content = @Content(examples = @ExampleObject(name = "Invitation", value = "{ \"success\": true, \"data\": " + EX_INVITATION
                     + ", \"message\": null, \"errorCode\": null, \"error\": null }")))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Already invited, or already a member (`community.invitation.exists`, `community.member.exists`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "community.invitation.exists", value = ERR_MESSAGE
-                            + "This invitee already has a pending invitation" + ERR_CODE + "community.invitation.exists"
-                            + ERR_ERROR + "This invitee already has a pending invitation" + ERR_END)))
+    @ApiError(status = 400, key = MessageKey.COMMON_VALIDATION_FAILED, when = "neither or both of `userId` and `email`, `email` invalid, or `role` missing or invalid")
+    @ApiError(status = 400, key = MessageKey.COMMUNITY_MEMBER_INVALID, when = "the `userId` is suspended or is a community account")
+    @ApiError(status = 404, key = MessageKey.USER_NOT_FOUND, when = "no user with this `userId`")
+    @ApiError(status = 409, key = MessageKey.COMMUNITY_MEMBER_EXISTS, when = "the `userId` is already a member")
+    @ApiError(status = 409, key = MessageKey.COMMUNITY_INVITATION_EXISTS, when = "the user or address already has an unexpired invitation to this community account")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_NOT_MEMBER, when = "the caller is not a member of this community account, or it does not exist or is suspended")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_ROLE_FORBIDDEN, when = "the caller is not an OWNER or ADMIN, or is an ADMIN and the invitation grants OWNER")
     public ResponseEntity<ApiResponse<CommunityInvitationResponse>> invite(
             @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
             @PathVariable UUID communityId,
@@ -433,11 +388,12 @@ public class CommunityController {
             **Behavior**: the invitations not yet accepted, declined or revoked, oldest first; expired ones are included \
             (compare `expiresAt` with now) until the address is invited again.
             **Side effects**: none
-            **Errors**:
-            """ + NOT_MEMBER + PROFILE_EDITOR)
+            """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Invitations",
             content = @Content(examples = @ExampleObject(name = "Invitations", value = "{ \"success\": true, \"data\": [" + EX_INVITATION
                     + "], \"message\": null, \"errorCode\": null, \"error\": null }")))
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_NOT_MEMBER, when = "the caller is not a member of this community account, or it does not exist or is suspended")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_ROLE_FORBIDDEN, when = "the caller is not an OWNER or ADMIN")
     public ResponseEntity<ApiResponse<List<CommunityInvitationResponse>>> listInvitations(
             @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
             @PathVariable UUID communityId,
@@ -454,14 +410,12 @@ public class CommunityController {
             **Behavior**: deletes the invitation, expired or not; its notification disappears and it can no longer be accepted. \
             An email already sent stays sent.
             **Side effects**: the action is audit-logged.
-            **Errors**:
-            - 404 `community.invitation.not_found`: no such invitation of this community account
-            """ + NOT_MEMBER + MANAGER_ONLY)
+            """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Invitation revoked",
             content = @Content(examples = @ExampleObject(name = "Revoked", value = EX_OK)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No such invitation (`community.invitation.not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "community.invitation.not_found", value = INVITATION_NOT_FOUND)))
+    @ApiError(status = 404, key = MessageKey.COMMUNITY_INVITATION_NOT_FOUND, when = "no such invitation of this community account")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_NOT_MEMBER, when = "the caller is not a member of this community account, or it does not exist or is suspended")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_ROLE_FORBIDDEN, when = "the caller is not an OWNER or ADMIN, or is an ADMIN and the invitation grants OWNER")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> revokeInvitation(
             @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
             @PathVariable UUID communityId,
@@ -483,21 +437,17 @@ public class CommunityController {
             The invitation id is `communityInvitation.id` of the `COMMUNITY_INVITATION` notification. A caller already a \
             member keeps their current role. Returns the membership as `GET /api/users/me/communities` lists it.
             **Side effects**: the invitation and its notification disappear; the action is audit-logged.
-            **Errors**:
-            - 400 `community.member.invalid`: the caller is suspended or is a community account
-            - 404 `community.invitation.not_found`: no unexpired invitation with this id was sent to the caller, \
-            or the community account is suspended
-            - 403 `community.locked`: the community account is locked; the invitation stays and can be accepted once it is unlocked
-            """ + LIMIT_REACHED)
+            """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Joined",
             content = @Content(examples = @ExampleObject(name = "Membership", value = """
                     { "success": true, "data": { "communityId": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48", "username": "sunrise_tower",
                         "displayName": "Sunrise Tower Committee", "avatarUrl": null, "role": "EDITOR", "locked": false },
                       "message": null, "errorCode": null, "error": null }
                     """)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No such invitation for the caller (`community.invitation.not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "community.invitation.not_found", value = INVITATION_NOT_FOUND)))
+    @ApiError(status = 400, key = MessageKey.COMMUNITY_MEMBER_INVALID, when = "the caller is suspended or is a community account")
+    @ApiError(status = 404, key = MessageKey.COMMUNITY_INVITATION_NOT_FOUND, when = "no unexpired invitation with this id was sent to the caller, or the community account is suspended")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_LOCKED, when = "the community account is locked; the invitation stays and can be accepted once it is unlocked")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_LIMIT_REACHED, when = "the user who would become an OWNER already owns as many community accounts as their plan allows; `data` is `{ \"limit\": 1, \"owned\": 1 }`")
     public ResponseEntity<ApiResponse<MyCommunityResponse>> acceptInvitation(
             @Parameter(description = "Invitation id", required = true, example = "019a6b2c-3d4e-7f50-8a61-b2c3d4e5f607")
             @PathVariable UUID invitationId,
@@ -513,14 +463,10 @@ public class CommunityController {
             **Precondition**: the invitation was sent to the caller (by id or to their email address) and has not expired
             **Behavior**: deletes the invitation; the community account can invite the address again.
             **Side effects**: the invitation and its notification disappear; the action is audit-logged.
-            **Errors**:
-            - 404 `community.invitation.not_found`: no unexpired invitation with this id was sent to the caller
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Declined",
             content = @Content(examples = @ExampleObject(name = "Declined", value = EX_OK)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "No such invitation for the caller (`community.invitation.not_found`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "community.invitation.not_found", value = INVITATION_NOT_FOUND)))
+    @ApiError(status = 404, key = MessageKey.COMMUNITY_INVITATION_NOT_FOUND, when = "no unexpired invitation with this id was sent to the caller")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> declineInvitation(
             @Parameter(description = "Invitation id", required = true, example = "019a6b2c-3d4e-7f50-8a61-b2c3d4e5f607")
             @PathVariable UUID invitationId,
@@ -538,15 +484,13 @@ public class CommunityController {
             An account that is not locked changes nothing. It counts toward every other OWNER's limit again too, so one now \
             over it gets `communityQuota.selectionRequired`.
             **Side effects**: an unlock is audit-logged as `UNLOCK` on `COMMUNITY` with `reason=OWNER_UNLOCK`.
-            **Errors**:
-            - 403 `community.role_forbidden`: the caller is not an OWNER
-            - 409 `common.conflict`: another change to the caller's community accounts is in progress; retry
-            """ + NOT_MEMBER + LIMIT_REACHED)
+            """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Unlocked",
             content = @Content(examples = @ExampleObject(name = "Unlocked", value = EX_OK)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not an OWNER, or no room in the plan (`community.role_forbidden`, `community.limit_reached`)",
-            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "community.role_forbidden", value = ERR_ROLE_FORBIDDEN)))
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_ROLE_FORBIDDEN, when = "the caller is not an OWNER")
+    @ApiError(status = 409, key = MessageKey.COMMON_CONFLICT, when = "another change to the caller's community accounts is in progress; retry")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_NOT_MEMBER, when = "the caller is not a member of this community account, or it does not exist or is suspended")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_LIMIT_REACHED, when = "the user who would become an OWNER already owns as many community accounts as their plan allows; `data` is `{ \"limit\": 1, \"owned\": 1 }`")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> unlock(
             @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
             @PathVariable UUID communityId,

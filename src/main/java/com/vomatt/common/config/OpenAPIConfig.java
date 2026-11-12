@@ -13,6 +13,7 @@ import io.swagger.v3.oas.models.servers.Server;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -30,13 +31,6 @@ public class OpenAPIConfig {
     public static final String EX_NOT_FOUND = "NotFound";
     public static final String EX_RATE_LIMITED = "RateLimited";
     public static final String ERROR_REF = "#/components/schemas/" + ERROR_SCHEMA;
-
-    // Error example pieces for annotations, which need compile-time constants:
-    // ERR_MESSAGE + message + ERR_CODE + errorCode + ERR_ERROR + message + ERR_END (same shape as ApiResponse.error)
-    public static final String ERR_MESSAGE = "{ \"success\": false, \"data\": null, \"message\": \"";
-    public static final String ERR_CODE = "\", \"errorCode\": \"";
-    public static final String ERR_ERROR = "\", \"error\": \"";
-    public static final String ERR_END = "\" }";
 
     /** Page of Poll summaries, shared by the Poll listing and user Poll listing endpoints. */
     public static final String EX_PAGE_OF_POLLS = "{ \"success\": true, \"data\": { \"items\": [ { \"id\": \"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05\", "
@@ -78,7 +72,7 @@ public class OpenAPIConfig {
     private String prodUrl;
 
     @Bean
-    public OpenAPI vomattOpenAPI(@Value("${spring.profiles.active:dev}") String activeProfile) {
+    public OpenAPI vomattOpenAPI(Environment environment) {
         Contact contact = new Contact();
         contact.setName("Vomatt");
         contact.setEmail("yi-hsien@vomatt.com");
@@ -102,7 +96,7 @@ public class OpenAPIConfig {
 
         SecurityRequirement securityRequirement = new SecurityRequirement().addList("bearerAuth");
 
-        List<Server> servers = "dev".equals(activeProfile)
+        List<Server> servers = environment.matchesProfiles("dev")
                 ? List.of(new Server().url(devUrl).description("Development"),
                 new Server().url(prodUrl).description("Production"))
                 : List.of(new Server().url(prodUrl).description("Production"),

@@ -17,7 +17,7 @@ import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.Cursor;
 import com.vomatt.common.response.CursorResponse;
-import com.vomatt.common.util.UUIDv7Generator;
+import com.vomatt.entity.common.BaseEntity;
 import com.vomatt.entity.CommunityInvitation;
 import com.vomatt.entity.NotificationCategory;
 import com.vomatt.entity.NotificationKind;
@@ -150,7 +150,7 @@ public class NotificationService {
         changes.put(NotificationPreference.LIKES, request.likes());
         changes.forEach((preference, on) -> {
             if (on != null) {
-                preferenceRepository.upsert(UUIDv7Generator.generateId(), userUuid, preference.preferenceKey(), on.toString());
+                preferenceRepository.upsert(BaseEntity.newTimeOrderedId(), userUuid, preference.preferenceKey(), on.toString());
             }
         });
         log.info("User {} updated notification preferences", userId);

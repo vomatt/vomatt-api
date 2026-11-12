@@ -1,5 +1,6 @@
 package com.vomatt.contact;
 
+import com.vomatt.common.annotation.ApiError;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -8,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.vomatt.common.annotation.PublicApiResponse;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.SimpleResultResponse;
 import com.vomatt.common.util.ClientIpResolver;
@@ -39,9 +41,7 @@ public class ContactController {
             **Precondition**: the client IP is under the daily contact limit (UTC day; 5 unless an admin set lookup `config` / `contact_daily_limit`, a positive number or numeric string). A server-side caller names the visitor's IP with `X-Client-IP` and `X-Client-IP-Secret`, as vomatt-web does
             **Behavior**: stores the message for staff to read in the back office; `name` and `email` are trimmed. Responds 201 with the new message id
             **Side effects**: counts toward the client IP's daily contact limit (only once stored)
-            **Errors**:
-            - 400 `common.validation_failed`: `name` blank or longer than 100 characters, `email` not a valid address or longer than 254 characters, `message` blank or longer than 5000 characters, or `locale` not `en` / `zh`
-            - 429 `common.rate_limited`: daily contact limit reached, or too many write requests from this IP""",
+            """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     examples = @ExampleObject(value = """
                             {
@@ -51,6 +51,8 @@ public class ContactController {
                               "locale": "en"
                             }
                             """))))
+    @ApiError(status = 400, key = MessageKey.COMMON_VALIDATION_FAILED, when = "`name` blank or longer than 100 characters, `email` not a valid address or longer than 254 characters, `message` blank or longer than 5000 characters, or `locale` not `en` / `zh`")
+    @ApiError(status = 429, key = MessageKey.COMMON_RATE_LIMITED, when = "daily contact limit reached, or too many write requests from this IP")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> createMessage(
             @Valid @RequestBody CreateContactMessageRequest request, HttpServletRequest httpRequest) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(SimpleResultResponse.ok(

@@ -157,7 +157,6 @@ public enum MessageKey {
     COMMUNITY_LIMIT_REACHED("community.limit_reached"),
     COMMUNITY_LOCKED("community.locked"),
     COMMUNITY_KEEP_INVALID("community.keep.invalid"),
-    BILLING_UNAVAILABLE("billing.unavailable"),
     ;
 
     private final String code;

@@ -108,11 +108,14 @@ public class AuthService {
     private final AppKey appKey;
     private final PasskeyService passkeyService;
 
+    static final String GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
+    static final String APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys";
+    static final String LINE_TOKEN_URL = "https://api.line.me/oauth2/v2.1/token";
+    static final String LINE_VERIFY_URL = "https://api.line.me/oauth2/v2.1/verify";
+    static final String LINE_PROFILE_URL = "https://api.line.me/v2/profile";
+
     @Value("${google.client-id:}")
     private String googleClientId;
-
-    @Value("${oauth.google.jwks-url}")
-    private String googleJwksUrl;
 
     @Value("${line.channel-id:}")
     private String lineChannelId;
@@ -120,20 +123,8 @@ public class AuthService {
     @Value("${line.channel-secret:}")
     private String lineChannelSecret;
 
-    @Value("${oauth.line.token-url}")
-    private String lineTokenUrl;
-
-    @Value("${oauth.line.verify-url}")
-    private String lineVerifyUrl;
-
-    @Value("${oauth.line.profile-url}")
-    private String lineProfileUrl;
-
     @Value("${apple.client-id:}")
     private String appleClientId;
-
-    @Value("${oauth.apple.jwks-url}")
-    private String appleJwksUrl;
 
     // ── OTP ──────────────────────────────────────────────────────────
 
@@ -751,7 +742,7 @@ public class AuthService {
             throw ApiException.badRequest(MessageKey.AUTH_GOOGLE_NOT_CONFIGURED);
         }
         // JWKS outage -> 503 (thrown before the try, so it is not reported as an invalid token)
-        List<Map<String, Object>> keys = fetchJwks(googleJwksUrl, "Google", false);
+        List<Map<String, Object>> keys = fetchJwks(GOOGLE_JWKS_URL, "Google", false);
 
         String email;
         String name;
@@ -760,7 +751,7 @@ public class AuthService {
         try {
             // Every local verification failure maps to auth.google.no_email ("token invalid"), except a wrong audience
             Supplier<ApiException> invalid = () -> ApiException.unauthorized(MessageKey.AUTH_GOOGLE_NO_EMAIL);
-            payload = verifyRs256(idToken, keys, googleJwksUrl, "Google", invalid, invalid, invalid);
+            payload = verifyRs256(idToken, keys, GOOGLE_JWKS_URL, "Google", invalid, invalid, invalid);
             if (!GOOGLE_ISSUERS.contains(payload.get("iss"))) {
                 throw invalid.get();
             }
@@ -808,7 +799,7 @@ public class AuthService {
         tokenBody.add("client_id", lineChannelId);
         tokenBody.add("client_secret", lineChannelSecret);
 
-        Map<String, Object> tokenResponse = callLine(() -> postForm(lineTokenUrl, tokenBody),
+        Map<String, Object> tokenResponse = callLine(() -> postForm(LINE_TOKEN_URL, tokenBody),
                 MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
 
         // instanceof, not a cast: a malformed LINE response is a failed exchange (401), not a ClassCastException (500)
@@ -817,7 +808,7 @@ public class AuthService {
             throw ApiException.unauthorized(MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
         }
 
-        Map<String, Object> lineProfile = callLine(() -> restClient.get().uri(lineProfileUrl)
+        Map<String, Object> lineProfile = callLine(() -> restClient.get().uri(LINE_PROFILE_URL)
                 .header("Authorization", "Bearer " + accessToken).retrieve().body(Map.class),
                 MessageKey.AUTH_LINE_PROFILE_FAILED);
 
@@ -840,7 +831,7 @@ public class AuthService {
             verifyBody.add("id_token", idToken);
             verifyBody.add("client_id", lineChannelId);
 
-            Map<String, Object> verifyResponse = callLine(() -> postForm(lineVerifyUrl, verifyBody),
+            Map<String, Object> verifyResponse = callLine(() -> postForm(LINE_VERIFY_URL, verifyBody),
                     MessageKey.AUTH_LINE_TOKEN_EXCHANGE_FAILED);
             Object emailValue = verifyResponse == null ? null : verifyResponse.get("email");
             if (verifyResponse == null || !(verifyResponse.get("sub") instanceof String sub)
@@ -931,11 +922,11 @@ public class AuthService {
         }
         // P6-#16: JWKS fetching (external call + null guard + 5xx/connection failure classification) stays outside the try,
         // so a 503 external error from an Apple/network failure is not swallowed by the broad catch below and misreported as a 401 login failure.
-        List<Map<String, Object>> keys = fetchJwks(appleJwksUrl, "Apple", false);
+        List<Map<String, Object>> keys = fetchJwks(APPLE_JWKS_URL, "Apple", false);
 
         Map<String, Object> payload;
         try {
-            payload = verifyRs256(idToken, keys, appleJwksUrl, "Apple",
+            payload = verifyRs256(idToken, keys, APPLE_JWKS_URL, "Apple",
                     () -> ApiException.unauthorized(MessageKey.AUTH_APPLE_INVALID_TOKEN),
                     () -> ApiException.unauthorized(MessageKey.AUTH_APPLE_KEY_NOT_FOUND),
                     () -> ApiException.unauthorized(MessageKey.AUTH_APPLE_INVALID_SIGNATURE));

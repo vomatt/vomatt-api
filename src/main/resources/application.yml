@@ -209,16 +209,6 @@ line:
 apple:
   client-id: ${APPLE_CLIENT_ID:}
 
-oauth:
-  google:
-    jwks-url: ${GOOGLE_JWKS_URL:https://www.googleapis.com/oauth2/v3/certs}
-  line:
-    token-url: ${LINE_TOKEN_URL:https://api.line.me/oauth2/v2.1/token}
-    verify-url: ${LINE_VERIFY_URL:https://api.line.me/oauth2/v2.1/verify}
-    profile-url: ${LINE_PROFILE_URL:https://api.line.me/v2/profile}
-  apple:
-    jwks-url: ${APPLE_JWKS_URL:https://appleid.apple.com/auth/keys}
-
 logging:
   level:
     com.vomatt: ${LOG_LEVEL:INFO}

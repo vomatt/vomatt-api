@@ -327,14 +327,15 @@ public class AuthService {
     }
 
     private AuthResponse verifyEmailOtp(String normalizedEmail, String code, String clientIp) {
-        OtpRecord otp = consumeOtp(OTP_EMAIL_NS, normalizedEmail, code, clientIp);
+        consumeOtp(OTP_EMAIL_NS, normalizedEmail, code, clientIp);
 
         // The user proved ownership of the email via OTP -> treat as verified
         FoundUser found = findOrCreateUserByEmail(normalizedEmail, null, "email_otp", true);
         User user = found.user();
 
         AuthResponse response = buildAuthResponse(user, false, found.created());
-        if ("signup".equals(otp.type())) {
+        // Keyed on the account having been created here, not on the OTP's type (a guess made when it was sent).
+        if (found.created()) {
             // Sent only after the login succeeded, in the background so SMTP latency does not delay the response
             emailService.sendWelcomeEmail(normalizedEmail, LocaleContextHolder.getLocale());
         }

@@ -572,6 +572,32 @@ class AuthServiceTest {
         verify(redisService).delete("otp:email:level", attempt("user@example.com"));
     }
 
+    @Test
+    void shouldSendWelcomeEmailOnlyWhenVerificationCreatedTheAccount() {
+        // The OTP's type is a guess from send time: "signup" for an existing account, "login" for a new one
+        OtpRecord signup = new OtpRecord(h("old@example.com", "123456"), "signup", Instant.now(), 0);
+        OtpRecord login = new OtpRecord(h("new@example.com", "123456"), "login", Instant.now(), 0);
+        when(redisService.get(eq("otp:email"), eq(k("old@example.com")), eq(OtpRecord.class))).thenReturn(signup);
+        when(redisService.getAndDelete("otp:email", k("old@example.com"), OtpRecord.class)).thenReturn(signup);
+        when(redisService.get(eq("otp:email"), eq(k("new@example.com")), eq(OtpRecord.class))).thenReturn(login);
+        when(redisService.getAndDelete("otp:email", k("new@example.com"), OtpRecord.class)).thenReturn(login);
+        when(userRepository.findByEmail("old@example.com")).thenReturn(Optional.of(User.builder().id(UUID.randomUUID())
+                .email("old@example.com").roles(new String[] { "user" }).build()));
+        when(userRepository.findByEmail("new@example.com")).thenReturn(Optional.empty());
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> {
+            User saved = inv.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            return saved;
+        });
+        when(refreshTokenService.issue(anyString(), any(), anyBoolean())).thenReturn(new RefreshTokenService.IssuedTokens("t", "r"));
+
+        authService.verifyOtp("old@example.com", null, "123456", IP);
+        verify(emailService, never()).sendWelcomeEmail(anyString(), any());
+
+        assertThat(authService.verifyOtp("new@example.com", null, "123456", IP).isNewUser()).isTrue();
+        verify(emailService).sendWelcomeEmail(eq("new@example.com"), any());
+    }
+
     // ── admin console login: OTP first, role second, so no response reveals a role ────────
 
     @Test

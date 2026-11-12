@@ -1,6 +1,6 @@
 -- =============================================================================
--- Option vote count, Turnout and like count reconciliation (run manually; not part of startup)
--- vote_options.vote_count, votes.turnout and votes.like_count are atomically incremented/decremented by the application; this file checks and fixes drift from the actual user_votes / vote_likes row count.
+-- Option vote count, Turnout, like count, share count and tag usage reconciliation (run manually; not part of startup)
+-- vote_options.vote_count, votes.turnout, votes.like_count, votes.share_count and tags.usage_count are atomically incremented/decremented by the application; this file checks and fixes drift from the actual user_votes / vote_likes / vote_shares / vote_tags rows.
 -- =============================================================================
 
 -- Only Polls that have not Ended are checked: an Ended Poll's result is frozen as it closed. RetentionJob seals its
@@ -58,3 +58,39 @@ FROM (SELECT v2.id, COUNT(l.vote_id) AS actual
       LEFT JOIN vomatt.vote_likes l ON l.vote_id = v2.id
       GROUP BY v2.id) c
 WHERE c.id = v.id AND v.like_count <> c.actual;
+
+-- Shares, like likes, are released from every Poll on account deletion, so every Poll is checked.
+-- 7) Check: Polls whose stored share count (votes.share_count) differs from the actual sharer count (should normally return 0 rows)
+SELECT v.id AS vote_id, v.share_count AS stored, COUNT(s.vote_id) AS actual
+FROM vomatt.votes v
+LEFT JOIN vomatt.vote_shares s ON s.vote_id = v.id
+GROUP BY v.id
+HAVING v.share_count <> COUNT(s.vote_id);
+
+-- 8) Fix: overwrite the share count with the actual count
+UPDATE vomatt.votes v
+SET share_count = c.actual
+FROM (SELECT v2.id, COUNT(s.vote_id) AS actual
+      FROM vomatt.votes v2
+      LEFT JOIN vomatt.vote_shares s ON s.vote_id = v2.id
+      GROUP BY v2.id) c
+WHERE c.id = v.id AND v.share_count <> c.actual;
+
+-- A tag counts the Public, non-Deleted Polls carrying it (VoteService.countedTagIds), whatever their status.
+-- 9) Check: tags whose stored usage count (tags.usage_count) differs from the actual counted Poll count (should normally return 0 rows)
+SELECT t.id AS tag_id, t.usage_count AS stored, COUNT(v.id) AS actual
+FROM vomatt.tags t
+LEFT JOIN vomatt.vote_tags vt ON vt.tag_id = t.id
+LEFT JOIN vomatt.votes v ON v.id = vt.vote_id AND v.audience = 'PUBLIC' AND v.deleted_at IS NULL
+GROUP BY t.id
+HAVING t.usage_count <> COUNT(v.id);
+
+-- 10) Fix: overwrite the usage count with the actual count
+UPDATE vomatt.tags t
+SET usage_count = c.actual
+FROM (SELECT t2.id, COUNT(v.id) AS actual
+      FROM vomatt.tags t2
+      LEFT JOIN vomatt.vote_tags vt ON vt.tag_id = t2.id
+      LEFT JOIN vomatt.votes v ON v.id = vt.vote_id AND v.audience = 'PUBLIC' AND v.deleted_at IS NULL
+      GROUP BY t2.id) c
+WHERE c.id = t.id AND t.usage_count <> c.actual;

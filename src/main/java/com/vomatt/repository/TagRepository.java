@@ -43,6 +43,19 @@ public interface TagRepository extends JpaRepository<Tag, UUID> {
     @Query("UPDATE Tag t SET t.usageCount = t.usageCount - 1 WHERE t.id IN :tagIds AND t.usageCount > 0")
     void decrementUsageCount(@Param("tagIds") Set<UUID> tagIds);
 
+    /**
+     * Releases the user's counted Polls (Public, not Deleted, as VoteService counts them) from their tags' usage counts;
+     * run before deleting the user, whose Polls and their vote_tags rows cascade.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = """
+            UPDATE vomatt.tags t SET usage_count = GREATEST(t.usage_count - c.n, 0)
+            FROM (SELECT vt.tag_id, COUNT(*) AS n FROM vomatt.vote_tags vt JOIN vomatt.votes v ON v.id = vt.vote_id
+                  WHERE v.creator_id = :userId AND v.audience = 'PUBLIC' AND v.deleted_at IS NULL
+                  GROUP BY vt.tag_id) c
+            WHERE t.id = c.tag_id""", nativeQuery = true)
+    void decrementUsageCountForUserPolls(@Param("userId") UUID userId);
+
     @Query(value = "SELECT EXISTS (SELECT 1 FROM vomatt.vote_tags WHERE tag_id = :tagId)", nativeQuery = true)
     boolean isTagReferencedByVotes(@Param("tagId") UUID tagId);
 

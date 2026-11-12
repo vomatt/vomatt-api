@@ -46,8 +46,9 @@ public class LookupService {
                 .map(lookupMapper::toDto)
                 .toList();
         // Only types that exist are cached: lookupType is caller input, so caching misses would let any user
-        // fill the shared Redis with one two-hour key per made-up type
-        if (!result.isEmpty()) {
+        // fill the shared Redis with one two-hour key per made-up type. The config type is the exception: it is
+        // read on hot paths and is empty until an admin sets a limit, so its miss is cached too
+        if (!result.isEmpty() || CONFIG_TYPE.equals(lookupType)) {
             redisService.set(CacheNamespaces.LOOKUP_BY_TYPE, lookupType, result, LOOKUP_CACHE_DURATION);
         }
         return result;

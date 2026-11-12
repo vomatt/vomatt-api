@@ -141,7 +141,8 @@ class ActAsFilterTest {
     void shouldAllowMemberRoutesAndMarkingReadWhenActingAsAnalyst() throws Exception {
         member(CommunityRole.ANALYST);
         for (var call : List.of(List.of("DELETE", "/api/communities/" + communityId + "/members/" + memberId),
-                List.of("POST", "/api/notifications/comment_x/read"), List.of("POST", "/api/notifications/read-all"))) {
+                List.of("POST", "/api/notifications/comment_x/read"), List.of("POST", "/api/notifications/read-all"),
+                List.of("POST", "/api/users/me/communities/keep"))) {
             signIn();
             assertThat(run(acting(call.get(0), call.get(1)), new MockHttpServletResponse())).as(call.toString()).isNotNull();
         }

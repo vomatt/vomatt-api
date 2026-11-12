@@ -545,7 +545,7 @@ public class CommunityController {
             content = @Content(examples = @ExampleObject(name = "Unlocked", value = EX_OK)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not an OWNER, or no room in the plan (`community.role_forbidden`, `community.limit_reached`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "community.not_member", value = ERR_NOT_MEMBER)))
+                    examples = @ExampleObject(name = "community.role_forbidden", value = ERR_ROLE_FORBIDDEN)))
     public ResponseEntity<ApiResponse<SimpleResultResponse>> unlock(
             @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
             @PathVariable UUID communityId,

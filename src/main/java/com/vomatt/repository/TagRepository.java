@@ -43,7 +43,7 @@ public interface TagRepository extends JpaRepository<Tag, UUID> {
     @Query("UPDATE Tag t SET t.usageCount = t.usageCount - 1 WHERE t.id IN :tagIds AND t.usageCount > 0")
     void decrementUsageCount(@Param("tagIds") Set<UUID> tagIds);
 
-    @Query("SELECT CASE WHEN COUNT(v) > 0 THEN true ELSE false END FROM Vote v JOIN v.tags t WHERE t.id = :tagId")
+    @Query(value = "SELECT EXISTS (SELECT 1 FROM vomatt.vote_tags WHERE tag_id = :tagId)", nativeQuery = true)
     boolean isTagReferencedByVotes(@Param("tagId") UUID tagId);
 
     /**

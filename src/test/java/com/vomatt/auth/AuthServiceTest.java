@@ -745,7 +745,7 @@ class AuthServiceTest {
         verify(redisService).deleteAll("otp:email:guesses", List.of(k("user@example.com") + ":" + created.toEpochMilli()));
         verify(redisService).deleteAll("otp:email:cooldown", List.of(k("user@example.com")));
         verify(redisService).hDelete("otp:email:attempt-idx", k("user@example.com"), key.get(0));
-        verify(redisService, never()).hGetAll(anyString(), anyString());
+        verify(redisService, never()).hGetAllOrThrow(anyString(), anyString());
     }
 
     @Test
@@ -764,7 +764,7 @@ class AuthServiceTest {
     @Test
     void shouldAlsoClearCounterWhenUnlockClearsOnlyLock() {
         // A lock removed with its counter still at 3 would keep refusing the right code
-        when(redisService.hGetAll("otp:phone:attempt-idx", k("+886912345678")))
+        when(redisService.hGetAllOrThrow("otp:phone:attempt-idx", k("+886912345678")))
                 .thenReturn(java.util.Map.of("k1", "1", "k2", "1"));
         when(redisService.deleteAll(anyString(), any())).thenReturn(2L);
 

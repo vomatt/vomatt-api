@@ -1010,7 +1010,7 @@ class VoteServiceTest {
         @DisplayName("should show voters when the Poll holds no Anonymous Ballot")
         void shouldShowVotersWhenNoAnonymousBallot() {
             endedWith(VoterVisibility.OWNER);
-            when(userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn(0L);
+            when(userVoteRepository.existsByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn(false);
             when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of());
 
             assertThat(voteService.getVoters(voteId.toString(), userId.toString(), null, null).items()).isEmpty();
@@ -1022,14 +1022,14 @@ class VoteServiceTest {
             endedWith(VoterVisibility.OWNER);
             com.vomatt.entity.UserVote named = new com.vomatt.entity.UserVote(user, vote, option);
             setId(option, UUID.randomUUID());
-            when(userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn(1L);
+            when(userVoteRepository.existsByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn(true);
             when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of(named));
 
             assertThat(voteService.getVoters(voteId.toString(), userId.toString(), null, null).items())
                     .singleElement().satisfies(v -> assertThat(v.optionId()).isNull());
             verify(voteMapper).toVoterResponse(eq(named), eq(false), any());
 
-            when(userVoteRepository.countByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn(0L);
+            when(userVoteRepository.existsByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn(false);
             assertThat(voteService.getVoters(voteId.toString(), userId.toString(), null, null).items())
                     .singleElement().satisfies(v -> assertThat(v.optionId()).isEqualTo(option.getId().toString()));
         }

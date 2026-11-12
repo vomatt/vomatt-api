@@ -44,7 +44,7 @@ public enum VisibilityField {
     }
 
     /**
-     * Preference setting key, e.g., "visibility.email"
+     * Preference setting key, e.g., "visibility.bio"
      */
     public String preferenceKey() {
         return PREFERENCE_PREFIX + fieldName;

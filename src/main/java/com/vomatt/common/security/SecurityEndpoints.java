@@ -84,7 +84,8 @@ public final class SecurityEndpoints {
      * Writes any role may send while acting, ANALYST included: member management (CommunityService authorizes by the
      * real member's role) and marking the community account's notifications read.
      */
-    public static final String[] ACT_AS_ANY_ROLE = { "/api/communities/**", "/api/notifications/*/read", "/api/notifications/read-all" };
+    public static final String[] ACT_AS_ANY_ROLE = { "/api/communities/**", "/api/notifications/*/read", "/api/notifications/read-all",
+            "/api/users/me/communities/keep" };
 
     /**
      * POST-only routes any role may send while acting: following, which UserService refuses for every community account

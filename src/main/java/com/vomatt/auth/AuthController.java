@@ -441,7 +441,7 @@ public class AuthController {
                     **Precondition**: the client obtained a Google ID token (Google Sign-In)
                     **Behavior**: verifies the ID token signature against Google's public keys, then its issuer, audience and expiry. Each ID token signs in once; presenting it again is refused. \
                     Signs in the user with that email, creating the user if new. An existing account with the same email is reused only when Google reports the email as verified
-                    **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated; the token is marked used for 15 minutes
+                    **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated; the token is marked used until it expires
                     **Errors**:
                     - 400 `auth.google.not_configured`: Google login is not configured on the server
                     - 401 `auth.google.no_email`: the token is invalid (malformed, bad signature, wrong issuer, expired) or carries no email
@@ -518,7 +518,7 @@ public class AuthController {
                     **Behavior**: verifies the token signature against Apple's public keys, then its issuer, audience, expiry and that its `nonce` claim equals SHA-256 of the given `nonce`. \
                     Each identity token signs in once; presenting it again is refused. Signs in the user with the token's email, creating it if new. \
                     `fullName` is used only when a new user is created. An existing account with the same email is reused only when Apple reports the email as verified
-                    **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated; the token is marked used for 15 minutes
+                    **Side effects**: creates a user on first login, with a random bot avatar; `lastLoginAt` is updated; the token is marked used until it expires
                     **Errors**:
                     - 400 `auth.apple.not_configured`: Apple login is not configured on the server
                     - 401 `auth.apple.invalid_token`: the token is malformed or has no key ID

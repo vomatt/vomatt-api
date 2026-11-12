@@ -130,7 +130,7 @@ public class User extends AuditableEntity {
 
     /** The name to show for the user: the display name, or the username when none is set. */
     public String displayNameOrUsername() {
-        return displayName != null ? displayName : username;
+        return displayName != null && !displayName.isBlank() ? displayName : username;
     }
 
     /** A community account: managed by its members through {@code X-Act-As}, never signed in to directly. */

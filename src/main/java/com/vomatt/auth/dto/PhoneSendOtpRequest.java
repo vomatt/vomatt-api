@@ -15,7 +15,7 @@ public record PhoneSendOtpRequest(
                 example = "0912345678")
         @NotBlank String phone,
 
-        @Schema(description = "OTP purpose. When null, treated as \"login\", which requires the phone number to be registered already. \"signup\" is for new numbers",
+        @Schema(description = "OTP purpose, informational only: either value sends the same OTP, and the account is created at verification when the number is new. Null is treated as \"login\"",
                 example = "login", allowableValues = {"login", "signup"}, nullable = true)
         String type
 ) {

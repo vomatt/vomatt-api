@@ -4,10 +4,10 @@ Vomatt polling community backend. The architecture follows sachmis-api (domain-d
 
 ## Tech stack
 
-- Java 25 (virtual threads), Spring Boot 4.0.5, Maven Wrapper
+- Java 25 (virtual threads), Spring Boot 4.1.2, Maven Wrapper
 - Spring Web MVC, Data JPA (Hibernate 7), Security 7, Mail, Data Redis (Lettuce)
 - PostgreSQL (schema `vomatt`), Redis
-- JJWT, Bucket4j, SpringDoc OpenAPI 3, Lombok + MapStruct, Thymeleaf (email)
+- JJWT, SpringDoc OpenAPI 3, Lombok, Thymeleaf (email)
 
 ## Quick start
 
@@ -33,6 +33,6 @@ Responses are always `ApiResponse<T>`: `{ success, data, message, errorCode, err
 
 For frontend integration see [docs/frontend/README.md](docs/frontend/README.md) (Swagger usage, global conventions, glossary).
 
-Upgrading a pre-sachmis database (before running the API; Flyway then baselines it at V1 and V2 adds everything since): `psql "$DB" -v ON_ERROR_STOP=1 -f src/main/resources/db/migrations/2026-10-02-sachmis-arch.sql` (single transaction; back up first and check the time zone assumption in the file header).
+Upgrading a pre-sachmis database (before running the API; Flyway then baselines it at `V20261027125251__baseline` and `V20261027125252__catch_up` adds everything since): `psql "$DB" -v ON_ERROR_STOP=1 -f src/main/resources/db/migrations/2026-10-02-sachmis-arch.sql` (single transaction; back up first and check the time zone assumption in the file header).
 
 Development guidelines: see [AGENTS.md](AGENTS.md).

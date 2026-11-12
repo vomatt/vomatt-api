@@ -38,7 +38,7 @@ import lombok.ToString;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@ToString(exclude = {"creator", "options", "memberVotes", "tags"})
+@ToString(exclude = {"creator", "options", "tags"})
 public class Vote extends AuditableEntity {
 
     @NotBlank
@@ -118,9 +118,6 @@ public class Vote extends AuditableEntity {
 
     @OneToMany(mappedBy = "vote", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<VoteOption> options = new HashSet<>();
-
-    @OneToMany(mappedBy = "vote", cascade = CascadeType.ALL, orphanRemoval = true)
-    private Set<UserVote> userVotes = new HashSet<>();
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(

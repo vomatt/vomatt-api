@@ -560,7 +560,7 @@ public class AuthService {
         String indexNs = namespace + OTP_ATTEMPT_IDX_SUFFIX;
         String key = redisKey(identifier);
         Collection<String> attemptKeys = clientIp != null ? List.of(attemptKey(identifier, clientIp))
-                : redisService.hGetAll(indexNs, key).keySet();
+                : redisService.hGetAllOrThrow(indexNs, key).keySet();
         boolean lock = targets.contains(LoginUnlock.TARGET_LOCK);
         boolean attempts = targets.contains(LoginUnlock.TARGET_ATTEMPTS);
         long removed = 0;
@@ -938,8 +938,9 @@ public class AuthService {
         // so a 503 external error from an Apple/network failure is not swallowed by the broad catch below and misreported as a 401 login failure.
         List<Map<String, Object>> keys = fetchJwks(appleJwksUrl, "Apple", false);
 
+        Map<String, Object> payload;
         try {
-            var payload = verifyRs256(idToken, keys, appleJwksUrl, "Apple",
+            payload = verifyRs256(idToken, keys, appleJwksUrl, "Apple",
                     () -> ApiException.unauthorized(MessageKey.AUTH_APPLE_INVALID_TOKEN),
                     () -> ApiException.unauthorized(MessageKey.AUTH_APPLE_KEY_NOT_FOUND),
                     () -> ApiException.unauthorized(MessageKey.AUTH_APPLE_INVALID_SIGNATURE));
@@ -960,24 +961,23 @@ public class AuthService {
             if (!(payload.get("nonce") instanceof String n) || !n.equalsIgnoreCase(AppKey.sha256Hex(nonce))) {
                 throw ApiException.unauthorized(MessageKey.AUTH_APPLE_INVALID_NONCE);
             }
-            consumeIdToken(idToken, payload.get("exp"));
-
-            String email = (String) payload.get("email");
-            if (email == null)
-                throw ApiException.unauthorized(MessageKey.AUTH_APPLE_NO_EMAIL);
-
-            // Apple id_token usually returns email_verified as the string "true", occasionally as boolean true; parse defensively
-            boolean emailVerified = "true".equals(String.valueOf(payload.get("email_verified")));
-
-            FoundUser found = findOrCreateUserByEmail(User.normalizeEmail(email), fullName, "apple", emailVerified);
-            return buildAuthResponse(found.user(), false, found.created());
-
         } catch (ApiException ex) {
             throw ex;
         } catch (Exception ex) {
             log.error("Apple login error: {}", ex.getMessage());
             throw ApiException.unauthorized(MessageKey.AUTH_APPLE_LOGIN_FAILED);
         }
+        // Outside the try, as in googleLogin: DB / Redis failures must surface as themselves, not as a 401 login failure
+        consumeIdToken(idToken, payload.get("exp"));
+
+        if (!(payload.get("email") instanceof String email)) {
+            throw ApiException.unauthorized(MessageKey.AUTH_APPLE_NO_EMAIL);
+        }
+        // Apple id_token usually returns email_verified as the string "true", occasionally as boolean true; parse defensively
+        boolean emailVerified = "true".equals(String.valueOf(payload.get("email_verified")));
+
+        FoundUser found = findOrCreateUserByEmail(User.normalizeEmail(email), fullName, "apple", emailVerified);
+        return buildAuthResponse(found.user(), false, found.created());
     }
 
     /**

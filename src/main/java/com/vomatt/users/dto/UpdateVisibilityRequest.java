@@ -15,5 +15,5 @@ public record UpdateVisibilityRequest(
         @Schema(description = "Field name to visible flag. Allowed keys: firstName, lastName, location, displayName, bio, gender. "
                 + "Omitted fields keep their current setting; unknown keys (including email and birthday, which are never public) are ignored",
                 example = "{\"firstName\": true, \"location\": false}")
-        @NotNull Map<String, Boolean> visibility
+        @NotNull Map<String, @NotNull Boolean> visibility
 ) {}

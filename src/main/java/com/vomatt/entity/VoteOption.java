@@ -1,17 +1,12 @@
 package com.vomatt.entity;
 
-import java.util.HashSet;
-import java.util.Set;
-
 import com.vomatt.entity.common.AuditableEntity;
 
-import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -28,7 +23,7 @@ import lombok.ToString;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@ToString(exclude = {"vote", "memberVotes"})
+@ToString(exclude = {"vote"})
 public class VoteOption extends AuditableEntity {
 
     @NotBlank
@@ -53,9 +48,6 @@ public class VoteOption extends AuditableEntity {
     // Maintained only by atomic SQL in VoteOptionRepository; JPA never writes it, so a stale entity can't overwrite it
     @Column(name = "vote_count", nullable = false, insertable = false, updatable = false)
     private int voteCount;
-
-    @OneToMany(mappedBy = "option", cascade = CascadeType.ALL, orphanRemoval = true)
-    private Set<UserVote> userVotes = new HashSet<>();
 
     public VoteOption(String text, String description, Vote vote) {
         this.text = text;

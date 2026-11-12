@@ -2,7 +2,6 @@ package com.vomatt.repository;
 
 import java.time.OffsetDateTime;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -36,11 +35,11 @@ public class AdminQueryRepository {
     private final EntityManager em;
 
     /**
-     * @param q      matched case-insensitively (contains) against username, email, phone number and display name, or null
+     * @param q      matched case-insensitively (contains) against username, email, phone number, display name and first / last name, or null
      * @param active true for active, false for suspended, null for both
      * @param role   one of the roles, or null
      */
-    // ponytail: LIKE over four columns scans every user; add pg_trgm indexes if the user table outgrows it
+    // ponytail: LIKE over the name, email and phone columns scans every user; add pg_trgm indexes if the user table outgrows it
     public Page<User> findUsers(String q, Boolean active, String role, Pageable pageable) {
         StringBuilder sql = new StringBuilder("FROM vomatt.users u WHERE true");
         Map<String, Object> params = new HashMap<>();

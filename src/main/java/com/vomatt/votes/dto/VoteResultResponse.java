@@ -50,7 +50,7 @@ public class VoteResultResponse {
     @Schema(description = "Deadline: the end time the owner set; ending early never moves it", example = "2026-10-19T09:00:00+08:00")
     private OffsetDateTime deadline;
 
-    @Schema(description = "False when the owner Closed the Poll early (or, for legacy data, Cancelled it while Scheduled); true otherwise", example = "true")
+    @Schema(description = "False when the Poll ended early: the owner Closed it or every Invitee cast a Ballot (or, for legacy data, Cancelled it while Scheduled); true otherwise", example = "true")
     private boolean isActive;
 
     @Schema(description = "Deprecated: always false, Polls are single-choice", deprecated = true, example = "false")

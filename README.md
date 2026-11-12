@@ -17,17 +17,9 @@ Vomatt polling community backend. The architecture follows sachmis-api (domain-d
 3. Run: `./mvnw spring-boot:run`; with `EMAIL_ENABLED=false` no OTP email is sent; read it from the app log line `[EMAIL-NOOP] ... OTP <code>` (Redis holds only a hash)
 4. Swagger UI: <http://localhost:8080/swagger-ui.html>
 
-## Features
+## API
 
-| Domain | Path | Description |
-|--------|------|------|
-| auth | `/api/auth/**` | Email / phone OTP, Google / LINE / Apple login, refresh, logout |
-| users | `/api/users/**` | My profile, public profile page, field visibility, search, account deletion |
-| votes | `/api/votes/**` | Create / query / vote / cancel / results / deactivate |
-| comments | `/api/votes/{voteId}/comments/**` | Comments, likes |
-| tags | `/api/tags/**` | Tag queries (public) |
-| lookups | `/api/lookups/**` | Lookup (dictionary) queries |
-| admin | `/api/admin/**` | Tag and lookup management (requires ADMIN) |
+The endpoints and their schemas are in Swagger UI (<http://localhost:8080/swagger-ui.html>) and the generated [docs/frontend/openapi.json](docs/frontend/openapi.json); error codes in [docs/frontend/error-codes.md](docs/frontend/error-codes.md), contract changes in [docs/frontend/CHANGELOG.md](docs/frontend/CHANGELOG.md).
 
 Responses are always `ApiResponse<T>`: `{ success, data, message, errorCode, error }`; pagination uses `CursorResponse<T>` (`items / nextCursor`; `limit` defaults to 20, max 50).
 

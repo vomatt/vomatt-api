@@ -59,6 +59,10 @@ public class UserController {
 
     private static final Logger log = LoggerFactory.getLogger(UserController.class);
 
+    /** One MyProfileResponse example, shared by every response that returns it. */
+    private static final String MY_PROFILE_EXAMPLE = """
+            {"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":"+886912345678","phoneVerified":true,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","gender":"FEMALE","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"createdPollCount":6,"votedPollCount":21,"followersCount":12,"followingCount":8,"visibilitySettings":{"firstName":false,"lastName":false,"location":false,"displayName":true,"bio":true,"gender":false},"anonymousBallotByDefault":false,"community":false,"plan":"FREE","communityQuota":{"owned":1,"limit":1,"selectionRequired":false,"selectionDeadline":null}}""";
+
     private final UserService userService;
     private final VoteService voteService;
     private final PasskeyService passkeyService;
@@ -70,8 +74,8 @@ public class UserController {
     @GetMapping("/me")
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
-            content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":null,"phoneVerified":false,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","gender":"FEMALE","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"followersCount":12,"followingCount":8,"visibilitySettings":{"firstName":false,"lastName":false,"location":false,"displayName":true,"bio":true,"gender":false},"anonymousBallotByDefault":false,"community":false,"plan":"FREE","communityQuota":{"owned":1,"limit":1}},"message":null,"errorCode":null,"error":null}""")))
+            content = @Content(examples = @ExampleObject(value =
+                    "{\"success\":true,\"data\":" + MY_PROFILE_EXAMPLE + ",\"message\":null,\"errorCode\":null,\"error\":null}")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
@@ -99,8 +103,8 @@ public class UserController {
     @GetMapping("/me/export")
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
-            content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"exportedAt":"2026-10-23T10:00:00+08:00","profile":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":null,"phoneVerified":false,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","gender":"FEMALE","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":1,"totalVotes":1,"followersCount":0,"followingCount":1,"visibilitySettings":{"firstName":false,"lastName":false,"location":true,"displayName":true,"bio":true,"gender":false},"anonymousBallotByDefault":false},"preferences":{"visibility.location":"true"},"polls":[{"id":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","title":"Lunch?","description":null,"audience":"PUBLIC","startTime":"2026-10-01T12:00:00+08:00","endTime":"2026-10-08T12:00:00+08:00","createdAt":"2026-10-01T12:00:00+08:00","deleted":false,"options":["Ramen","Sushi"]}],"comments":[{"id":"0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b","voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","text":"Ramen!","createdAt":"2026-10-02T09:00:00+08:00"}],"ballots":[{"voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","voteTitle":"Lunch?","optionId":"0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813","optionText":"Ramen","anonymous":false,"castAt":"2026-10-02T08:30:00+08:00"}],"feedback":[{"id":"0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70","content":"Please add dark mode.","createdAt":"2026-10-03T10:00:00+08:00"}],"following":[{"userId":"0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f","username":"bob","since":"2026-10-04T10:00:00+08:00"}],"blocking":[]},"message":null,"errorCode":null,"error":null}""")))
+            content = @Content(examples = @ExampleObject(value = "{\"success\":true,\"data\":{\"exportedAt\":\"2026-10-23T10:00:00+08:00\",\"profile\":" + MY_PROFILE_EXAMPLE + """
+                    ,"preferences":{"visibility.location":"true"},"polls":[{"id":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","title":"Lunch?","description":null,"audience":"PUBLIC","startTime":"2026-10-01T12:00:00+08:00","endTime":"2026-10-08T12:00:00+08:00","createdAt":"2026-10-01T12:00:00+08:00","deleted":false,"options":["Ramen","Sushi"]}],"comments":[{"id":"0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b","voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","text":"Ramen!","createdAt":"2026-10-02T09:00:00+08:00"}],"ballots":[{"voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","voteTitle":"Lunch?","optionId":"0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813","optionText":"Ramen","anonymous":false,"castAt":"2026-10-02T08:30:00+08:00"}],"feedback":[{"id":"0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70","content":"Please add dark mode.","createdAt":"2026-10-03T10:00:00+08:00"}],"following":[{"userId":"0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f","username":"bob","since":"2026-10-04T10:00:00+08:00"}],"blocking":[],"bookmarks":[{"voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","createdAt":"2026-10-05T10:00:00+08:00"}],"followedTags":[{"tagId":"0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70","createdAt":"2026-10-06T10:00:00+08:00"}]},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "Already exported today (`common.rate_limited`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
@@ -108,10 +112,11 @@ public class UserController {
     @Operation(summary = "Export my data", description = """
             **Auth**: required
             **Precondition**: not exported yet today (UTC)
-            **Behavior**: returns everything stored about the caller in one JSON document: the profile (as `GET /api/users/me`), stored preferences, \
+            **Behavior**: returns, in one JSON document, the profile (as `GET /api/users/me`), stored preferences, \
             Polls the caller created (Deleted included, with option texts), Comments written (not deleted), Ballots cast (with the chosen option; \
-            an Anonymous Ballot of an Ended Poll has no option once sealed), feedback sent, and the users the caller follows and blocked \
-            (`following`, `blocking`, oldest first, suspended accounts included). Of other users, only those follows' and blocks' ids and usernames are included.
+            an Anonymous Ballot of an Ended Poll has no option once sealed), feedback sent, the users the caller follows and blocked \
+            (`following`, `blocking`, oldest first, suspended accounts included), the Polls the caller bookmarked (`bookmarks`) and the \
+            tags the caller follows (`followedTags`), both oldest first. Of other users, only those follows' and blocks' ids and usernames are included.
             **Side effects**: none; counted toward the one export per UTC day
             **Errors**:
             - 404 `user.not_found`: the account no longer exists
@@ -400,8 +405,8 @@ public class UserController {
     @PostMapping("/me/phone/verify")
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
-            content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":"+886912345678","phoneVerified":true,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","gender":"FEMALE","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"createdPollCount":6,"votedPollCount":21,"followersCount":12,"followingCount":8,"visibilitySettings":{"firstName":false,"lastName":false,"location":false,"displayName":true,"bio":true,"gender":false},"anonymousBallotByDefault":false},"message":null,"errorCode":null,"error":null}""")))
+            content = @Content(examples = @ExampleObject(value =
+                    "{\"success\":true,\"data\":" + MY_PROFILE_EXAMPLE + ",\"message\":null,\"errorCode\":null,\"error\":null}")))
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
                     {"phone": "0912345678", "code": "123456"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",

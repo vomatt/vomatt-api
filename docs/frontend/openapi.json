@@ -17748,8 +17748,11 @@
                     "community" : false,
                     "communityQuota" : {
                       "limit" : 1,
-                      "owned" : 1
+                      "owned" : 1,
+                      "selectionDeadline" : null,
+                      "selectionRequired" : false
                     },
+                    "createdPollCount" : 6,
                     "displayName" : "Alice",
                     "email" : "alice@example.com",
                     "firstName" : "Alice",
@@ -17761,8 +17764,8 @@
                     "lastLoginAt" : "2026-10-09T09:15:00+08:00",
                     "lastName" : "Chen",
                     "location" : "Taipei",
-                    "phoneNumber" : null,
-                    "phoneVerified" : false,
+                    "phoneNumber" : "+886912345678",
+                    "phoneVerified" : true,
                     "plan" : "FREE",
                     "totalPolls" : 4,
                     "totalVotes" : 17,
@@ -17774,7 +17777,8 @@
                       "gender" : false,
                       "lastName" : false,
                       "location" : false
-                    }
+                    },
+                    "votedPollCount" : 21
                   },
                   "error" : null,
                   "errorCode" : null,
@@ -18576,7 +18580,7 @@
     },
     "/api/users/me/export" : {
       "get" : {
-        "description" : "**Auth**: required\n**Precondition**: not exported yet today (UTC)\n**Behavior**: returns everything stored about the caller in one JSON document: the profile (as `GET /api/users/me`), stored preferences, Polls the caller created (Deleted included, with option texts), Comments written (not deleted), Ballots cast (with the chosen option; an Anonymous Ballot of an Ended Poll has no option once sealed), feedback sent, and the users the caller follows and blocked (`following`, `blocking`, oldest first, suspended accounts included). Of other users, only those follows' and blocks' ids and usernames are included.\n**Side effects**: none; counted toward the one export per UTC day\n**Errors**:\n- 404 `user.not_found`: the account no longer exists\n- 429 `common.rate_limited`: an export was already produced today",
+        "description" : "**Auth**: required\n**Precondition**: not exported yet today (UTC)\n**Behavior**: returns, in one JSON document, the profile (as `GET /api/users/me`), stored preferences, Polls the caller created (Deleted included, with option texts), Comments written (not deleted), Ballots cast (with the chosen option; an Anonymous Ballot of an Ended Poll has no option once sealed), feedback sent, the users the caller follows and blocked (`following`, `blocking`, oldest first, suspended accounts included), the Polls the caller bookmarked (`bookmarks`) and the tags the caller follows (`followedTags`), both oldest first. Of other users, only those follows' and blocks' ids and usernames are included.\n**Side effects**: none; counted toward the one export per UTC day\n**Errors**:\n- 404 `user.not_found`: the account no longer exists\n- 429 `common.rate_limited`: an export was already produced today",
         "operationId" : "exportMyData",
         "responses" : {
           "200" : {
@@ -18593,6 +18597,10 @@
                       "voteTitle" : "Lunch?"
                     } ],
                     "blocking" : [ ],
+                    "bookmarks" : [ {
+                      "createdAt" : "2026-10-05T10:00:00+08:00",
+                      "voteId" : "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05"
+                    } ],
                     "comments" : [ {
                       "createdAt" : "2026-10-02T09:00:00+08:00",
                       "id" : "0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b",
@@ -18604,6 +18612,10 @@
                       "content" : "Please add dark mode.",
                       "createdAt" : "2026-10-03T10:00:00+08:00",
                       "id" : "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70"
+                    } ],
+                    "followedTags" : [ {
+                      "createdAt" : "2026-10-06T10:00:00+08:00",
+                      "tagId" : "0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70"
                     } ],
                     "following" : [ {
                       "since" : "2026-10-04T10:00:00+08:00",
@@ -18630,21 +18642,30 @@
                       "avatarUrl" : "bot:boba",
                       "bio" : "Poll enthusiast",
                       "birthday" : "1995-04-12",
+                      "community" : false,
+                      "communityQuota" : {
+                        "limit" : 1,
+                        "owned" : 1,
+                        "selectionDeadline" : null,
+                        "selectionRequired" : false
+                      },
+                      "createdPollCount" : 6,
                       "displayName" : "Alice",
                       "email" : "alice@example.com",
                       "firstName" : "Alice",
-                      "followersCount" : 0,
-                      "followingCount" : 1,
+                      "followersCount" : 12,
+                      "followingCount" : 8,
                       "gender" : "FEMALE",
                       "id" : "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47",
                       "joinedAt" : "2026-08-01T10:00:00+08:00",
                       "lastLoginAt" : "2026-10-09T09:15:00+08:00",
                       "lastName" : "Chen",
                       "location" : "Taipei",
-                      "phoneNumber" : null,
-                      "phoneVerified" : false,
-                      "totalPolls" : 1,
-                      "totalVotes" : 1,
+                      "phoneNumber" : "+886912345678",
+                      "phoneVerified" : true,
+                      "plan" : "FREE",
+                      "totalPolls" : 4,
+                      "totalVotes" : 17,
                       "username" : "alice",
                       "visibilitySettings" : {
                         "bio" : true,
@@ -18652,8 +18673,9 @@
                         "firstName" : false,
                         "gender" : false,
                         "lastName" : false,
-                        "location" : true
-                      }
+                        "location" : false
+                      },
+                      "votedPollCount" : 21
                     }
                   },
                   "error" : null,
@@ -19491,6 +19513,13 @@
                     "avatarUrl" : "bot:boba",
                     "bio" : "Poll enthusiast",
                     "birthday" : "1995-04-12",
+                    "community" : false,
+                    "communityQuota" : {
+                      "limit" : 1,
+                      "owned" : 1,
+                      "selectionDeadline" : null,
+                      "selectionRequired" : false
+                    },
                     "createdPollCount" : 6,
                     "displayName" : "Alice",
                     "email" : "alice@example.com",
@@ -19505,6 +19534,7 @@
                     "location" : "Taipei",
                     "phoneNumber" : "+886912345678",
                     "phoneVerified" : true,
+                    "plan" : "FREE",
                     "totalPolls" : 4,
                     "totalVotes" : 17,
                     "username" : "alice",

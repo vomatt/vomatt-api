@@ -1,5 +1,6 @@
 package com.vomatt.admin;
 
+import com.vomatt.common.audit.Auditable;
 import java.util.List;
 
 import com.vomatt.common.response.ApiResponse;
@@ -83,13 +84,14 @@ public class AdminLookupController {
     }
 
     @PostMapping
+    @Auditable(action = "CREATE", resourceType = "LOOKUP")
     @CommonApiResponses
     @Operation(summary = "Create Dictionary Item",
             description = """
                     **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
                     **Precondition**: caller holds role ADMIN
                     **Behavior**: creates an active item; `type` and `key` are trimmed, `seq` defaults to 0 and `frontendUsing` to false. Returns **201**
-                    **Side effects**: evicts the cached listing of this type, and the frontend dictionary when `frontendUsing` is true
+                    **Side effects**: evicts the cached listing of this type, and the frontend dictionary when `frontendUsing` is true. Written to the audit log
                     **Errors**:
                     - 409 `lookup.exists`: an item with this type and key already exists""")
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(mediaType = "application/json",
@@ -138,13 +140,14 @@ public class AdminLookupController {
     }
 
     @PutMapping("/{id}")
+    @Auditable(action = "UPDATE", resourceType = "LOOKUP", resourceIdIndex = 0)
     @CommonApiResponses
     @Operation(summary = "Update Dictionary Item",
             description = """
                     **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
                     **Precondition**: caller holds role ADMIN; the item exists
                     **Behavior**: partial update despite the PUT verb: only non-null fields are applied, and a field cannot be cleared to null. Changing `lookupType` or `lookupKey` moves the item
-                    **Side effects**: evicts the cached listings of the old and the new type, and the frontend dictionary when the item is or was flagged `frontendUsing`
+                    **Side effects**: evicts the cached listings of the old and the new type, and the frontend dictionary when the item is or was flagged `frontendUsing`. Written to the audit log
                     **Errors**:
                     - 400 `common.bad_request`: `id` is not a valid UUID
                     - 404 `lookup.not_found`: item does not exist
@@ -212,13 +215,14 @@ public class AdminLookupController {
     }
 
     @PatchMapping("/{id}/activate")
+    @Auditable(action = "ACTIVATE", resourceType = "LOOKUP", resourceIdIndex = 0)
     @CommonApiResponses
     @Operation(summary = "Activate Dictionary Item",
             description = """
                     **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
                     **Precondition**: caller holds role ADMIN; the item exists
                     **Behavior**: sets `isActive` to true; idempotent
-                    **Side effects**: evicts the cached type listing, and the frontend dictionary when the item is flagged `frontendUsing`
+                    **Side effects**: evicts the cached type listing, and the frontend dictionary when the item is flagged `frontendUsing`. Written to the audit log
                     **Errors**:
                     - 400 `common.bad_request`: `id` is not a valid UUID
                     - 404 `lookup.not_found`: item does not exist""")
@@ -263,13 +267,14 @@ public class AdminLookupController {
     }
 
     @PatchMapping("/{id}/deactivate")
+    @Auditable(action = "DEACTIVATE", resourceType = "LOOKUP", resourceIdIndex = 0)
     @CommonApiResponses
     @Operation(summary = "Deactivate Dictionary Item (Soft Delete)",
             description = """
                     **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
                     **Precondition**: caller holds role ADMIN; the item exists
                     **Behavior**: sets `isActive` to false; the item stays retrievable through the single-item endpoint but leaves type listings and the frontend dictionary. Idempotent
-                    **Side effects**: evicts the cached type listing, and the frontend dictionary when the item is flagged `frontendUsing`
+                    **Side effects**: evicts the cached type listing, and the frontend dictionary when the item is flagged `frontendUsing`. Written to the audit log
                     **Errors**:
                     - 400 `common.bad_request`: `id` is not a valid UUID
                     - 404 `lookup.not_found`: item does not exist""")
@@ -314,13 +319,14 @@ public class AdminLookupController {
     }
 
     @DeleteMapping("/{id}")
+    @Auditable(action = "DELETE", resourceType = "LOOKUP", resourceIdIndex = 0)
     @CommonApiResponses
     @Operation(summary = "Delete Dictionary Item (Hard Delete)",
             description = """
                     **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
                     **Precondition**: caller holds role ADMIN; the item exists
                     **Behavior**: permanently removes the item; prefer deactivation when it may be needed again
-                    **Side effects**: evicts the cached type listing, and the frontend dictionary when the item is flagged `frontendUsing`
+                    **Side effects**: evicts the cached type listing, and the frontend dictionary when the item is flagged `frontendUsing`. Written to the audit log
                     **Errors**:
                     - 400 `common.bad_request`: `id` is not a valid UUID
                     - 404 `lookup.not_found`: item does not exist""")

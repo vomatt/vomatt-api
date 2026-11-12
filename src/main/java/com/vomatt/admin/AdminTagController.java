@@ -1,5 +1,6 @@
 package com.vomatt.admin;
 
+import com.vomatt.common.audit.Auditable;
 import com.vomatt.tags.dto.CreateTagRequest;
 import com.vomatt.tags.dto.UpdateTagRequest;
 import com.vomatt.common.response.ApiResponse;
@@ -36,13 +37,14 @@ public class AdminTagController {
     private final TagService tagService;
 
     @PostMapping
+    @Auditable(action = "CREATE", resourceType = "TAG")
     @CommonApiResponses
     @Operation(summary = "Create Tag",
             description = """
                     **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
                     **Precondition**: caller holds role ADMIN
                     **Behavior**: creates a tag. `name` is trimmed; `slug` defaults to a slug generated from the name (lowercase, spaces to hyphens, unsupported characters dropped). Returns 200 with the created tag, `usageCount` 0
-                    **Side effects**: a new tag becomes visible in the public tag lists
+                    **Side effects**: a new tag becomes visible in the public tag lists. Written to the audit log
                     **Errors**:
                     - 400 `common.bad_request`: `slug` is omitted and no valid slug can be generated from `name`
                     - 409 `tag.name.exists`: another tag already has this name
@@ -97,13 +99,14 @@ public class AdminTagController {
     }
 
     @PutMapping("/{tagId}")
+    @Auditable(action = "UPDATE", resourceType = "TAG", resourceIdIndex = 0)
     @CommonApiResponses
     @Operation(summary = "Update Tag",
             description = """
                     **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
                     **Precondition**: caller holds role ADMIN; the tag exists
                     **Behavior**: replaces name, slug, description and displayOrder with the request values (full update: an omitted `description` becomes null and an omitted `displayOrder` becomes 0). `slug` is regenerated from `name` when null or blank, even if the tag already had a custom slug
-                    **Side effects**: the change is visible in the public tag lists; Polls keep their association with the tag
+                    **Side effects**: the change is visible in the public tag lists; Polls keep their association with the tag. Written to the audit log
                     **Errors**:
                     - 400 `common.bad_request`: `tagId` is not a valid UUID, or no valid slug can be generated from `name`
                     - 404 `tag.not_found`: tag does not exist
@@ -171,13 +174,14 @@ public class AdminTagController {
     }
 
     @DeleteMapping("/{tagId}")
+    @Auditable(action = "DELETE", resourceType = "TAG", resourceIdIndex = 0)
     @CommonApiResponses
     @Operation(summary = "Delete Tag",
             description = """
                     **Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)
                     **Precondition**: caller holds role ADMIN; the tag exists and is not used by any Poll
                     **Behavior**: hard-deletes the tag; returns `{success: true}`
-                    **Side effects**: the tag disappears from the public tag lists
+                    **Side effects**: the tag disappears from the public tag lists. Written to the audit log
                     **Errors**:
                     - 400 `common.bad_request`: `tagId` is not a valid UUID
                     - 404 `tag.not_found`: tag does not exist

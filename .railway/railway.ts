@@ -38,6 +38,12 @@ export default defineRailway(() => {
       MANAGEMENT_HEALTH_MAIL_ENABLED: "false",
       // Secrets and per-deployment values live on Railway: railway variables --set KEY=value
       JWT_SECRET: preserve(),
+      // Root secret for derived keys (OTP hashing...), at least 32 characters; required, no default
+      APP_KEY: preserve(),
+      // Shared with vomatt-web (same value there), at least 32 characters; required under the prod profile
+      CLIENT_IP_SECRET: preserve(),
+      // Railway ingress CIDRs allowed to set X-Forwarded-For; required under the prod profile
+      TRUSTED_PROXIES: preserve(),
       MAIL_USERNAME: preserve(),
       MAIL_PASSWORD: preserve(),
       RESEND_API_KEY: preserve(),

@@ -1191,8 +1191,9 @@ public class AuthService {
         if (user.isCommunity()) {
             throw ApiException.forbidden(MessageKey.AUTH_COMMUNITY_SIGN_IN_NOT_ALLOWED);
         }
-        user.setLastLoginAt(OffsetDateTime.now());
-        userRepository.save(user);
+        OffsetDateTime now = OffsetDateTime.now();
+        user.setLastLoginAt(now);
+        userRepository.recordLogin(user.getId(), now);
         List<String> roles = List.of(user.getRoles());
         RefreshTokenService.IssuedTokens tokens = refreshTokenService.issue(user.getId().toString(), roles, adminScope);
         return new AuthResponse(tokens.accessToken(), tokens.refreshToken(),

@@ -1509,7 +1509,9 @@ class AuthServiceTest {
         // Successful login updates lastLoginAt; an existing account is never reported as new
         assertThat(user.getLastLoginAt()).isNotNull();
         assertThat(response.isNewUser()).isFalse();
-        verify(userRepository).save(user);
+        // One targeted UPDATE, never a merge that could write a stale active back over a suspension
+        verify(userRepository).recordLogin(user.getId(), user.getLastLoginAt());
+        verify(userRepository, never()).save(any());
     }
 
     // ── appleLogin (P6-#16 external failure classification + #21 JWKS cache) ──────────────────

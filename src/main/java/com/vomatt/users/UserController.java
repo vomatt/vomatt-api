@@ -542,7 +542,7 @@ public class UserController {
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Block a user", description = """
-            **Auth**: required
+            **Auth**: required; while acting as a community account (`X-Act-As`), OWNER or ADMIN
             **Precondition**: `userId` is another existing, active account
             **Behavior**: the caller no longer sees, in `GET /api/votes` (Feed / Explore / Search / Top) and `GET /api/votes/following`, \
             Polls the blocked user created, nor, in `GET /api/votes/{voteId}/comments` and its replies, Comment threads the blocked user \
@@ -558,6 +558,7 @@ public class UserController {
             **Errors**:
             - 400 `user.block.self`: `userId` is the caller's own id
             - 400 `common.bad_request`: `userId` is not a valid id
+            - 403 `community.role_forbidden`: sent while acting as a community account with a role other than OWNER or ADMIN
             - 404 `user.not_found`: no account with this id, or it is suspended""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> blockUser(
             @Parameter(description = "Id of the user to block", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47")
@@ -574,13 +575,14 @@ public class UserController {
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
     @Operation(summary = "Unblock a user", description = """
-            **Auth**: required
+            **Auth**: required; while acting as a community account (`X-Act-As`), OWNER or ADMIN
             **Precondition**: none
             **Behavior**: removes the caller's block on the user, so their Polls and Comments show again. \
             Idempotent: succeeds when the user was not blocked or does not exist.
             **Side effects**: the unblock is written to the audit log
             **Errors**:
-            - 400 `common.bad_request`: `userId` is not a valid id""")
+            - 400 `common.bad_request`: `userId` is not a valid id
+            - 403 `community.role_forbidden`: sent while acting as a community account with a role other than OWNER or ADMIN""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> unblockUser(
             @Parameter(description = "Id of the user to unblock", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47")
             @PathVariable String userId,

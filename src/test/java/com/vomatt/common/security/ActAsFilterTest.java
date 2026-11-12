@@ -180,6 +180,29 @@ class ActAsFilterTest {
     }
 
     @Test
+    void shouldRefuseBlocksAndNotificationPreferenceWritesWhenEditor() throws Exception {
+        signIn();
+        member(CommunityRole.EDITOR);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        assertThat(run(acting("POST", "/api/users/me/blocks/" + UUID.randomUUID()), response)).isNull();
+        assertThat(response.getStatus()).isEqualTo(403);
+
+        signIn();
+        member(CommunityRole.EDITOR);
+        response = new MockHttpServletResponse();
+        assertThat(run(acting("PATCH", "/api/users/me/notification-preferences"), response)).isNull();
+        assertThat(response.getStatus()).isEqualTo(403);
+
+        signIn();
+        member(CommunityRole.EDITOR);
+        assertThat(run(acting("GET", "/api/users/me/blocks"), new MockHttpServletResponse())).isNotNull();
+
+        signIn();
+        member(CommunityRole.ADMIN);
+        assertThat(run(acting("DELETE", "/api/users/me/blocks/" + UUID.randomUUID()), new MockHttpServletResponse())).isNotNull();
+    }
+
+    @Test
     void shouldRefuseAccountRoutesWhenActingEvenAsOwner() throws Exception {
         member(CommunityRole.OWNER);
         for (var call : List.of(List.of("POST", "/api/auth/passkey/register/options"), List.of("GET", "/api/users/me/sessions"),

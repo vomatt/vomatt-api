@@ -77,8 +77,12 @@ public final class SecurityEndpoints {
     /** DELETE-only routes never reachable while acting: account deletion. */
     public static final String[] ACT_AS_DENIED_DELETE = { "/api/users/*" };
 
-    /** The community account's profile; writes need the OWNER or ADMIN role while acting. */
-    public static final String[] ACT_AS_PROFILE = { "/api/users/me", "/api/users/me/avatar", "/api/users/me/visibility" };
+    /**
+     * The community account's profile and account settings (blocks, notification preferences); writes need the OWNER or
+     * ADMIN role while acting.
+     */
+    public static final String[] ACT_AS_PROFILE = { "/api/users/me", "/api/users/me/avatar", "/api/users/me/visibility",
+            "/api/users/me/blocks/**", "/api/users/me/notification-preferences" };
 
     /**
      * Writes any role may send while acting, ANALYST included: member management (CommunityService authorizes by the

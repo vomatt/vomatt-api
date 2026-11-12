@@ -57,13 +57,14 @@ public class NotificationPreferenceController {
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Update notification preferences", description = """
-            **Auth**: required
+            **Auth**: required; while acting as a community account (`X-Act-As`), OWNER or ADMIN
             **Precondition**: none
             **Behavior**: sets the switches sent; an omitted or `null` field keeps its value. Returns every switch after the change. \
             A kind switched off leaves the feed and the unread count at once; switched back on, its items return with their \
             read state (and `POST /api/notifications/read-all` covers them too).
             **Side effects**: persists the switches; they also appear under `preferences` in `GET /api/users/me/export`
             **Errors**:
+            - 403 `community.role_forbidden`: sent while acting as a community account with a role other than OWNER or ADMIN
             - 404 `user.not_found`: the account no longer exists""")
     public ResponseEntity<ApiResponse<NotificationPreferencesResponse>> update(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """

@@ -1261,7 +1261,6 @@ class VoteServiceTest {
                     .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.VOTE_FORBIDDEN));
 
             assertThat(vote.isActive()).isTrue();
-            verify(voteRepository, never()).saveAndFlush(any());
         }
 
         @Test
@@ -1272,14 +1271,12 @@ class VoteServiceTest {
             vote.scheduleEnd(deadline);
             vote.setAudience(Audience.UNLISTED);
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
-            when(voteRepository.saveAndFlush(vote)).thenReturn(vote);
 
             voteService.closeVote(voteId.toString(), userId.toString());
 
             assertThat(vote.getStatus()).isEqualTo(VoteStatus.ENDED);
             assertThat(vote.getEndTime()).isBefore(deadline);
             assertThat(vote.getDeadline()).isEqualTo(deadline);
-            verify(voteRepository).saveAndFlush(vote);
         }
 
         @Test
@@ -1293,7 +1290,6 @@ class VoteServiceTest {
             assertThatThrownBy(() -> voteService.closeVote(voteId.toString(), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_CLOSE_PUBLIC_NOT_ALLOWED));
             assertThat(vote.getEndTime()).isEqualTo(deadline);
-            verify(voteRepository, never()).saveAndFlush(any());
         }
 
         @Test
@@ -1308,7 +1304,6 @@ class VoteServiceTest {
             assertThatThrownBy(() -> voteService.closeVote(voteId.toString(), userId.toString()))
                     .satisfies(ex -> assertApiException(ex, HttpStatus.BAD_REQUEST, MessageKey.VOTE_CLOSE_SCHEDULED));
             assertThat(vote.getEndTime()).isEqualTo(deadline);
-            verify(voteRepository, never()).saveAndFlush(any());
         }
 
         @Test
@@ -1318,7 +1313,6 @@ class VoteServiceTest {
             vote.setStartTime(OffsetDateTime.now().minusDays(1));
             vote.setEndTime(ended);
             when(voteRepository.findByIdForUpdate(voteId)).thenReturn(Optional.of(vote));
-            when(voteRepository.saveAndFlush(vote)).thenReturn(vote);
 
             voteService.closeVote(voteId.toString(), userId.toString());
 

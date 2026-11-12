@@ -602,16 +602,12 @@ public class VoteService {
             .toList();
     }
 
-    public VoteResponse closeVote(String voteId, String creatorId) {
+    public void closeVote(String voteId, String creatorId) {
         // Exclusive lock: waits for in-flight Ballot changes, and a concurrent Close then sees Ended and keeps its end time
         Vote vote = requireOwned(lockVote(UUID.fromString(voteId)), creatorId);
 
         vote.closeAt(OffsetDateTime.now());
-        // Flushed now so @PreUpdate stamps updated_at before the response is built from this Poll
-        vote = voteRepository.saveAndFlush(vote);
         log.info("Vote {} closed by creator {}", voteId, creatorId);
-
-        return toResponse(vote, creatorId);
     }
 
     /**

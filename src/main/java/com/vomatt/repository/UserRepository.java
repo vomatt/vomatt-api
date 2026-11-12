@@ -147,12 +147,18 @@ public interface UserRepository extends JpaRepository<User, UUID> {
            nativeQuery = true)
     List<UUID> lockToChange(@Param("ids") Collection<UUID> ids, @Param("lock") boolean lock);
 
+    /**
+     * Locks the community accounts for {@code reason}. The COMMUNITY_LOCKED notification is keyed by the account, so read
+     * state left from an earlier lock is dropped and this lock is unread.
+     */
     @Modifying
-    @Query("UPDATE User u SET u.lockedAt = :now WHERE u.id IN :ids")
-    void markLocked(@Param("ids") Collection<UUID> ids, @Param("now") OffsetDateTime now);
+    @Query(value = """
+            WITH unread AS (DELETE FROM vomatt.notification_reads WHERE kind = 'COMMUNITY_LOCKED' AND source_id IN (:ids))
+            UPDATE vomatt.users SET locked_at = :now, lock_reason = :reason WHERE id IN (:ids)""", nativeQuery = true)
+    void markLocked(@Param("ids") Collection<UUID> ids, @Param("now") OffsetDateTime now, @Param("reason") String reason);
 
     @Modifying
-    @Query("UPDATE User u SET u.lockedAt = NULL WHERE u.id IN :ids")
+    @Query(value = "UPDATE vomatt.users SET locked_at = NULL, lock_reason = NULL WHERE id IN (:ids)", nativeQuery = true)
     void markUnlocked(@Param("ids") Collection<UUID> ids);
 
     /** Whether the account is active and still holds the admin role; checked per request on /api/admin/**. */

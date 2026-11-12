@@ -215,7 +215,7 @@ public class PlanService {
             return 0;
         }
         if (lock) {
-            userRepository.markLocked(changing, OffsetDateTime.now());
+            userRepository.markLocked(changing, OffsetDateTime.now(), reason.name());
         } else {
             userRepository.markUnlocked(changing);
         }

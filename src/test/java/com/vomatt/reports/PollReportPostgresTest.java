@@ -31,6 +31,7 @@ import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.retention.RetentionJob;
 import com.vomatt.common.util.TimeUtil;
 import com.vomatt.entity.Gender;
+import com.vomatt.entity.Invitee;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserVote;
 import com.vomatt.entity.Vote;
@@ -61,7 +62,10 @@ class PollReportPostgresTest extends PostgresRepositoryTest {
         Vote poll = persistPoll(owner, now.minusDays(20), now.minusDays(10), "A", "B");
         VoteOption a = option(poll, "A");
         voters.forEach(v -> em.persist(new UserVote(v, poll, a)));
-        em.flush();
+        // The stored counts, which in production only VoteRepository's atomic increments write
+        addTurnout(poll, voters.size());
+        em.createNativeQuery("UPDATE vomatt.vote_options SET vote_count = :n WHERE id = :id")
+                .setParameter("n", voters.size()).setParameter("id", a.getId()).executeUpdate();
         em.createNativeQuery("UPDATE vomatt.votes SET pro = TRUE, voter_visibility = 'NOBODY', is_anonymous = TRUE WHERE id = :id")
                 .setParameter("id", poll.getId()).executeUpdate();
         em.clear();
@@ -108,6 +112,36 @@ class PollReportPostgresTest extends PostgresRepositoryTest {
         assertThat(again).isEqualTo(first);
         assertThat(((Number) em.createNativeQuery("SELECT COUNT(*) FROM vomatt.poll_reports WHERE vote_id = :id")
                 .setParameter("id", poll.getId()).getSingleResult()).intValue()).isEqualTo(1);
+    }
+
+    @Test
+    void shouldUseStoredCountsAndDistinctInviteesWhenVoterDeletedAfterEnd() {
+        User owner = persistUser("rep-inv-owner-" + System.nanoTime());
+        User twice = persistUser("rep-inv-twice-" + System.nanoTime());
+        User silent = persistUser("rep-inv-silent-" + System.nanoTime());
+        User gone = persistUser("rep-inv-gone-" + System.nanoTime());
+        // The owner, an Invitee on the Poll by ID and by address, and an Invitee whose account is deleted after End vote
+        Vote poll = endedProPoll(owner, List.of(owner, twice, gone));
+        em.createNativeQuery("UPDATE vomatt.votes SET audience = 'INVITE_ONLY' WHERE id = :id")
+                .setParameter("id", poll.getId()).executeUpdate();
+        Vote ref = em.getReference(Vote.class, poll.getId());
+        em.persist(new Invitee(ref, twice));
+        em.persist(new Invitee(ref, twice, twice.getEmail()));
+        em.persist(new Invitee(ref, silent));
+        em.persist(new Invitee(ref, "pending-" + System.nanoTime() + "@test.local"));
+        em.persist(new Invitee(ref, gone));
+        em.flush();
+        em.createNativeQuery("DELETE FROM vomatt.users WHERE id = :id").setParameter("id", gone.getId()).executeUpdate();
+        em.clear();
+
+        PollReportResponse report = reportService.getReport(poll.getId().toString(), owner.getId().toString());
+
+        // Same totals as the Poll's results; the deleted voter's Ballot stays counted there
+        assertThat(report.turnout().ballots()).isEqualTo(3);
+        assertThat(report.options()).extracting(PollReportResponse.OptionCount::count).containsExactly(3, 0);
+        // Invitees: twice (once), silent, the pending address; only twice holds a Ballot, the owner's never counts
+        assertThat(report.turnout().invitees()).isEqualTo(3);
+        assertThat(report.turnout().rate()).isEqualTo(1.0 / 3);
     }
 
     @Test

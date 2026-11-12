@@ -4441,7 +4441,7 @@
         "type" : "object"
       },
       "OptionCount" : {
-        "description" : "One option's Ballot count",
+        "description" : "One option's Ballot count, the same stored count the Poll's results show",
         "properties" : {
           "count" : {
             "format" : "int32",
@@ -5596,18 +5596,18 @@
         "description" : "Turnout",
         "properties" : {
           "ballots" : {
-            "description" : "Ballots cast",
+            "description" : "Ballots cast, the Poll's `turnout`; the owner's Ballot included",
             "format" : "int32",
             "type" : "integer"
           },
           "invitees" : {
-            "description" : "Invitees of an INVITE_ONLY Poll; null for other Audiences",
+            "description" : "Distinct Invitees of an INVITE_ONLY Poll (a user invited both by ID and by an address of theirs counts once); null for other Audiences",
             "format" : "int32",
             "nullable" : true,
             "type" : "integer"
           },
           "rate" : {
-            "description" : "`ballots / invitees` (0-1); null unless INVITE_ONLY with Invitees",
+            "description" : "Invitees holding a Ballot divided by `invitees` (0-1; the owner's Ballot never counts); null unless INVITE_ONLY with Invitees",
             "format" : "double",
             "nullable" : true,
             "type" : "number"
@@ -7942,7 +7942,7 @@
         "tags" : [ "Admin - Lookup" ]
       },
       "post" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: creates an active item; `type` and `key` are trimmed, `seq` defaults to 0 and `frontendUsing` to false. Returns **201**\n**Side effects**: evicts the cached listing of this type, and the frontend dictionary when `frontendUsing` is true\n**Errors**:\n- 409 `lookup.exists`: an item with this type and key already exists",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: creates an active item; `type` and `key` are trimmed, `seq` defaults to 0 and `frontendUsing` to false. Returns **201**\n**Side effects**: evicts the cached listing of this type, and the frontend dictionary when `frontendUsing` is true. Written to the audit log\n**Errors**:\n- 409 `lookup.exists`: an item with this type and key already exists",
         "operationId" : "create",
         "requestBody" : {
           "content" : {
@@ -8080,7 +8080,7 @@
     },
     "/api/admin/lookups/{id}" : {
       "delete" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the item exists\n**Behavior**: permanently removes the item; prefer deactivation when it may be needed again\n**Side effects**: evicts the cached type listing, and the frontend dictionary when the item is flagged `frontendUsing`\n**Errors**:\n- 400 `common.bad_request`: `id` is not a valid UUID\n- 404 `lookup.not_found`: item does not exist",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the item exists\n**Behavior**: permanently removes the item; prefer deactivation when it may be needed again\n**Side effects**: evicts the cached type listing, and the frontend dictionary when the item is flagged `frontendUsing`. Written to the audit log\n**Errors**:\n- 400 `common.bad_request`: `id` is not a valid UUID\n- 404 `lookup.not_found`: item does not exist",
         "operationId" : "delete",
         "parameters" : [ {
           "description" : "Dictionary item ID (UUIDv7)",
@@ -8190,7 +8190,7 @@
         "tags" : [ "Admin - Lookup" ]
       },
       "put" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the item exists\n**Behavior**: partial update despite the PUT verb: only non-null fields are applied, and a field cannot be cleared to null. Changing `lookupType` or `lookupKey` moves the item\n**Side effects**: evicts the cached listings of the old and the new type, and the frontend dictionary when the item is or was flagged `frontendUsing`\n**Errors**:\n- 400 `common.bad_request`: `id` is not a valid UUID\n- 404 `lookup.not_found`: item does not exist\n- 409 `lookup.exists`: the resulting type and key belong to another item",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the item exists\n**Behavior**: partial update despite the PUT verb: only non-null fields are applied, and a field cannot be cleared to null. Changing `lookupType` or `lookupKey` moves the item\n**Side effects**: evicts the cached listings of the old and the new type, and the frontend dictionary when the item is or was flagged `frontendUsing`. Written to the audit log\n**Errors**:\n- 400 `common.bad_request`: `id` is not a valid UUID\n- 404 `lookup.not_found`: item does not exist\n- 409 `lookup.exists`: the resulting type and key belong to another item",
         "operationId" : "update",
         "parameters" : [ {
           "description" : "Dictionary item ID (UUIDv7)",
@@ -8355,7 +8355,7 @@
     },
     "/api/admin/lookups/{id}/activate" : {
       "patch" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the item exists\n**Behavior**: sets `isActive` to true; idempotent\n**Side effects**: evicts the cached type listing, and the frontend dictionary when the item is flagged `frontendUsing`\n**Errors**:\n- 400 `common.bad_request`: `id` is not a valid UUID\n- 404 `lookup.not_found`: item does not exist",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the item exists\n**Behavior**: sets `isActive` to true; idempotent\n**Side effects**: evicts the cached type listing, and the frontend dictionary when the item is flagged `frontendUsing`. Written to the audit log\n**Errors**:\n- 400 `common.bad_request`: `id` is not a valid UUID\n- 404 `lookup.not_found`: item does not exist",
         "operationId" : "activate",
         "parameters" : [ {
           "description" : "Dictionary item ID (UUIDv7)",
@@ -8467,7 +8467,7 @@
     },
     "/api/admin/lookups/{id}/deactivate" : {
       "patch" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the item exists\n**Behavior**: sets `isActive` to false; the item stays retrievable through the single-item endpoint but leaves type listings and the frontend dictionary. Idempotent\n**Side effects**: evicts the cached type listing, and the frontend dictionary when the item is flagged `frontendUsing`\n**Errors**:\n- 400 `common.bad_request`: `id` is not a valid UUID\n- 404 `lookup.not_found`: item does not exist",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the item exists\n**Behavior**: sets `isActive` to false; the item stays retrievable through the single-item endpoint but leaves type listings and the frontend dictionary. Idempotent\n**Side effects**: evicts the cached type listing, and the frontend dictionary when the item is flagged `frontendUsing`. Written to the audit log\n**Errors**:\n- 400 `common.bad_request`: `id` is not a valid UUID\n- 404 `lookup.not_found`: item does not exist",
         "operationId" : "deactivate",
         "parameters" : [ {
           "description" : "Dictionary item ID (UUIDv7)",
@@ -8663,7 +8663,7 @@
     },
     "/api/admin/tags" : {
       "post" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: creates a tag. `name` is trimmed; `slug` defaults to a slug generated from the name (lowercase, spaces to hyphens, unsupported characters dropped). Returns 200 with the created tag, `usageCount` 0\n**Side effects**: a new tag becomes visible in the public tag lists\n**Errors**:\n- 400 `common.bad_request`: `slug` is omitted and no valid slug can be generated from `name`\n- 409 `tag.name.exists`: another tag already has this name\n- 409 `tag.slug.exists`: another tag already has this slug",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN\n**Behavior**: creates a tag. `name` is trimmed; `slug` defaults to a slug generated from the name (lowercase, spaces to hyphens, unsupported characters dropped). Returns 200 with the created tag, `usageCount` 0\n**Side effects**: a new tag becomes visible in the public tag lists. Written to the audit log\n**Errors**:\n- 400 `common.bad_request`: `slug` is omitted and no valid slug can be generated from `name`\n- 409 `tag.name.exists`: another tag already has this name\n- 409 `tag.slug.exists`: another tag already has this slug",
         "operationId" : "createTag",
         "requestBody" : {
           "content" : {
@@ -8789,7 +8789,7 @@
     },
     "/api/admin/tags/{tagId}" : {
       "delete" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the tag exists and is not used by any Poll\n**Behavior**: hard-deletes the tag; returns `{success: true}`\n**Side effects**: the tag disappears from the public tag lists\n**Errors**:\n- 400 `common.bad_request`: `tagId` is not a valid UUID\n- 404 `tag.not_found`: tag does not exist\n- 409 `tag.in_use`: at least one Poll still references the tag",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the tag exists and is not used by any Poll\n**Behavior**: hard-deletes the tag; returns `{success: true}`\n**Side effects**: the tag disappears from the public tag lists. Written to the audit log\n**Errors**:\n- 400 `common.bad_request`: `tagId` is not a valid UUID\n- 404 `tag.not_found`: tag does not exist\n- 409 `tag.in_use`: at least one Poll still references the tag",
         "operationId" : "deleteTag",
         "parameters" : [ {
           "description" : "Tag ID (UUIDv7)",
@@ -8921,7 +8921,7 @@
         "tags" : [ "Admin Tag" ]
       },
       "put" : {
-        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the tag exists\n**Behavior**: replaces name, slug, description and displayOrder with the request values (full update: an omitted `description` becomes null and an omitted `displayOrder` becomes 0). `slug` is regenerated from `name` when null or blank, even if the tag already had a custom slug\n**Side effects**: the change is visible in the public tag lists; Polls keep their association with the tag\n**Errors**:\n- 400 `common.bad_request`: `tagId` is not a valid UUID, or no valid slug can be generated from `name`\n- 404 `tag.not_found`: tag does not exist\n- 409 `tag.name.exists`: another tag already has this name\n- 409 `tag.slug.exists`: another tag already has this slug",
+        "description" : "**Auth**: admin (role ADMIN; 403 `common.forbidden` otherwise)\n**Precondition**: caller holds role ADMIN; the tag exists\n**Behavior**: replaces name, slug, description and displayOrder with the request values (full update: an omitted `description` becomes null and an omitted `displayOrder` becomes 0). `slug` is regenerated from `name` when null or blank, even if the tag already had a custom slug\n**Side effects**: the change is visible in the public tag lists; Polls keep their association with the tag. Written to the audit log\n**Errors**:\n- 400 `common.bad_request`: `tagId` is not a valid UUID, or no valid slug can be generated from `name`\n- 404 `tag.not_found`: tag does not exist\n- 409 `tag.name.exists`: another tag already has this name\n- 409 `tag.slug.exists`: another tag already has this slug",
         "operationId" : "updateTag",
         "parameters" : [ {
           "description" : "Tag ID (UUIDv7)",

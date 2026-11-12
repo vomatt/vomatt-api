@@ -67,6 +67,8 @@ public class AdminVoteService {
             throw ApiException.notFound(MessageKey.VOTE_NOT_FOUND);
         }
         vote.closeAt(OffsetDateTime.now());
+        // Flushed now so @PreUpdate stamps updated_at before the response is built from this Poll
+        voteRepository.saveAndFlush(vote);
         log.info("Vote {} closed by admin {}", voteId, actorId);
         return toResponse(vote);
     }

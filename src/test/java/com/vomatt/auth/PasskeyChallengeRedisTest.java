@@ -12,7 +12,7 @@ import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactor
 import org.testcontainers.containers.GenericContainer;
 
 import com.vomatt.common.config.RedisConfig;
-import com.vomatt.common.redis.RedisServiceImpl;
+import com.vomatt.common.redis.RedisService;
 
 import tools.jackson.databind.json.JsonMapper;
 
@@ -22,7 +22,7 @@ class PasskeyChallengeRedisTest {
 
     static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7").withExposedPorts(6379);
     static LettuceConnectionFactory connectionFactory;
-    static RedisServiceImpl redisService;
+    static RedisService redisService;
 
     @BeforeAll
     static void startRedis() {
@@ -31,7 +31,7 @@ class PasskeyChallengeRedisTest {
                 new RedisStandaloneConfiguration(REDIS.getHost(), REDIS.getMappedPort(6379)));
         connectionFactory.afterPropertiesSet();
         connectionFactory.start();
-        redisService = new RedisServiceImpl(new RedisConfig(new StandardEnvironment(), "").redisTemplate(connectionFactory),
+        redisService = new RedisService(new RedisConfig(new StandardEnvironment(), "").redisTemplate(connectionFactory),
                 JsonMapper.builder().build());
     }
 

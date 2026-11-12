@@ -10,8 +10,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import org.springframework.beans.factory.annotation.Value;
-
 import com.vomatt.common.util.ClientIpResolver;
 import com.vomatt.entity.User;
 import com.vomatt.repository.UserRepository;
@@ -28,8 +26,6 @@ public class AuditService {
     
     private final AuditLogRepository auditLogRepository;
     private final UserRepository userRepository;
-    @Value("${app.audit.enabled:true}")
-    private boolean auditEnabled;
     // @Async runs on unbounded virtual threads; cap concurrent audit writes so they cannot drain the request connection pool
     private final Semaphore writePermits = new Semaphore(2);
     long permitWaitMillis = 2000;
@@ -37,10 +33,6 @@ public class AuditService {
     @Async
     public void logAction(String userId, String action, String resourceType, String resourceId, 
                          String ipAddress, String userAgent, String requestUri, String httpMethod, String details) {
-        if (!auditEnabled) {
-            return;
-        }
-        
         try {
             AuditLog auditLog = new AuditLog(userId, null, action, resourceType, resourceId);
             auditLog.setIpAddress(ipAddress);
@@ -63,9 +55,6 @@ public class AuditService {
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public void logActionNow(String userId, String action, String resourceType, String resourceId, String details) {
-        if (!auditEnabled) {
-            return;
-        }
         AuditLog auditLog = new AuditLog(userId, null, action, resourceType, resourceId);
         HttpServletRequest request = AuditAspect.currentRequest();
         if (request != null) {
@@ -83,10 +72,6 @@ public class AuditService {
     @Async
     public void logFailedAction(String userId, String action, String resourceType, 
                                String resourceId, String errorMessage, String ipAddress, String details) {
-        if (!auditEnabled) {
-            return;
-        }
-        
         try {
             AuditLog auditLog = new AuditLog(userId, null, action, resourceType, resourceId);
             auditLog.setSuccess(false);

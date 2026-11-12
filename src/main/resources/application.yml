@@ -160,8 +160,6 @@ app:
     secret-access-key: ${STORAGE_SECRET_ACCESS_KEY:}
     # true for the docker compose s3 service; virtual-hosted style (bucket.endpoint) otherwise
     path-style: ${STORAGE_PATH_STYLE:false}
-  audit:
-    enabled: ${AUDIT_ENABLED:true}
   billing:
     # Paid plans through Stripe; off until it is integrated (vomatt-web docs/release/stripe-go-live.md)
     enabled: ${BILLING_ENABLED:false}

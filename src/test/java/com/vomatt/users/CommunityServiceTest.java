@@ -200,6 +200,21 @@ class CommunityServiceTest {
     }
 
     @Test
+    void shouldSkipRoomCheckWhenTransferringLockedCommunity() {
+        caller(OWNER);
+        CommunityMember target = target(EDITOR);
+        when(memberRepository.findByCommunityUserIdAndUserId(communityId, callerId))
+                .thenReturn(Optional.of(new CommunityMember(communityId, callerId, OWNER)));
+        when(memberRepository.lockOwnerIds(communityId)).thenReturn(List.of(callerId));
+        when(userRepository.existsByIdAndLockedAtIsNotNull(communityId)).thenReturn(true);
+
+        service.transferOwner(communityId, targetId, callerId.toString());
+
+        verify(planService, never()).requireRoom(any());
+        assertThat(target.getRole()).isEqualTo(OWNER);
+    }
+
+    @Test
     void shouldRefuseTransferWhenCallerIsNotOwner() {
         caller(ADMIN);
         target(EDITOR);

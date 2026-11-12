@@ -344,7 +344,8 @@ public class CommunityController {
     @Operation(summary = "Transfer community account ownership", description = """
             **Auth**: required (OWNER only)
             **Precondition**: the user is a member
-            **Behavior**: the member becomes an OWNER and the caller an ADMIN. Naming oneself changes nothing.
+            **Behavior**: the member becomes an OWNER and the caller an ADMIN. Naming oneself changes nothing. A locked \
+            community account does not count toward the plan's limit, so receiving one needs no room (unlocking it later does).
             **Side effects**: the action is audit-logged.
             **Errors**:
             - 400 `common.validation_failed`: `userId` missing

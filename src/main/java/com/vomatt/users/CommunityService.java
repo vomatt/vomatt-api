@@ -295,10 +295,11 @@ public class CommunityService {
      * OWNER only: the member becomes an OWNER and the caller an ADMIN. Transferring to oneself changes nothing. Takes
      * the OWNER row lock and checks the caller's role under it, so an OWNER demoted concurrently cannot still transfer.
      * A recipient not yet an OWNER needs room in their plan, checked first: the person's row is locked before OWNER rows.
+     * A locked community account does not count as owned (PlanService), so it needs none; unlocking it checks then.
      */
     public void transferOwner(UUID communityId, UUID userId, String callerId) {
         requireOwner(communityId, callerId);
-        if (findMember(communityId, userId).getRole() != OWNER) {
+        if (findMember(communityId, userId).getRole() != OWNER && !userRepository.existsByIdAndLockedAtIsNotNull(communityId)) {
             planService.requireRoom(userId);
         }
         requireOwnerLocked(communityId, callerId);

@@ -556,12 +556,17 @@ public class AuthService {
      * @return how many Redis keys were removed (0 when nothing was locked or counted)
      */
     public int unlockLogin(String channel, String identifier, String clientIp, Set<String> targets) {
-        String namespace = switch (channel) {
-            case LoginUnlock.CHANNEL_EMAIL -> OTP_EMAIL_NS;
-            case LoginUnlock.CHANNEL_PHONE -> OTP_PHONE_NS;
-            case LoginUnlock.CHANNEL_ADMIN -> OTP_ADMIN_EMAIL_NS;
+        return switch (channel) {
+            case LoginUnlock.CHANNEL_EMAIL -> unlockNamespace(OTP_EMAIL_NS, identifier, clientIp, targets);
+            // Phone sign-in and phone bind keep the same lockouts in separate namespaces; one channel clears both
+            case LoginUnlock.CHANNEL_PHONE -> unlockNamespace(OTP_PHONE_NS, identifier, clientIp, targets)
+                    + unlockNamespace(OTP_PHONE_BIND_NS, identifier, clientIp, targets);
+            case LoginUnlock.CHANNEL_ADMIN -> unlockNamespace(OTP_ADMIN_EMAIL_NS, identifier, clientIp, targets);
             default -> throw new IllegalArgumentException("Unknown login channel: " + channel);
         };
+    }
+
+    private int unlockNamespace(String namespace, String identifier, String clientIp, Set<String> targets) {
         String indexNs = namespace + OTP_ATTEMPT_IDX_SUFFIX;
         String key = redisKey(identifier);
         Collection<String> attemptKeys = clientIp != null ? List.of(attemptKey(identifier, clientIp))

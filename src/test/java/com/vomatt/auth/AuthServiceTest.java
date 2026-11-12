@@ -807,7 +807,7 @@ class AuthServiceTest {
         // A lock removed with its counter still at 3 would keep refusing the right code
         when(redisService.hGetAllOrThrow("otp:phone:attempt-idx", k("+886912345678")))
                 .thenReturn(java.util.Map.of("k1", "1", "k2", "1"));
-        when(redisService.deleteAll(anyString(), any())).thenReturn(2L);
+        when(redisService.deleteAll(startsWith("otp:phone:"), any())).thenReturn(2L);
 
         int cleared = authService.unlockLogin("phone", "+886912345678", null, Set.of("lock"));
 
@@ -818,6 +818,20 @@ class AuthServiceTest {
         verify(redisService, never()).getAndDelete(eq("otp:phone"), anyString(), any());
         verify(redisService, never()).deleteAll(eq("otp:phone:cooldown"), any());
         verify(redisService).delete("otp:phone:attempt-idx", k("+886912345678"));
+    }
+
+    @Test
+    void shouldClearPhoneBindLockoutWhenUnlockingPhoneChannel() {
+        String bindKey = AuthService.attemptKey("+886912345678", IP);
+        when(redisService.deleteAll(anyString(), any())).thenReturn(0L);
+        when(redisService.deleteAll("otp:phone-bind:lock", List.of(bindKey))).thenReturn(1L);
+
+        int cleared = authService.unlockLogin("phone", "+886912345678", IP, Set.of("lock"));
+
+        assertThat(cleared).isEqualTo(1);
+        verify(redisService).deleteAll("otp:phone:lock", List.of(bindKey));
+        verify(redisService).deleteAll("otp:phone-bind:fail", List.of(bindKey));
+        verify(redisService).hDelete("otp:phone-bind:attempt-idx", k("+886912345678"), bindKey);
     }
 
     @Test

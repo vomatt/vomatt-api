@@ -9,7 +9,6 @@ import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import com.vomatt.common.redis.RedisService;
@@ -40,8 +39,8 @@ public class InvitationEmailLimiter {
     private final LookupService lookupService;
     private final InvitationEmailRepository invitationEmailRepository;
 
-    @Value("${app.email.invitation-daily-limit:200}")
-    private int dailyLimit;
+    /** Fallback when the {@value #LIMIT_KEY} config lookup is unset or invalid. */
+    static final int DEFAULT_DAILY_LIMIT = 200;
 
     /**
      * Takes up to {@code n} emails from the sender's daily quota with one INCRBY; the counter moves by {@code n} even
@@ -49,7 +48,7 @@ public class InvitationEmailLimiter {
      */
     private int takeQuota(UUID senderId, int n) {
         // Read before counting and outside the catch: a failing lookup query must not be swallowed inside the caller's transaction
-        int limit = lookupService.configInt(LIMIT_KEY, dailyLimit);
+        int limit = lookupService.configInt(LIMIT_KEY, DEFAULT_DAILY_LIMIT);
         try {
             long count = redisService.incrementAndExpire(COUNTER_NS, senderId + ":" + TextUtil.utcDay(), n, Duration.ofDays(1));
             return Math.clamp(limit - (count - n), 0, n);

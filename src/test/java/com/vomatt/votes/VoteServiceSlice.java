@@ -15,7 +15,7 @@ import com.vomatt.repository.VoteListRepository;
 
 /** Beans VoteService needs on top of a @DataJpaTest slice (Spring Data repositories are already present). */
 @TestConfiguration
-@Import({ VoteService.class, VoteMapper.class, VoteConfigurationProperties.class, VoteListRepository.class,
+@Import({ VoteService.class, VoteMapper.class, VoteListRepository.class,
         NotificationRepository.class, LockTimeout.class, EmailServiceNoOp.class, InviteListService.class, InviteListMapper.class,
         com.vomatt.lookups.LookupService.class, com.vomatt.lookups.LookupMapper.class,
         com.vomatt.common.email.InvitationEmailLimiter.class, com.vomatt.repository.InvitationEmailRepository.class })

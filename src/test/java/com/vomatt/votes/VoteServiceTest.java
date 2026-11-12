@@ -71,7 +71,6 @@ class VoteServiceTest {
     @Mock UserVoteRepository userVoteRepository;
     @Mock UserRepository userRepository;
     @Mock TagRepository tagRepository;
-    @Mock VoteConfigurationProperties voteConfig;
     @Mock com.vomatt.repository.VoteCommentRepository voteCommentRepository;
     @Mock InviteeRepository inviteeRepository;
     @Mock com.vomatt.repository.UserBlockRepository blockRepository;
@@ -110,12 +109,9 @@ class VoteServiceTest {
         vote.setCreator(user);
         setId(vote, voteId);
         ReflectionTestUtils.setField(vote, "createdAt", OffsetDateTime.now());
-        lenient().when(voteConfig.getDeleteWindow()).thenReturn(Duration.ofMinutes(20));
-        lenient().when(voteConfig.getBallotRateLimit()).thenReturn(new VoteConfigurationProperties.BallotRateLimit());
         // Real limiter over the mocked Redis and lookups, so the quota tests still drive it through redisService
         var limiter = new com.vomatt.common.email.InvitationEmailLimiter(redisService, lookupService,
                 mock(com.vomatt.repository.InvitationEmailRepository.class));
-        ReflectionTestUtils.setField(limiter, "dailyLimit", 200);
         ReflectionTestUtils.setField(voteService, "invitationEmailLimiter", limiter);
         org.mockito.Mockito.lenient().when(lookupService.configInt(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyInt()))
                 .thenAnswer(inv -> inv.getArgument(1));
@@ -184,8 +180,6 @@ class VoteServiceTest {
         @Test
         @DisplayName("should throw 400 VOTE_OPTIONS_MIN when too few options")
         void shouldThrowWhenTooFewOptions() {
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-
             CreateVoteRequest request = new CreateVoteRequest();
             request.setTitle("Test");
             request.setOptions(List.of(buildOption("A")));
@@ -200,8 +194,6 @@ class VoteServiceTest {
         @Test
         @DisplayName("should throw 400 VOTE_OPTIONS_MAX at the admin-set max options, never below the minimum")
         void shouldThrowWhenAdminMaxOptionsExceeded() {
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             // 1 is below the 2-option minimum, so the effective max is 2
             when(lookupService.configInt(VoteService.MAX_OPTIONS_KEY, 10)).thenReturn(1);
 
@@ -219,9 +211,7 @@ class VoteServiceTest {
         @Test
         @DisplayName("should throw 400 VOTE_OPTIONS_MAX when too many options")
         void shouldThrowWhenTooManyOptions() {
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(2);
-
+            when(lookupService.configInt(VoteService.MAX_OPTIONS_KEY, VoteService.DEFAULT_MAX_OPTIONS)).thenReturn(2);
             CreateVoteRequest request = new CreateVoteRequest();
             request.setTitle("Test");
             request.setOptions(List.of(buildOption("A"), buildOption("B"), buildOption("C")));
@@ -236,9 +226,6 @@ class VoteServiceTest {
         @Test
         @DisplayName("should throw 400 VOTE_END_TIME_PAST when end time is in the past")
         void shouldThrowWhenEndTimeInPast() {
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
-
             CreateVoteRequest request = new CreateVoteRequest();
             request.setTitle("Test");
             request.setOptions(List.of(buildOption("A"), buildOption("B")));
@@ -265,8 +252,6 @@ class VoteServiceTest {
         @Test
         @DisplayName("should throw 400 VOTE_END_BEFORE_START when end time equals start time")
         void shouldRejectCreateWhenEndEqualsStart() {
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             OffsetDateTime start = OffsetDateTime.now().plusDays(1);
             CreateVoteRequest request = new CreateVoteRequest();
             request.setTitle("Test");
@@ -281,8 +266,6 @@ class VoteServiceTest {
         @Test
         @DisplayName("should throw 400 VOTE_INVITEE_NOT_INVITE_ONLY when inviteeIds are sent for a Public Poll")
         void shouldRejectCreateWhenInviteesSentForPublicPoll() {
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             CreateVoteRequest request = new CreateVoteRequest();
             request.setTitle("Test");
             request.setOptions(List.of(buildOption("A"), buildOption("B")));
@@ -296,8 +279,6 @@ class VoteServiceTest {
         @Test
         @DisplayName("should throw 400 VOTE_INVITEE_NOT_INVITE_ONLY when inviteeEmails are sent for a Public Poll")
         void shouldRejectCreateWhenInviteeEmailsSentForPublicPoll() {
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             CreateVoteRequest request = new CreateVoteRequest();
             request.setTitle("Test");
             request.setOptions(List.of(buildOption("A"), buildOption("B")));
@@ -312,8 +293,6 @@ class VoteServiceTest {
         @Test
         @DisplayName("should throw 400 VOTE_INVITEE_NOT_INVITE_ONLY when inviteListIds are sent for a Public Poll")
         void shouldRejectCreateWhenInviteListIdsSentForPublicPoll() {
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             CreateVoteRequest request = new CreateVoteRequest();
             request.setTitle("Test");
             request.setOptions(List.of(buildOption("A"), buildOption("B")));
@@ -328,9 +307,6 @@ class VoteServiceTest {
         @Test
         @DisplayName("should invite each user once, skipping the owner, when an Invite-only Poll is created")
         void shouldInviteDistinctUsersWhenInviteOnlyPollCreated() {
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
-            when(voteConfig.getMaxVoteDuration()).thenReturn(Duration.ofDays(365));
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
             stubSaveAssignsId();
             User bob = User.builder().id(UUID.randomUUID()).username("bob").build();
@@ -355,8 +331,6 @@ class VoteServiceTest {
         @Test
         @DisplayName("should throw 404 USER_NOT_FOUND when creator is not found")
         void shouldThrowWhenCreatorNotFound() {
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             when(userRepository.findById(userId)).thenReturn(Optional.empty());
 
             CreateVoteRequest request = new CreateVoteRequest();
@@ -370,8 +344,6 @@ class VoteServiceTest {
         @Test
         @DisplayName("should create Poll with options")
         void shouldCreateVote() {
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
             stubSaveAssignsId();
 
@@ -395,8 +367,6 @@ class VoteServiceTest {
         @Test
         @DisplayName("should create a NOBODY Poll when a legacy client sends only anonymous true")
         void shouldCreateNobodyPollWhenOnlyLegacyAnonymousSent() {
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
             stubSaveAssignsId();
             CreateVoteRequest request = new CreateVoteRequest();
@@ -1095,9 +1065,6 @@ class VoteServiceTest {
         @DisplayName("should map the legacy anonymous flag on edit: true to NOBODY, null keeps it, false back to OWNER")
         void shouldMapLegacyAnonymousWhenEditSendsOnlyIt() {
             scheduled();
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
-            when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
             stubSaveAndFlushAssignsId();
             CreateVoteRequest request = editRequest(null);
 
@@ -1122,9 +1089,6 @@ class VoteServiceTest {
         @DisplayName("should let an explicit voterVisibility win over the legacy anonymous flag on edit")
         void shouldPreferVoterVisibilityWhenEditSendsBoth() {
             scheduled();
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
-            when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
             stubSaveAndFlushAssignsId();
             CreateVoteRequest request = editRequest(null);
             request.setAnonymous(true);
@@ -1141,9 +1105,6 @@ class VoteServiceTest {
         @DisplayName("should change Audience when Scheduled, and keep it when edit omits audience")
         void shouldChangeAudienceWhenScheduledPollEdited() {
             scheduled();
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
-            when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
             stubSaveAndFlushAssignsId();
             CreateVoteRequest request = editRequest(null);
             request.setAudience(Audience.UNLISTED);
@@ -1171,9 +1132,6 @@ class VoteServiceTest {
         @DisplayName("should replace title and options when editing Scheduled Poll")
         void shouldReplaceFieldsAndOptionsWhenScheduledPollEdited() {
             scheduled();
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
-            when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
             stubSaveAndFlushAssignsId();
 
             CreateVoteRequest request = editRequest(null);
@@ -1194,9 +1152,6 @@ class VoteServiceTest {
         void shouldKeepStartTimeWhenEditOmitsIt() {
             scheduled();
             OffsetDateTime originalStart = vote.getStartTime();
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
-            when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
             stubSaveAndFlushAssignsId();
             CreateVoteRequest request = editRequest(null);
             request.setStartTime(null);
@@ -1212,8 +1167,6 @@ class VoteServiceTest {
         @DisplayName("should validate end time against original start time when edit omits startTime")
         void shouldValidateEndTimeAgainstKeptStartTime() {
             scheduled();
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             CreateVoteRequest request = editRequest(null);
             request.setStartTime(null);
             // ends after now but before the kept start time
@@ -1232,9 +1185,6 @@ class VoteServiceTest {
             vote.addTag(kept);
             vote.addTag(dropped);
             scheduled();
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
-            when(voteConfig.getMaxVoteDuration()).thenReturn(java.time.Duration.ofDays(365));
             when(tagRepository.findAllById(Set.of(kept.getId(), added.getId()))).thenReturn(List.of(kept, added));
             stubSaveAndFlushAssignsId();
 
@@ -1977,8 +1927,6 @@ class VoteServiceTest {
         @Test
         @DisplayName("should link tags and update usageCount when creating Poll")
         void shouldCreateVoteWithTags() {
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
             stubSaveAssignsId();
 
@@ -2000,8 +1948,6 @@ class VoteServiceTest {
         @Test
         @DisplayName("should throw 400 TAG_IDS_INVALID when tagIds contains nonexistent ID")
         void shouldThrowWhenTagIdNotFound() {
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
 
             UUID tagId1 = UUID.randomUUID();
@@ -2025,8 +1971,6 @@ class VoteServiceTest {
         @Test
         @DisplayName("should create Poll normally without tagIds")
         void shouldCreateVoteWithoutTags() {
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
             stubSaveAssignsId();
 
@@ -2224,9 +2168,6 @@ class VoteServiceTest {
 
         @Test
         void shouldRejectCreateWhenRevealAtBeforeEndTime() {
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
-            when(voteConfig.getMaxVoteDuration()).thenReturn(Duration.ofDays(365));
             OffsetDateTime end = OffsetDateTime.now().plusDays(1);
             CreateVoteRequest request = new CreateVoteRequest();
             request.setTitle("Test");
@@ -2241,9 +2182,7 @@ class VoteServiceTest {
 
         @Test
         void shouldRejectCreateAndEditWhenRevealAtPastEndPlusMaxDuration() {
-            when(voteConfig.getMinOptionsPerVote()).thenReturn(2);
-            when(voteConfig.getMaxOptionsPerVote()).thenReturn(10);
-            when(voteConfig.getMaxVoteDuration()).thenReturn(Duration.ofDays(30));
+            when(lookupService.configDuration(eq(VoteService.MAX_DURATION_DAYS_KEY), any(), any())).thenReturn(Duration.ofDays(30));
             OffsetDateTime end = OffsetDateTime.now().plusDays(1);
             CreateVoteRequest request = new CreateVoteRequest();
             request.setTitle("Test");

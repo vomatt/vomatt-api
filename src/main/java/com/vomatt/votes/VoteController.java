@@ -129,7 +129,7 @@ public class VoteController {
             **Side effects**: usage count of each attached tag +1 for a PUBLIC Poll (UNLISTED and INVITE_ONLY Polls are not counted); \
             each Invitee tied to a user gets an unread Invitation notification (unread count, `unread` on My Polls `status=open`); each new email Invitee \
             is sent an invitation email linking to the Poll (only when email is enabled) \
-            (at most once per address per Poll, even after removing and re-adding it, and at most `EMAIL_INVITATION_DAILY_LIMIT` (default 200) per owner per day; \
+            (at most once per address per Poll, even after removing and re-adding it, and at most `invitation_email_daily_limit` (default 200, admin-configurable) per owner per day; \
             over the limit the Invitee is still added and only the email is skipped) and gets the Invitation notification once tied to a user; the creation is audit-logged.
             **Errors**:
                     - 400 `vote.invitee.not_invite_only`: `inviteeIds`, `inviteeEmails` or `inviteListIds` is not empty but `audience` is not INVITE_ONLY
@@ -188,7 +188,7 @@ public class VoteController {
             **Side effects**: all options are replaced, so option IDs change; tag usage counts are adjusted for added / removed tags \
             and for an Audience change (only PUBLIC Polls are counted). `inviteeIds` replaces the Invitees added by ID and `inviteeEmails` those added by email (matched by address); \
             an Audience other than INVITE_ONLY removes them all. Each new Invitee tied to a user gets an unread Invitation notification, including one removed and invited again; \
-            each newly added email Invitee is sent an invitation email (at most once per address per Poll, even after removing and re-adding it, and at most `EMAIL_INVITATION_DAILY_LIMIT` (default 200) per owner per day; \
+            each newly added email Invitee is sent an invitation email (at most once per address per Poll, even after removing and re-adding it, and at most `invitation_email_daily_limit` (default 200, admin-configurable) per owner per day; \
             over the limit the Invitee is still added and only the email is skipped).
             **Errors**:
             - 403 `vote.forbidden`: the caller is not the owner
@@ -938,7 +938,7 @@ public class VoteController {
             join `emails` by their stored address; later Invite List changes never touch the Poll. Returns the full Invitee list.
             **Side effects**: `inviteeCount` grows (email Invitees included); each new Invitee tied to a user gets an unread Invitation notification \
             (again unread for one removed and invited again) and later the Ended Notification; each new email Invitee is sent an invitation email \
-            (at most once per address per Poll, even after removing and re-adding it, and at most `EMAIL_INVITATION_DAILY_LIMIT` (default 200) per owner per day; \
+            (at most once per address per Poll, even after removing and re-adding it, and at most `invitation_email_daily_limit` (default 200, admin-configurable) per owner per day; \
             over the limit the Invitee is still added and only the email is skipped) \
             linking to the Poll (only when email is enabled) and gets both notifications once tied to a user; the action is audit-logged.
             **Errors**:

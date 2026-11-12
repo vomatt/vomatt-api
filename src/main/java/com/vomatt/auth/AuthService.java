@@ -630,8 +630,8 @@ public class AuthService {
 
     /**
      * What is stored for an OTP instead of the code: {@code HMAC(derive("otp"), identifier:code)}. A Redis dump cannot be
-     * used to sign in, and without the key no table of the 10^6 codes can be precomputed; the identifier keeps two
-     * users' equal codes from hashing alike.
+     * used to sign in, and without the key no table of the 900,000 codes (100000-999999) can be precomputed; the
+     * identifier keeps two users' equal codes from hashing alike.
      */
     private String otpHash(String identifier, String code) {
         return AppKey.hmacHex(appKey.derive(OTP_KEY_LABEL), identifier + ":" + code);

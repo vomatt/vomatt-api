@@ -19,9 +19,11 @@ export default defineRailway(() => {
       REDIS_HOST: cache.env.REDISHOST,
       REDIS_PORT: cache.env.REDISPORT,
       REDIS_PASSWORD: cache.env.REDISPASSWORD,
-      PROFILES_ACTIVE: "dev",
+      // Per environment, set on Railway: production MUST set PROFILES_ACTIVE=prod and SWAGGER_ENABLED=false (prod turns on
+      // the startup guards: REDIS_PASSWORD, TRUSTED_PROXIES, CLIENT_IP_SECRET); the dev environment sets dev / true
+      PROFILES_ACTIVE: preserve(),
+      SWAGGER_ENABLED: preserve(),
       LOG_LEVEL: "INFO",
-      SWAGGER_ENABLED: "true",
       // RAILWAY_PUBLIC_DOMAIN is injected once a domain is generated
       OPENAPI_DEV_URL: "https://${{RAILWAY_PUBLIC_DOMAIN}}",
       OPENAPI_PROD_URL: "https://${{RAILWAY_PUBLIC_DOMAIN}}",

@@ -47,6 +47,7 @@ class CommunityServiceTest {
     @Mock com.vomatt.common.email.InvitationEmailLimiter invitationEmailLimiter;
     @Mock com.vomatt.common.email.EmailService emailService;
     @Mock PlanService planService;
+    @Mock com.vomatt.repository.UserPreferenceRepository preferenceRepository;
     @InjectMocks CommunityService service;
 
     final UUID communityId = UUID.randomUUID();
@@ -175,6 +176,27 @@ class CommunityServiceTest {
 
         assertThatThrownBy(() -> service.listMembers(communityId, callerId.toString()))
                 .satisfies(ex -> assertKey(ex, MessageKey.COMMUNITY_NOT_MEMBER));
+    }
+
+    @Test
+    void shouldMaskMemberDisplayNameWhenTheMemberHidesIt() {
+        caller(EDITOR);
+        User bob = User.builder().id(targetId).username("bob").displayName("Bob").build();
+        CommunityMember member = mock(CommunityMember.class);
+        when(member.getUser()).thenReturn(bob);
+        when(member.getUserId()).thenReturn(targetId);
+        when(memberRepository.findByCommunityUserIdOrderByCreatedAtAscUserIdAsc(communityId)).thenReturn(List.of(member));
+        com.vomatt.entity.UserPreference hidden = new com.vomatt.entity.UserPreference();
+        hidden.setUser(bob);
+        hidden.setKey("visibility.displayName");
+        hidden.setValue("false");
+        when(preferenceRepository.findByUserIdInAndKeyIn(any(), any())).thenReturn(List.of(hidden));
+
+        assertThat(service.listMembers(communityId, callerId.toString()))
+                .singleElement().satisfies(m -> {
+                    assertThat(m.username()).isEqualTo("bob");
+                    assertThat(m.displayName()).isNull();
+                });
     }
 
     @Test

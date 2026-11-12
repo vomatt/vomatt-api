@@ -2996,7 +2996,7 @@
             "type" : "string"
           },
           "displayName" : {
-            "description" : "The invited user's display name; null if never set or for an invitation by email",
+            "description" : "The invited user's display name, masked by their visibility settings; null if hidden, never set or for an invitation by email",
             "example" : "Dave",
             "nullable" : true,
             "type" : "string"
@@ -3080,7 +3080,7 @@
             "type" : "string"
           },
           "displayName" : {
-            "description" : "Member's display name; null if never set",
+            "description" : "Member's display name, masked by their visibility settings; null if hidden or never set",
             "example" : "Alice",
             "nullable" : true,
             "type" : "string"

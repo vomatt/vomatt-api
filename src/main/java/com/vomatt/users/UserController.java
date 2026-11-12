@@ -374,6 +374,11 @@ public class UserController {
 
     @PostMapping("/me/phone/send-otp")
     @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503",
+            description = "SMS is not available in this environment (`auth.sms.unavailable`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = OpenAPIConfig.ERR_MESSAGE
+                    + "SMS verification is currently unavailable" + OpenAPIConfig.ERR_CODE + "auth.sms.unavailable"
+                    + OpenAPIConfig.ERR_ERROR + "SMS verification is currently unavailable" + OpenAPIConfig.ERR_END)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"success":true},"message":null,"errorCode":null,"error":null}""")))

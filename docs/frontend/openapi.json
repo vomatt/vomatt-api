@@ -12808,6 +12808,23 @@
               }
             },
             "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          },
+          "503" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : null,
+                  "error" : "SMS verification is currently unavailable",
+                  "errorCode" : "auth.sms.unavailable",
+                  "message" : "SMS verification is currently unavailable",
+                  "success" : false
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "SMS is not available in this environment (`auth.sms.unavailable`)"
           }
         },
         "summary" : "Send phone OTP",
@@ -19456,6 +19473,23 @@
               }
             },
             "description" : "Rate limit exceeded; see `Retry-After` header (errorCode `common.rate_limited`)"
+          },
+          "503" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "data" : null,
+                  "error" : "SMS verification is currently unavailable",
+                  "errorCode" : "auth.sms.unavailable",
+                  "message" : "SMS verification is currently unavailable",
+                  "success" : false
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "SMS is not available in this environment (`auth.sms.unavailable`)"
           }
         },
         "summary" : "Send phone bind OTP",

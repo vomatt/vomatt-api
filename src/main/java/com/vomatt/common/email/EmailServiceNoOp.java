@@ -1,5 +1,6 @@
 package com.vomatt.common.email;
 
+import com.vomatt.common.constant.OtpLogProfiles;
 import com.vomatt.common.util.TextUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,11 +15,11 @@ import java.util.UUID;
 
 /**
  * EmailService used when email is disabled: logs the OTP instead of sending it, which is how local development reads
- * it (Redis holds only a hash). Never loaded under the prod profile, where a missing real sender must fail startup
- * rather than print codes into the logs.
+ * it (Redis holds only a hash). Loaded only under the dev or loadtest profile (never with prod); under any other or
+ * missing profile, email disabled leaves no EmailService and startup fails rather than print codes into the logs.
  */
 @Service
-@Profile("!prod")
+@Profile(OtpLogProfiles.ALLOWED)
 @ConditionalOnProperty(name = "app.email.enabled", havingValue = "false", matchIfMissing = true)
 public class EmailServiceNoOp implements EmailService {
 

@@ -60,7 +60,10 @@ public class LookupService {
         return lookupRepository.findForAdmin(lookupType, includeInactive).stream().map(lookupMapper::toDto).toList();
     }
 
-    /** Lookup type holding admin-tunable backend settings; never set frontendUsing on these. */
+    /**
+     * Lookup type holding the admin-tunable limits the backend enforces. Not secret: like any type, any signed-in user
+     * can read it ({@code GET /api/lookups/config}). Never set frontendUsing on these.
+     */
     public static final String CONFIG_TYPE = "config";
 
     /**

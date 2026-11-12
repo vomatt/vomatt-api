@@ -116,8 +116,9 @@ class CommunityDeletePostgresTest extends PostgresRepositoryTest {
             assertThat(e.getUsername()).isEqualTo(owner.getUsername());
             assertThat(e.getResourceType()).isEqualTo("COMMUNITY");
             assertThat(e.getHttpMethod()).isEqualTo("DELETE");
-            assertThat(e.getDetails()).isEqualTo("username=" + communityUsername + "; displayName=\"Sunrise Tower\"; members="
-                    + owner.getUsername() + ":OWNER," + admin.getUsername() + ":ADMIN");
+            // Members are listed by join time; the two here can join in the same instant, so either order is right
+            assertThat(e.getDetails()).startsWith("username=" + communityUsername + "; displayName=\"Sunrise Tower\"; members=")
+                    .contains(owner.getUsername() + ":OWNER", admin.getUsername() + ":ADMIN");
         });
         verify(droppingWriter, never()).logAction(any(), any(), any(), any(), any(), any(), any(), any(), any());
     }

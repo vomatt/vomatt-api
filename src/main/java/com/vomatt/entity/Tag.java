@@ -31,7 +31,8 @@ public class Tag extends AuditableEntity {
     @Column(name = "display_order", nullable = false)
     private int displayOrder;
 
-    @Column(name = "usage_count", nullable = false)
+    // Maintained with atomic SQL (TagRepository); never written back from a loaded entity, which would undo a concurrent change
+    @Column(name = "usage_count", nullable = false, updatable = false)
     private int usageCount;
 
     public Tag(String name, String slug, String description, int displayOrder) {

@@ -111,7 +111,7 @@ public class CommunityController {
             with the caller as its first OWNER, who then invites members (`POST /api/communities/{communityId}/invitations`). It has no email or phone and can never sign in; members \
             act as it with the `X-Act-As` header. Sent while acting, the real member becomes the OWNER. Returns 201 with the \
             account, `community` true
-            **Side effects**: the creation is audit-logged
+            **Side effects**: the creation is audit-logged as `CREATE` on `COMMUNITY`, with the new account's id and username in the details
             **Errors**:
             - 400 `common.validation_failed`: `username` not 3-50 characters of [a-z0-9_] or reserved, `displayName` blank or over 100 characters
             - 400 `community.member.invalid`: the caller is suspended or is a community account
@@ -344,7 +344,8 @@ public class CommunityController {
     @Operation(summary = "Transfer community account ownership", description = """
             **Auth**: required (OWNER only)
             **Precondition**: the user is a member
-            **Behavior**: the member becomes an OWNER and the caller an ADMIN. Naming oneself changes nothing.
+            **Behavior**: the member becomes an OWNER and the caller an ADMIN. Naming oneself changes nothing. A locked \
+            community account does not count toward the plan's limit, so receiving one needs no room (unlocking it later does).
             **Side effects**: the action is audit-logged.
             **Errors**:
             - 400 `common.validation_failed`: `userId` missing
@@ -545,7 +546,7 @@ public class CommunityController {
             content = @Content(examples = @ExampleObject(name = "Unlocked", value = EX_OK)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Not an OWNER, or no room in the plan (`community.role_forbidden`, `community.limit_reached`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
-                    examples = @ExampleObject(name = "community.not_member", value = ERR_NOT_MEMBER)))
+                    examples = @ExampleObject(name = "community.role_forbidden", value = ERR_ROLE_FORBIDDEN)))
     public ResponseEntity<ApiResponse<SimpleResultResponse>> unlock(
             @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
             @PathVariable UUID communityId,

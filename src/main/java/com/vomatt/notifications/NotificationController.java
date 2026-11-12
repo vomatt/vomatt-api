@@ -94,13 +94,15 @@ public class NotificationController {
             the caller blocked (as COMMENT). Gone if the like is taken back; liking again is a new, unread LIKE
             - POLL_LIKE: someone else liked the caller's Poll (`PUT /api/votes/{voteId}/like`). Gone if the like is taken back; \
             liking again is a new, unread POLL_LIKE
+            - COMMUNITY_INVITATION: the caller was invited to join a community account; gone once the invitation is accepted, \
+            declined, revoked or expired, or the caller is already a member
             - COMMUNITY_LOCKED: a community account the caller is an OWNER of was locked because the selection deadline \
             after a downgrade passed without a choice (`POST /api/users/me/communities/keep`); every OWNER gets one, `actor` is the \
-            community account. Kept 180 days
+            community account, the time is when it was locked. Listed while it stays locked; a later lock is a new, unread one
             Each kind falls in one `category`: CONVERSATION (COMMENT, MENTION), LIKE (LIKE, POLL_LIKE), POLL_END (RESULT, CANCELLED, CLOSING_SOON), \
-            INVITATION (INVITATION), FOLLOW (FOLLOWED), COMMUNITY (COMMUNITY_LOCKED). With `category`, only that category is listed; pass the same `category` with \
+            INVITATION (INVITATION, COMMUNITY_INVITATION), FOLLOW (FOLLOWED), COMMUNITY (COMMUNITY_LOCKED). With `category`, only that category is listed; pass the same `category` with \
             every page.
-            Kinds switched off in the caller's preferences are left out (FOLLOWED cannot be switched off). Nothing from a suspended user, \
+            Kinds switched off in the caller's preferences are left out (FOLLOWED, COMMUNITY_INVITATION and COMMUNITY_LOCKED cannot be switched off). Nothing from a suspended user, \
             a user the caller blocked or a user who blocked the caller is listed, nor anything about a Poll whose owner blocked the caller. `poll` never carries per-option counts, its \
             outcome (`winningOptionIds`, `winningOptionLabels`, `tie`) stays null until the Poll has Ended, and `actor` is never \
             a voter, so Sealed results and Anonymous Ballots stay hidden. Each item carries what a row needs: the caller's \

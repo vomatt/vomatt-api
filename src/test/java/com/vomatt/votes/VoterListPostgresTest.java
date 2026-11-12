@@ -1,7 +1,6 @@
 package com.vomatt.votes;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -12,8 +11,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 
-import com.vomatt.common.exception.ApiException;
-import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.CursorResponse;
 import com.vomatt.entity.User;
 import com.vomatt.entity.UserVote;

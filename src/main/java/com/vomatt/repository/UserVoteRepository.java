@@ -45,8 +45,8 @@ public interface UserVoteRepository extends JpaRepository<UserVote, UUID> {
     List<UserVote> findVoterPage(@Param("voteId") UUID voteId, @Param("afterTime") OffsetDateTime afterTime,
                                  @Param("afterId") UUID afterId, Limit limit);
 
-    /** Anonymous Ballots in a Poll other than the caller's; while there are any, the voter list names no options. */
-    long countByVoteIdAndAnonymousTrueAndUserIdNot(UUID voteId, UUID userId);
+    /** Whether a Poll holds an Anonymous Ballot other than the caller's; while it does, the voter list names no options. */
+    boolean existsByVoteIdAndAnonymousTrueAndUserIdNot(UUID voteId, UUID userId);
 
     /**
      * Seals the Anonymous Ballots of Polls Ended by {@code now}: the option is dropped from the row, so the database

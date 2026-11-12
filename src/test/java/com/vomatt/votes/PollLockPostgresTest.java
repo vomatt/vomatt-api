@@ -101,8 +101,10 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
         return voteService.vote(poll.getId().toString(), request, voter.getId().toString());
     }
 
-    private VoteResponse close() {
-        return voteService.closeVote(poll.getId().toString(), owner.getId().toString());
+    /** Closes the Poll and returns its end time as stored (seen from the caller's transaction, if any). */
+    private OffsetDateTime close() {
+        voteService.closeVote(poll.getId().toString(), owner.getId().toString());
+        return storedEndTime();
     }
 
     // Runs action in an outer transaction that stays open until release; acted fires once the action is done
@@ -208,7 +210,7 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
         createPoll(now.minusMinutes(1), now.plusDays(1));
         CountDownLatch closed = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
-        Future<VoteResponse> closer = holding(this::close, closed, release);
+        Future<OffsetDateTime> closer = holding(this::close, closed, release);
         assertThat(closed.await(10, TimeUnit.SECONDS)).isTrue();
 
         Future<VoteResponse> caster = pool.submit(this::cast);
@@ -272,7 +274,7 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
         Future<VoteResponse> caster = holding(this::cast, cast, release);
         assertThat(cast.await(10, TimeUnit.SECONDS)).isTrue();
 
-        Future<VoteResponse> closer = pool.submit(this::close);
+        Future<OffsetDateTime> closer = pool.submit(this::close);
         assertThat(blocked(closer)).as("Close waits for the Cast").isTrue();
         release.countDown();
         caster.get(10, TimeUnit.SECONDS);
@@ -289,7 +291,7 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
         createPoll(now.minusHours(1), now.plusDays(1));
         CountDownLatch closed = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
-        Future<VoteResponse> closer = holding(this::close, closed, release);
+        Future<OffsetDateTime> closer = holding(this::close, closed, release);
         assertThat(closed.await(10, TimeUnit.SECONDS)).isTrue();
 
         Future<VoteResponse> caster = pool.submit(this::cast);
@@ -314,7 +316,7 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
                 () -> voteService.retract(poll.getId().toString(), voter.getId().toString()), retracted, release);
         assertThat(retracted.await(10, TimeUnit.SECONDS)).isTrue();
 
-        Future<VoteResponse> closer = pool.submit(this::close);
+        Future<OffsetDateTime> closer = pool.submit(this::close);
         assertThat(blocked(closer)).as("Close waits for the Retraction").isTrue();
         release.countDown();
         retracter.get(10, TimeUnit.SECONDS);
@@ -493,13 +495,13 @@ class PollLockPostgresTest extends PostgresRepositoryTest {
         createPoll(now.minusHours(1), now.plusDays(1));
         CountDownLatch closed = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
-        Future<VoteResponse> first = holding(this::close, closed, release);
+        Future<OffsetDateTime> first = holding(this::close, closed, release);
         assertThat(closed.await(10, TimeUnit.SECONDS)).isTrue();
 
-        Future<VoteResponse> second = pool.submit(this::close);
+        Future<OffsetDateTime> second = pool.submit(this::close);
         assertThat(blocked(second)).as("second Close waits for the first").isTrue();
         release.countDown();
-        OffsetDateTime firstEnd = first.get(10, TimeUnit.SECONDS).getEndTime();
+        OffsetDateTime firstEnd = first.get(10, TimeUnit.SECONDS);
         second.get(10, TimeUnit.SECONDS);
 
         assertThat(storedEndTime().toInstant()).isCloseTo(firstEnd.toInstant(), within(1, ChronoUnit.MICROS));

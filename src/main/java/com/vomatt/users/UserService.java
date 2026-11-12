@@ -147,6 +147,8 @@ public class UserService {
         voteOptionRepository.decrementForUserBallots(user.getId());
         voteRepository.decrementShareCountForUserShares(user.getId());
         voteRepository.decrementLikeCountForUserLikes(user.getId());
+        // The user's Polls cascade too; their tags stop counting them
+        tagRepository.decrementUsageCountForUserPolls(user.getId());
         auditLogRepository.anonymizeByUserId(userId);
         deleteUploadedAvatarAfterCommit(user.getAvatarUrl());
         List<UUID> owners = communityMemberRepository.findOwnerIds(List.of(user.getId()));
@@ -379,7 +381,7 @@ public class UserService {
             userRepository.countVotedPolls(user.getId()), visibility, anonymousBallotByDefault, planService.quota(user));
     }
 
-    /** Data portability: everything stored about the caller, nothing about anyone else. Fails closed when Redis is down. */
+    /** Data portability: the caller's own data as GET /api/users/me/export lists it, nothing about anyone else. Fails closed when Redis is down. */
     @Transactional(readOnly = true)
     public UserDataExportResponse exportMyData(String userId) {
         String counterKey = userId + ":" + TextUtil.utcDay();
@@ -445,16 +447,9 @@ public class UserService {
         return loadVisibilitySettings(user.getId());
     }
 
+    // One statement, so two concurrent first writes of a key do not hit the unique key
     private void savePreference(User user, String key, String value) {
-        UserPreference pref = preferenceRepository.findByUserIdAndKey(user.getId(), key)
-                .orElseGet(() -> {
-                    UserPreference newPref = new UserPreference();
-                    newPref.setUser(user);
-                    newPref.setKey(key);
-                    return newPref;
-                });
-        pref.setValue(value);
-        preferenceRepository.save(pref);
+        preferenceRepository.upsert(UUIDv7Generator.generateId(), user.getId(), key, value);
     }
 
     @Transactional

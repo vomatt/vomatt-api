@@ -30,7 +30,6 @@ import com.vomatt.repository.PostgresRepositoryTest;
 import com.vomatt.repository.UserFollowRepository;
 import com.vomatt.votes.VoteService;
 import com.vomatt.votes.VoteServiceSlice;
-import com.vomatt.votes.dto.VoteResponse;
 
 @Import({ VoteServiceSlice.class, UserService.class, UserMapper.class, com.vomatt.common.storage.StorageService.class, PlanService.class,
         com.vomatt.common.audit.AuditService.class })

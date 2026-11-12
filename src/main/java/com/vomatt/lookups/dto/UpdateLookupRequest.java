@@ -1,6 +1,7 @@
 package com.vomatt.lookups.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -13,11 +14,13 @@ import lombok.Data;
 public class UpdateLookupRequest {
 
     @Size(max = 50)
-    @Schema(description = "New dictionary type; null keeps the current one", example = "vote_duration", nullable = true)
+    @Pattern(regexp = "(?s).*\\S.*", message = "must not be blank")
+    @Schema(description = "New dictionary type; null keeps the current one, blank is rejected", example = "vote_duration", nullable = true)
     private String lookupType;
 
     @Size(max = 50)
-    @Schema(description = "New key; null keeps the current one", example = "48h", nullable = true)
+    @Pattern(regexp = "(?s).*\\S.*", message = "must not be blank")
+    @Schema(description = "New key; null keeps the current one, blank is rejected", example = "48h", nullable = true)
     private String lookupKey;
 
     @Schema(description = "New JSON value; null keeps the current one", example = "{\"label\": \"48 hours\", \"hours\": 48}", nullable = true)

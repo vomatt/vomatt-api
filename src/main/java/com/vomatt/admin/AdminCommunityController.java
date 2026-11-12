@@ -41,7 +41,7 @@ public class AdminCommunityController {
                     **Behavior**: creates a community account (a group's page: `displayName` is the group name, the logo is its avatar) \
                     with the given user as its first OWNER. It has no email or phone and can never sign in; members act as it with the \
                     `X-Act-As` header. Returns 201 with the account, `community` true
-                    **Side effects**: the creation is audit-logged
+                    **Side effects**: the creation is audit-logged as `CREATE` on `COMMUNITY`, with the new account's id and username in the details
                     **Errors**:
                     - 400 `common.validation_failed`: `username` not 3-50 characters of [a-z0-9_] or reserved, `displayName` blank or over 100 characters, `ownerUserId` missing
                     - 400 `community.member.invalid`: the owner is suspended or is a community account

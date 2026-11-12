@@ -308,6 +308,21 @@ class AuthServiceTest {
         verify(redisService, never()).delete("otp:phone:cooldown", k("+886912345678"));
     }
 
+    @Test
+    void shouldAnswer503AndReleaseOtpWhenSmsIsUnavailable() {
+        org.mockito.Mockito.doThrow(ApiException.serviceUnavailable(MessageKey.AUTH_SMS_UNAVAILABLE))
+                .when(smsService).sendOtp(anyString(), anyString());
+
+        assertThatThrownBy(() -> authService.sendPhoneBindOtp("0912345678", IP))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> {
+                    ApiException api = (ApiException) ex;
+                    assertThat(api.getStatus()).isEqualTo(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE);
+                    assertThat(api.getMessageKey()).isEqualTo(MessageKey.AUTH_SMS_UNAVAILABLE);
+                });
+        verify(redisService).delete("otp:phone-bind", k("+886912345678"));
+    }
+
     // ── verifyOtp ────────────────────────────────────────────────────
 
     @Test
@@ -367,7 +382,7 @@ class AuthServiceTest {
     @Test
     void verifyOtp_withWrongCode_shouldIncrementAtomicFailCounter() {
         // P1-#7: failure count uses atomic INCR (separate counter) to prevent concurrent bypass of the 3-attempt limit
-        OtpRecord otpRecord = new OtpRecord(h("user@example.com", "123456"), "login", Instant.now(), 0);
+        OtpRecord otpRecord = new OtpRecord(h("user@example.com", "123456"), "login", Instant.now());
         when(redisService.get(eq("otp:email"), eq(k("user@example.com")), eq(OtpRecord.class))).thenReturn(otpRecord);
         when(redisService.incrementAndExpire(eq("otp:email:fail"), eq(attempt("user@example.com")), any(Duration.class)))
                 .thenReturn(1L);
@@ -380,7 +395,7 @@ class AuthServiceTest {
     }
 
     private void stubWrongCodeAttempt(long attempts) {
-        OtpRecord otpRecord = new OtpRecord(h("user@example.com", "123456"), "login", Instant.now(), 0);
+        OtpRecord otpRecord = new OtpRecord(h("user@example.com", "123456"), "login", Instant.now());
         when(redisService.get(eq("otp:email"), eq(k("user@example.com")), eq(OtpRecord.class))).thenReturn(otpRecord);
         when(redisService.incrementAndExpire(eq("otp:email:fail"), eq(attempt("user@example.com")), any(Duration.class)))
                 .thenReturn(attempts);
@@ -493,7 +508,7 @@ class AuthServiceTest {
     @Test
     void shouldRestoreResentOtpWhenOldCodeArrivesDuringResend() {
         stubWrongCodeAttempt(1L);
-        OtpRecord resent = new OtpRecord(h("user@example.com", "777777"), "login", Instant.now().plusSeconds(1), 0);
+        OtpRecord resent = new OtpRecord(h("user@example.com", "777777"), "login", Instant.now().plusSeconds(1));
         when(redisService.getAndDelete("otp:email", k("user@example.com"), OtpRecord.class)).thenReturn(resent);
 
         assertThatThrownBy(() -> authService.verifyOtp("user@example.com", null, "123456", IP))
@@ -539,7 +554,7 @@ class AuthServiceTest {
 
     @Test
     void verifyOtp_withValidCode_shouldReturnTokenAndDeleteOtp() {
-        OtpRecord otpRecord = new OtpRecord(h("user@example.com", "123456"), "login", Instant.now(), 0);
+        OtpRecord otpRecord = new OtpRecord(h("user@example.com", "123456"), "login", Instant.now());
         User user = User.builder().id(UUID.randomUUID()).email("user@example.com").displayName("Test User")
                 .roles(new String[] { "user" }).build();
 
@@ -555,6 +570,32 @@ class AuthServiceTest {
         // A successful sign-in resets the failure counter and the lockout level for this identifier + IP
         verify(redisService).delete("otp:email:fail", attempt("user@example.com"));
         verify(redisService).delete("otp:email:level", attempt("user@example.com"));
+    }
+
+    @Test
+    void shouldSendWelcomeEmailOnlyWhenVerificationCreatedTheAccount() {
+        // The OTP's type is a guess from send time: "signup" for an existing account, "login" for a new one
+        OtpRecord signup = new OtpRecord(h("old@example.com", "123456"), "signup", Instant.now());
+        OtpRecord login = new OtpRecord(h("new@example.com", "123456"), "login", Instant.now());
+        when(redisService.get(eq("otp:email"), eq(k("old@example.com")), eq(OtpRecord.class))).thenReturn(signup);
+        when(redisService.getAndDelete("otp:email", k("old@example.com"), OtpRecord.class)).thenReturn(signup);
+        when(redisService.get(eq("otp:email"), eq(k("new@example.com")), eq(OtpRecord.class))).thenReturn(login);
+        when(redisService.getAndDelete("otp:email", k("new@example.com"), OtpRecord.class)).thenReturn(login);
+        when(userRepository.findByEmail("old@example.com")).thenReturn(Optional.of(User.builder().id(UUID.randomUUID())
+                .email("old@example.com").roles(new String[] { "user" }).build()));
+        when(userRepository.findByEmail("new@example.com")).thenReturn(Optional.empty());
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> {
+            User saved = inv.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            return saved;
+        });
+        when(refreshTokenService.issue(anyString(), any(), anyBoolean())).thenReturn(new RefreshTokenService.IssuedTokens("t", "r"));
+
+        authService.verifyOtp("old@example.com", null, "123456", IP);
+        verify(emailService, never()).sendWelcomeEmail(anyString(), any());
+
+        assertThat(authService.verifyOtp("new@example.com", null, "123456", IP).isNewUser()).isTrue();
+        verify(emailService).sendWelcomeEmail(eq("new@example.com"), any());
     }
 
     // ── admin console login: OTP first, role second, so no response reveals a role ────────
@@ -573,7 +614,7 @@ class AuthServiceTest {
     @Test
     void shouldReturn403AfterConsumingOtpWhenAdminRoleWasRemoved() {
         // Holder of a delivered code whose admin role was revoked since: the code is spent, no account or token
-        OtpRecord otpRecord = new OtpRecord(h("user@example.com", "123456"), "login", Instant.now(), 0);
+        OtpRecord otpRecord = new OtpRecord(h("user@example.com", "123456"), "login", Instant.now());
         User customer = User.builder().id(UUID.randomUUID()).email("user@example.com")
                 .displayName("Customer").roles(new String[] { "user" }).active(true).build();
         when(redisService.get(eq("otp:admin-email"), eq(k("user@example.com")), eq(OtpRecord.class))).thenReturn(otpRecord);
@@ -604,7 +645,7 @@ class AuthServiceTest {
     @Test
     void shouldIssueAdminScopeFromAdminNamespaceWhenAdminLoginSucceeds() {
         // The admin OTP lives in its own namespace, so a consumer-login code cannot be redeemed here
-        OtpRecord otpRecord = new OtpRecord(h("admin@example.com", "123456"), "login", Instant.now(), 0);
+        OtpRecord otpRecord = new OtpRecord(h("admin@example.com", "123456"), "login", Instant.now());
         User admin = User.builder().id(UUID.randomUUID()).email("admin@example.com")
                 .displayName("Admin").roles(new String[] { "user", "admin" }).active(true).build();
         when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
@@ -673,7 +714,7 @@ class AuthServiceTest {
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(customer));
 
         // The same error /admin/verify-otp gives this user once a delivered code is spent
-        OtpRecord otpRecord = new OtpRecord(h("user@example.com", "123456"), "login", Instant.now(), 0);
+        OtpRecord otpRecord = new OtpRecord(h("user@example.com", "123456"), "login", Instant.now());
         when(redisService.get(eq("otp:admin-email"), eq(k("user@example.com")), eq(OtpRecord.class))).thenReturn(otpRecord);
         when(redisService.getAndDelete("otp:admin-email", k("user@example.com"), OtpRecord.class)).thenReturn(otpRecord);
         for (ThrowingCallable call : List.<ThrowingCallable>of(() -> authService.verifyAdminPasskey(PASSKEY),
@@ -697,7 +738,7 @@ class AuthServiceTest {
 
     @Test
     void shouldIssueUserScopeWhenAdminSignsInThroughConsumerLogin() {
-        OtpRecord otpRecord = new OtpRecord(h("admin@example.com", "123456"), "login", Instant.now(), 0);
+        OtpRecord otpRecord = new OtpRecord(h("admin@example.com", "123456"), "login", Instant.now());
         User admin = User.builder().id(UUID.randomUUID()).email("admin@example.com")
                 .displayName("Admin").roles(new String[] { "user", "admin" }).active(true).build();
         when(redisService.get(eq("otp:email"), eq(k("admin@example.com")), eq(OtpRecord.class))).thenReturn(otpRecord);
@@ -714,7 +755,7 @@ class AuthServiceTest {
 
     @Test
     void shouldIndexAttemptKeyWhenCodeIsWrong() {
-        OtpRecord otpRecord = new OtpRecord(h("user@example.com", "123456"), "login", Instant.now(), 0);
+        OtpRecord otpRecord = new OtpRecord(h("user@example.com", "123456"), "login", Instant.now());
         when(redisService.get(eq("otp:email"), eq(k("user@example.com")), eq(OtpRecord.class))).thenReturn(otpRecord);
         when(redisService.incrementAndExpire(eq("otp:email:fail"), eq(attempt("user@example.com")), any(Duration.class)))
                 .thenReturn(1L);
@@ -733,7 +774,7 @@ class AuthServiceTest {
         List<String> key = List.of(attempt("user@example.com"));
         when(redisService.deleteAll(anyString(), any())).thenReturn(1L);
         when(redisService.getAndDelete("otp:email", k("user@example.com"), OtpRecord.class))
-                .thenReturn(new OtpRecord(h("user@example.com", "123456"), "login", created, 0));
+                .thenReturn(new OtpRecord(h("user@example.com", "123456"), "login", created));
 
         int cleared = authService.unlockLogin("email", "user@example.com", IP, Set.of("lock", "attempts", "cooldown"));
 
@@ -745,7 +786,7 @@ class AuthServiceTest {
         verify(redisService).deleteAll("otp:email:guesses", List.of(k("user@example.com") + ":" + created.toEpochMilli()));
         verify(redisService).deleteAll("otp:email:cooldown", List.of(k("user@example.com")));
         verify(redisService).hDelete("otp:email:attempt-idx", k("user@example.com"), key.get(0));
-        verify(redisService, never()).hGetAll(anyString(), anyString());
+        verify(redisService, never()).hGetAllOrThrow(anyString(), anyString());
     }
 
     @Test
@@ -764,9 +805,9 @@ class AuthServiceTest {
     @Test
     void shouldAlsoClearCounterWhenUnlockClearsOnlyLock() {
         // A lock removed with its counter still at 3 would keep refusing the right code
-        when(redisService.hGetAll("otp:phone:attempt-idx", k("+886912345678")))
+        when(redisService.hGetAllOrThrow("otp:phone:attempt-idx", k("+886912345678")))
                 .thenReturn(java.util.Map.of("k1", "1", "k2", "1"));
-        when(redisService.deleteAll(anyString(), any())).thenReturn(2L);
+        when(redisService.deleteAll(startsWith("otp:phone:"), any())).thenReturn(2L);
 
         int cleared = authService.unlockLogin("phone", "+886912345678", null, Set.of("lock"));
 
@@ -777,6 +818,20 @@ class AuthServiceTest {
         verify(redisService, never()).getAndDelete(eq("otp:phone"), anyString(), any());
         verify(redisService, never()).deleteAll(eq("otp:phone:cooldown"), any());
         verify(redisService).delete("otp:phone:attempt-idx", k("+886912345678"));
+    }
+
+    @Test
+    void shouldClearPhoneBindLockoutWhenUnlockingPhoneChannel() {
+        String bindKey = AuthService.attemptKey("+886912345678", IP);
+        when(redisService.deleteAll(anyString(), any())).thenReturn(0L);
+        when(redisService.deleteAll("otp:phone-bind:lock", List.of(bindKey))).thenReturn(1L);
+
+        int cleared = authService.unlockLogin("phone", "+886912345678", IP, Set.of("lock"));
+
+        assertThat(cleared).isEqualTo(1);
+        verify(redisService).deleteAll("otp:phone:lock", List.of(bindKey));
+        verify(redisService).deleteAll("otp:phone-bind:fail", List.of(bindKey));
+        verify(redisService).hDelete("otp:phone-bind:attempt-idx", k("+886912345678"), bindKey);
     }
 
     @Test
@@ -846,7 +901,7 @@ class AuthServiceTest {
     @Test
     void verifyOtp_wrongCodeSameLength_shouldRejectViaConstantTimeCompare() {
         // Wrong code of the same length is still rejected (constant-time comparison does not affect correctness)
-        OtpRecord otpRecord = new OtpRecord(h("user@example.com", "123456"), "login", Instant.now(), 0);
+        OtpRecord otpRecord = new OtpRecord(h("user@example.com", "123456"), "login", Instant.now());
         when(redisService.get(eq("otp:email"), eq(k("user@example.com")), eq(OtpRecord.class))).thenReturn(otpRecord);
         when(redisService.incrementAndExpire(eq("otp:email:fail"), eq(attempt("user@example.com")), any(Duration.class)))
                 .thenReturn(1L);
@@ -990,7 +1045,7 @@ class AuthServiceTest {
 
     @Test
     void shouldBindEmailInviteesWhenEmailOtpVerified() {
-        OtpRecord otpRecord = new OtpRecord(h("carol@example.com", "123456"), "signup", Instant.now(), 0);
+        OtpRecord otpRecord = new OtpRecord(h("carol@example.com", "123456"), "signup", Instant.now());
         when(redisService.get(eq("otp:email"), eq(k("carol@example.com")), eq(OtpRecord.class))).thenReturn(otpRecord);
         when(redisService.getAndDelete("otp:email", k("carol@example.com"), OtpRecord.class)).thenReturn(otpRecord);
         when(userRepository.findByEmail("carol@example.com")).thenReturn(Optional.empty());
@@ -1016,7 +1071,7 @@ class AuthServiceTest {
     void shouldResolveSameAccountWhenGmailVariantVerifiesOtp() {
         User existing = User.builder().id(UUID.randomUUID()).email("ab@gmail.com")
                 .roles(new String[] { "user" }).build();
-        OtpRecord gmailOtp = new OtpRecord(h("ab@gmail.com", "123456"), "login", Instant.now(), 0);
+        OtpRecord gmailOtp = new OtpRecord(h("ab@gmail.com", "123456"), "login", Instant.now());
         when(redisService.get(eq("otp:email"), eq(k("ab@gmail.com")), eq(OtpRecord.class))).thenReturn(gmailOtp);
         when(redisService.getAndDelete(eq("otp:email"), eq(k("ab@gmail.com")), eq(OtpRecord.class))).thenReturn(gmailOtp);
         when(userRepository.findByEmail("ab@gmail.com")).thenReturn(Optional.of(existing));
@@ -1468,7 +1523,9 @@ class AuthServiceTest {
         // Successful login updates lastLoginAt; an existing account is never reported as new
         assertThat(user.getLastLoginAt()).isNotNull();
         assertThat(response.isNewUser()).isFalse();
-        verify(userRepository).save(user);
+        // One targeted UPDATE, never a merge that could write a stale active back over a suspension
+        verify(userRepository).recordLogin(user.getId(), user.getLastLoginAt());
+        verify(userRepository, never()).save(any());
     }
 
     // ── appleLogin (P6-#16 external failure classification + #21 JWKS cache) ──────────────────

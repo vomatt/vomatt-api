@@ -396,12 +396,13 @@ class UserServiceTest {
         UpdateProfileRequest request = new UpdateProfileRequest();
 
         userService.updateMyProfile(id.toString(), request);
-        verify(preferenceRepository, never()).save(any());
+        verify(preferenceRepository, never()).upsert(any(), any(), any(), any());
 
         request.setAnonymousBallotByDefault(true);
         userService.updateMyProfile(id.toString(), request);
-        verify(preferenceRepository).save(org.mockito.ArgumentMatchers.argThat(pref ->
-                UserPreference.ANONYMOUS_BALLOT_KEY.equals(pref.getKey()) && "true".equals(pref.getValue()) && pref.getUser() == user));
+        // An atomic upsert, so concurrent first writes of the key cannot fail on the unique key
+        verify(preferenceRepository).upsert(any(), eq(id), eq(UserPreference.ANONYMOUS_BALLOT_KEY), eq("true"));
+        verify(preferenceRepository, never()).save(any());
     }
 
     @Test

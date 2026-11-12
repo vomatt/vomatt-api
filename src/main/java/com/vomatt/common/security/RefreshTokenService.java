@@ -37,8 +37,9 @@ public class RefreshTokenService {
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
 
-    // Every key and index field below is keyOf(token) = SHA-256(token), never the token itself: a Redis dump cannot
-    // mint access tokens, and the client-held value alone is what the server never stores
+    // Every key and index field below is keyOf(token) = SHA-256(token), never the token itself, so the client-held
+    // value is not stored as a key. One exception: the grace cache (GRACE_NS) holds the new access + refresh pair in
+    // clear for the grace window, so a Redis dump taken within it can use that pair
     private static final String NAMESPACE = "refresh";
     // Consumed (rotated) token -> its session id, used for reuse detection; kept as long as the refresh token
     // itself could have lived, so a stolen token replayed at any point in its lifetime still trips the detector
@@ -375,18 +376,26 @@ public class RefreshTokenService {
 
     /**
      * A user's live sessions, most recently active first (never-seen legacy ones last), each named by
-     * {@link #sessionIdOf}. Index fields whose token has expired or does not decode are left out, and so are revoked
-     * sessions (reuse detection leaves their live token behind, but it can no longer refresh).
+     * {@link #sessionIdOf}. Index fields whose token has expired or does not decode are left out and removed from the index;
+     * revoked sessions are left out too (reuse detection leaves their live token behind, but it can no longer refresh).
      */
     public List<RefreshTokenData> listSessions(String userId) {
         List<String> keys = List.copyOf(redisService.hGetAllOrThrow(USER_IDX_NS, userId).keySet());
         List<RefreshTokenData> tokens = redisService.multiGetOrThrow(NAMESPACE, keys, RefreshTokenData.class);
         List<RefreshTokenData> live = new ArrayList<>();
+        List<String> stale = new ArrayList<>();
         for (int i = 0; i < keys.size(); i++) {
             RefreshTokenData t = tokens.get(i);
             if (t != null) {
                 live.add(t.withSessionId(sessionIdOf(t, keys.get(i))));
+            } else {
+                stale.add(keys.get(i));
             }
+        }
+        // A field whose token expired is never removed otherwise; its key is SHA-256 of a unique token, so no later
+        // write can reuse it and dropping it here is safe
+        if (!stale.isEmpty()) {
+            redisService.hDelete(USER_IDX_NS, userId, stale.toArray(String[]::new));
         }
         List<String> revoked = redisService.multiGetOrThrow(REVOKED_SESSION_NS,
                 live.stream().map(RefreshTokenData::sessionId).toList(), String.class);
@@ -455,7 +464,7 @@ public class RefreshTokenService {
         return redisService.hasKeyOrThrow(REVOKED_SESSION_NS, sessionId);
     }
 
-    /** Redis key of a token: its SHA-256 hex. The same digest is what db/redis-hash-refresh-keys.sh wrote on migration. */
+    /** Redis key of a token: its SHA-256 hex. */
     static String keyOf(String token) {
         return AppKey.sha256Hex(token);
     }

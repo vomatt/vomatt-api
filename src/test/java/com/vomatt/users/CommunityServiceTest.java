@@ -47,6 +47,7 @@ class CommunityServiceTest {
     @Mock com.vomatt.common.email.InvitationEmailLimiter invitationEmailLimiter;
     @Mock com.vomatt.common.email.EmailService emailService;
     @Mock PlanService planService;
+    @Mock com.vomatt.repository.UserPreferenceRepository preferenceRepository;
     @InjectMocks CommunityService service;
 
     final UUID communityId = UUID.randomUUID();
@@ -175,6 +176,61 @@ class CommunityServiceTest {
 
         assertThatThrownBy(() -> service.listMembers(communityId, callerId.toString()))
                 .satisfies(ex -> assertKey(ex, MessageKey.COMMUNITY_NOT_MEMBER));
+    }
+
+    @Test
+    void shouldMaskMemberDisplayNameWhenTheMemberHidesIt() {
+        caller(EDITOR);
+        User bob = User.builder().id(targetId).username("bob").displayName("Bob").build();
+        CommunityMember member = mock(CommunityMember.class);
+        when(member.getUser()).thenReturn(bob);
+        when(member.getUserId()).thenReturn(targetId);
+        when(memberRepository.findByCommunityUserIdOrderByCreatedAtAscUserIdAsc(communityId)).thenReturn(List.of(member));
+        com.vomatt.entity.UserPreference hidden = new com.vomatt.entity.UserPreference();
+        hidden.setUser(bob);
+        hidden.setKey("visibility.displayName");
+        hidden.setValue("false");
+        when(preferenceRepository.findByUserIdInAndKeyIn(any(), any())).thenReturn(List.of(hidden));
+
+        assertThat(service.listMembers(communityId, callerId.toString()))
+                .singleElement().satisfies(m -> {
+                    assertThat(m.username()).isEqualTo("bob");
+                    assertThat(m.displayName()).isNull();
+                });
+    }
+
+    @Test
+    void shouldSkipRoomCheckWhenTransferringLockedCommunity() {
+        caller(OWNER);
+        CommunityMember target = target(EDITOR);
+        when(memberRepository.findByCommunityUserIdAndUserId(communityId, callerId))
+                .thenReturn(Optional.of(new CommunityMember(communityId, callerId, OWNER)));
+        when(memberRepository.lockOwnerIds(communityId)).thenReturn(List.of(callerId));
+        when(userRepository.existsByIdAndLockedAtIsNotNull(communityId)).thenReturn(true);
+
+        service.transferOwner(communityId, targetId, callerId.toString());
+
+        verify(planService, never()).requireRoom(any());
+        assertThat(target.getRole()).isEqualTo(OWNER);
+    }
+
+    @Test
+    void shouldRecordNewAccountInAuditDetailsWhenCreatingCommunity() {
+        UUID newId = UUID.randomUUID();
+        when(userRepository.findById(callerId)).thenReturn(Optional.of(User.builder().id(callerId).username("alice").build()));
+        when(userRepository.saveAndFlush(any())).thenAnswer(inv -> User.builder().id(newId)
+                .username(inv.<User>getArgument(0).getUsername()).displayName("Sunrise").build());
+        var request = new org.springframework.mock.web.MockHttpServletRequest("POST", "/api/communities");
+        org.springframework.web.context.request.RequestContextHolder.setRequestAttributes(
+                new org.springframework.web.context.request.ServletRequestAttributes(request));
+        try {
+            service.createCommunity("sunrise", "Sunrise", callerId);
+        } finally {
+            org.springframework.web.context.request.RequestContextHolder.resetRequestAttributes();
+        }
+
+        assertThat(request.getAttribute(com.vomatt.common.audit.AuditAspect.class.getName() + ".details"))
+                .isEqualTo("id=" + newId + "; username=sunrise");
     }
 
     @Test

@@ -338,10 +338,6 @@ class UserProfileVisibilityTest {
             // Given
             User user = createTestUser();
             when(userRepository.findById(USER_UUID)).thenReturn(Optional.of(user));
-            when(preferenceRepository.findByUserIdAndKey(USER_UUID, "visibility.location"))
-                    .thenReturn(Optional.empty());
-            when(preferenceRepository.save(any(UserPreference.class)))
-                    .thenAnswer(inv -> inv.getArgument(0));
 
             // query after update returns the new settings
             UserPreference savedPref = createPref("visibility.location", "true");
@@ -353,9 +349,8 @@ class UserProfileVisibilityTest {
 
             // Then: email is no longer controllable, so only the location row is written
             assertThat(result).containsEntry("location", true).doesNotContainKey("email");
-            verify(preferenceRepository).save(argThat(p ->
-                    "visibility.location".equals(p.getKey()) && "true".equals(p.getValue()) && p.getUser() == user));
-            verify(preferenceRepository, never()).save(argThat(p -> "visibility.email".equals(p.getKey())));
+            verify(preferenceRepository).upsert(any(), eq(USER_UUID), eq("visibility.location"), eq("true"));
+            verify(preferenceRepository, never()).upsert(any(), any(), eq("visibility.email"), any());
         }
 
         @Test
@@ -372,7 +367,7 @@ class UserProfileVisibilityTest {
                     USER_ID, Map.of("unknownField", true, "points", true, "membershipLevel", true));
 
             // Then — unknown fields are not written
-            verify(preferenceRepository, never()).save(any(UserPreference.class));
+            verify(preferenceRepository, never()).upsert(any(), any(), any(), any());
             // all known fields default to false
             assertThat(result).containsEntry("location", false);
             assertThat(result).containsEntry("firstName", false);

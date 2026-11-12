@@ -56,4 +56,19 @@ public class PollReportRepository {
                 WHERE uv.vote.id = :voteId""", BallotDemographics.class)
                 .setParameter("voteId", voteId).getResultList();
     }
+
+    /** Distinct Invitees of a Poll and how many of them hold a Ballot; the owner is never an Invitee. */
+    public record InviteeTurnout(int invitees, int withBallot) {
+    }
+
+    /** A user on the Poll by ID and by an address of theirs counts once; an address not tied to a user counts as itself. */
+    public InviteeTurnout countInvitees(UUID voteId) {
+        Object[] row = (Object[]) em.createNativeQuery("""
+                SELECT COUNT(DISTINCT COALESCE(CAST(i.user_id AS text), i.email)),
+                       COUNT(DISTINCT i.user_id) FILTER (WHERE EXISTS (
+                           SELECT 1 FROM vomatt.user_votes uv WHERE uv.vote_id = i.vote_id AND uv.user_id = i.user_id))
+                FROM vomatt.vote_invitees i WHERE i.vote_id = :voteId""")
+                .setParameter("voteId", voteId).getSingleResult();
+        return new InviteeTurnout(((Number) row[0]).intValue(), ((Number) row[1]).intValue());
+    }
 }

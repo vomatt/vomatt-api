@@ -59,6 +59,10 @@ public class UserController {
 
     private static final Logger log = LoggerFactory.getLogger(UserController.class);
 
+    /** One MyProfileResponse example, shared by every response that returns it. */
+    private static final String MY_PROFILE_EXAMPLE = """
+            {"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":"+886912345678","phoneVerified":true,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","gender":"FEMALE","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"createdPollCount":6,"votedPollCount":21,"followersCount":12,"followingCount":8,"visibilitySettings":{"firstName":false,"lastName":false,"location":false,"displayName":true,"bio":true,"gender":false},"anonymousBallotByDefault":false,"community":false,"plan":"FREE","communityQuota":{"owned":1,"limit":1,"selectionRequired":false,"selectionDeadline":null}}""";
+
     private final UserService userService;
     private final VoteService voteService;
     private final PasskeyService passkeyService;
@@ -70,8 +74,8 @@ public class UserController {
     @GetMapping("/me")
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
-            content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":null,"phoneVerified":false,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","gender":"FEMALE","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"followersCount":12,"followingCount":8,"visibilitySettings":{"firstName":false,"lastName":false,"location":false,"displayName":true,"bio":true,"gender":false},"anonymousBallotByDefault":false,"community":false,"plan":"FREE","communityQuota":{"owned":1,"limit":1}},"message":null,"errorCode":null,"error":null}""")))
+            content = @Content(examples = @ExampleObject(value =
+                    "{\"success\":true,\"data\":" + MY_PROFILE_EXAMPLE + ",\"message\":null,\"errorCode\":null,\"error\":null}")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
@@ -99,8 +103,8 @@ public class UserController {
     @GetMapping("/me/export")
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
-            content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"exportedAt":"2026-10-23T10:00:00+08:00","profile":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":null,"phoneVerified":false,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","gender":"FEMALE","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":1,"totalVotes":1,"followersCount":0,"followingCount":1,"visibilitySettings":{"firstName":false,"lastName":false,"location":true,"displayName":true,"bio":true,"gender":false},"anonymousBallotByDefault":false},"preferences":{"visibility.location":"true"},"polls":[{"id":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","title":"Lunch?","description":null,"audience":"PUBLIC","startTime":"2026-10-01T12:00:00+08:00","endTime":"2026-10-08T12:00:00+08:00","createdAt":"2026-10-01T12:00:00+08:00","deleted":false,"options":["Ramen","Sushi"]}],"comments":[{"id":"0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b","voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","text":"Ramen!","createdAt":"2026-10-02T09:00:00+08:00"}],"ballots":[{"voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","voteTitle":"Lunch?","optionId":"0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813","optionText":"Ramen","anonymous":false,"castAt":"2026-10-02T08:30:00+08:00"}],"feedback":[{"id":"0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70","content":"Please add dark mode.","createdAt":"2026-10-03T10:00:00+08:00"}],"following":[{"userId":"0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f","username":"bob","since":"2026-10-04T10:00:00+08:00"}],"blocking":[]},"message":null,"errorCode":null,"error":null}""")))
+            content = @Content(examples = @ExampleObject(value = "{\"success\":true,\"data\":{\"exportedAt\":\"2026-10-23T10:00:00+08:00\",\"profile\":" + MY_PROFILE_EXAMPLE + """
+                    ,"preferences":{"visibility.location":"true"},"polls":[{"id":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","title":"Lunch?","description":null,"audience":"PUBLIC","startTime":"2026-10-01T12:00:00+08:00","endTime":"2026-10-08T12:00:00+08:00","createdAt":"2026-10-01T12:00:00+08:00","deleted":false,"options":["Ramen","Sushi"]}],"comments":[{"id":"0199f2a5-1c2d-7e3f-8a4b-5c6d7e8f9a0b","voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","text":"Ramen!","createdAt":"2026-10-02T09:00:00+08:00"}],"ballots":[{"voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","voteTitle":"Lunch?","optionId":"0199f2a4-8d11-7c3e-b0a4-5e29c7d6f813","optionText":"Ramen","anonymous":false,"castAt":"2026-10-02T08:30:00+08:00"}],"feedback":[{"id":"0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70","content":"Please add dark mode.","createdAt":"2026-10-03T10:00:00+08:00"}],"following":[{"userId":"0199c1a2-9e4f-7a21-8c3d-1b2a3c4d5e6f","username":"bob","since":"2026-10-04T10:00:00+08:00"}],"blocking":[],"bookmarks":[{"voteId":"0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05","createdAt":"2026-10-05T10:00:00+08:00"}],"followedTags":[{"tagId":"0199c3a2-7b5e-7c1d-9a4f-3e2b1d5c6f70","createdAt":"2026-10-06T10:00:00+08:00"}]},"message":null,"errorCode":null,"error":null}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "Already exported today (`common.rate_limited`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(value = """
@@ -108,10 +112,11 @@ public class UserController {
     @Operation(summary = "Export my data", description = """
             **Auth**: required
             **Precondition**: not exported yet today (UTC)
-            **Behavior**: returns everything stored about the caller in one JSON document: the profile (as `GET /api/users/me`), stored preferences, \
+            **Behavior**: returns, in one JSON document, the profile (as `GET /api/users/me`), stored preferences, \
             Polls the caller created (Deleted included, with option texts), Comments written (not deleted), Ballots cast (with the chosen option; \
-            an Anonymous Ballot of an Ended Poll has no option once sealed), feedback sent, and the users the caller follows and blocked \
-            (`following`, `blocking`, oldest first, suspended accounts included). Of other users, only those follows' and blocks' ids and usernames are included.
+            an Anonymous Ballot of an Ended Poll has no option once sealed), feedback sent, the users the caller follows and blocked \
+            (`following`, `blocking`, oldest first, suspended accounts included), the Polls the caller bookmarked (`bookmarks`) and the \
+            tags the caller follows (`followedTags`), both oldest first. Of other users, only those follows' and blocks' ids and usernames are included.
             **Side effects**: none; counted toward the one export per UTC day
             **Errors**:
             - 404 `user.not_found`: the account no longer exists
@@ -374,6 +379,11 @@ public class UserController {
 
     @PostMapping("/me/phone/send-otp")
     @CommonApiResponses
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503",
+            description = "SMS is not available in this environment (`auth.sms.unavailable`)",
+            content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF), examples = @ExampleObject(value = OpenAPIConfig.ERR_MESSAGE
+                    + "SMS verification is currently unavailable" + OpenAPIConfig.ERR_CODE + "auth.sms.unavailable"
+                    + OpenAPIConfig.ERR_ERROR + "SMS verification is currently unavailable" + OpenAPIConfig.ERR_END)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"success":true},"message":null,"errorCode":null,"error":null}""")))
@@ -390,7 +400,8 @@ public class UserController {
             - 400 `auth.otp.resend_cooldown`: an OTP was sent too recently; the message states the seconds left
             - 400 `auth.sms.send_failed`: the SMS provider rejected the message; the OTP is dropped and a resend is allowed after 30 s
             - 401 `auth.otp.too_many_attempts`: binding this number is locked for the caller's IP after 3 wrong codes (5 minutes, doubling on each further lockout, up to 24 hours)
-            - 429 `auth.otp.daily_limit`: 5 bind OTPs were already requested for this number from this IP today (UTC), or 15 from all IPs""")
+            - 429 `auth.otp.daily_limit`: 5 bind OTPs were already requested for this number from this IP today (UTC), or 15 from all IPs
+            - 503 `auth.sms.unavailable`: SMS is not available in this environment (production has no SMS provider yet); nothing is sent""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> sendPhoneBindOtp(
             @Valid @RequestBody BindPhoneSendOtpRequest request, HttpServletRequest httpRequest) {
         authService.sendPhoneBindOtp(request.phone(), ClientIpResolver.resolve(httpRequest));
@@ -400,8 +411,8 @@ public class UserController {
     @PostMapping("/me/phone/verify")
     @CommonApiResponses
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success",
-            content = @Content(examples = @ExampleObject(value = """
-                    {"success":true,"data":{"id":"0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47","username":"alice","email":"alice@example.com","phoneNumber":"+886912345678","phoneVerified":true,"firstName":"Alice","lastName":"Chen","birthday":"1995-04-12","gender":"FEMALE","displayName":"Alice","bio":"Poll enthusiast","avatarUrl":"bot:boba","location":"Taipei","active":true,"lastLoginAt":"2026-10-09T09:15:00+08:00","joinedAt":"2026-08-01T10:00:00+08:00","totalPolls":4,"totalVotes":17,"createdPollCount":6,"votedPollCount":21,"followersCount":12,"followingCount":8,"visibilitySettings":{"firstName":false,"lastName":false,"location":false,"displayName":true,"bio":true,"gender":false},"anonymousBallotByDefault":false},"message":null,"errorCode":null,"error":null}""")))
+            content = @Content(examples = @ExampleObject(value =
+                    "{\"success\":true,\"data\":" + MY_PROFILE_EXAMPLE + ",\"message\":null,\"errorCode\":null,\"error\":null}")))
     @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(value = """
                     {"phone": "0912345678", "code": "123456"}""")))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account no longer exists (errorCode `user.not_found`)",
@@ -542,7 +553,7 @@ public class UserController {
                     examples = @ExampleObject(value = """
                             {"success":false,"data":null,"message":"User not found","errorCode":"user.not_found","error":"User not found"}""")))
     @Operation(summary = "Block a user", description = """
-            **Auth**: required
+            **Auth**: required; while acting as a community account (`X-Act-As`), OWNER or ADMIN
             **Precondition**: `userId` is another existing, active account
             **Behavior**: the caller no longer sees, in `GET /api/votes` (Feed / Explore / Search / Top) and `GET /api/votes/following`, \
             Polls the blocked user created, nor, in `GET /api/votes/{voteId}/comments` and its replies, Comment threads the blocked user \
@@ -558,6 +569,7 @@ public class UserController {
             **Errors**:
             - 400 `user.block.self`: `userId` is the caller's own id
             - 400 `common.bad_request`: `userId` is not a valid id
+            - 403 `community.role_forbidden`: sent while acting as a community account with a role other than OWNER or ADMIN
             - 404 `user.not_found`: no account with this id, or it is suspended""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> blockUser(
             @Parameter(description = "Id of the user to block", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47")
@@ -574,13 +586,14 @@ public class UserController {
             content = @Content(examples = @ExampleObject(value = """
                     {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
     @Operation(summary = "Unblock a user", description = """
-            **Auth**: required
+            **Auth**: required; while acting as a community account (`X-Act-As`), OWNER or ADMIN
             **Precondition**: none
             **Behavior**: removes the caller's block on the user, so their Polls and Comments show again. \
             Idempotent: succeeds when the user was not blocked or does not exist.
             **Side effects**: the unblock is written to the audit log
             **Errors**:
-            - 400 `common.bad_request`: `userId` is not a valid id""")
+            - 400 `common.bad_request`: `userId` is not a valid id
+            - 403 `community.role_forbidden`: sent while acting as a community account with a role other than OWNER or ADMIN""")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> unblockUser(
             @Parameter(description = "Id of the user to unblock", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47")
             @PathVariable String userId,
@@ -818,6 +831,7 @@ public class UserController {
             **Errors**:
             - 403 `user.delete.forbidden`: deleting another user's account without an admin console token, or without being an active admin in the database
             - 409 `admin.last_admin`: the account is the only active admin
+            - 409 `community.last_owner`: the account is the only OWNER of a community account; transfer or delete it first
             - 409 `common.conflict`: another admin change is in progress; retry
             - 404 `user.not_found`: no account with this id
             - 400 `common.bad_request`: `userId` is not a valid id (admin callers only; other callers get 403 first)""")

@@ -139,10 +139,12 @@ public class VoteCommentService {
     @Transactional(readOnly = true)
     public CursorResponse<CommentDto> getReplies(String voteId, UUID commentId, String cursor, Integer limit,
                                                  String currentUserId) {
-        voteService.findAccessibleVote(UUID.fromString(voteId), currentUserId);
+        UUID voteUuid = UUID.fromString(voteId);
+        voteService.findAccessibleVote(voteUuid, currentUserId);
         UUID viewerId = currentUserId == null ? null : UUID.fromString(currentUserId);
         VoteComment root = commentRepository.findById(commentId)
-            .filter(c -> c.getParent() == null && c.getVote().getId().toString().equals(voteId))
+            // Compared as UUIDs: the path accepts upper-case hex, which never equals the canonical string
+            .filter(c -> c.getParent() == null && c.getVote().getId().equals(voteUuid))
             // A thread started by a user the viewer blocked is hidden from the list, so its Replies are too
             .filter(c -> viewerId == null || !commentRepository.isHiddenFrom(c.getId(), viewerId))
             .orElseThrow(() -> ApiException.notFound(MessageKey.COMMENT_NOT_FOUND));

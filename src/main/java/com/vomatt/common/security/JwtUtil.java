@@ -41,8 +41,7 @@ public class JwtUtil {
      * @param secret one or more HS256 secrets, comma-separated. The first one signs new tokens and all of them verify,
      *               so a key is rotated without a cut: prepend the new secret, deploy, wait out
      *               {@code jwt.expiration-seconds}, then drop the old one and deploy again. Each key is named by
-     *               {@code kid = SHA-256(secret)[0..8)} in the token header; a token without kid (issued before kids
-     *               existed) is checked against the signing key only.
+     *               {@code kid = SHA-256(secret)[0..8)} in the token header; a token without kid is refused.
      */
     public JwtUtil(@Value("${jwt.secret}") String secret, @Value("${jwt.expiration-seconds}") long expirationSeconds) {
         // Validate the key lengths at startup (bean creation) to fail fast on misconfiguration,
@@ -62,8 +61,8 @@ public class JwtUtil {
         this.signingKey = keys.get(signingKid);
         this.parser = Jwts.parser().keyLocator(header -> {
             String kid = header instanceof io.jsonwebtoken.ProtectedHeader p ? p.getKeyId() : null;
-            // Unknown kid -> null -> JJWT refuses the token
-            return kid == null ? signingKey : keysByKid.get(kid);
+            // Missing or unknown kid -> null -> JJWT refuses the token (Map.copyOf's get(null) would throw)
+            return kid == null ? null : keysByKid.get(kid);
         }).build();
         this.expirationSeconds = expirationSeconds;
     }

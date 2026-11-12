@@ -220,7 +220,7 @@ public class AuthService {
         if (testAccount) {
             code = otpTestCode;
         }
-        storeOtp(namespace, redisKey, quota, attemptKey, new OtpRecord(otpHash(normalizedEmail, code), otpType, Instant.now(), 0));
+        storeOtp(namespace, redisKey, quota, attemptKey, new OtpRecord(otpHash(normalizedEmail, code), otpType, Instant.now()));
         if (testAccount || !deliver) {
             return;
         }
@@ -254,10 +254,14 @@ public class AuthService {
         acquireResendCooldown(namespace, redisKey);
         DailyQuota quota = DailyQuota.of(redisKey, attemptKey);
         takeDailyQuota(namespace, redisKey, quota, otpDailyLimitPhone);
-        storeOtp(namespace, redisKey, quota, attemptKey, new OtpRecord(otpHash(phone, code), otpType, Instant.now(), 0));
+        storeOtp(namespace, redisKey, quota, attemptKey, new OtpRecord(otpHash(phone, code), otpType, Instant.now()));
 
         try {
             smsService.sendOtp(phone, code);
+        } catch (ApiException ex) {
+            // SMS unavailable in this environment (SmsServiceUnavailable): nothing was sent, keep the service's status
+            releaseUndeliveredOtp(namespace, redisKey, quota);
+            throw ex;
         } catch (Exception ex) {
             releaseUndeliveredOtp(namespace, redisKey, quota);
             log.warn("Failed to send OTP SMS: {}", ex.getMessage());
@@ -323,14 +327,15 @@ public class AuthService {
     }
 
     private AuthResponse verifyEmailOtp(String normalizedEmail, String code, String clientIp) {
-        OtpRecord otp = consumeOtp(OTP_EMAIL_NS, normalizedEmail, code, clientIp);
+        consumeOtp(OTP_EMAIL_NS, normalizedEmail, code, clientIp);
 
         // The user proved ownership of the email via OTP -> treat as verified
         FoundUser found = findOrCreateUserByEmail(normalizedEmail, null, "email_otp", true);
         User user = found.user();
 
         AuthResponse response = buildAuthResponse(user, false, found.created());
-        if ("signup".equals(otp.type())) {
+        // Keyed on the account having been created here, not on the OTP's type (a guess made when it was sent).
+        if (found.created()) {
             // Sent only after the login succeeded, in the background so SMTP latency does not delay the response
             emailService.sendWelcomeEmail(normalizedEmail, LocaleContextHolder.getLocale());
         }
@@ -551,16 +556,21 @@ public class AuthService {
      * @return how many Redis keys were removed (0 when nothing was locked or counted)
      */
     public int unlockLogin(String channel, String identifier, String clientIp, Set<String> targets) {
-        String namespace = switch (channel) {
-            case LoginUnlock.CHANNEL_EMAIL -> OTP_EMAIL_NS;
-            case LoginUnlock.CHANNEL_PHONE -> OTP_PHONE_NS;
-            case LoginUnlock.CHANNEL_ADMIN -> OTP_ADMIN_EMAIL_NS;
+        return switch (channel) {
+            case LoginUnlock.CHANNEL_EMAIL -> unlockNamespace(OTP_EMAIL_NS, identifier, clientIp, targets);
+            // Phone sign-in and phone bind keep the same lockouts in separate namespaces; one channel clears both
+            case LoginUnlock.CHANNEL_PHONE -> unlockNamespace(OTP_PHONE_NS, identifier, clientIp, targets)
+                    + unlockNamespace(OTP_PHONE_BIND_NS, identifier, clientIp, targets);
+            case LoginUnlock.CHANNEL_ADMIN -> unlockNamespace(OTP_ADMIN_EMAIL_NS, identifier, clientIp, targets);
             default -> throw new IllegalArgumentException("Unknown login channel: " + channel);
         };
+    }
+
+    private int unlockNamespace(String namespace, String identifier, String clientIp, Set<String> targets) {
         String indexNs = namespace + OTP_ATTEMPT_IDX_SUFFIX;
         String key = redisKey(identifier);
         Collection<String> attemptKeys = clientIp != null ? List.of(attemptKey(identifier, clientIp))
-                : redisService.hGetAll(indexNs, key).keySet();
+                : redisService.hGetAllOrThrow(indexNs, key).keySet();
         boolean lock = targets.contains(LoginUnlock.TARGET_LOCK);
         boolean attempts = targets.contains(LoginUnlock.TARGET_ATTEMPTS);
         long removed = 0;
@@ -620,8 +630,8 @@ public class AuthService {
 
     /**
      * What is stored for an OTP instead of the code: {@code HMAC(derive("otp"), identifier:code)}. A Redis dump cannot be
-     * used to sign in, and without the key no table of the 10^6 codes can be precomputed; the identifier keeps two
-     * users' equal codes from hashing alike.
+     * used to sign in, and without the key no table of the 900,000 codes (100000-999999) can be precomputed; the
+     * identifier keeps two users' equal codes from hashing alike.
      */
     private String otpHash(String identifier, String code) {
         return AppKey.hmacHex(appKey.derive(OTP_KEY_LABEL), identifier + ":" + code);
@@ -938,8 +948,9 @@ public class AuthService {
         // so a 503 external error from an Apple/network failure is not swallowed by the broad catch below and misreported as a 401 login failure.
         List<Map<String, Object>> keys = fetchJwks(appleJwksUrl, "Apple", false);
 
+        Map<String, Object> payload;
         try {
-            var payload = verifyRs256(idToken, keys, appleJwksUrl, "Apple",
+            payload = verifyRs256(idToken, keys, appleJwksUrl, "Apple",
                     () -> ApiException.unauthorized(MessageKey.AUTH_APPLE_INVALID_TOKEN),
                     () -> ApiException.unauthorized(MessageKey.AUTH_APPLE_KEY_NOT_FOUND),
                     () -> ApiException.unauthorized(MessageKey.AUTH_APPLE_INVALID_SIGNATURE));
@@ -960,24 +971,23 @@ public class AuthService {
             if (!(payload.get("nonce") instanceof String n) || !n.equalsIgnoreCase(AppKey.sha256Hex(nonce))) {
                 throw ApiException.unauthorized(MessageKey.AUTH_APPLE_INVALID_NONCE);
             }
-            consumeIdToken(idToken, payload.get("exp"));
-
-            String email = (String) payload.get("email");
-            if (email == null)
-                throw ApiException.unauthorized(MessageKey.AUTH_APPLE_NO_EMAIL);
-
-            // Apple id_token usually returns email_verified as the string "true", occasionally as boolean true; parse defensively
-            boolean emailVerified = "true".equals(String.valueOf(payload.get("email_verified")));
-
-            FoundUser found = findOrCreateUserByEmail(User.normalizeEmail(email), fullName, "apple", emailVerified);
-            return buildAuthResponse(found.user(), false, found.created());
-
         } catch (ApiException ex) {
             throw ex;
         } catch (Exception ex) {
             log.error("Apple login error: {}", ex.getMessage());
             throw ApiException.unauthorized(MessageKey.AUTH_APPLE_LOGIN_FAILED);
         }
+        // Outside the try, as in googleLogin: DB / Redis failures must surface as themselves, not as a 401 login failure
+        consumeIdToken(idToken, payload.get("exp"));
+
+        if (!(payload.get("email") instanceof String email)) {
+            throw ApiException.unauthorized(MessageKey.AUTH_APPLE_NO_EMAIL);
+        }
+        // Apple id_token usually returns email_verified as the string "true", occasionally as boolean true; parse defensively
+        boolean emailVerified = "true".equals(String.valueOf(payload.get("email_verified")));
+
+        FoundUser found = findOrCreateUserByEmail(User.normalizeEmail(email), fullName, "apple", emailVerified);
+        return buildAuthResponse(found.user(), false, found.created());
     }
 
     /**
@@ -1186,8 +1196,9 @@ public class AuthService {
         if (user.isCommunity()) {
             throw ApiException.forbidden(MessageKey.AUTH_COMMUNITY_SIGN_IN_NOT_ALLOWED);
         }
-        user.setLastLoginAt(OffsetDateTime.now());
-        userRepository.save(user);
+        OffsetDateTime now = OffsetDateTime.now();
+        user.setLastLoginAt(now);
+        userRepository.recordLogin(user.getId(), now);
         List<String> roles = List.of(user.getRoles());
         RefreshTokenService.IssuedTokens tokens = refreshTokenService.issue(user.getId().toString(), roles, adminScope);
         return new AuthResponse(tokens.accessToken(), tokens.refreshToken(),

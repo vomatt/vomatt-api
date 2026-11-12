@@ -4,10 +4,10 @@ Vomatt polling community backend. The architecture follows sachmis-api (domain-d
 
 ## Tech stack
 
-- Java 25 (virtual threads), Spring Boot 4.0.5, Maven Wrapper
+- Java 25 (virtual threads), Spring Boot 4.1.2, Maven Wrapper
 - Spring Web MVC, Data JPA (Hibernate 7), Security 7, Mail, Data Redis (Lettuce)
 - PostgreSQL (schema `vomatt`), Redis
-- JJWT, Bucket4j, SpringDoc OpenAPI 3, Lombok + MapStruct, Thymeleaf (email)
+- JJWT, SpringDoc OpenAPI 3, Lombok, Thymeleaf (email)
 
 ## Quick start
 
@@ -17,22 +17,12 @@ Vomatt polling community backend. The architecture follows sachmis-api (domain-d
 3. Run: `./mvnw spring-boot:run`; with `EMAIL_ENABLED=false` no OTP email is sent; read it from the app log line `[EMAIL-NOOP] ... OTP <code>` (Redis holds only a hash)
 4. Swagger UI: <http://localhost:8080/swagger-ui.html>
 
-## Features
+## API
 
-| Domain | Path | Description |
-|--------|------|------|
-| auth | `/api/auth/**` | Email / phone OTP, Google / LINE / Apple login, refresh, logout |
-| users | `/api/users/**` | My profile, public profile page, field visibility, search, account deletion |
-| votes | `/api/votes/**` | Create / query / vote / cancel / results / deactivate |
-| comments | `/api/votes/{voteId}/comments/**` | Comments, likes |
-| tags | `/api/tags/**` | Tag queries (public) |
-| lookups | `/api/lookups/**` | Lookup (dictionary) queries |
-| admin | `/api/admin/**` | Tag and lookup management (requires ADMIN) |
+The endpoints and their schemas are in Swagger UI (<http://localhost:8080/swagger-ui.html>) and the generated [docs/frontend/openapi.json](docs/frontend/openapi.json); error codes in [docs/frontend/error-codes.md](docs/frontend/error-codes.md), contract changes in [docs/frontend/CHANGELOG.md](docs/frontend/CHANGELOG.md).
 
 Responses are always `ApiResponse<T>`: `{ success, data, message, errorCode, error }`; pagination uses `CursorResponse<T>` (`items / nextCursor`; `limit` defaults to 20, max 50).
 
 For frontend integration see [docs/frontend/README.md](docs/frontend/README.md) (Swagger usage, global conventions, glossary).
-
-Upgrading a pre-sachmis database (before running the API; Flyway then baselines it at V1 and V2 adds everything since): `psql "$DB" -v ON_ERROR_STOP=1 -f src/main/resources/db/migrations/2026-10-02-sachmis-arch.sql` (single transaction; back up first and check the time zone assumption in the file header).
 
 Development guidelines: see [AGENTS.md](AGENTS.md).

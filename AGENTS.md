@@ -2,7 +2,7 @@
 
 This file provides guidance to AI coding agents working with code in this repository.
 
-Vomatt polling community backend: Java 25 (virtual threads), Spring Boot 4.1.1 (Security 7, Jackson 3 `tools.jackson.*`, Hibernate 7), PostgreSQL (schema `vomatt`), Redis (Lettuce). Respond in Traditional Chinese; write code comments in English.
+Vomatt polling community backend: Java 25 (virtual threads), Spring Boot 4.1.2 (Security 7, Jackson 3 `tools.jackson.*`, Hibernate 7), PostgreSQL (schema `vomatt`), Redis (Lettuce). Respond in Traditional Chinese; write code comments in English.
 
 ## Commands
 
@@ -21,7 +21,7 @@ Swagger UI: <http://localhost:8080/swagger-ui.html>. `*PostgresTest` and `OpenAp
 
 ## Architecture
 
-- Packages are split by domain: `auth`, `users`, `votes`, `comments`, `notifications`, `tags`, `invitelists`, `lookups`, `admin`, `feedback`, each with Controller + Service + Mapper + `dto/`. All JPA entities live in `entity/`, all repositories in `repository/`, shared components in `common/`.
+- Packages are split by domain: `auth`, `users`, `votes`, `comments`, `notifications`, `tags`, `invitelists`, `lookups`, `admin`, `feedback`, each with Controller + Service + Mapper + `dto/`. All JPA entities live in `entity/` and all repositories in `repository/`, except the audit log (`common/audit/AuditLog` + `AuditLogRepository`); shared components live in `common/`.
 - When a Service has only one implementation, do not split it into interface / Impl; `@Transactional` goes on the Service layer.
 - Code and API paths keep the `Vote` naming; business terms follow `CONTEXT.md` (Poll, Ballot, Selection, Participant, Sealed, Turnout, Support...). Renaming would break the contract, so it is not renamed.
 - Poll status is not stored in a column; it is derived from time: `Vote.statusAt()`, with Ended taking precedence over Scheduled. Cancelled is an Ended Poll with `endTime <= startTime` (`Vote.isCancelled`).
@@ -31,7 +31,7 @@ Swagger UI: <http://localhost:8080/swagger-ui.html>. `*PostgresTest` and `OpenAp
 - Operational limits an admin can tune (`vote_max_options`, `vote_delete_window_minutes`, `invite_list_max_*`, `invitation_email_daily_limit`...) are `config`-type lookups read with `LookupService.configInt` / `configDuration`, which fall back to the default in code when unset or invalid. A new tunable limit goes there, not in code or env.
 - Option vote counts are stored in `vote_options.vote_count` and maintained with atomic increments/decrements; `db/reconcile-vote-counts.sql` can be used to reconcile them.
 - Public lists use cursor pagination (`CursorResponse` / `Cursor`, `limit` defaults to 20, max 50); keyset queries live in `VoteListRepository`. Title and description search uses a custom bigram GIN index; `q` needs at least 2 characters.
-- Notifications (the feed: RESULT, CANCELLED, INVITATION, FOLLOWED, COMMENT, MENTION, CLOSING_SOON, LIKE, POLL_LIKE, COMMUNITY_INVITATION) are derived at read time from the rows they are about, one SQL branch per kind in `NotificationRepository` (ADR 0005); the database stores only read state (`notification_reads` keyed by kind + source id, `notification_read_all`). Notifications need no scheduler. A new kind is a new branch there, plus its switch in `NotificationPreference` if it has one, and its `NotificationCategory` (the feed's tab filter) in the `NotificationKind` constructor.
+- Notifications (the feed: RESULT, CANCELLED, INVITATION, FOLLOWED, COMMENT, MENTION, CLOSING_SOON, LIKE, POLL_LIKE, COMMUNITY_INVITATION, COMMUNITY_LOCKED) are derived at read time from the rows they are about, one SQL branch per kind in `NotificationRepository` (ADR 0005); the database stores only read state (`notification_reads` keyed by kind + source id, `notification_read_all`). Notifications need no scheduler. A new kind is a new branch there, plus its switch in `NotificationPreference` if it has one, and its `NotificationCategory` (the feed's tab filter) in the `NotificationKind` constructor.
 - Responses are always wrapped in `ApiResponse<T>` (`success, data, message, errorCode, error`). Raise errors with `throw ApiException.xxx(MessageKey.X)`; messages live in `resources/i18n/messages*.properties` and are handled centrally by `GlobalExceptionHandler`.
 - Auth: JWT access token plus Redis refresh token (rotation + grace window + reuse detection). `User.active=false` means suspended. `User.roles` (`text[]`) is mapped to `ROLE_<UPPER>`.
 - Community accounts (`ROLE_COMMUNITY`) never sign in and never cast a Ballot. Members act as one with header `X-Act-As`: `ActAsFilter` (registered after `JwtAuthFilter`, the one sanctioned SecurityConfig chain edit) swaps the principal to the community account and keeps the real member and role in `ActingMember.current()`; record that member in `acted_by`. Path rules for acting live in `SecurityEndpoints` (`ACT_AS_DENIED`, `ACT_AS_PROFILE`, `ACT_AS_ANY_ROLE`, `ACT_AS_ANY_ROLE_POST`); role capabilities live on `CommunityRole`. Members join only by accepting a `community_invitations` row (`CommunityService`), never added directly. Any edit or delete of a community account's Poll or Comment goes through `ActingMember.requireMayEdit(acted_by)` (an EDITOR touches only its own).
@@ -43,11 +43,10 @@ Swagger UI: <http://localhost:8080/swagger-ui.html>. `*PostgresTest` and `OpenAp
 - DDL is managed by Flyway in `src/main/resources/db/migration/` (`ddl-auto: none`), run at app startup in every environment, tests included. `V20261027125251__baseline.sql` is the full schema; databases created before Flyway are baselined at its version (`baseline-on-migrate`, `baseline-version`), and `V20261027125252__catch_up.sql` (the last schema.sql, idempotent) brings them up to date. All time columns are `TIMESTAMPTZ` <-> `OffsetDateTime`; primary keys use UUID v7 (`UUIDv7Generator`).
 - Every schema or data change is a new `V<yyyyMMddHHmmss>__<topic>.sql`, versioned by its creation time (UTC+8) so parallel branches do not collide; never edit an applied one, comments included (Flyway checksums fail startup). Data migrations need a `*MigrationPostgresTest`.
 - `beforeMigrate__notification_reads_by_kind.sql` is a Flyway callback that runs before every migrate: it converts a pre-2026-10-26 `notification_reads` (keyed by `vote_id`) to the `(user_id, kind, source_id)` key, which `V20261027125252__catch_up.sql`'s `CREATE TABLE IF NOT EXISTS` skips. It must stay idempotent.
-- `db/migrations/` (plural, date-named) holds pre-Flyway one-off scripts that Flyway never runs; do not add to it. Their tests recreate the old shape on top of the baseline. `2026-10-02-sachmis-arch.sql` and `2026-10-14-canonical-gmail.sql` cannot run against the current schema, so they have no test.
 
 ## API contract and frontend docs
 
-- `docs/frontend/` is the only docs directory under version control; all other `docs/*` are gitignored.
+- `docs/frontend/` and `docs/adr/` are the only docs directories under version control; all other `docs/*` are gitignored.
 - Controller endpoints must have `@Operation` together with `@CommonApiResponses` or `@PublicApiResponse`. `@Operation(description)` covers, in order, Auth / Precondition / Behavior / Side effects / Errors; request and response each need at least one `@ExampleObject`. OpenAPI text (summary, description, `@Schema`) is always in English. Do not return generic `Map` / `Object`.
 - `docs/frontend/openapi.json` and `docs/frontend/error-codes.md` are generated by `OpenApiSnapshotTest` and `ErrorCodesDocTest`; do not edit them by hand. When the contract or `MessageKey` changes, regenerate with `-Dsnapshot.update=true` and commit them together, otherwise the tests fail.
 - Record contract changes in `docs/frontend/CHANGELOG.md`; mark breaking changes with 💥.

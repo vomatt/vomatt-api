@@ -104,6 +104,17 @@ class RefreshTokenServiceRedisTest {
     }
 
     @Test
+    void shouldDropIndexFieldWhenListingSessionsFindsItsTokenExpired() {
+        String live = service.issue(userId, List.of("user"), false).refreshToken();
+        String expired = service.issue(userId, List.of("user"), false).refreshToken();
+        template.delete("refresh:" + keyOf(expired));
+
+        assertThat(service.listSessions(userId)).extracting(RefreshTokenService.RefreshTokenData::sessionId)
+                .containsExactly(sessionOf(live));
+        assertThat(redisService.hGetAll("refresh:idx", userId)).containsOnlyKeys(keyOf(live));
+    }
+
+    @Test
     void shouldListLiveSessionsAndStopKickedOneFromRotating() {
         String laptop = service.issue(userId, List.of("user"), false).refreshToken();
         java.time.Instant laptopSignIn = redisService.get("refresh", keyOf(laptop), RefreshTokenService.RefreshTokenData.class).createdAt();

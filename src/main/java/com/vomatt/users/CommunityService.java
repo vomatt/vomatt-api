@@ -12,6 +12,7 @@ import com.vomatt.entity.CommunityRole;
 import com.vomatt.entity.User;
 import com.vomatt.repository.LockTimeout;
 import com.vomatt.repository.CommunityMemberRepository;
+import com.vomatt.repository.UserPreferenceRepository;
 import com.vomatt.repository.UserRepository;
 import com.vomatt.users.dto.MyCommunityResponse;
 import com.vomatt.users.dto.CommunityMemberResponse;
@@ -66,6 +67,7 @@ public class CommunityService {
     private final EmailService emailService;
     private final AuditService auditService;
     private final PlanService planService;
+    private final UserPreferenceRepository preferenceRepository;
 
     /** How long an invitation can be accepted. */
     static final Duration INVITATION_TTL = Duration.ofDays(7);
@@ -86,6 +88,8 @@ public class CommunityService {
                 .roles(new String[] { UserRole.COMMUNITY })
                 .build());
         memberRepository.save(new CommunityMember(community.getId(), ownerUserId, OWNER));
+        // The CREATE audit entry has no id argument to name the new account by
+        AuditAspect.recordDetails("id=" + community.getId() + "; username=" + community.getUsername());
         log.info("Community account {} created with owner {}", community.getId(), ownerUserId);
         return userMapper.toSearchResult(community, new PublicName(community.getDisplayName(), null, null));
     }
@@ -94,8 +98,9 @@ public class CommunityService {
     @Transactional(readOnly = true)
     public List<CommunityMemberResponse> listMembers(UUID communityId, String callerId) {
         requireRole(communityId, callerId);
-        return memberRepository.findByCommunityUserIdOrderByCreatedAtAscUserIdAsc(communityId).stream()
-                .map(m -> toResponse(m, m.getUser())).toList();
+        List<CommunityMember> members = memberRepository.findByCommunityUserIdOrderByCreatedAtAscUserIdAsc(communityId);
+        Map<UUID, PublicName> names = PublicNames.load(members.stream().map(CommunityMember::getUser).toList(), preferenceRepository);
+        return members.stream().map(m -> toResponse(m, m.getUser(), names.get(m.getUserId()))).toList();
     }
 
     /** The community accounts the caller belongs to, for the account switcher. */
@@ -146,7 +151,7 @@ public class CommunityService {
         }
         log.info("Community account {}: {} invited {} as {} ({})", communityId, callerId, userId != null ? userId : "an address",
                 role, invitation.getId());
-        return toResponse(invitation, user);
+        return toResponse(invitation, user, user == null ? null : PublicNames.load(user, preferenceRepository));
     }
 
     private void mailInvitation(UUID communityId, String address, CommunityRole role, String callerId) {
@@ -172,7 +177,11 @@ public class CommunityService {
         List<CommunityInvitation> invitations = invitationRepository.findByCommunityUserIdOrderByCreatedAtAscIdAsc(communityId);
         Map<UUID, User> users = userRepository.findAllById(invitations.stream().map(CommunityInvitation::getUserId)
                 .filter(Objects::nonNull).toList()).stream().collect(Collectors.toMap(User::getId, Function.identity()));
-        return invitations.stream().map(i -> toResponse(i, i.getUserId() == null ? null : users.get(i.getUserId()))).toList();
+        Map<UUID, PublicName> names = PublicNames.load(users.values(), preferenceRepository);
+        return invitations.stream().map(i -> {
+            User user = i.getUserId() == null ? null : users.get(i.getUserId());
+            return toResponse(i, user, user == null ? null : names.get(user.getId()));
+        }).toList();
     }
 
     /** OWNER or ADMIN withdraws an invitation; only an OWNER withdraws one that grants OWNER. */
@@ -241,9 +250,10 @@ public class CommunityService {
                 .orElseThrow(() -> ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
     }
 
-    private static CommunityInvitationResponse toResponse(CommunityInvitation i, User user) {
+    // name: the user's names as their visibility settings show them to others (PublicNames)
+    private static CommunityInvitationResponse toResponse(CommunityInvitation i, User user, PublicName name) {
         return new CommunityInvitationResponse(i.getId().toString(), user == null ? null : user.getId().toString(),
-                user == null ? null : user.getUsername(), user == null ? null : user.getDisplayName(),
+                user == null ? null : user.getUsername(), user == null ? null : name.displayName(),
                 user == null ? null : user.getAvatarUrl(), i.getEmail(), i.getRole(), i.getCreatedAt(), i.getExpiresAt());
     }
 
@@ -261,7 +271,8 @@ public class CommunityService {
         member.setRole(role);
         planService.reconcile(List.of(userId));
         log.info("Community account {}: {} set {} to {}", communityId, callerId, userId, role);
-        return toResponse(member, userRepository.getReferenceById(userId));
+        User user = userRepository.getReferenceById(userId);
+        return toResponse(member, user, PublicNames.load(user, preferenceRepository));
     }
 
     /** OWNER or ADMIN removes a member; any member may leave on their own. The last OWNER can do neither. */
@@ -286,10 +297,11 @@ public class CommunityService {
      * OWNER only: the member becomes an OWNER and the caller an ADMIN. Transferring to oneself changes nothing. Takes
      * the OWNER row lock and checks the caller's role under it, so an OWNER demoted concurrently cannot still transfer.
      * A recipient not yet an OWNER needs room in their plan, checked first: the person's row is locked before OWNER rows.
+     * A locked community account does not count as owned (PlanService), so it needs none; unlocking it checks then.
      */
     public void transferOwner(UUID communityId, UUID userId, String callerId) {
         requireOwner(communityId, callerId);
-        if (findMember(communityId, userId).getRole() != OWNER) {
+        if (findMember(communityId, userId).getRole() != OWNER && !userRepository.existsByIdAndLockedAtIsNotNull(communityId)) {
             planService.requireRoom(userId);
         }
         requireOwnerLocked(communityId, callerId);
@@ -448,8 +460,8 @@ public class CommunityService {
         return userRepository.findById(id).orElseThrow(() -> ApiException.notFound(MessageKey.USER_NOT_FOUND));
     }
 
-    private static CommunityMemberResponse toResponse(CommunityMember m, User user) {
-        return new CommunityMemberResponse(m.getUserId().toString(), user.getUsername(), user.getDisplayName(),
+    private static CommunityMemberResponse toResponse(CommunityMember m, User user, PublicName name) {
+        return new CommunityMemberResponse(m.getUserId().toString(), user.getUsername(), name.displayName(),
                 user.getAvatarUrl(), m.getRole(), m.getCreatedAt());
     }
 }

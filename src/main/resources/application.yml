@@ -8,7 +8,7 @@ spring:
       enabled: true
   servlet:
     multipart:
-      # Avatar upload limit (UserService.AVATAR_MAX_BYTES); the request allows room for the multipart envelope
+      # Avatar upload limit; the request allows room for the multipart envelope
       max-file-size: 2MB
       max-request-size: 3MB
   autoconfigure:
@@ -34,6 +34,8 @@ spring:
     schemas: vomatt
     baseline-on-migrate: true
     baseline-version: "20261027125251"
+    # Versions are creation timestamps, so a branch merged later can carry an older version than one already applied
+    out-of-order: true
 
   jpa:
     # Do not read DB metadata at startup (serverless cold start: open the port even if the DB is slow or unreachable; errors surface at request time)
@@ -176,6 +178,10 @@ app:
   retention:
     # Daily data retention run (RetentionJob), UTC; one instance does the work, the others skip via advisory lock
     cron: ${RETENTION_CRON:0 30 4 * * *}
+  community:
+    # CommunitySelectionJob, UTC: gives owners over their community limit a selection deadline, then locks the
+    # accounts of those who let it pass; runs on every instance, each user under their own row lock
+    selection-cron: ${COMMUNITY_SELECTION_CRON:0 */10 * * * *}
 
 otp:
   ttl-seconds: ${OTP_TTL_SECONDS:180}

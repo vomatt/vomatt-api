@@ -36,7 +36,7 @@ public enum NotificationKind {
     COMMUNITY_INVITATION(NotificationCategory.INVITATION),
     /**
      * A community account the user is an OWNER of was locked because its selection deadline passed without a choice.
-     * Source: the LOCK audit entry.
+     * Source: the community account (its {@code locked_at}); listed while the lock lasts.
      */
     COMMUNITY_LOCKED(NotificationCategory.COMMUNITY);
 

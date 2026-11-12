@@ -42,6 +42,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `auth.email.send_failed` | 400 | 郵件發送失敗：{0} | Email delivery failed: {0} | Show message so the user can fix the input | AuthService |
 | `auth.phone.invalid` | 400 | 手機號碼格式錯誤，請輸入 09 開頭的台灣手機號碼或含國碼的號碼（例如 +886912345678） | Invalid phone number. Use a Taiwan mobile number starting with 09 or a number with a country code (e.g. +886912345678) | Show message so the user can fix the input | User |
 | `auth.sms.send_failed` | 400 | 簡訊發送失敗：{0} | SMS delivery failed: {0} | Show message so the user can fix the input | AuthService |
+| `auth.sms.unavailable` | 503 | 簡訊驗證目前無法使用 | SMS verification is currently unavailable | Show service temporarily unavailable, retry later | SmsServiceUnavailable |
 | `auth.refresh_token.invalid` | 401 | Refresh token 無效或已過期 | Refresh token is invalid or has expired | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.suspicious_login` | 401 | 安全性警告：此登入階段被重複更新，已將其登出，請重新登入 | Security alert: this session was refreshed twice, so it has been signed out. Please log in again | See [auth-flow.md](auth-flow.md) | AuthService |
 | `auth.google.not_configured` | 400 | Google OAuth 尚未設定 | Google OAuth is not configured | Show message so the user can fix the input | AuthService |
@@ -147,21 +148,5 @@ Keys not found on any error path (mostly success-response `message` values, e.g.
 
 | key | zh-TW message | en message | Used in |
 |-----|-----------|---------|----------|
-| `common.admin_only` | 此功能限管理員使用 | This feature is for administrators only |  |
-| `common.invalid_content_type` | 不支援的檔案格式：{0} | Unsupported file type: {0} |  |
-| `common.image_upload_failed` | 圖片上傳失敗：{0} | Image upload failed: {0} |  |
-| `common.sign_url_failed` | 簽署 URL 失敗 | Failed to generate signed URL |  |
-| `auth.otp.sent` | 驗證碼已發送，請檢查信筱 | Verification code sent, please check your email |  |
-| `auth.login.success` | 登入成功 | Login successful |  |
-| `auth.logout.success` | 已登出 | Logged out successfully |  |
-| `auth.token.refreshed` | Token 已更新 | Token refreshed successfully |  |
-| `auth.otp.expired` | 驗證碼已過期 | Verification code has expired |  |
-| `auth.invalid_credentials` | 帳號或密碼錯誤 | Invalid email or password |  |
-| `auth.user.not_found` | 找不到此者帳號 | Account not found |  |
-| `auth.account.already_exists` | 該信筱已註冊 | This email is already registered |  |
-| `auth.invalid_user_id` | 用戶 ID 格式無效 | Invalid user ID format |  |
-| `user.update.success` | 用戶資料已更新 | User profile updated |  |
-| `user.profile.not_found` | 找不到此用戶的個人資料 | User profile not found |  |
-| `user.email.taken` | Email 已被使用 | Email already in use |  |
 | `user.block.self` | 不能封鎖自己 | You cannot block yourself | UserService |
 | `user.follow.self` | 不能追蹤自己 | You cannot follow yourself | UserService |

@@ -31,7 +31,6 @@ import com.vomatt.lookups.LookupService;
 import com.vomatt.reports.dto.PollReportResponse;
 import com.vomatt.reports.dto.PollReportResponse.Group;
 import com.vomatt.repository.BallotDemographics;
-import com.vomatt.repository.InviteeRepository;
 import com.vomatt.repository.PollReportRepository;
 import com.vomatt.repository.VoteOptionRepository;
 import com.vomatt.repository.VoteRepository;
@@ -64,7 +63,6 @@ public class PollReportService {
     private final VoteService voteService;
     private final VoteRepository voteRepository;
     private final VoteOptionRepository voteOptionRepository;
-    private final InviteeRepository inviteeRepository;
     private final PollReportRepository reportRepository;
     private final LookupService lookupService;
 
@@ -128,20 +126,19 @@ public class PollReportService {
         List<BallotDemographics> ballots = reportRepository.findBallots(vote.getId());
         LocalDate endDate = TimeUtil.taipeiBusinessDate(vote.getEndTime());
 
-        // A sealed Anonymous Ballot (option NULL) counts in turnout but in no option
+        // Totals come from the stored counts, as in the Poll's results; Ballot rows only feed the demographic groups,
+        // where a sealed Anonymous Ballot (option NULL) or a deleted voter's missing row is simply not counted
         Map<UUID, Integer> optionIndex = new LinkedHashMap<>();
         options.forEach(o -> optionIndex.put(o.getId(), optionIndex.size()));
         List<BallotDemographics> chosen = ballots.stream().filter(b -> optionIndex.containsKey(b.optionId())).toList();
 
-        int[] optionCounts = new int[options.size()];
-        chosen.forEach(b -> optionCounts[optionIndex.get(b.optionId())]++);
-
         Integer invitees = null;
+        Double rate = null;
         if (vote.getAudience() == Audience.INVITE_ONLY) {
-            invitees = inviteeRepository.countByVoteIds(List.of(vote.getId())).stream()
-                    .mapToInt(c -> c.getCount().intValue()).sum();
+            PollReportRepository.InviteeTurnout t = reportRepository.countInvitees(vote.getId());
+            invitees = t.invitees();
+            rate = invitees == 0 ? null : (double) t.withBallot() / invitees;
         }
-        Double rate = invitees == null || invitees == 0 ? null : (double) ballots.size() / invitees;
 
         return new PollReportResponse(
                 vote.getId().toString(),
@@ -150,9 +147,9 @@ public class PollReportService {
                 minCellSize,
                 new PollReportResponse.Timeline(vote.getCreatedAt(), vote.getStartTime(), vote.getEndTime(),
                         vote.resultsRevealAt()),
-                new PollReportResponse.Turnout(ballots.size(), invitees, rate),
-                IntStream.range(0, options.size())
-                        .mapToObj(i -> new PollReportResponse.OptionCount(options.get(i).getId().toString(), options.get(i).getText(), optionCounts[i]))
+                new PollReportResponse.Turnout(vote.getTurnout(), invitees, rate),
+                options.stream()
+                        .map(o -> new PollReportResponse.OptionCount(o.getId().toString(), o.getText(), o.getVoteCount()))
                         .toList(),
                 breakdown(AGE_BANDS, chosen, b -> ageBand(b.birthday(), endDate), optionIndex, minCellSize),
                 breakdown(GENDERS, chosen, b -> b.gender() == null ? NOT_PROVIDED : b.gender().name(), optionIndex, minCellSize));

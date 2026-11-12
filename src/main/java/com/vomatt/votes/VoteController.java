@@ -759,7 +759,7 @@ public class VoteController {
                         "nextCursor": null
                       }, "message": null, "errorCode": null, "error": null }
                     """)))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Poll not Ended or `revealAt` not passed (`vote.results.sealed`), or Voter Visibility does not allow the caller or the Poll holds 1 or 2 Anonymous Ballots other than the caller's own (`vote.voters.hidden`)",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Poll not Ended or `revealAt` not passed (`vote.results.sealed`), or Voter Visibility does not allow the caller (`vote.voters.hidden`)",
             content = @Content(schema = @Schema(ref = OpenAPIConfig.ERROR_REF),
                     examples = @ExampleObject(name = "vote.voters.hidden", value = ERR_MESSAGE + "Voters of this Poll are hidden" + ERR_CODE + "vote.voters.hidden" + ERR_ERROR + "Voters of this Poll are hidden" + ERR_END)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Poll does not exist, is Deleted, or is Invite-only and hidden from the caller, or its owner blocked the caller (`vote.not_found`)",

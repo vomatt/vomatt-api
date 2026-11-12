@@ -8,7 +8,7 @@ export default defineRailway(() => {
 
   const api = service("vomatt-api", {
     source: github("vomatt/vomatt-api", { branch: "main" }),
-    build: { builder: "DOCKERFILE", dockerfilePath: "Dockerfile.vercel" },
+    build: { builder: "DOCKERFILE", dockerfilePath: "Dockerfile" },
     healthcheck: "/actuator/health",
     healthcheckTimeout: 300,
     env: {

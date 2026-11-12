@@ -1,5 +1,5 @@
-# Production image: Railway builds this file (.railway/railway.ts dockerfilePath); the name is kept because Railway points at it
-# Local check: docker build -f Dockerfile.vercel -t vomatt-api .
+# Production image: Railway builds this file (.railway/railway.ts dockerfilePath); docker compose builds it too
+# Local check: docker build -t vomatt-api .
 
 # ---- build ----
 FROM eclipse-temurin:25-jdk@sha256:2d5d5e9b533342a565907c84f47a2ec298c40cde7b13a3ca85d4950fa456a641 AS build

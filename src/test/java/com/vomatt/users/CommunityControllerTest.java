@@ -4,11 +4,13 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,6 +32,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import com.vomatt.common.exception.GlobalExceptionHandler;
 import com.vomatt.common.i18n.LocalizedMessageService;
 import com.vomatt.common.security.UserPrincipal;
+import com.vomatt.entity.CommunityRole;
+import com.vomatt.users.dto.CommunityInvitationDetailResponse;
 import com.vomatt.users.dto.UpdateCommunityRequest;
 import com.vomatt.users.dto.UserDto;
 
@@ -69,6 +73,25 @@ class CommunityControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.username").value("sunrise_tower"))
                 .andExpect(jsonPath("$.data.community").value(true));
+    }
+
+    @Test
+    void shouldReturnInvitationWithNullInviterWhenInviteeAsks() throws Exception {
+        UUID invitationId = UUID.randomUUID();
+        when(communityService.getInvitation(invitationId, USER_ID.toString())).thenReturn(new CommunityInvitationDetailResponse(
+                invitationId.toString(), CommunityRole.EDITOR, OffsetDateTime.parse("2026-11-18T14:52:00+08:00"),
+                new UserDto("c1", "sunrise_tower", "Sunrise Tower", null, null, null, true), null, true, false));
+
+        mockMvc.perform(get("/api/community-invitations/" + invitationId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(invitationId.toString()))
+                .andExpect(jsonPath("$.data.role").value("EDITOR"))
+                .andExpect(jsonPath("$.data.expiresAt").exists())
+                .andExpect(jsonPath("$.data.community.username").value("sunrise_tower"))
+                .andExpect(jsonPath("$.data.community.community").value(true))
+                .andExpect(jsonPath("$.data.inviter").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.data.locked").value(true))
+                .andExpect(jsonPath("$.data.member").value(false));
     }
 
     @Test

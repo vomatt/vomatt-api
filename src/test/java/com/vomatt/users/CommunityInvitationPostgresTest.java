@@ -25,6 +25,7 @@ import com.vomatt.repository.CommunityInvitationRepository;
 import com.vomatt.repository.CommunityMemberRepository;
 import com.vomatt.repository.NotificationRepository;
 import com.vomatt.repository.PostgresRepositoryTest;
+import com.vomatt.users.dto.CommunityInvitationDetailResponse;
 import com.vomatt.users.dto.CommunityInvitationResponse;
 import com.vomatt.votes.VoteServiceSlice;
 
@@ -110,6 +111,7 @@ class CommunityInvitationPostgresTest extends PostgresRepositoryTest {
 
         assertKey(() -> communityService.acceptInvitation(UUID.fromString(invitation.id()), dave.getId().toString()),
                 MessageKey.COMMUNITY_LOCKED);
+        assertThat(communityService.getInvitation(UUID.fromString(invitation.id()), dave.getId().toString()).locked()).isTrue();
         assertThat(memberRepository.findActiveRole(communityId, dave.getId())).isEmpty();
         assertThat(invitationRepository.existsById(UUID.fromString(invitation.id()))).isTrue();
     }
@@ -229,5 +231,90 @@ class CommunityInvitationPostgresTest extends PostgresRepositoryTest {
         assertThat(memberRepository.findActiveRole(communityId, phoneOnly.getId())).contains(CommunityRole.EDITOR);
         assertKey(() -> communityService.invite(communityId, phoneOnly.getId(), null, CommunityRole.ADMIN, owner.getId().toString()),
                 MessageKey.COMMUNITY_MEMBER_EXISTS);
+    }
+
+    @Test
+    void shouldShowInvitationToInviteeWhenSentToTheirAddressOrId() {
+        CommunityInvitationResponse byEmail = invite(dave.getEmail(), CommunityRole.EDITOR);
+        User erin = persistUser("ci-e-" + UUID.randomUUID().toString().substring(0, 8));
+        CommunityInvitationResponse byId = communityService.invite(communityId, erin.getId(), null, CommunityRole.ANALYST,
+                owner.getId().toString());
+        em.flush();
+
+        CommunityInvitationDetailResponse forDave = communityService.getInvitation(UUID.fromString(byEmail.id()), dave.getId().toString());
+        assertThat(forDave.id()).isEqualTo(byEmail.id());
+        assertThat(forDave.role()).isEqualTo(CommunityRole.EDITOR);
+        assertThat(forDave.expiresAt()).isEqualTo(byEmail.expiresAt());
+        assertThat(forDave.community().id()).isEqualTo(communityId.toString());
+        assertThat(forDave.community().displayName()).isEqualTo("Sunrise Tower");
+        assertThat(forDave.community().community()).isTrue();
+        assertThat(forDave.inviter().id()).isEqualTo(owner.getId().toString());
+        assertThat(forDave.inviter().username()).isEqualTo(owner.getUsername());
+        assertThat(forDave.locked()).isFalse();
+        assertThat(forDave.member()).isFalse();
+
+        assertThat(communityService.getInvitation(UUID.fromString(byId.id()), erin.getId().toString()).role())
+                .isEqualTo(CommunityRole.ANALYST);
+    }
+
+    @Test
+    void shouldHideInvitationWhenCallerIsNotTheInvitee() {
+        CommunityInvitationResponse invitation = invite(dave.getEmail(), CommunityRole.EDITOR);
+
+        assertKey(() -> communityService.getInvitation(UUID.fromString(invitation.id()), owner.getId().toString()),
+                MessageKey.COMMUNITY_INVITATION_NOT_FOUND);
+        assertKey(() -> communityService.getInvitation(UUID.randomUUID(), dave.getId().toString()),
+                MessageKey.COMMUNITY_INVITATION_NOT_FOUND);
+    }
+
+    @Test
+    void shouldHideInvitationWhenExpired() {
+        CommunityInvitationResponse invitation = invite(dave.getEmail(), CommunityRole.EDITOR);
+        em.createNativeQuery("UPDATE vomatt.community_invitations SET expires_at = now() - INTERVAL '1 minute' WHERE id = :id")
+                .setParameter("id", UUID.fromString(invitation.id())).executeUpdate();
+        em.clear();
+
+        assertKey(() -> communityService.getInvitation(UUID.fromString(invitation.id()), dave.getId().toString()),
+                MessageKey.COMMUNITY_INVITATION_NOT_FOUND);
+    }
+
+    @Test
+    void shouldHideInvitationWhenCommunityIsSuspended() {
+        CommunityInvitationResponse invitation = invite(dave.getEmail(), CommunityRole.EDITOR);
+        em.createNativeQuery("UPDATE vomatt.users SET active = false WHERE id = :id").setParameter("id", communityId).executeUpdate();
+        em.clear();
+
+        assertKey(() -> communityService.getInvitation(UUID.fromString(invitation.id()), dave.getId().toString()),
+                MessageKey.COMMUNITY_INVITATION_NOT_FOUND);
+    }
+
+    @Test
+    void shouldHideInvitationWhenCommunityIsDeleted() {
+        CommunityInvitationResponse invitation = invite(dave.getEmail(), CommunityRole.EDITOR);
+        em.createNativeQuery("DELETE FROM vomatt.users WHERE id = :id").setParameter("id", communityId).executeUpdate();
+        em.clear();
+
+        assertKey(() -> communityService.getInvitation(UUID.fromString(invitation.id()), dave.getId().toString()),
+                MessageKey.COMMUNITY_INVITATION_NOT_FOUND);
+    }
+
+    @Test
+    void shouldTellInviteeTheyAreAlreadyAMember() {
+        CommunityInvitationResponse invitation = invite(dave.getEmail(), CommunityRole.EDITOR);
+        memberRepository.insertIfAbsent(communityId, dave.getId(), CommunityRole.CHIEF_EDITOR.name());
+        em.flush();
+
+        assertThat(communityService.getInvitation(UUID.fromString(invitation.id()), dave.getId().toString()).member()).isTrue();
+    }
+
+    @Test
+    void shouldShowNoInviterWhenInvitersAccountIsDeleted() {
+        CommunityInvitationResponse invitation = invite(dave.getEmail(), CommunityRole.EDITOR);
+        em.createNativeQuery("DELETE FROM vomatt.users WHERE id = :id").setParameter("id", owner.getId()).executeUpdate();
+        em.clear();
+
+        CommunityInvitationDetailResponse detail = communityService.getInvitation(UUID.fromString(invitation.id()), dave.getId().toString());
+        assertThat(detail.inviter()).isNull();
+        assertThat(detail.community().id()).isEqualTo(communityId.toString());
     }
 }

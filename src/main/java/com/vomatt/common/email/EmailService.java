@@ -44,8 +44,8 @@ public interface EmailService {
     /**
      * Invites an address with no account to join a community account in the background, failures only logged: once
      * signed up with the address, the invitee accepts it like any other ({@code role} is an enum name, labelled from
-     * {@code community.role.*}).
+     * {@code community.role.*}). The button opens the invitation's page.
      */
-    void sendCommunityInvitationEmail(String to, String inviterName, String inviterUsername, String communityName,
-                                      String role, Duration expiresIn, Locale locale);
+    void sendCommunityInvitationEmail(String to, UUID invitationId, String inviterName, String inviterUsername,
+                                      String communityName, String role, Duration expiresIn, Locale locale);
 }

@@ -43,6 +43,7 @@ import static org.mockito.Mockito.when;
 class EmailTemplateTest {
 
     private static final Locale ZH_TW = Locale.forLanguageTag("zh-TW");
+    private static final UUID INVITATION_ID = UUID.fromString("019a6b2c-3d4e-7f50-8a61-b2c3d4e5f607");
 
     private final JavaMailSender mailSender = mock(JavaMailSender.class);
     private final EmailServiceImpl emailService = createEmailService();
@@ -58,7 +59,7 @@ class EmailTemplateTest {
         emailService.sendPreSignupEmail("a@example.com", "123456");
 
         String html = sentHtml();
-        assertThat(html).contains("123456", "你好，", "感謝您註冊 Vomatt 帳戶", "3 分鐘", "服務條款", "https://staging.vomatt.com/privacy-policy")
+        assertThat(html).contains("123456", "你好，", "感謝您註冊 Vomatt 帳戶", "3 分鐘", "服務條款", "https://about.staging.vomatt.com/zh/privacy-policy")
                 .doesNotContain("??", "©", "點一下驗證碼");
     }
 
@@ -86,7 +87,7 @@ class EmailTemplateTest {
 
         String html = sentHtml();
         assertThat(html).contains("654321", "complete your login", "expire in 3 minutes",
-                "Contact Us", "https://staging.vomatt.com/terms-of-service").doesNotContain("??", "pre-signup", "©", "Tap the code");
+                "Contact Us", "https://about.staging.vomatt.com/terms-of-service", "https://about.staging.vomatt.com/contact").doesNotContain("??", "pre-signup", "©", "Tap the code");
     }
 
     @Test
@@ -132,15 +133,31 @@ class EmailTemplateTest {
 
     @Test
     void shouldRenderCommunityInvitationWithRoleAndExpiryWhenLocaleIsZhTwOrEn() throws Exception {
-        emailService.sendCommunityInvitationEmail("a@example.com", "Amy", "amy", "Sunrise Tower", "EDITOR",
+        emailService.sendCommunityInvitationEmail("a@example.com", INVITATION_ID, "Amy", "amy", "Sunrise Tower", "EDITOR",
                 java.time.Duration.ofDays(7), ZH_TW);
         assertThat(sentHtml()).contains("在 Vomatt 加入 Sunrise Tower", "Amy（@amy）邀請您以「編輯」身分加入",
-                "加入社群帳號", "https://staging.vomatt.com/login", "7 天後失效").doesNotContain("??");
+                "加入社群帳號", "7 天後失效").doesNotContain("??");
 
-        emailService.sendCommunityInvitationEmail("b@example.com", "Amy", "amy", "Sunrise Tower", "CHIEF_EDITOR",
+        emailService.sendCommunityInvitationEmail("b@example.com", INVITATION_ID, "Amy", "amy", "Sunrise Tower", "CHIEF_EDITOR",
                 java.time.Duration.ofDays(7), Locale.ENGLISH);
         assertThat(sentHtml()).contains("Join Sunrise Tower on Vomatt", "Amy (@amy) invited you",
                 "as Chief editor", "expires in 7 days").doesNotContain("??");
+    }
+
+    @Test
+    void shouldLinkToInvitationPageWhenCommunityInvitationIsMailed() throws Exception {
+        emailService.sendCommunityInvitationEmail("a@example.com", INVITATION_ID, "Amy", "amy", "Sunrise Tower", "EDITOR",
+                java.time.Duration.ofDays(7), Locale.ENGLISH);
+
+        assertThat(sentHtml()).contains("href=\"https://staging.vomatt.com/notifications/community-invitations/" + INVITATION_ID + "\"")
+                .doesNotContain("https://staging.vomatt.com/login");
+    }
+
+    @Test
+    void shouldLinkToSignupPageWhenSignupInvitationIsMailed() throws Exception {
+        emailService.sendSignupInvitationEmails(List.of("a@example.com"), "Amy", Locale.ENGLISH);
+
+        assertThat(sentHtml()).contains("href=\"https://staging.vomatt.com/login\"");
     }
 
     @Test
@@ -171,7 +188,7 @@ class EmailTemplateTest {
         String text = sentText();
         assertThat(text).contains("Amy invited you", "Lunch <b>vote</b>",
                 "Open the Poll (https://staging.vomatt.com/poll/" + pollId + ")",
-                "Privacy Policy (https://staging.vomatt.com/privacy-policy)")
+                "Privacy Policy (https://about.staging.vomatt.com/privacy-policy)")
                 .doesNotContain("<p", "<td", "<a ", "&lt;", "color-scheme", "\n\n");
     }
 
@@ -238,10 +255,15 @@ class EmailTemplateTest {
 
     /** {@code app.email.poll-path} from application.yml, resolved as Spring would with EMAIL_POLL_PATH unset. */
     private static String defaultPollPath() {
+        return defaultPath("poll-path", "EMAIL_POLL_PATH");
+    }
+
+    /** {@code app.email.<property>} from application.yml, resolved as Spring would with {@code envVar} unset. */
+    private static String defaultPath(String property, String envVar) {
         YamlPropertiesFactoryBean yaml = new YamlPropertiesFactoryBean();
         yaml.setResources(new ClassPathResource("application.yml"));
-        String placeholder = yaml.getObject().getProperty("app.email.poll-path");
-        return new StandardEnvironment().resolvePlaceholders(placeholder.replace("EMAIL_POLL_PATH", "EMAIL_POLL_PATH_UNSET"));
+        String placeholder = yaml.getObject().getProperty("app.email." + property);
+        return new StandardEnvironment().resolvePlaceholders(placeholder.replace(envVar, envVar + "_UNSET"));
     }
 
     private String sentHtml() throws Exception {
@@ -296,9 +318,11 @@ class EmailTemplateTest {
         ReflectionTestUtils.setField(service, "fromEmail", "noreply@vomatt.com");
         ReflectionTestUtils.setField(service, "replyTo", "");
         ReflectionTestUtils.setField(service, "siteUrl", "https://staging.vomatt.com");
+        ReflectionTestUtils.setField(service, "aboutUrl", "https://about.staging.vomatt.com");
         ReflectionTestUtils.setField(service, "otpTtlSeconds", 180L);
         ReflectionTestUtils.setField(service, "pollPath", defaultPollPath());
         ReflectionTestUtils.setField(service, "signupPath", "/login");
+        ReflectionTestUtils.setField(service, "communityInvitationPath", defaultPath("community-invitation-path", "EMAIL_COMMUNITY_INVITATION_PATH"));
         return service;
     }
 }

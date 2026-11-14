@@ -140,10 +140,14 @@ app:
     reply-to: ${EMAIL_REPLY_TO:}
     # Frontend origin used for links in emails (logo, footer)
     site-url: ${EMAIL_SITE_URL:https://vomatt.com}
+    # About site origin for the footer's Terms, Privacy and Contact links; /zh is added for Chinese emails
+    about-url: ${EMAIL_ABOUT_URL:https://about.vomatt.com}
     # Frontend path of a Poll, appended to site-url in invitation emails; {voteId} is replaced
     poll-path: ${EMAIL_POLL_PATH:/poll/{voteId}}
-    # Frontend sign-up page, appended to site-url in invitations for addresses with no account
+    # Frontend sign-up page, appended to site-url in Invite List invitations for addresses with no account
     signup-path: ${EMAIL_SIGNUP_PATH:/login}
+    # Frontend page of a community account invitation, appended to site-url in its email; {invitationId} is replaced
+    community-invitation-path: ${EMAIL_COMMUNITY_INVITATION_PATH:/notifications/community-invitations/{invitationId}}
   security:
     # Comma-separated frontend origins; * is not allowed
     cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}

@@ -301,9 +301,10 @@ class CommunityServiceTest {
         when(userRepository.getReferenceById(communityId)).thenReturn(User.builder().id(communityId).username("tower").displayName("Sunrise Tower").build());
         when(userRepository.getReferenceById(callerId)).thenReturn(User.builder().id(callerId).username("amy").build());
 
-        service.invite(communityId, null, "dave@example.com", CommunityRole.EDITOR, callerId.toString());
+        com.vomatt.users.dto.CommunityInvitationResponse invitation = service.invite(communityId, null, "dave@example.com", CommunityRole.EDITOR, callerId.toString());
 
-        verify(emailService).sendCommunityInvitationEmail(org.mockito.ArgumentMatchers.eq("dave@example.com"), org.mockito.ArgumentMatchers.eq("amy"),
+        verify(emailService).sendCommunityInvitationEmail(org.mockito.ArgumentMatchers.eq("dave@example.com"),
+                org.mockito.ArgumentMatchers.eq(UUID.fromString(invitation.id())), org.mockito.ArgumentMatchers.eq("amy"),
                 org.mockito.ArgumentMatchers.eq("amy"), org.mockito.ArgumentMatchers.eq("Sunrise Tower"), org.mockito.ArgumentMatchers.eq("EDITOR"),
                 org.mockito.ArgumentMatchers.eq(CommunityService.INVITATION_TTL), org.mockito.ArgumentMatchers.any());
     }

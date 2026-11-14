@@ -31,6 +31,7 @@ import com.vomatt.common.email.InvitationEmailLimiter;
 import com.vomatt.common.util.AfterCommit;
 import com.vomatt.entity.CommunityInvitation;
 import com.vomatt.repository.CommunityInvitationRepository;
+import com.vomatt.users.dto.CommunityInvitationDetailResponse;
 import com.vomatt.users.dto.CommunityInvitationResponse;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -147,14 +148,14 @@ public class CommunityService {
             throw ApiException.conflict(MessageKey.COMMUNITY_INVITATION_EXISTS);
         }
         if (email != null && !userRepository.existsByEmail(email)) {
-            mailInvitation(communityId, email, role, callerId);
+            mailInvitation(communityId, invitation.getId(), email, role, callerId);
         }
         log.info("Community account {}: {} invited {} as {} ({})", communityId, callerId, userId != null ? userId : "an address",
                 role, invitation.getId());
         return toResponse(invitation, user, user == null ? null : PublicNames.load(user, preferenceRepository));
     }
 
-    private void mailInvitation(UUID communityId, String address, CommunityRole role, String callerId) {
+    private void mailInvitation(UUID communityId, UUID invitationId, String address, CommunityRole role, String callerId) {
         // Counted against the inviting person, not the community account: anyone can create community accounts, so a
         // per-community budget would multiply with each one they make
         if (invitationEmailLimiter.claim(UUID.fromString(callerId), communityId, List.of(address)).isEmpty()) {
@@ -166,8 +167,8 @@ public class CommunityService {
         String inviterName = inviter.displayNameOrUsername();
         String inviterUsername = inviter.getUsername();
         Locale locale = LocaleContextHolder.getLocale();
-        AfterCommit.run(() -> emailService.sendCommunityInvitationEmail(address, inviterName, inviterUsername, communityName,
-                role.name(), INVITATION_TTL, locale));
+        AfterCommit.run(() -> emailService.sendCommunityInvitationEmail(address, invitationId, inviterName, inviterUsername,
+                communityName, role.name(), INVITATION_TTL, locale));
     }
 
     /** OWNER or ADMIN: the community account's invitations, expired ones included, oldest first. */
@@ -222,6 +223,27 @@ public class CommunityService {
         invitationRepository.deleteForInvitee(community.getId(), caller.getId(), caller.getEmail());
         log.info("Community account {}: {} accepted invitation {} as {}", community.getId(), callerId, invitationId, role);
         return toMine(community, role);
+    }
+
+    /**
+     * The invitee's view of an invitation, for the page its email links to. Visible exactly when it could be answered:
+     * sent to the caller, unexpired, and its community account active; anyone else gets not found.
+     */
+    @Transactional(readOnly = true)
+    public CommunityInvitationDetailResponse getInvitation(UUID invitationId, String callerId) {
+        User caller = userRepository.findById(UUID.fromString(callerId))
+                .orElseThrow(() -> ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
+        CommunityInvitation invitation = findOwnInvitation(invitationId, caller);
+        User community = userRepository.findById(invitation.getCommunityUserId()).filter(User::isActive)
+                .orElseThrow(() -> ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
+        User inviter = invitation.getInvitedBy() == null ? null : userRepository.findById(invitation.getInvitedBy()).orElse(null);
+        Map<UUID, PublicName> names = PublicNames.load(inviter == null ? List.of(community) : List.of(community, inviter),
+                preferenceRepository);
+        return new CommunityInvitationDetailResponse(invitation.getId().toString(), invitation.getRole(), invitation.getExpiresAt(),
+                userMapper.toSearchResult(community, names.get(community.getId())),
+                inviter == null ? null : userMapper.toSearchResult(inviter, names.get(inviter.getId())),
+                community.getLockedAt() != null,
+                memberRepository.findByCommunityUserIdAndUserId(community.getId(), caller.getId()).isPresent());
     }
 
     /** The invitee turns the invitation down; it is deleted, and its notification goes with it. */

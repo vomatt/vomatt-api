@@ -68,12 +68,19 @@ public class EmailServiceImpl implements EmailService {
     @Value("${app.email.site-url:https://vomatt.com}")
     private String siteUrl;
 
+    // The footer's legal and contact pages live on the about site, in the email's language
+    @Value("${app.email.about-url:https://about.vomatt.com}")
+    private String aboutUrl;
+
     @Value("${app.email.poll-path:/poll/{voteId}}")
     private String pollPath;
 
-    // Where a join invitation's button leads: the sign-up page, as signing up with the address is what joins
+    // Where a sign-up invitation's button leads: the sign-up page, as signing up with the address is what joins
     @Value("${app.email.signup-path:/login}")
     private String signupPath;
+
+    @Value("${app.email.community-invitation-path:/notifications/community-invitations/{invitationId}}")
+    private String communityInvitationPath;
 
     private static final DateTimeFormatter SENT_AT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
@@ -195,26 +202,27 @@ public class EmailServiceImpl implements EmailService {
     @Async
     @Override
     public void sendSignupInvitationEmails(List<String> recipients, String inviterName, Locale locale) {
-        sendPaced("sign-up invitations", recipients, to -> sendJoinInvitation(to, "vomatt", locale, Map.of("inviterName", Objects.toString(inviterName, ""))));
+        sendPaced("sign-up invitations", recipients, to -> sendJoinInvitation(to, "vomatt", siteUrl + signupPath, locale,
+                Map.of("inviterName", Objects.toString(inviterName, ""))));
     }
 
     @Async
     @Override
-    public void sendCommunityInvitationEmail(String to, String inviterName, String inviterUsername, String communityName,
-                                             String role, Duration expiresIn, Locale locale) {
-        sendJoinInvitation(to, "community", locale,
+    public void sendCommunityInvitationEmail(String to, UUID invitationId, String inviterName, String inviterUsername,
+                                             String communityName, String role, Duration expiresIn, Locale locale) {
+        sendJoinInvitation(to, "community", siteUrl + communityInvitationPath.replace("{invitationId}", invitationId.toString()), locale,
                 Map.of("inviterName", Objects.toString(inviterName, ""), "inviterUsername", inviterUsername,
                         "communityName", communityName, "role", role, "expiresDays", expiresIn.toDays()));
     }
 
     // Shaped like a team invitation: greeting by address, the invite, a button and its URL, then when and to whom it was
     // sent. kind picks the texts, email.join.<kind>.*
-    private void sendJoinInvitation(String to, String kind, Locale locale, Map<String, Object> variables) {
+    private void sendJoinInvitation(String to, String kind, String joinUrl, Locale locale, Map<String, Object> variables) {
         String subjectKey = "email.join." + kind + ".subject";
         Map<String, Object> all = new HashMap<>(variables);
         all.put("kind", kind);
         all.put("email", to);
-        all.put("joinUrl", siteUrl + signupPath);
+        all.put("joinUrl", joinUrl);
         all.put("sentAt", OffsetDateTime.now(ZoneOffset.UTC).format(SENT_AT));
         try {
             send(to, subjectKey, "email/join-invitation-email", locale, all);
@@ -229,6 +237,7 @@ public class EmailServiceImpl implements EmailService {
         String subject = messageSource.getMessage(subjectKey, null, locale);
         Context context = new Context(locale, variables);
         context.setVariable("siteUrl", siteUrl);
+        context.setVariable("aboutUrl", aboutUrl + ("zh".equals(locale.getLanguage()) ? "/zh" : ""));
         String html = templateEngine.process(template, context);
         // An HTML-only email scores as spam with Gmail and others, so every email carries a text/plain part too
         String text = toPlainText(html);

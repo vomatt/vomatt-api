@@ -9,6 +9,7 @@ import com.vomatt.common.response.ApiResponse;
 import com.vomatt.common.response.SimpleResultResponse;
 import com.vomatt.common.security.ActingMember;
 import com.vomatt.common.security.UserPrincipal;
+import com.vomatt.users.dto.CommunityInvitationDetailResponse;
 import com.vomatt.users.dto.CommunityInvitationRequest;
 import com.vomatt.users.dto.CommunityInvitationResponse;
 import com.vomatt.users.dto.MyCommunityResponse;
@@ -424,6 +425,37 @@ public class CommunityController {
             @AuthenticationPrincipal UserPrincipal principal) {
         communityService.revokeInvitation(communityId, invitationId, ActingMember.realUserId(principal));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
+    @GetMapping("/api/community-invitations/{invitationId}")
+    @CommonApiResponses
+    @Operation(summary = "Get a community account invitation sent to the caller", description = """
+            **Auth**: required; refused while acting as a community account (`X-Act-As`)
+            **Precondition**: the invitation was sent to the caller (by id or to their email address) and has not expired
+            **Behavior**: the invitation as its invitee sees it, for the page the invitation email links to: the role, \
+            when it expires, the community account and the member who sent it (`inviter`, null once their account is \
+            deleted), each with public names masked by their visibility settings. `locked`: the community account is locked, so accept answers 403 `community.locked` until it is unlocked. `member`: the caller already belongs to it, so accepting keeps their role. \
+            Visible exactly when accept or decline would find it; any other caller gets the same 404, so it never tells whether the invitation exists. The \
+            invitation id is the one in the email link, or `communityInvitation.id` of the `COMMUNITY_INVITATION` notification.
+            **Side effects**: none
+            """)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Invitation",
+            content = @Content(examples = @ExampleObject(name = "Invitation", value = """
+                    { "success": true, "data": { "id": "019a6b2c-3d4e-7f50-8a61-b2c3d4e5f607", "role": "EDITOR",
+                        "expiresAt": "2026-11-18T14:52:00+08:00",
+                        "community": { "id": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48", "username": "sunrise_tower",
+                          "displayName": "Sunrise Tower Committee", "firstName": null, "lastName": null, "avatarUrl": null,
+                          "community": true },
+                        "inviter": { "id": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47", "username": "amy", "displayName": "Amy",
+                          "firstName": null, "lastName": null, "avatarUrl": "bot:boba", "community": false }, "locked": false, "member": false },
+                      "message": null, "errorCode": null, "error": null }
+                    """)))
+    @ApiError(status = 404, key = MessageKey.COMMUNITY_INVITATION_NOT_FOUND, when = "no unexpired invitation with this id was sent to the caller, or the community account is suspended")
+    public ResponseEntity<ApiResponse<CommunityInvitationDetailResponse>> getInvitation(
+            @Parameter(description = "Invitation id", required = true, example = "019a6b2c-3d4e-7f50-8a61-b2c3d4e5f607")
+            @PathVariable UUID invitationId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(communityService.getInvitation(invitationId, ActingMember.realUserId(principal))));
     }
 
     @PostMapping("/api/community-invitations/{invitationId}/accept")

@@ -56,8 +56,9 @@ public class EmailServiceNoOp implements EmailService {
     }
 
     @Override
-    public void sendCommunityInvitationEmail(String to, String inviterName, String inviterUsername, String communityName,
-                                             String role, Duration expiresIn, Locale locale) {
-        logger.info("[EMAIL-NOOP] invitation to community {} as {} for {}", communityName, role, TextUtil.maskEmail(to));
+    public void sendCommunityInvitationEmail(String to, UUID invitationId, String inviterName, String inviterUsername,
+                                             String communityName, String role, Duration expiresIn, Locale locale) {
+        logger.info("[EMAIL-NOOP] invitation {} to community {} as {} for {}", invitationId, communityName, role,
+                TextUtil.maskEmail(to));
     }
 }

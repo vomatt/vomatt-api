@@ -12,7 +12,7 @@ public final class ReservedUsernames {
 
     // Regex alternation so it can be embedded in compile-time @Pattern constants
     private static final String ALTERNATION =
-            "search|account|explore|login|notifications|poll|sanity|api|me|my|admin|settings";
+            "search|account|explore|login|notifications|poll|sanity|api|me|my|admin|settings|contact";
 
     /** One character a username may hold. */
     public static final String USERNAME_CHAR = "[a-z0-9_]";

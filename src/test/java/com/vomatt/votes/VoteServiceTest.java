@@ -1271,14 +1271,16 @@ class VoteServiceTest {
         }
     }
 
-    // ─── hasUserVoted ─────────────────────────────────────────────────────────
+    // ─── getMyVoteStatus ──────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("hasUserVoted should delegate to repository")
-    void shouldDelegateHasUserVotedToRepository() {
+    @DisplayName("getMyVoteStatus should report no Ballot when the caller has none")
+    void shouldReportNoBallotWhenCallerHasNone() {
         when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
-        when(userVoteRepository.existsByUserIdAndVoteId(userId, voteId)).thenReturn(true);
-        assertThat(voteService.hasUserVoted(voteId.toString(), userId.toString())).isTrue();
+        when(userVoteRepository.findByUserIdAndVoteId(userId, voteId)).thenReturn(Optional.empty());
+        var status = voteService.getMyVoteStatus(voteId.toString(), userId.toString());
+        assertThat(status.isHasVoted()).isFalse();
+        assertThat(status.getSelectedOptions()).isEmpty();
     }
 
     // ─── deleteVote ───────────────────────────────────────────────────────────
@@ -1400,7 +1402,7 @@ class VoteServiceTest {
                     () -> voteService.retract(id, owner),
                     () -> voteService.getVoteResults(id, owner),
                     () -> voteService.getVoters(id, owner, null, null),
-                    () -> voteService.hasUserVoted(id, owner),
+                    () -> voteService.getMyVoteStatus(id, owner),
                     () -> voteService.closeVote(id, owner),
                     () -> voteService.deleteVote(id, owner));
             paths.forEach(path -> assertThatThrownBy(path)
@@ -1451,7 +1453,7 @@ class VoteServiceTest {
                     () -> voteService.retract(id, stranger),
                     () -> voteService.getVoteResults(id, stranger),
                     () -> voteService.getVoters(id, stranger, null, null),
-                    () -> voteService.hasUserVoted(id, stranger),
+                    () -> voteService.getMyVoteStatus(id, stranger),
                     () -> voteService.getInvitees(id, stranger),
                     () -> voteService.addInvitees(id, invite, stranger),
                     () -> voteService.removeInvitee(id, stranger, stranger),

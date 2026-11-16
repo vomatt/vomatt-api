@@ -1,7 +1,5 @@
 package com.vomatt.repository;
 
-import com.vomatt.common.util.TimeUtil;
-
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.EnumMap;
@@ -14,6 +12,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Repository;
 
+import com.vomatt.common.util.TimeUtil;
 import com.vomatt.common.response.Cursor;
 import com.vomatt.entity.NotificationKind;
 

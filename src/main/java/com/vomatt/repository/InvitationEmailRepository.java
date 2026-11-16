@@ -1,7 +1,5 @@
 package com.vomatt.repository;
 
-import com.vomatt.common.util.TimeUtil;
-
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -13,6 +11,8 @@ import org.springframework.stereotype.Repository;
 
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+
+import com.vomatt.common.util.TimeUtil;
 
 /** Sign-up invitation emails sent, per sender and address ({@code invitation_emails}). */
 @Repository

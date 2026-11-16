@@ -312,8 +312,9 @@ public class VoteService {
     public CursorResponse<VoteResponse> listBookmarkedVotes(String userId, String cursor, Integer limit) {
         int size = CursorResponse.limit(limit);
         Cursor after = Cursor.decode(cursor, Cursor.Scope.BOOKMARKS);
-        List<VoteBookmark> rows = bookmarkRepository.findPage(UUID.fromString(userId),
-            after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
+        UUID user = UUID.fromString(userId);
+        List<VoteBookmark> rows = after == null ? bookmarkRepository.findPage(user, Limit.of(size + 1))
+            : bookmarkRepository.findPageAfter(user, after.timeKey(), after.id(), Limit.of(size + 1));
         return CursorResponse.of(rows, size, Cursor.Scope.BOOKMARKS, b -> Cursor.of(b.getCreatedAt(), b.getId()),
             page -> {
                 List<Vote> votes = page.stream().map(VoteBookmark::getVote).toList();
@@ -586,8 +587,8 @@ public class VoteService {
 
         int size = CursorResponse.limit(limit);
         Cursor after = Cursor.decode(cursor, Cursor.Scope.VOTERS);
-        List<UserVote> rows = userVoteRepository.findVoterPage(vote.getId(),
-            after == null ? null : after.timeKey(), after == null ? null : after.id(), Limit.of(size + 1));
+        List<UserVote> rows = after == null ? userVoteRepository.findVoterPage(vote.getId(), Limit.of(size + 1))
+            : userVoteRepository.findVoterPageAfter(vote.getId(), after.timeKey(), after.id(), Limit.of(size + 1));
         return CursorResponse.of(rows, size, Cursor.Scope.VOTERS, ballot -> Cursor.of(ballot.getCreatedAt(), ballot.getId()),
             page -> {
                 Map<UUID, PublicName> names = PublicNames.load(page.stream().map(UserVote::getUser).toList(), preferenceRepository);
@@ -953,8 +954,6 @@ public class VoteService {
         }
         List<UUID> ids = votes.stream().map(Vote::getId).toList();
         OffsetDateTime now = OffsetDateTime.now();
-        Map<UUID, Long> commentCounts = voteCommentRepository.countVisibleByVoteIds(ids).stream()
-            .collect(Collectors.toMap(IdCount::getId, IdCount::getCount));
         Map<UUID, BallotSelection> selections = userId == null ? Map.of()
             : userVoteRepository.findSelections(UUID.fromString(userId), ids).stream()
                 .collect(Collectors.toMap(BallotSelection::getVoteId, Function.identity(), (a, b) -> a));
@@ -972,7 +971,7 @@ public class VoteService {
             // A sealed Anonymous Ballot (Ended Poll) has no option any more; the Ballot itself is still the caller's
             response.setMyOptionId(mine == null || mine.getOptionId() == null ? null : mine.getOptionId().toString());
             response.setMyBallotAnonymous(mine == null ? null : mine.isAnonymous());
-            response.setCommentCount(commentCounts.getOrDefault(vote.getId(), 0L));
+            response.setCommentCount(vote.getCommentCount());
             if (userId != null) {
                 response.setBookmarked(bookmarked.contains(vote.getId()));
             }

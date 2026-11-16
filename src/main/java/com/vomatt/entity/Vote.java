@@ -84,6 +84,10 @@ public class Vote extends AuditableEntity {
     @Column(name = "like_count", insertable = false, updatable = false)
     private int likeCount;
 
+    /** Live Comments and Replies; written only by atomic SQL in {@code VoteCommentRepository}, never by the entity. */
+    @Column(name = "comment_count", insertable = false, updatable = false)
+    private int commentCount;
+
     @Column(name = "is_active")
     private boolean isActive = true;
 

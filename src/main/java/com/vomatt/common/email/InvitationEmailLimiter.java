@@ -2,6 +2,7 @@ package com.vomatt.common.email;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -67,7 +68,7 @@ public class InvitationEmailLimiter {
      * account) within {@link #RESEND_AFTER}, even after the invitation was revoked, within the daily quota.
      */
     public List<String> claim(UUID senderId, UUID scopeId, Collection<String> emails) {
-        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime now = sentNow();
         UUID sender = realSender(senderId);
         return claim(sender, emails,
                 unsent -> invitationEmailRepository.findSentSince(scopeId, unsent, now.minus(RESEND_AFTER)),
@@ -81,7 +82,7 @@ public class InvitationEmailLimiter {
      * the address may next be mailed about the scope.
      */
     public OffsetDateTime claimOrThrow(UUID senderId, UUID scopeId, String email) {
-        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime now = sentNow();
         if (!invitationEmailRepository.findSentSince(scopeId, List.of(email), now.minus(RESEND_AFTER)).isEmpty()) {
             throw ApiException.tooManyRequests(MessageKey.INVITATION_EMAIL_TOO_SOON);
         }
@@ -124,6 +125,11 @@ public class InvitationEmailLimiter {
             record.accept(recipients);
         }
         return recipients;
+    }
+
+    // At the precision sent_at keeps (Postgres stores microseconds), so a returned time equals the one read back later
+    private static OffsetDateTime sentNow() {
+        return OffsetDateTime.now().truncatedTo(ChronoUnit.MICROS);
     }
 
     /** The member acting as the community account {@code senderId}, or the sender itself. */

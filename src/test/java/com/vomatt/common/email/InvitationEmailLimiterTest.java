@@ -1,6 +1,7 @@
 package com.vomatt.common.email;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -50,6 +51,28 @@ class InvitationEmailLimiterTest {
 
         assertThat(limiter.claim(senderId, scopeId, List.of("a@example.com", "b@example.com"))).containsExactly("b@example.com");
         verify(repository).recordSent(eq(senderId), eq(scopeId), eq(List.of("b@example.com")), any());
+    }
+
+    @Test
+    void shouldRefuseWithoutTakingQuotaWhenResendIsTooSoon() {
+        when(repository.findSentSince(eq(scopeId), any(), any())).thenReturn(List.of("a@example.com"));
+
+        assertThatThrownBy(() -> limiter.claimOrThrow(senderId, scopeId, "a@example.com")).isInstanceOfSatisfying(
+                com.vomatt.common.exception.ApiException.class,
+                ex -> assertThat(ex.getMessageKey()).isEqualTo(com.vomatt.common.i18n.MessageKey.INVITATION_EMAIL_TOO_SOON));
+        verifyNoInteractions(redisService);
+        verify(repository, never()).recordSent(any(), any(), any(), any());
+    }
+
+    @Test
+    void shouldRefuseAndRecordNothingWhenResendIsOverDailyLimit() {
+        when(lookupService.configInt(anyString(), anyInt())).thenReturn(200);
+        when(redisService.incrementAndExpire(eq("email:invitation"), anyString(), eq(1L), any())).thenReturn(201L);
+
+        assertThatThrownBy(() -> limiter.claimOrThrow(senderId, scopeId, "a@example.com")).isInstanceOfSatisfying(
+                com.vomatt.common.exception.ApiException.class,
+                ex -> assertThat(ex.getMessageKey()).isEqualTo(com.vomatt.common.i18n.MessageKey.INVITATION_EMAIL_DAILY_LIMIT));
+        verify(repository, never()).recordSent(any(), any(), any(), any());
     }
 
     @Test

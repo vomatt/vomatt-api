@@ -5,11 +5,14 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.vomatt.entity.CommunityInvitation;
+
+import jakarta.persistence.LockModeType;
 
 public interface CommunityInvitationRepository extends JpaRepository<CommunityInvitation, UUID> {
 
@@ -18,6 +21,11 @@ public interface CommunityInvitationRepository extends JpaRepository<CommunityIn
     Optional<CommunityInvitation> findByCommunityUserIdAndUserId(UUID communityUserId, UUID userId);
 
     Optional<CommunityInvitation> findByIdAndCommunityUserId(UUID id, UUID communityUserId);
+
+    /** The invitation, locked so two resends of it cannot both pass the resend window. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT i FROM CommunityInvitation i WHERE i.id = :id AND i.communityUserId = :communityId")
+    Optional<CommunityInvitation> lockByIdAndCommunityUserId(@Param("id") UUID id, @Param("communityId") UUID communityId);
 
     /** A community account's invitations, expired ones included, oldest first. */
     List<CommunityInvitation> findByCommunityUserIdOrderByCreatedAtAscIdAsc(UUID communityUserId);

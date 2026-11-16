@@ -56,21 +56,24 @@ public class VoteListRepository {
     @SuppressWarnings("unchecked")
     public List<Vote> findPage(VoteListOrder order, String tag, String query, Cursor after, OffsetDateTime now,
                                int limit, UUID viewerId) {
-        StringBuilder sql = new StringBuilder("SELECT v.* FROM vomatt.votes v WHERE v.deleted_at IS NULL AND v.audience = 'PUBLIC' AND ");
+        // A tag filter walks that tag's vote_tags rows, which carry the Poll's times, in keyset order
+        // (idx_vote_tags_tag_start / idx_vote_tags_tag_end); slugs are unique and (vote_id, tag_id) is the key, so one row per Poll
+        String k = tag != null ? "vt." : "v.";
+        String id = tag != null ? "vt.vote_id" : "v.id";
+        StringBuilder sql = new StringBuilder("SELECT v.* FROM ").append(tag != null
+                ? "vomatt.vote_tags vt JOIN vomatt.votes v ON v.id = vt.vote_id WHERE vt.tag_id = (SELECT t.id FROM vomatt.tags t WHERE t.slug = :tag) AND "
+                : "vomatt.votes v WHERE ");
+        sql.append("v.deleted_at IS NULL AND v.audience = 'PUBLIC' AND ");
         List<String> sortColumns = switch (order) {
-            case NEWEST -> List.of("v.start_time");
-            case CLOSING, ENDED -> List.of("v.end_time");
-            case TOP -> List.of("v.turnout", "v.start_time");
+            case NEWEST -> List.of(k + "start_time");
+            case CLOSING, ENDED -> List.of(k + "end_time");
+            case TOP -> List.of("v.turnout", k + "start_time");
         };
         boolean descending = order != VoteListOrder.CLOSING;
 
         sql.append(order == VoteListOrder.ENDED
-                ? "v.end_time <= :now"
-                : "v.start_time <= :now AND v.end_time > :now");
-        if (tag != null) {
-            sql.append(" AND EXISTS (SELECT 1 FROM vomatt.vote_tags vt JOIN vomatt.tags t ON t.id = vt.tag_id")
-               .append(" WHERE vt.vote_id = v.id AND t.slug = :tag)");
-        }
+                ? k + "end_time <= :now"
+                : k + "start_time <= :now AND " + k + "end_time > :now");
         if (query != null) {
             sql.append(SEARCH_CONDITION);
         }
@@ -78,13 +81,14 @@ public class VoteListRepository {
             sql.append(NOT_BLOCKED_BY_VIEWER);
         }
         if (after != null) {
-            sql.append(" AND (").append(String.join(", ", sortColumns)).append(", v.id) ").append(descending ? "<" : ">")
+            sql.append(" AND (").append(String.join(", ", sortColumns)).append(", ").append(id).append(") ")
+               .append(descending ? "<" : ">")
                .append(order == VoteListOrder.TOP ? " (:afterCount, :afterKey, :afterId)" : " (:afterKey, :afterId)");
         }
         String direction = descending ? " DESC" : " ASC";
         sql.append(" ORDER BY ");
         sortColumns.forEach(column -> sql.append(column).append(direction).append(", "));
-        sql.append("v.id").append(direction).append(" LIMIT :limit");
+        sql.append(id).append(direction).append(" LIMIT :limit");
 
         Query nativeQuery = em.createNativeQuery(sql.toString(), Vote.class)
                 .setParameter("now", now)
@@ -114,7 +118,7 @@ public class VoteListRepository {
      */
     @SuppressWarnings("unchecked")
     public List<Vote> findFollowing(UUID followerId, Cursor after, OffsetDateTime now, int limit) {
-        // ponytail: both arms walk past Ended Polls; add Open-only partial indexes if creators or tags pile up history
+        // ponytail: both arms walk past Ended Polls still in their start_time range; add Open-only partial indexes if creators or tags pile up history
         String open = """
                 v.deleted_at IS NULL AND v.audience = 'PUBLIC' AND v.start_time <= :now AND v.end_time > :now"""
                 + (after == null ? "" : " AND (v.start_time, v.id) < (:afterKey, :afterId)");
@@ -131,16 +135,19 @@ public class VoteListRepository {
 
                     UNION ALL
                     SELECT tv.id FROM vomatt.tag_follows tf
-                    CROSS JOIN LATERAL (
-                        SELECT v.id FROM\s"""
-                // OFFSET 0 keeps the planner on idx_vote_tags_tag_id instead of walking idx_votes_start_id over every live Poll
-                + "(SELECT vt.vote_id FROM vomatt.vote_tags vt WHERE vt.tag_id = tf.tag_id OFFSET 0) vt" + """
+                    CROSS JOIN LATERAL ("""
+                // walks idx_vote_tags_tag_start: the tag's Polls newest opened first, times copied onto vote_tags
+                + """
 
+                        SELECT vt.vote_id AS id FROM vomatt.vote_tags vt
                         JOIN vomatt.votes v ON v.id = vt.vote_id
-                        WHERE v.creator_id <> :viewerId AND\s""" + open
+                        WHERE vt.tag_id = tf.tag_id AND vt.start_time <= :now AND vt.end_time > :now"""
+                + (after == null ? "" : " AND (vt.start_time, vt.vote_id) < (:afterKey, :afterId)") + """
+
+                          AND v.creator_id <> :viewerId AND v.deleted_at IS NULL AND v.audience = 'PUBLIC'"""
                 + " AND " + UserFilters.active("v.creator_id") + NOT_BLOCKED_BY_VIEWER + """
 
-                        ORDER BY v.start_time DESC, v.id DESC LIMIT :limit) tv
+                        ORDER BY vt.start_time DESC, vt.vote_id DESC LIMIT :limit) tv
                     WHERE tf.user_id = :viewerId)
                 ORDER BY v.start_time DESC, v.id DESC LIMIT :limit""";
         Query nativeQuery = em.createNativeQuery(sql, Vote.class)

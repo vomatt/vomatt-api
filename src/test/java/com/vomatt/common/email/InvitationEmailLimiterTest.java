@@ -44,7 +44,7 @@ class InvitationEmailLimiterTest {
 
     @Test
     void shouldSkipAddressesMailedThisWeekAndRecordTheRestWhenClaiming() {
-        when(repository.findSentSince(eq(senderId), eq(scopeId), any(), any())).thenReturn(List.of("a@example.com"));
+        when(repository.findSentSince(eq(scopeId), any(), any())).thenReturn(List.of("a@example.com"));
         when(lookupService.configInt(anyString(), anyInt())).thenReturn(200);
         when(redisService.incrementAndExpire(eq("email:invitation"), anyString(), eq(1L), any())).thenReturn(1L);
 

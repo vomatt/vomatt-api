@@ -352,8 +352,8 @@ public class CommunityController {
             user or address is replaced by the new one. \
             """ + ROLES + """
 
-            **Side effects**: an address with no account at all is mailed once committed; one member mails one address at most \
-            once a week, within the member's own daily invitation email limit (shared with their Poll and Invite List invitations). Audit-logged.
+            **Side effects**: an address with no account at all is mailed once committed; one community account mails one address at most \
+            once every 3 days, whichever member invites it and even after the invitation is revoked and sent again, within the member's own daily invitation email limit (shared with their Poll and Invite List invitations). Audit-logged.
             """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = {
                     @ExampleObject(name = "Invite a user", value = """

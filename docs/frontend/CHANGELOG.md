@@ -2,6 +2,9 @@
 
 Contract changes that affect the frontend. 💥 BREAKING means frontend code must change. See [openapi.json](openapi.json) for the contract snapshot and [error-codes.md](error-codes.md) for error codes.
 
+## 2026-11-16
+- Invitation emails to addresses with no account now reach one address at most once every 3 days per Invite List or community account (was once a week). For a community account this holds whichever OWNER / ADMIN sends it: revoking an invitation and inviting the same address again within 3 days creates the invitation but sends no email. Responses are unchanged.
+
 ## 2026-11-14
 - `contact` is now a reserved username (the web redirects `/contact` to the about site); existing accounts holding it keep it.
 - New `GET /api/community-invitations/{invitationId}` for the invitee: returns `CommunityInvitationDetailResponse` (`id`, `role`, `expiresAt`, `community` and `inviter` as `UserDto`, names masked by each one's visibility settings; `inviter` is null once the inviting member's account is deleted; `locked` is true while the community account is locked, when accept answers 403 `community.locked`; `member` is true when the caller already belongs to it, as accept then keeps their role). It is visible exactly when accept / decline would find it (sent to the caller by id or to their email address, not expired, community account not suspended); otherwise 404 `community.invitation.not_found`, the same for every other caller. Refused while acting (`X-Act-As`, 403 `community.role_forbidden`), like accept and decline.

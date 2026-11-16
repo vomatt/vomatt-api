@@ -17,13 +17,15 @@ public class InvitationEmailRepository {
 
     private final EntityManager em;
 
-    /** The addresses the sender mailed about the scope at or after {@code since}. */
+    /**
+     * The addresses mailed about the scope at or after {@code since}, by anyone: a community account has several
+     * managers, so another one revoking and re-inviting must not mail the address again.
+     */
     @SuppressWarnings("unchecked")
-    public List<String> findSentSince(UUID senderId, UUID scopeId, Collection<String> emails, OffsetDateTime since) {
+    public List<String> findSentSince(UUID scopeId, Collection<String> emails, OffsetDateTime since) {
         return em.createNativeQuery("""
                 SELECT email FROM vomatt.invitation_emails
-                WHERE sender_id = :senderId AND scope_id = :scopeId AND email IN (:emails) AND sent_at >= :since""")
-                .setParameter("senderId", senderId)
+                WHERE scope_id = :scopeId AND email IN (:emails) AND sent_at >= :since""")
                 .setParameter("scopeId", scopeId)
                 .setParameter("emails", emails)
                 .setParameter("since", since)

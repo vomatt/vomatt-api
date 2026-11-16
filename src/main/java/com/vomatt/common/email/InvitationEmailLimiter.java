@@ -32,8 +32,8 @@ public class InvitationEmailLimiter {
 
     static final String COUNTER_NS = "email:invitation";
     public static final String LIMIT_KEY = "invitation_email_daily_limit";
-    /** A sign-up invitation reaches an address from the same sender at most once in this window. */
-    static final Duration RESEND_AFTER = Duration.ofDays(7);
+    /** A sign-up invitation about one scope reaches an address at most once in this window, whoever sends it. */
+    static final Duration RESEND_AFTER = Duration.ofDays(3);
 
     private final RedisService redisService;
     private final LookupService lookupService;
@@ -59,14 +59,14 @@ public class InvitationEmailLimiter {
     }
 
     /**
-     * Of the sign-up invitation addresses, those to mail now: not mailed by this sender about this scope (the Invite
-     * List or community account) within {@link #RESEND_AFTER}, within the daily quota.
+     * Of the sign-up invitation addresses, those to mail now: not mailed about this scope (the Invite List or community
+     * account) within {@link #RESEND_AFTER}, even after the invitation was revoked, within the daily quota.
      */
     public List<String> claim(UUID senderId, UUID scopeId, Collection<String> emails) {
         OffsetDateTime now = OffsetDateTime.now();
         UUID sender = realSender(senderId);
         return claim(sender, emails,
-                unsent -> invitationEmailRepository.findSentSince(sender, scopeId, unsent, now.minus(RESEND_AFTER)),
+                unsent -> invitationEmailRepository.findSentSince(scopeId, unsent, now.minus(RESEND_AFTER)),
                 recipients -> invitationEmailRepository.recordSent(sender, scopeId, recipients, now));
     }
 

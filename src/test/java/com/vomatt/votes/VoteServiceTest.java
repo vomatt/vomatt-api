@@ -71,7 +71,6 @@ class VoteServiceTest {
     @Mock UserVoteRepository userVoteRepository;
     @Mock UserRepository userRepository;
     @Mock TagRepository tagRepository;
-    @Mock com.vomatt.repository.VoteCommentRepository voteCommentRepository;
     @Mock InviteeRepository inviteeRepository;
     @Mock com.vomatt.repository.UserBlockRepository blockRepository;
     @Mock NotificationRepository notificationRepository;
@@ -607,7 +606,7 @@ class VoteServiceTest {
         @DisplayName("should flag listed Polls bookmarked")
         void shouldFlagBookmarkedWhenListingBookmarks() {
             com.vomatt.entity.VoteBookmark row = new com.vomatt.entity.VoteBookmark(user, vote);
-            when(bookmarkRepository.findPage(eq(userId), isNull(), isNull(), any())).thenReturn(List.of(row));
+            when(bookmarkRepository.findPage(eq(userId), any())).thenReturn(List.of(row));
 
             var page = voteService.listBookmarkedVotes(userId.toString(), null, null);
 
@@ -961,7 +960,7 @@ class VoteServiceTest {
         @DisplayName("should show voters only to owner when visibility is OWNER")
         void shouldShowVotersOnlyToOwnerWhenVisibilityIsOwner() {
             endedWith(VoterVisibility.OWNER);
-            when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of());
+            when(userVoteRepository.findVoterPage(eq(voteId), any())).thenReturn(List.of());
 
             assertThat(voteService.getVoters(voteId.toString(), userId.toString(), null, null).items()).isEmpty();
             assertHidden(UUID.randomUUID().toString());
@@ -971,7 +970,7 @@ class VoteServiceTest {
         @DisplayName("should show voters to any signed-in user when visibility is SIGNED_IN")
         void shouldShowVotersToAnySignedInUserWhenVisibilityIsSignedIn() {
             endedWith(VoterVisibility.SIGNED_IN);
-            when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of());
+            when(userVoteRepository.findVoterPage(eq(voteId), any())).thenReturn(List.of());
 
             assertThat(voteService.getVoters(voteId.toString(), UUID.randomUUID().toString(), null, null).nextCursor())
                     .isNull();
@@ -982,7 +981,7 @@ class VoteServiceTest {
         void shouldShowVotersWhenNoAnonymousBallot() {
             endedWith(VoterVisibility.OWNER);
             when(userVoteRepository.existsByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn(false);
-            when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of());
+            when(userVoteRepository.findVoterPage(eq(voteId), any())).thenReturn(List.of());
 
             assertThat(voteService.getVoters(voteId.toString(), userId.toString(), null, null).items()).isEmpty();
         }
@@ -994,7 +993,7 @@ class VoteServiceTest {
             com.vomatt.entity.UserVote named = new com.vomatt.entity.UserVote(user, vote, option);
             setId(option, UUID.randomUUID());
             when(userVoteRepository.existsByVoteIdAndAnonymousTrueAndUserIdNot(voteId, userId)).thenReturn(true);
-            when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of(named));
+            when(userVoteRepository.findVoterPage(eq(voteId), any())).thenReturn(List.of(named));
 
             assertThat(voteService.getVoters(voteId.toString(), userId.toString(), null, null).items())
                     .singleElement().satisfies(v -> assertThat(v.optionId()).isNull());
@@ -1484,7 +1483,7 @@ class VoteServiceTest {
             vote.setVoterVisibility(VoterVisibility.SIGNED_IN);
             when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
             when(inviteeRepository.existsByVoteIdAndUserId(voteId, inviteeId)).thenReturn(true);
-            when(userVoteRepository.findVoterPage(eq(voteId), isNull(), isNull(), any())).thenReturn(List.of());
+            when(userVoteRepository.findVoterPage(eq(voteId), any())).thenReturn(List.of());
 
             assertThat(voteService.getVoters(voteId.toString(), inviteeId.toString(), null, null).items()).isEmpty();
         }

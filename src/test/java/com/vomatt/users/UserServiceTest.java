@@ -181,10 +181,11 @@ class UserServiceTest {
 
         userService.deleteUser(id.toString(), new UserPrincipal(id.toString(), List.of("user"), null));
 
-        InOrder order = inOrder(voteOptionRepository, voteRepository, auditLogRepository, userRepository);
+        InOrder order = inOrder(voteOptionRepository, voteRepository, voteCommentRepository, auditLogRepository, userRepository);
         order.verify(userRepository).lockForDelete(id);
         order.verify(voteRepository).decrementTurnoutForUserBallots(id);
         order.verify(voteOptionRepository).decrementForUserBallots(id);
+        order.verify(voteCommentRepository).decrementCommentCountForUserComments(id);
         order.verify(auditLogRepository).anonymizeByUserId(id.toString());
         order.verify(userRepository).delete(user);
         verify(voteViewRecorder).forgetViewer(id.toString());

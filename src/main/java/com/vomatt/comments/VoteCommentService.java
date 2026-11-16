@@ -113,6 +113,7 @@ public class VoteCommentService {
         }
         // flush so created_at / updated_at exist before mapping (UUIDv7 ids defer the insert)
         comment = commentRepository.saveAndFlush(comment);
+        commentRepository.incrementCommentCount(vote.getId());
 
         log.info("Comment created: {} on vote: {} by user: {}", comment.getId(), voteId, userId);
 
@@ -242,8 +243,7 @@ public class VoteCommentService {
         }
         ActingMember.requireMayEdit(comment.getActedBy());
 
-        comment.softDelete();
-        commentRepository.save(comment);
+        commentRepository.softDelete(commentId);
 
         log.info("Comment {} deleted by user {}", commentId, userId);
     }

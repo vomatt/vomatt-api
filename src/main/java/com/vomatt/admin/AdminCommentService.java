@@ -11,7 +11,6 @@ import com.vomatt.admin.dto.AdminCommentResponse;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.response.PageResponse;
-import com.vomatt.entity.VoteComment;
 import com.vomatt.repository.AdminQueryRepository;
 import com.vomatt.repository.VoteCommentRepository;
 
@@ -38,9 +37,9 @@ public class AdminCommentService {
 
     /** Soft delete, as the author's own delete; idempotent. Replies stay, the Comment becomes their placeholder. */
     public void deleteComment(UUID commentId, String actorId) {
-        VoteComment comment = commentRepository.findById(commentId)
-                .orElseThrow(() -> ApiException.notFound(MessageKey.COMMENT_NOT_FOUND));
-        comment.softDelete();
+        if (commentRepository.softDelete(commentId) == 0 && !commentRepository.existsById(commentId)) {
+            throw ApiException.notFound(MessageKey.COMMENT_NOT_FOUND);
+        }
         log.info("Comment {} deleted by admin {}", commentId, actorId);
     }
 }

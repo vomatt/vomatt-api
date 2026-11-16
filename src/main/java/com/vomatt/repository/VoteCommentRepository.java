@@ -3,6 +3,7 @@ package com.vomatt.repository;
 import com.vomatt.entity.VoteComment;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -22,10 +23,38 @@ public interface VoteCommentRepository extends JpaRepository<VoteComment, UUID> 
     @Query("SELECT c FROM VoteComment c WHERE c.id = :id AND c.isDeleted = false")
     Optional<VoteComment> findByIdAndNotDeleted(@Param("id") UUID id);
 
-    /** Visible message counts (Comments and Replies, not deleted) for a page of Polls. */
-    @Query("SELECT c.vote.id AS id, COUNT(c) AS count FROM VoteComment c "
-            + "WHERE c.vote.id IN :voteIds AND c.isDeleted = false GROUP BY c.vote.id")
-    List<IdCount> countVisibleByVoteIds(@Param("voteIds") Collection<UUID> voteIds);
+    /** Atomic +1 on the Poll's stored comment count (votes.comment_count); call once per inserted Comment or Reply. */
+    @Modifying
+    @Query(value = "UPDATE vomatt.votes SET comment_count = comment_count + 1 WHERE id = :voteId", nativeQuery = true)
+    void incrementCommentCount(@Param("voteId") UUID voteId);
+
+    /**
+     * Soft deletes the Comment and takes one off its Poll's comment count in one statement; 1 when it was live, 0 when
+     * it was already deleted. Do not mark the managed entity deleted first: the auto-flush before this statement would
+     * leave nothing for it to match.
+     */
+    @Modifying
+    @Query(value = """
+            WITH d AS (
+                UPDATE vomatt.vote_comments SET is_deleted = TRUE, updated_at = now()
+                WHERE id = :id AND NOT is_deleted RETURNING vote_id)
+            UPDATE vomatt.votes SET comment_count = comment_count - 1 WHERE id IN (SELECT vote_id FROM d)""",
+            nativeQuery = true)
+    int softDelete(@Param("id") UUID id);
+
+    /**
+     * Releases from the stored comment counts the live Comments that cascade with the user: their own and every Reply
+     * under their top-level Comments (deleted or not). Run before deleting the user.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = """
+            UPDATE vomatt.votes v SET comment_count = v.comment_count - g.n
+            FROM (SELECT c.vote_id, COUNT(*) AS n
+                  FROM vomatt.vote_comments c LEFT JOIN vomatt.vote_comments p ON p.id = c.parent_id
+                  WHERE NOT c.is_deleted AND (c.user_id = :userId OR p.user_id = :userId)
+                  GROUP BY c.vote_id) g
+            WHERE v.id = g.vote_id""", nativeQuery = true)
+    void decrementCommentCountForUserComments(@Param("userId") UUID userId);
 
     /**
      * Keyset page of a Poll's top-level Comments, newest first; a deleted Comment stays as a placeholder

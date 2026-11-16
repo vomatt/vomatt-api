@@ -2,7 +2,6 @@ package com.vomatt.admin;
 
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
-import com.vomatt.entity.VoteComment;
 import com.vomatt.repository.AdminQueryRepository;
 import com.vomatt.repository.VoteCommentRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -12,11 +11,11 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -31,18 +30,18 @@ class AdminCommentServiceTest {
     @Test
     void shouldSoftDeleteWhenCallerIsNotAuthor() {
         UUID commentId = UUID.randomUUID();
-        VoteComment comment = new VoteComment();
-        when(commentRepository.findById(commentId)).thenReturn(Optional.of(comment));
+        when(commentRepository.softDelete(commentId)).thenReturn(1);
 
         service.deleteComment(commentId, UUID.randomUUID().toString());
 
-        assertThat(comment.isDeleted()).isTrue();
+        verify(commentRepository).softDelete(commentId);
     }
 
     @Test
     void shouldReturn404WhenCommentMissing() {
         UUID commentId = UUID.randomUUID();
-        when(commentRepository.findById(commentId)).thenReturn(Optional.empty());
+        when(commentRepository.softDelete(commentId)).thenReturn(0);
+        when(commentRepository.existsById(commentId)).thenReturn(false);
 
         assertThatThrownBy(() -> service.deleteComment(commentId, "admin"))
                 .isInstanceOfSatisfying(ApiException.class,

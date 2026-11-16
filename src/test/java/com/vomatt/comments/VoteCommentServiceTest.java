@@ -132,8 +132,7 @@ class VoteCommentServiceTest {
                         ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMENT_FORBIDDEN));
 
         assertThat(target.getContent()).isEqualTo("mine");
-        assertThat(target.isDeleted()).isFalse();
-        org.mockito.Mockito.verify(commentRepository, org.mockito.Mockito.never()).save(any());
+        org.mockito.Mockito.verify(commentRepository, org.mockito.Mockito.never()).softDelete(any());
         org.mockito.Mockito.verify(commentRepository, org.mockito.Mockito.never()).saveAndFlush(any());
     }
 
@@ -156,11 +155,11 @@ class VoteCommentServiceTest {
             assertThatThrownBy(() -> commentService.deleteComment(target.getId(), viewerId.toString()))
                     .isInstanceOfSatisfying(ApiException.class,
                             ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.COMMUNITY_ROLE_FORBIDDEN));
-            assertThat(target.isDeleted()).isFalse();
+            org.mockito.Mockito.verify(commentRepository, org.mockito.Mockito.never()).softDelete(any());
 
             actAs(com.vomatt.entity.CommunityRole.CHIEF_EDITOR);
             commentService.deleteComment(target.getId(), viewerId.toString());
-            assertThat(target.isDeleted()).isTrue();
+            org.mockito.Mockito.verify(commentRepository).softDelete(target.getId());
         } finally {
             org.springframework.security.core.context.SecurityContextHolder.clearContext();
         }

@@ -111,6 +111,38 @@ class VoterListPostgresTest extends PostgresRepositoryTest {
                 .containsExactly(org.assertj.core.groups.Tuple.tuple("vl-self-named", option.getId().toString()));
     }
 
+    @Test
+    @DisplayName("should page voters with equal Ballot times by id, one per page, without gaps or duplicates")
+    void shouldOrderByIdWhenBallotTimesAreEqual() {
+        User owner = persistUser("vl-tie-owner");
+        OffsetDateTime now = OffsetDateTime.now();
+        Vote poll = persistPoll(owner, now.minusDays(2), now.minusDays(1), "A", "B");
+        VoteOption option = poll.getOptions().iterator().next();
+        List<UserVote> ballots = new ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            UserVote ballot = new UserVote(persistUser("vl-tie-voter-" + i), poll, option);
+            em.persist(ballot);
+            ballots.add(ballot);
+        }
+        em.flush();
+        em.createNativeQuery("UPDATE vomatt.user_votes SET created_at = :t WHERE vote_id = :id")
+                .setParameter("t", now.minusDays(2)).setParameter("id", poll.getId()).executeUpdate();
+        List<String> expected = ballots.stream().sorted(java.util.Comparator.comparing(UserVote::getId))
+                .map(b -> b.getUser().getUsername()).toList();
+        em.clear();
+
+        List<String> seen = new ArrayList<>();
+        String cursor = null;
+        do {
+            CursorResponse<VoterResponse> page = voteService.getVoters(poll.getId().toString(),
+                    owner.getId().toString(), cursor, 1);
+            page.items().forEach(v -> seen.add(v.username()));
+            cursor = page.nextCursor();
+        } while (cursor != null);
+
+        assertThat(seen).containsExactlyElementsOf(expected);
+    }
+
     private void persistAnonymousBallot(User user, Vote poll, VoteOption option) {
         UserVote ballot = new UserVote(user, poll, option);
         ballot.setAnonymous(true);

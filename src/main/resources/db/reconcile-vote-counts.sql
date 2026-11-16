@@ -1,6 +1,6 @@
 -- =============================================================================
--- Option vote count, Turnout, like count, share count and tag usage reconciliation (run manually; not part of startup)
--- vote_options.vote_count, votes.turnout, votes.like_count, votes.share_count and tags.usage_count are atomically incremented/decremented by the application; this file checks and fixes drift from the actual user_votes / vote_likes / vote_shares / vote_tags rows.
+-- Option vote count, Turnout, like count, share count, comment count and tag usage reconciliation (run manually; not part of startup)
+-- vote_options.vote_count, votes.turnout, votes.like_count, votes.share_count, votes.comment_count and tags.usage_count are atomically incremented/decremented by the application; this file checks and fixes drift from the actual user_votes / vote_likes / vote_shares / vote_comments / vote_tags rows.
 -- =============================================================================
 
 -- Only Polls that have not Ended are checked: an Ended Poll's result is frozen as it closed. RetentionJob seals its
@@ -94,3 +94,20 @@ FROM (SELECT t2.id, COUNT(v.id) AS actual
       LEFT JOIN vomatt.votes v ON v.id = vt.vote_id AND v.audience = 'PUBLIC' AND v.deleted_at IS NULL
       GROUP BY t2.id) c
 WHERE c.id = t.id AND t.usage_count <> c.actual;
+
+-- Comments are not frozen when a Poll Ends (account deletion releases them from every Poll), so every Poll is checked.
+-- 11) Check: Polls whose stored comment count (votes.comment_count) differs from the actual live Comments and Replies (should normally return 0 rows)
+SELECT v.id AS vote_id, v.comment_count AS stored, COUNT(c.id) AS actual
+FROM vomatt.votes v
+LEFT JOIN vomatt.vote_comments c ON c.vote_id = v.id AND NOT c.is_deleted
+GROUP BY v.id
+HAVING v.comment_count <> COUNT(c.id);
+
+-- 12) Fix: overwrite the comment count with the actual count
+UPDATE vomatt.votes v
+SET comment_count = c.actual
+FROM (SELECT v2.id, COUNT(c2.id) AS actual
+      FROM vomatt.votes v2
+      LEFT JOIN vomatt.vote_comments c2 ON c2.vote_id = v2.id AND NOT c2.is_deleted
+      GROUP BY v2.id) c
+WHERE c.id = v.id AND v.comment_count <> c.actual;

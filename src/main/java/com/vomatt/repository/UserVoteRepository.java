@@ -33,15 +33,21 @@ public interface UserVoteRepository extends JpaRepository<UserVote, UUID> {
             + "WHERE uv.user.id = :userId AND uv.vote.id IN :voteIds")
     List<BallotSelection> findSelections(@Param("userId") UUID userId, @Param("voteIds") Collection<UUID> voteIds);
 
-    /** Keyset page of a Poll's named Ballots (Anonymous Ballots left out), oldest first; pass null cursor values for the first page. */
+    /** First page of a Poll's named Ballots (Anonymous Ballots left out), oldest first; later pages: {@link #findVoterPageAfter}. */
     @Query("""
             SELECT uv FROM UserVote uv JOIN FETCH uv.user JOIN FETCH uv.option
             WHERE uv.vote.id = :voteId AND uv.anonymous = false
-              AND (CAST(:afterTime AS OffsetDateTime) IS NULL OR uv.createdAt > :afterTime
-                   OR (uv.createdAt = :afterTime AND uv.id > :afterId))
             ORDER BY uv.createdAt, uv.id""")
-    List<UserVote> findVoterPage(@Param("voteId") UUID voteId, @Param("afterTime") OffsetDateTime afterTime,
-                                 @Param("afterId") UUID afterId, Limit limit);
+    List<UserVote> findVoterPage(@Param("voteId") UUID voteId, Limit limit);
+
+    /** Keyset page after the cursor, ordered as {@link #findVoterPage}; a row comparison, so the index seeks to the cursor. */
+    @Query("""
+            SELECT uv FROM UserVote uv JOIN FETCH uv.user JOIN FETCH uv.option
+            WHERE uv.vote.id = :voteId AND uv.anonymous = false
+              AND (uv.createdAt, uv.id) > (:afterTime, :afterId)
+            ORDER BY uv.createdAt, uv.id""")
+    List<UserVote> findVoterPageAfter(@Param("voteId") UUID voteId, @Param("afterTime") OffsetDateTime afterTime,
+                                      @Param("afterId") UUID afterId, Limit limit);
 
     /** Whether a Poll holds an Anonymous Ballot other than the caller's; while it does, the voter list names no options. */
     boolean existsByVoteIdAndAnonymousTrueAndUserIdNot(UUID voteId, UUID userId);

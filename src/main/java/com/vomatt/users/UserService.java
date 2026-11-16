@@ -147,6 +147,7 @@ public class UserService {
         voteOptionRepository.decrementForUserBallots(user.getId());
         voteRepository.decrementShareCountForUserShares(user.getId());
         voteRepository.decrementLikeCountForUserLikes(user.getId());
+        voteCommentRepository.decrementCommentCountForUserComments(user.getId());
         // The user's Polls cascade too; their tags stop counting them
         tagRepository.decrementUsageCountForUserPolls(user.getId());
         auditLogRepository.anonymizeByUserId(userId);

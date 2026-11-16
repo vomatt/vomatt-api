@@ -43,19 +43,22 @@ public interface VoteBookmarkRepository extends JpaRepository<VoteBookmark, UUID
     /**
      * Keyset page of the user's bookmarked Polls, most recently bookmarked first. Deleted Polls, Invite-only Polls the
      * user can no longer reach (Invitee removed) and Polls whose owner blocked the user are left out, as in My Polls.
-     * Null cursor values for the first page.
+     * First page; later pages: {@link #findPageAfter}.
      */
-    @Query("""
-            SELECT b FROM VoteBookmark b JOIN FETCH b.vote v
+    @Query("SELECT b " + PAGE_FROM + " ORDER BY b.createdAt DESC, b.id DESC")
+    List<VoteBookmark> findPage(@Param("userId") UUID userId, Limit limit);
+
+    /** Keyset page after the cursor, ordered as {@link #findPage}; a row comparison, so the index seeks to the cursor. */
+    @Query("SELECT b " + PAGE_FROM + " AND (b.createdAt, b.id) < (:afterTime, :afterId) ORDER BY b.createdAt DESC, b.id DESC")
+    List<VoteBookmark> findPageAfter(@Param("userId") UUID userId, @Param("afterTime") OffsetDateTime afterTime,
+                                     @Param("afterId") UUID afterId, Limit limit);
+
+    String PAGE_FROM = """
+            FROM VoteBookmark b JOIN FETCH b.vote v
             WHERE b.user.id = :userId AND v.deletedAt IS NULL
               AND (v.audience <> com.vomatt.entity.Audience.INVITE_ONLY OR v.creator.id = :userId
                    OR EXISTS (SELECT 1 FROM Invitee i WHERE i.vote = v AND i.user.id = :userId))
-              AND NOT EXISTS (SELECT 1 FROM UserBlock x WHERE x.blocker = v.creator AND x.blocked.id = :userId)
-              AND (CAST(:afterTime AS OffsetDateTime) IS NULL OR b.createdAt < :afterTime
-                   OR (b.createdAt = :afterTime AND b.id < :afterId))
-            ORDER BY b.createdAt DESC, b.id DESC""")
-    List<VoteBookmark> findPage(@Param("userId") UUID userId, @Param("afterTime") OffsetDateTime afterTime,
-                                @Param("afterId") UUID afterId, Limit limit);
+              AND NOT EXISTS (SELECT 1 FROM UserBlock x WHERE x.blocker = v.creator AND x.blocked.id = :userId)""";
 
     /** For the data export, oldest first. */
     List<VoteBookmark> findByUserIdOrderByCreatedAt(UUID userId);

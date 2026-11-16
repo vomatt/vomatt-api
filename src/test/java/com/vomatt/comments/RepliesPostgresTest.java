@@ -150,7 +150,38 @@ class RepliesPostgresTest extends PostgresRepositoryTest {
         commentService.deleteComment(UUID.fromString(gone.getId()), user.getId().toString());
         em.flush();
 
-        assertThat(commentRepository.countVisibleByVoteIds(List.of(poll.getId())).getFirst().getCount()).isEqualTo(2);
+        assertThat(commentCount()).isEqualTo(2);
+        // An already deleted Comment takes nothing off again (admin delete is idempotent)
+        assertThat(commentRepository.softDelete(UUID.fromString(gone.getId()))).isZero();
+        assertThat(commentCount()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("should release a deleted account's Comments and the Replies under them from commentCount")
+    void shouldMatchLiveCommentsWhenAccountIsDeleted() {
+        User other = persistUser("rp-other-" + UUID.randomUUID());
+        CommentDto theirs = postAs(other, "theirs", null);
+        postAs(user, "reply to theirs", theirs.getId());
+        postAs(other, "own reply", theirs.getId());
+        CommentDto mine = post("mine", null);
+        postAs(other, "their reply to mine", mine.getId());
+        CommentDto deletedRoot = postAs(other, "deleted root", null);
+        postAs(user, "reply under deleted root", deletedRoot.getId());
+        commentService.deleteComment(UUID.fromString(deletedRoot.getId()), other.getId().toString());
+        em.flush();
+        assertThat(commentCount()).isEqualTo(6);
+
+        commentRepository.decrementCommentCountForUserComments(other.getId());
+        em.createNativeQuery("DELETE FROM vomatt.users WHERE id = :id").setParameter("id", other.getId()).executeUpdate();
+
+        assertThat(commentCount()).isEqualTo(1).isEqualTo(((Number) em.createNativeQuery(
+                "SELECT COUNT(*) FROM vomatt.vote_comments WHERE vote_id = :id AND NOT is_deleted")
+                .setParameter("id", poll.getId()).getSingleResult()).intValue());
+    }
+
+    private int commentCount() {
+        return ((Number) em.createNativeQuery("SELECT comment_count FROM vomatt.votes WHERE id = :id")
+                .setParameter("id", poll.getId()).getSingleResult()).intValue();
     }
 
     @Test

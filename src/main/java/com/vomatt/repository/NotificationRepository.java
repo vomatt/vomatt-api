@@ -129,6 +129,7 @@ public class NotificationRepository {
                     FROM vomatt.votes v
                     WHERE v.id IN (SELECT i.vote_id FROM vomatt.vote_invitees i JOIN vomatt.votes iv ON iv.id = i.vote_id
                                    WHERE i.user_id = :userId AND iv.audience = 'INVITE_ONLY'
+                                     AND iv.end_time > :now AND iv.end_time <= :soon
                                    UNION
                                    SELECT fv.id FROM vomatt.user_follows f JOIN vomatt.votes fv ON fv.creator_id = f.followed_id
                                    WHERE f.follower_id = :userId AND fv.audience = 'PUBLIC'
@@ -238,9 +239,9 @@ public class NotificationRepository {
         return ((Number) bind(sql, userId, now).getSingleResult()).longValue();
     }
 
-    // The given kinds' unread notifications as n, for the badge count and the unread ids to agree.
-    // ponytail: RESULT materializes every Poll the user ever took part in; add a time window or a stored counter
-    // if this shows up in slow queries
+    // The given kinds' unread notifications as n, for the badge count and the unread ids to agree. Postgres pushes
+    // NOT READ's read-all bound (created_at > read_at, RESULT's GREATEST included) into every branch, so mark-all-read
+    // prunes inside each branch rather than after the whole history is built
     private static String unread(Set<NotificationKind> kinds) {
         return union(kinds, kinds, "") + ") n WHERE NOT " + READ;
     }

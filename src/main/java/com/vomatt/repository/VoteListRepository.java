@@ -40,6 +40,7 @@ public class VoteListRepository {
      * and {@code :pattern} to {@link LikePattern#containsPattern}. The bigram GIN index finds candidates (ADR 0001) and
      * LIKE confirms the contiguous match.
      */
+    // ponytail: matches are sorted in full after the GIN lookup, so a broad query costs O(matches); add a ranked/limited candidate scan if hot
     static final String SEARCH_CONDITION = " AND v.search_bigrams @> vomatt.text_bigrams(:q)"
             + " AND lower(COALESCE(v.title, '') || ' ' || COALESCE(v.description, '')) LIKE :pattern ESCAPE '\\'";
 
@@ -60,10 +61,15 @@ public class VoteListRepository {
         // (idx_vote_tags_tag_start / idx_vote_tags_tag_end); slugs are unique and (vote_id, tag_id) is the key, so one row per Poll
         String k = tag != null ? "vt." : "v.";
         String id = tag != null ? "vt.vote_id" : "v.id";
-        StringBuilder sql = new StringBuilder("SELECT v.* FROM ").append(tag != null
+        // Untagged TOP starts from the not-yet-Ended set on idx_votes_end_id (bounded by the longest Poll) and sorts it; walking
+        // idx_votes_turnout_start_id instead skips every Ended high-Turnout Poll ever made. OFFSET 0 keeps the subquery.
+        String from = tag != null
                 ? "vomatt.vote_tags vt JOIN vomatt.votes v ON v.id = vt.vote_id WHERE vt.tag_id = (SELECT t.id FROM vomatt.tags t WHERE t.slug = :tag) AND "
-                : "vomatt.votes v WHERE ");
-        sql.append("v.deleted_at IS NULL AND v.audience = 'PUBLIC' AND ");
+                : order == VoteListOrder.TOP
+                ? "(SELECT * FROM vomatt.votes WHERE end_time > :now OFFSET 0) v WHERE "
+                : "vomatt.votes v WHERE ";
+        StringBuilder sql = new StringBuilder("SELECT v.* FROM ").append(from)
+                .append("v.deleted_at IS NULL AND v.audience = 'PUBLIC' AND ");
         List<String> sortColumns = switch (order) {
             case NEWEST -> List.of(k + "start_time");
             case CLOSING, ENDED -> List.of(k + "end_time");

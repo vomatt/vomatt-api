@@ -285,6 +285,21 @@ class VoteListPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    @DisplayName("should page Top over Open Polls only when Ended Polls hold higher Turnout")
+    void shouldPageTopOverOpenPollsWhenEndedPollsHaveHigherTurnout() {
+        for (int i = 0; i < 5; i++) {
+            poll("ended" + i, now.minusDays(3), now.minusHours(i + 1), 100 + i);
+        }
+        poll("mid", now.minusHours(3), now.plusDays(1), 5);
+        poll("tie-new", now.minusHours(1), now.plusDays(1), 2);
+        poll("tie-old", now.minusHours(2), now.plusDays(1), 2);
+        poll("zero", now.minusHours(4), now.plusDays(1), 0);
+
+        assertThat(titles(VoteListOrder.TOP, 1)).containsExactly("mid", "tie-new", "tie-old", "zero");
+        assertThat(titles(VoteListOrder.TOP, 3)).containsExactly("mid", "tie-new", "tie-old", "zero");
+    }
+
+    @Test
     @DisplayName("should filter Top by tag and free-text query")
     void shouldFilterTopByTagAndQuery() {
         poll("lunch ideas", now.minusHours(1), now.plusDays(1), 1);

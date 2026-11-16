@@ -76,7 +76,6 @@ import com.vomatt.repository.InviteeRepository;
 import com.vomatt.repository.LockTimeout;
 import com.vomatt.repository.NotificationRepository;
 import com.vomatt.repository.VoteBookmarkRepository;
-import com.vomatt.repository.VoteCommentRepository;
 import com.vomatt.repository.VoteListRepository;
 import com.vomatt.repository.VoteReportRepository;
 import com.vomatt.repository.VoteRepository;
@@ -98,7 +97,6 @@ public class VoteService {
     private final TagRepository tagRepository;
     private final VoteMapper voteMapper;
     private final VoteListRepository voteListRepository;
-    private final VoteCommentRepository voteCommentRepository;
     private final NotificationRepository notificationRepository;
     private final InviteeRepository inviteeRepository;
     private final UserBlockRepository blockRepository;

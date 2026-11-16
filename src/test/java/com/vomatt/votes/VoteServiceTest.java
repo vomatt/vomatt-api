@@ -71,7 +71,6 @@ class VoteServiceTest {
     @Mock UserVoteRepository userVoteRepository;
     @Mock UserRepository userRepository;
     @Mock TagRepository tagRepository;
-    @Mock com.vomatt.repository.VoteCommentRepository voteCommentRepository;
     @Mock InviteeRepository inviteeRepository;
     @Mock com.vomatt.repository.UserBlockRepository blockRepository;
     @Mock NotificationRepository notificationRepository;

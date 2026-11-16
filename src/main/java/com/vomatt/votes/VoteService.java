@@ -46,6 +46,7 @@ import com.vomatt.votes.dto.InviteesRequest;
 import com.vomatt.votes.dto.VoteCreatorResponse;
 import com.vomatt.votes.dto.VoteRequest;
 import com.vomatt.votes.dto.ShareVoteRequest;
+import com.vomatt.votes.dto.UserVoteStatusResponse;
 import com.vomatt.votes.dto.VoteResponse;
 import com.vomatt.votes.dto.VoteShareResponse;
 import com.vomatt.votes.dto.VoteResultResponse;
@@ -595,20 +596,17 @@ public class VoteService {
     }
 
     @Transactional(readOnly = true)
-    public boolean hasUserVoted(String voteId, String userId) {
+    public UserVoteStatusResponse getMyVoteStatus(String voteId, String userId) {
         findAccessibleVote(UUID.fromString(voteId), userId);
-        return userVoteRepository.existsByUserIdAndVoteId(UUID.fromString(userId), UUID.fromString(voteId));
-    }
-
-    @Transactional(readOnly = true)
-    public List<String> getUserVoteOptions(String voteId, String userId) {
-        findAccessibleVote(UUID.fromString(voteId), userId);
-        return userVoteRepository.findByUserIdAndVoteId(UUID.fromString(userId), UUID.fromString(voteId))
-            .stream()
+        Optional<UserVote> ballot = userVoteRepository.findByUserIdAndVoteId(UUID.fromString(userId), UUID.fromString(voteId));
+        UserVoteStatusResponse response = new UserVoteStatusResponse();
+        response.setHasVoted(ballot.isPresent());
+        response.setSelectedOptions(ballot.stream()
             // A sealed Anonymous Ballot (Ended Poll) has no option any more
             .filter(mv -> mv.getOption() != null)
             .map(mv -> mv.getOption().getId().toString())
-            .toList();
+            .toList());
+        return response;
     }
 
     public void closeVote(String voteId, String creatorId) {

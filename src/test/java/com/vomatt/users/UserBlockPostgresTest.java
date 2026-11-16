@@ -125,7 +125,7 @@ class UserBlockPostgresTest extends PostgresRepositoryTest {
         for (Vote v : new Vote[] { viewerPoll, invitePoll }) {
             String id = v.getId().toString();
             assertPollNotFound(() -> voteService.getVote(id, as));
-            assertPollNotFound(() -> voteService.hasUserVoted(id, as));
+            assertPollNotFound(() -> voteService.getMyVoteStatus(id, as));
             assertPollNotFound(() -> commentService.getCommentsByVote(id, null, 20, as));
         }
         // The owner and everyone else are unaffected

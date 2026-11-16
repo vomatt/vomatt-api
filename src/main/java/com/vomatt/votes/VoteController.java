@@ -34,10 +34,8 @@ import com.vomatt.votes.dto.VoteResultResponse;
 import com.vomatt.votes.dto.VoterResponse;
 import com.vomatt.common.security.UserPrincipal;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import com.vomatt.votes.VoteService;
 import com.vomatt.common.audit.Auditable;
 
-import com.vomatt.common.config.OpenAPIConfig;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -54,6 +52,11 @@ import static com.vomatt.common.config.OpenAPIConfig.EX_PAGE_OF_POLLS;
 @Tag(name = "Vote", description = "Poll APIs: create, edit, Close, cast / retract a Ballot, results, Participants, Feed / Explore / Search listing")
 public class VoteController {
     private final VoteService voteService;
+
+    private static final String EX_OK = """
+            { "success": true, "data": { "success": true, "id": null, "status": null, "message": null },
+              "message": null, "errorCode": null, "error": null }
+            """;
 
     private static final String POLL_1 = """
             { "success": true, "data": {
@@ -239,8 +242,7 @@ public class VoteController {
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
             @PathVariable String voteId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        VoteResponse response = voteService.getVote(voteId, principal != null ? principal.userId() : null);
-        return ResponseEntity.ok(ApiResponse.ok(response));
+        return ResponseEntity.ok(ApiResponse.ok(voteService.getVote(voteId, principal != null ? principal.userId() : null)));
     }
 
     @GetMapping("/{voteId}/creator")
@@ -322,10 +324,7 @@ public class VoteController {
                             { "reason": "SPAM" }
                             """) })))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Reported (or already reported by the caller)",
-            content = @Content(examples = @ExampleObject(name = "reported", value = """
-                    { "success": true, "data": { "success": true, "id": null, "status": null, "message": null },
-                      "message": null, "errorCode": null, "error": null }
-                    """)))
+            content = @Content(examples = @ExampleObject(name = "reported", value = EX_OK)))
     @ApiError(status = 400, key = MessageKey.VOTE_REPORT_SELF, when = "the caller created the Poll")
     @ApiError(status = 400, key = MessageKey.COMMON_VALIDATION_FAILED, when = "`reason` missing, or `note` over 500 characters")
     @ApiError(status = 400, key = MessageKey.COMMON_BAD_REQUEST, when = "`reason` is not one of the values above")
@@ -352,8 +351,7 @@ public class VoteController {
             bookmarking an already Ended Poll gives no RESULT. A Poll Cancelled before it opened gives no RESULT.
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Bookmarked (or already bookmarked)",
-            content = @Content(examples = @ExampleObject(name = "Bookmarked", value = """
-                    {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
+            content = @Content(examples = @ExampleObject(name = "Bookmarked", value = EX_OK)))
     @ApiError(status = 404, key = MessageKey.VOTE_NOT_FOUND, when = "Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee")
     @ApiError(status = 404, key = MessageKey.USER_NOT_FOUND, when = "the signed-in account no longer exists")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> bookmark(
@@ -375,8 +373,7 @@ public class VoteController {
             taking the like back removes it, and liking again gives a new, unread one
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Liked (or already liked)",
-            content = @Content(examples = @ExampleObject(name = "Liked", value = """
-                    {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
+            content = @Content(examples = @ExampleObject(name = "Liked", value = EX_OK)))
     @ApiError(status = 404, key = MessageKey.VOTE_NOT_FOUND, when = "Poll does not exist, is Deleted, is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller")
     @ApiError(status = 404, key = MessageKey.USER_NOT_FOUND, when = "the signed-in account no longer exists")
     public ResponseEntity<ApiResponse<SimpleResultResponse>> like(
@@ -398,8 +395,7 @@ public class VoteController {
             **Errors**: none beyond the common ones
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Like removed (or there was none)",
-            content = @Content(examples = @ExampleObject(name = "Removed", value = """
-                    {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
+            content = @Content(examples = @ExampleObject(name = "Removed", value = EX_OK)))
     public ResponseEntity<ApiResponse<SimpleResultResponse>> unlike(
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
             @PathVariable String voteId,
@@ -419,8 +415,7 @@ public class VoteController {
             **Errors**: none beyond the common ones
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Bookmark removed (or there was none)",
-            content = @Content(examples = @ExampleObject(name = "Removed", value = """
-                    {"success":true,"data":{"success":true,"id":null,"status":null,"message":null},"message":null,"errorCode":null,"error":null}""")))
+            content = @Content(examples = @ExampleObject(name = "Removed", value = EX_OK)))
     public ResponseEntity<ApiResponse<SimpleResultResponse>> unbookmark(
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
             @PathVariable String voteId,
@@ -593,8 +588,7 @@ public class VoteController {
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
             @PathVariable String voteId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        VoteResponse response = voteService.retract(voteId, principal.userId());
-        return ResponseEntity.ok(ApiResponse.ok(response));
+        return ResponseEntity.ok(ApiResponse.ok(voteService.retract(voteId, principal.userId())));
     }
 
     @DeleteMapping("/{voteId}/vote/{optionId}")
@@ -657,8 +651,7 @@ public class VoteController {
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
             @PathVariable String voteId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        VoteResultResponse response = voteService.getVoteResults(voteId, principal != null ? principal.userId() : null);
-        return ResponseEntity.ok(ApiResponse.ok(response));
+        return ResponseEntity.ok(ApiResponse.ok(voteService.getVoteResults(voteId, principal != null ? principal.userId() : null)));
     }
 
     @GetMapping("/{voteId}/voters")
@@ -718,10 +711,7 @@ public class VoteController {
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")
             @PathVariable String voteId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        UserVoteStatusResponse response = new UserVoteStatusResponse();
-        response.setHasVoted(voteService.hasUserVoted(voteId, principal.userId()));
-        response.setSelectedOptions(voteService.getUserVoteOptions(voteId, principal.userId()));
-        return ResponseEntity.ok(ApiResponse.ok(response));
+        return ResponseEntity.ok(ApiResponse.ok(voteService.getMyVoteStatus(voteId, principal.userId())));
     }
 
     @DeleteMapping("/{voteId}")
@@ -737,10 +727,7 @@ public class VoteController {
             **Side effects**: nobody is notified
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Poll deleted",
-            content = @Content(examples = @ExampleObject(name = "Deleted", value = """
-                    { "success": true, "data": { "success": true, "id": null, "status": null, "message": null },
-                      "message": null, "errorCode": null, "error": null }
-                    """)))
+            content = @Content(examples = @ExampleObject(name = "Deleted", value = EX_OK)))
     @ApiError(status = 400, key = MessageKey.VOTE_DELETE_WINDOW_PASSED, when = "the Poll is Open or Ended and the delete window (default 20 minutes, configurable) has passed", args = { "20" })
     @ApiError(status = 403, key = MessageKey.VOTE_FORBIDDEN, when = "the caller is not the owner")
     @ApiError(status = 403, key = MessageKey.COMMUNITY_ROLE_FORBIDDEN, when = "acting as a community account (`X-Act-As`) as an EDITOR on a Poll another member published, or as an ANALYST")
@@ -765,10 +752,7 @@ public class VoteController {
             **Side effects**: the Poll becomes Ended, so results and Voter Visibility open up; the owner, Participants and Invitees receive an Ended Notification.
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Poll closed (or already Ended)",
-            content = @Content(examples = @ExampleObject(name = "Closed", value = """
-                    { "success": true, "data": { "success": true, "id": null, "status": null, "message": null },
-                      "message": null, "errorCode": null, "error": null }
-                    """)))
+            content = @Content(examples = @ExampleObject(name = "Closed", value = EX_OK)))
     @ApiError(status = 400, key = MessageKey.VOTE_CLOSE_PUBLIC_NOT_ALLOWED, when = "the Poll is Public and Open")
     @ApiError(status = 400, key = MessageKey.VOTE_CLOSE_SCHEDULED, when = "the Poll is Scheduled; use `DELETE /api/votes/{voteId}` instead")
     @ApiError(status = 403, key = MessageKey.VOTE_FORBIDDEN, when = "the caller is not the owner")

@@ -149,6 +149,51 @@ class CommunityInvitationPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    void shouldRefuseResendWithinWindowForAnyManagerAndAllowItAfter() {
+        memberRepository.save(new com.vomatt.entity.CommunityMember(communityId, dave.getId(), CommunityRole.ADMIN));
+        CommunityInvitationResponse invitation = invite("gina@example.com", CommunityRole.EDITOR);
+        assertThat(invitation.resendAvailableAt()).isAfter(OffsetDateTime.now().plusDays(2));
+
+        // Another manager, even after revoking and inviting again, cannot mail the address before the window passes
+        assertKey(() -> communityService.resendInvitation(communityId, UUID.fromString(invitation.id()), dave.getId().toString()),
+                MessageKey.INVITATION_EMAIL_TOO_SOON);
+        communityService.revokeInvitation(communityId, UUID.fromString(invitation.id()), dave.getId().toString());
+        CommunityInvitationResponse again = communityService.invite(communityId, null, "gina@example.com", CommunityRole.EDITOR,
+                dave.getId().toString());
+        assertThat(again.resendAvailableAt()).isEqualTo(invitation.resendAvailableAt());
+
+        em.createNativeQuery("UPDATE vomatt.invitation_emails SET sent_at = sent_at - INTERVAL '3 days' WHERE scope_id = :id")
+                .setParameter("id", communityId).executeUpdate();
+        CommunityInvitationResponse resent = communityService.resendInvitation(communityId, UUID.fromString(again.id()),
+                dave.getId().toString());
+
+        assertThat(resent.resendAvailableAt()).isAfter(OffsetDateTime.now().plusDays(2));
+        assertThat(communityService.listInvitations(communityId, owner.getId().toString()))
+                .extracting(i -> i.resendAvailableAt().toInstant()).containsExactly(resent.resendAvailableAt().toInstant());
+    }
+
+    @Test
+    void shouldAnswerResendTheSameWhetherOrNotAddressHasAccount() {
+        CommunityInvitationResponse withAccount = invite(dave.getEmail(), CommunityRole.EDITOR);
+        CommunityInvitationResponse withoutAccount = invite("ivy@example.com", CommunityRole.EDITOR);
+
+        assertThat(withAccount.resendAvailableAt()).isAfter(OffsetDateTime.now().plusDays(2));
+        assertThat(withoutAccount.resendAvailableAt()).isAfter(OffsetDateTime.now().plusDays(2));
+        assertKey(() -> communityService.resendInvitation(communityId, UUID.fromString(withAccount.id()), owner.getId().toString()),
+                MessageKey.INVITATION_EMAIL_TOO_SOON);
+    }
+
+    @Test
+    void shouldRefuseResendWhenInvitedByUserId() {
+        CommunityInvitationResponse invitation = communityService.invite(communityId, dave.getId(), null, CommunityRole.EDITOR,
+                owner.getId().toString());
+
+        assertThat(invitation.resendAvailableAt()).isNull();
+        assertKey(() -> communityService.resendInvitation(communityId, UUID.fromString(invitation.id()), owner.getId().toString()),
+                MessageKey.COMMUNITY_INVITATION_NOT_EMAIL);
+    }
+
+    @Test
     void shouldConflictWhenAddressAlreadyInvitedAndReplaceWhenExpired() {
         CommunityInvitationResponse first = invite("erin@example.com", CommunityRole.EDITOR);
         assertKey(() -> invite("erin@example.com", CommunityRole.ADMIN), MessageKey.COMMUNITY_INVITATION_EXISTS);

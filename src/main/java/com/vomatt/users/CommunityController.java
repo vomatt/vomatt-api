@@ -334,7 +334,12 @@ public class CommunityController {
     private static final String EX_INVITATION = """
             { "id": "019a6b2c-3d4e-7f50-8a61-b2c3d4e5f607", "userId": "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d47", "username": "dave",
               "displayName": "Dave", "avatarUrl": "bot:boba", "email": null, "role": "EDITOR",
-              "invitedAt": "2026-11-11T14:52:00+08:00", "expiresAt": "2026-11-18T14:52:00+08:00" }""";
+              "invitedAt": "2026-11-11T14:52:00+08:00", "expiresAt": "2026-11-18T14:52:00+08:00", "resendAvailableAt": null }""";
+
+    private static final String EX_EMAIL_INVITATION = """
+            { "id": "019a6b2c-3d4e-7f50-8a61-b2c3d4e5f608", "userId": null, "username": null, "displayName": null, "avatarUrl": null,
+              "email": "dave@example.com", "role": "ANALYST", "invitedAt": "2026-11-11T14:52:00+08:00",
+              "expiresAt": "2026-11-18T14:52:00+08:00", "resendAvailableAt": "2026-11-17T09:30:00+08:00" }""";
 
     @PostMapping("/api/communities/{communityId}/invitations")
     @Auditable(action = "INVITE_MEMBER", resourceType = "COMMUNITY", resourceIdIndex = 0)
@@ -352,8 +357,10 @@ public class CommunityController {
             user or address is replaced by the new one. \
             """ + ROLES + """
 
-            **Side effects**: an address with no account at all is mailed once committed; one member mails one address at most \
-            once a week, within the member's own daily invitation email limit (shared with their Poll and Invite List invitations). Audit-logged.
+            **Side effects**: an address with no account at all is mailed once committed; one community account mails one address at most \
+            once every 3 days, whichever member invites it and even after the invitation is revoked and sent again, within the member's own daily invitation email limit (shared with their Poll and Invite List invitations). \
+            Every invitation by email takes from that window and limit, whether or not the address has an account, so neither \
+            tells. Audit-logged.
             """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = {
                     @ExampleObject(name = "Invite a user", value = """
@@ -425,6 +432,38 @@ public class CommunityController {
             @AuthenticationPrincipal UserPrincipal principal) {
         communityService.revokeInvitation(communityId, invitationId, ActingMember.realUserId(principal));
         return ResponseEntity.ok(ApiResponse.ok(SimpleResultResponse.ok()));
+    }
+
+    @PostMapping("/api/communities/{communityId}/invitations/{invitationId}/resend")
+    @Auditable(action = "RESEND_INVITATION", resourceType = "COMMUNITY", resourceIdIndex = 0)
+    @CommonApiResponses
+    @Operation(summary = "Email a community account invitation again", description = """
+            **Auth**: required (OWNER or ADMIN; only an OWNER resends one that grants OWNER)
+            **Precondition**: the invitation belongs to this community account, was sent to an `email` address and has not \
+            expired (an expired one is invited again instead); its `resendAvailableAt` has passed.
+            **Behavior**: emails the invitation again, unchanged: same link, same `expiresAt`. As with the first email, an \
+            address that has an account is notified, not mailed, and the answer is the same either way. Returns the \
+            invitation with its new `resendAvailableAt`.
+            **Side effects**: an address with no account is mailed once committed; the email counts toward the caller's own \
+            daily invitation email limit and starts a new 3-day window for this community account and address. Audit-logged.
+            """)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Invitation emailed again",
+            content = @Content(examples = @ExampleObject(name = "Resent", value = "{ \"success\": true, \"data\": " + EX_EMAIL_INVITATION
+                    + ", \"message\": null, \"errorCode\": null, \"error\": null }")))
+    @ApiError(status = 400, key = MessageKey.COMMUNITY_INVITATION_NOT_EMAIL, when = "the invitation was sent to a `userId`, not an email address")
+    @ApiError(status = 404, key = MessageKey.COMMUNITY_INVITATION_NOT_FOUND, when = "no such invitation of this community account, or it has expired")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_NOT_MEMBER, when = "the caller is not a member of this community account, or it does not exist or is suspended")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_ROLE_FORBIDDEN, when = "the caller is not an OWNER or ADMIN, or is an ADMIN and the invitation grants OWNER")
+    @ApiError(status = 429, key = MessageKey.INVITATION_EMAIL_TOO_SOON, when = "`resendAvailableAt` has not passed: the address was emailed about this community account within 3 days, by any member")
+    @ApiError(status = 429, key = MessageKey.INVITATION_EMAIL_DAILY_LIMIT, when = "the caller has used up today's invitation email limit (`invitation_email_daily_limit`)")
+    public ResponseEntity<ApiResponse<CommunityInvitationResponse>> resendInvitation(
+            @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
+            @PathVariable UUID communityId,
+            @Parameter(description = "Invitation id", required = true, example = "019a6b2c-3d4e-7f50-8a61-b2c3d4e5f608")
+            @PathVariable UUID invitationId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(communityService.resendInvitation(communityId, invitationId,
+                ActingMember.realUserId(principal))));
     }
 
     @GetMapping("/api/community-invitations/{invitationId}")

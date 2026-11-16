@@ -315,9 +315,13 @@ class CommunityServiceTest {
         savesInvitation();
         when(userRepository.existsByEmail("dave@example.com")).thenReturn(true);
 
+        when(invitationEmailLimiter.claim(callerId, communityId, List.of("dave@example.com"))).thenReturn(List.of("dave@example.com"));
+
         service.invite(communityId, null, "dave@example.com", CommunityRole.EDITOR, callerId.toString());
 
-        org.mockito.Mockito.verifyNoInteractions(invitationEmailLimiter, emailService);
+        // Claimed like any address, so the window and quota never tell it has an account; only the email is skipped
+        verify(invitationEmailLimiter).claim(callerId, communityId, List.of("dave@example.com"));
+        org.mockito.Mockito.verifyNoInteractions(emailService);
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.vomatt.common.email;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -21,6 +22,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.lookups.LookupService;
 import com.vomatt.repository.InvitationEmailRepository;
@@ -44,12 +47,35 @@ class InvitationEmailLimiterTest {
 
     @Test
     void shouldSkipAddressesMailedThisWeekAndRecordTheRestWhenClaiming() {
-        when(repository.findSentSince(eq(senderId), eq(scopeId), any(), any())).thenReturn(List.of("a@example.com"));
+        when(repository.findSentSince(eq(scopeId), any(), any())).thenReturn(List.of("a@example.com"));
         when(lookupService.configInt(anyString(), anyInt())).thenReturn(200);
         when(redisService.incrementAndExpire(eq("email:invitation"), anyString(), eq(1L), any())).thenReturn(1L);
 
         assertThat(limiter.claim(senderId, scopeId, List.of("a@example.com", "b@example.com"))).containsExactly("b@example.com");
         verify(repository).recordSent(eq(senderId), eq(scopeId), eq(List.of("b@example.com")), any());
+    }
+
+    private void assertRefused(MessageKey key) {
+        assertThatThrownBy(() -> limiter.claimOrThrow(senderId, scopeId, "a@example.com"))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(key));
+    }
+
+    @Test
+    void shouldRefuseWithoutTakingQuotaWhenResendIsTooSoon() {
+        when(repository.findSentSince(eq(scopeId), any(), any())).thenReturn(List.of("a@example.com"));
+
+        assertRefused(MessageKey.INVITATION_EMAIL_TOO_SOON);
+        verifyNoInteractions(redisService);
+        verify(repository, never()).recordSent(any(), any(), any(), any());
+    }
+
+    @Test
+    void shouldRefuseAndRecordNothingWhenResendIsOverDailyLimit() {
+        when(lookupService.configInt(anyString(), anyInt())).thenReturn(200);
+        when(redisService.incrementAndExpire(eq("email:invitation"), anyString(), eq(1L), any())).thenReturn(201L);
+
+        assertRefused(MessageKey.INVITATION_EMAIL_DAILY_LIMIT);
+        verify(repository, never()).recordSent(any(), any(), any(), any());
     }
 
     @Test

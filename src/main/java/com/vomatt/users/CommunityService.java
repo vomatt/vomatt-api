@@ -29,6 +29,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.vomatt.common.email.EmailService;
 import com.vomatt.common.email.InvitationEmailLimiter;
 import com.vomatt.common.util.AfterCommit;
+import com.vomatt.common.util.TextUtil;
 import com.vomatt.entity.CommunityInvitation;
 import com.vomatt.repository.CommunityInvitationRepository;
 import com.vomatt.users.dto.CommunityInvitationDetailResponse;
@@ -147,18 +148,53 @@ public class CommunityService {
             // A concurrent invite of the same user or address won the unique key
             throw ApiException.conflict(MessageKey.COMMUNITY_INVITATION_EXISTS);
         }
-        if (email != null && !userRepository.existsByEmail(email)) {
+        if (email != null) {
             mailInvitation(communityId, invitation.getId(), email, role, callerId);
         }
         log.info("Community account {}: {} invited {} as {} ({})", communityId, callerId, userId != null ? userId : "an address",
                 role, invitation.getId());
-        return toResponse(invitation, user, user == null ? null : PublicNames.load(user, preferenceRepository));
+        return toResponse(invitation, user, user == null ? null : PublicNames.load(user, preferenceRepository),
+                email == null ? Map.of() : invitationEmailLimiter.nextSendAt(communityId, List.of(email)));
+    }
+
+    /**
+     * OWNER or ADMIN emails an unexpired invitation by email again (only an OWNER one that grants OWNER), within the same
+     * resend window and daily quota as the first email, and says when either stops it. Like {@link #invite}, an address
+     * with an account is claimed the same way but not mailed, so the answer never tells whether it has one.
+     */
+    public CommunityInvitationResponse resendInvitation(UUID communityId, UUID invitationId, String callerId) {
+        CommunityRole caller = requireManager(communityId, callerId);
+        // Locked: two clicks at once must not both pass the resend window
+        CommunityInvitation invitation = lockTimeout.within(() -> invitationRepository.lockByIdAndCommunityUserId(invitationId, communityId))
+                .filter(i -> !i.isExpiredAt(OffsetDateTime.now()))
+                .orElseThrow(() -> ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
+        requireGrant(caller, invitation.getRole());
+        String address = invitation.getEmail();
+        if (address == null) {
+            throw ApiException.badRequest(MessageKey.COMMUNITY_INVITATION_NOT_EMAIL);
+        }
+        OffsetDateTime resendAvailableAt = invitationEmailLimiter.claimOrThrow(UUID.fromString(callerId), communityId, address);
+        sendUnlessAccount(communityId, invitationId, address, invitation.getRole(), callerId);
+        log.info("Community account {}: {} resent invitation {}", communityId, callerId, invitationId);
+        return toResponse(invitation, null, null, Map.of(address, resendAvailableAt));
     }
 
     private void mailInvitation(UUID communityId, UUID invitationId, String address, CommunityRole role, String callerId) {
         // Counted against the inviting person, not the community account: anyone can create community accounts, so a
-        // per-community budget would multiply with each one they make
+        // per-community budget would multiply with each one they make. Claimed for an address with an account too, so
+        // the window and quota never tell whether it has one.
         if (invitationEmailLimiter.claim(UUID.fromString(callerId), communityId, List.of(address)).isEmpty()) {
+            log.info("Community invitation {} not mailed to {}: mailed within the resend window or over the daily limit",
+                    invitationId, TextUtil.maskEmail(address));
+            return;
+        }
+        sendUnlessAccount(communityId, invitationId, address, role, callerId);
+    }
+
+    // An address with an account gets the COMMUNITY_INVITATION notification instead
+    private void sendUnlessAccount(UUID communityId, UUID invitationId, String address, CommunityRole role, String callerId) {
+        if (userRepository.existsByEmail(address)) {
+            log.info("Community invitation {} not mailed to {}: the address has an account", invitationId, TextUtil.maskEmail(address));
             return;
         }
         User community = userRepository.getReferenceById(communityId);
@@ -179,9 +215,11 @@ public class CommunityService {
         Map<UUID, User> users = userRepository.findAllById(invitations.stream().map(CommunityInvitation::getUserId)
                 .filter(Objects::nonNull).toList()).stream().collect(Collectors.toMap(User::getId, Function.identity()));
         Map<UUID, PublicName> names = PublicNames.load(users.values(), preferenceRepository);
+        Map<String, OffsetDateTime> nextSendAt = invitationEmailLimiter.nextSendAt(communityId,
+                invitations.stream().map(CommunityInvitation::getEmail).filter(Objects::nonNull).toList());
         return invitations.stream().map(i -> {
             User user = i.getUserId() == null ? null : users.get(i.getUserId());
-            return toResponse(i, user, user == null ? null : names.get(user.getId()));
+            return toResponse(i, user, user == null ? null : names.get(user.getId()), nextSendAt);
         }).toList();
     }
 
@@ -273,10 +311,13 @@ public class CommunityService {
     }
 
     // name: the user's names as their visibility settings show them to others (PublicNames)
-    private static CommunityInvitationResponse toResponse(CommunityInvitation i, User user, PublicName name) {
+    // nextSendAt: InvitationEmailLimiter#nextSendAt; an address never mailed (over the quota at invite) may be mailed now
+    private static CommunityInvitationResponse toResponse(CommunityInvitation i, User user, PublicName name,
+                                                          Map<String, OffsetDateTime> nextSendAt) {
         return new CommunityInvitationResponse(i.getId().toString(), user == null ? null : user.getId().toString(),
                 user == null ? null : user.getUsername(), user == null ? null : name.displayName(),
-                user == null ? null : user.getAvatarUrl(), i.getEmail(), i.getRole(), i.getCreatedAt(), i.getExpiresAt());
+                user == null ? null : user.getAvatarUrl(), i.getEmail(), i.getRole(), i.getCreatedAt(), i.getExpiresAt(),
+                i.getEmail() == null ? null : nextSendAt.getOrDefault(i.getEmail(), i.getCreatedAt()));
     }
 
     public CommunityMemberResponse changeRole(UUID communityId, UUID userId, CommunityRole role, String callerId) {

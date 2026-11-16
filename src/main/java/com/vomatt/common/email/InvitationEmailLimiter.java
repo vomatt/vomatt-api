@@ -2,15 +2,20 @@ package com.vomatt.common.email;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
 
+import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.util.TextUtil;
 import com.vomatt.lookups.LookupService;
@@ -32,8 +37,8 @@ public class InvitationEmailLimiter {
 
     static final String COUNTER_NS = "email:invitation";
     public static final String LIMIT_KEY = "invitation_email_daily_limit";
-    /** A sign-up invitation reaches an address from the same sender at most once in this window. */
-    static final Duration RESEND_AFTER = Duration.ofDays(7);
+    /** A sign-up invitation about one scope reaches an address at most once in this window, whoever sends it. */
+    static final Duration RESEND_AFTER = Duration.ofDays(3);
 
     private final RedisService redisService;
     private final LookupService lookupService;
@@ -59,15 +64,40 @@ public class InvitationEmailLimiter {
     }
 
     /**
-     * Of the sign-up invitation addresses, those to mail now: not mailed by this sender about this scope (the Invite
-     * List or community account) within {@link #RESEND_AFTER}, within the daily quota.
+     * Of the sign-up invitation addresses, those to mail now: not mailed about this scope (the Invite List or community
+     * account) within {@link #RESEND_AFTER}, even after the invitation was revoked, within the daily quota.
      */
     public List<String> claim(UUID senderId, UUID scopeId, Collection<String> emails) {
-        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime now = sentNow();
         UUID sender = realSender(senderId);
         return claim(sender, emails,
-                unsent -> invitationEmailRepository.findSentSince(sender, scopeId, unsent, now.minus(RESEND_AFTER)),
+                unsent -> invitationEmailRepository.findSentSince(scopeId, unsent, now.minus(RESEND_AFTER)),
                 recipients -> invitationEmailRepository.recordSent(sender, scopeId, recipients, now));
+    }
+
+    /**
+     * Claims one more invitation email about the scope to the address, the way {@link #claim(UUID, UUID, Collection)}
+     * would, but says why not: 429 {@code invitation.email.too_soon} within {@link #RESEND_AFTER} of the last one (checked
+     * first, so it uses no quota), 429 {@code invitation.email.daily_limit} over the sender's daily quota. Returns when
+     * the address may next be mailed about the scope.
+     */
+    public OffsetDateTime claimOrThrow(UUID senderId, UUID scopeId, String email) {
+        OffsetDateTime now = sentNow();
+        if (!invitationEmailRepository.findSentSince(scopeId, List.of(email), now.minus(RESEND_AFTER)).isEmpty()) {
+            throw ApiException.tooManyRequests(MessageKey.INVITATION_EMAIL_TOO_SOON);
+        }
+        UUID sender = realSender(senderId);
+        if (claim(sender, List.of(email), unsent -> List.of(),
+                recipients -> invitationEmailRepository.recordSent(sender, scopeId, recipients, now)).isEmpty()) {
+            throw ApiException.tooManyRequests(MessageKey.INVITATION_EMAIL_DAILY_LIMIT);
+        }
+        return now.plus(RESEND_AFTER);
+    }
+
+    /** When each address may next be mailed about the scope; addresses never mailed about it are absent (any time). */
+    public Map<String, OffsetDateTime> nextSendAt(UUID scopeId, Collection<String> emails) {
+        return invitationEmailRepository.findLastSent(scopeId, emails).entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().plus(RESEND_AFTER)));
     }
 
     /**
@@ -95,6 +125,11 @@ public class InvitationEmailLimiter {
             record.accept(recipients);
         }
         return recipients;
+    }
+
+    // At the precision sent_at keeps (Postgres stores microseconds), so a returned time equals the one read back later
+    private static OffsetDateTime sentNow() {
+        return OffsetDateTime.now().truncatedTo(ChronoUnit.MICROS);
     }
 
     /** The member acting as the community account {@code senderId}, or the sender itself. */

@@ -3,12 +3,16 @@ package com.vomatt.repository;
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.UUID;
 
 import org.springframework.stereotype.Repository;
 
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+
+import com.vomatt.common.util.TimeUtil;
 
 /** Sign-up invitation emails sent, per sender and address ({@code invitation_emails}). */
 @Repository
@@ -17,17 +21,34 @@ public class InvitationEmailRepository {
 
     private final EntityManager em;
 
-    /** The addresses the sender mailed about the scope at or after {@code since}. */
+    /**
+     * The addresses mailed about the scope at or after {@code since}, by anyone: a community account has several
+     * managers, so another one revoking and re-inviting must not mail the address again.
+     */
     @SuppressWarnings("unchecked")
-    public List<String> findSentSince(UUID senderId, UUID scopeId, Collection<String> emails, OffsetDateTime since) {
+    public List<String> findSentSince(UUID scopeId, Collection<String> emails, OffsetDateTime since) {
         return em.createNativeQuery("""
                 SELECT email FROM vomatt.invitation_emails
-                WHERE sender_id = :senderId AND scope_id = :scopeId AND email IN (:emails) AND sent_at >= :since""")
-                .setParameter("senderId", senderId)
+                WHERE scope_id = :scopeId AND email IN (:emails) AND sent_at >= :since""")
                 .setParameter("scopeId", scopeId)
                 .setParameter("emails", emails)
                 .setParameter("since", since)
                 .getResultList();
+    }
+
+    /** When each of the addresses was last mailed about the scope, by anyone; addresses never mailed are absent. */
+    @SuppressWarnings("unchecked")
+    public Map<String, OffsetDateTime> findLastSent(UUID scopeId, Collection<String> emails) {
+        if (emails.isEmpty()) {
+            return Map.of();
+        }
+        List<Object[]> rows = em.createNativeQuery("""
+                SELECT email, max(sent_at) FROM vomatt.invitation_emails
+                WHERE scope_id = :scopeId AND email IN (:emails) GROUP BY email""")
+                .setParameter("scopeId", scopeId)
+                .setParameter("emails", emails)
+                .getResultList();
+        return rows.stream().collect(Collectors.toMap(r -> (String) r[0], r -> TimeUtil.toOffsetDateTime(r[1])));
     }
 
     /** Records the sender mailed the addresses about the scope now. */

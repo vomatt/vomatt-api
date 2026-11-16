@@ -180,7 +180,7 @@ public class InviteListController {
             An address is always listed as entered, whether or not it belongs to an account, including one of a user already a member by ID; once someone verifies it at sign-up / sign-in it is tied to that user, \
             still listed by the address. Returns the full member list.
             **Side effects**: members get no notification. A new address that belongs to no account at all is mailed, once committed, \
-            an invitation to sign up for Vomatt from the owner, naming no Invite List; one Invite List mails one address at most once a week, \
+            an invitation to sign up for Vomatt from the owner, naming no Invite List; one Invite List mails one address at most once every 3 days, \
             within the daily invitation email limit of the person adding it (the real member while acting as a community account; \
             shared with Poll invitations). The response is the same whether or not \
             an email was sent. The action is audit-logged.

@@ -169,13 +169,12 @@ class CommunityInvitationPostgresTest extends PostgresRepositoryTest {
 
         assertThat(resent.resendAvailableAt()).isAfter(OffsetDateTime.now().plusDays(2));
         assertThat(communityService.listInvitations(communityId, owner.getId().toString()))
-                .extracting(CommunityInvitationResponse::resendAvailableAt).containsExactly(resent.resendAvailableAt());
+                .extracting(i -> i.resendAvailableAt().toInstant()).containsExactly(resent.resendAvailableAt().toInstant());
     }
 
     @Test
     void shouldAnswerResendTheSameWhetherOrNotAddressHasAccount() {
-        persistUserWithEmail("hank@example.com");
-        CommunityInvitationResponse withAccount = invite("hank@example.com", CommunityRole.EDITOR);
+        CommunityInvitationResponse withAccount = invite(dave.getEmail(), CommunityRole.EDITOR);
         CommunityInvitationResponse withoutAccount = invite("ivy@example.com", CommunityRole.EDITOR);
 
         assertThat(withAccount.resendAvailableAt()).isAfter(OffsetDateTime.now().plusDays(2));
@@ -192,11 +191,6 @@ class CommunityInvitationPostgresTest extends PostgresRepositoryTest {
         assertThat(invitation.resendAvailableAt()).isNull();
         assertKey(() -> communityService.resendInvitation(communityId, UUID.fromString(invitation.id()), owner.getId().toString()),
                 MessageKey.COMMUNITY_INVITATION_NOT_EMAIL);
-    }
-
-    private void persistUserWithEmail(String email) {
-        em.persist(User.builder().username("ci-e-" + UUID.randomUUID().toString().substring(0, 8)).email(email).build());
-        em.flush();
     }
 
     @Test

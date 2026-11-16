@@ -173,10 +173,10 @@ public class CommunityService {
         if (address == null) {
             throw ApiException.badRequest(MessageKey.COMMUNITY_INVITATION_NOT_EMAIL);
         }
-        invitationEmailLimiter.claimOrThrow(UUID.fromString(callerId), communityId, address);
+        OffsetDateTime resendAvailableAt = invitationEmailLimiter.claimOrThrow(UUID.fromString(callerId), communityId, address);
         sendUnlessAccount(communityId, invitationId, address, invitation.getRole(), callerId);
         log.info("Community account {}: {} resent invitation {}", communityId, callerId, invitationId);
-        return toResponse(invitation, null, null, invitationEmailLimiter.nextSendAt(communityId, List.of(address)));
+        return toResponse(invitation, null, null, Map.of(address, resendAvailableAt));
     }
 
     private void mailInvitation(UUID communityId, UUID invitationId, String address, CommunityRole role, String callerId) {

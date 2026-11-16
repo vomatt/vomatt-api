@@ -22,6 +22,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.vomatt.common.exception.ApiException;
+import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.lookups.LookupService;
 import com.vomatt.repository.InvitationEmailRepository;
@@ -53,13 +55,16 @@ class InvitationEmailLimiterTest {
         verify(repository).recordSent(eq(senderId), eq(scopeId), eq(List.of("b@example.com")), any());
     }
 
+    private void assertRefused(MessageKey key) {
+        assertThatThrownBy(() -> limiter.claimOrThrow(senderId, scopeId, "a@example.com"))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(key));
+    }
+
     @Test
     void shouldRefuseWithoutTakingQuotaWhenResendIsTooSoon() {
         when(repository.findSentSince(eq(scopeId), any(), any())).thenReturn(List.of("a@example.com"));
 
-        assertThatThrownBy(() -> limiter.claimOrThrow(senderId, scopeId, "a@example.com")).isInstanceOfSatisfying(
-                com.vomatt.common.exception.ApiException.class,
-                ex -> assertThat(ex.getMessageKey()).isEqualTo(com.vomatt.common.i18n.MessageKey.INVITATION_EMAIL_TOO_SOON));
+        assertRefused(MessageKey.INVITATION_EMAIL_TOO_SOON);
         verifyNoInteractions(redisService);
         verify(repository, never()).recordSent(any(), any(), any(), any());
     }
@@ -69,9 +74,7 @@ class InvitationEmailLimiterTest {
         when(lookupService.configInt(anyString(), anyInt())).thenReturn(200);
         when(redisService.incrementAndExpire(eq("email:invitation"), anyString(), eq(1L), any())).thenReturn(201L);
 
-        assertThatThrownBy(() -> limiter.claimOrThrow(senderId, scopeId, "a@example.com")).isInstanceOfSatisfying(
-                com.vomatt.common.exception.ApiException.class,
-                ex -> assertThat(ex.getMessageKey()).isEqualTo(com.vomatt.common.i18n.MessageKey.INVITATION_EMAIL_DAILY_LIMIT));
+        assertRefused(MessageKey.INVITATION_EMAIL_DAILY_LIMIT);
         verify(repository, never()).recordSent(any(), any(), any(), any());
     }
 

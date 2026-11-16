@@ -1,5 +1,7 @@
 package com.vomatt.repository;
 
+import com.vomatt.common.util.TimeUtil;
+
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -46,16 +48,7 @@ public class InvitationEmailRepository {
                 .setParameter("scopeId", scopeId)
                 .setParameter("emails", emails)
                 .getResultList();
-        return rows.stream().collect(Collectors.toMap(r -> (String) r[0], r -> toOffsetDateTime(r[1])));
-    }
-
-    private static OffsetDateTime toOffsetDateTime(Object value) {
-        return switch (value) {
-            case OffsetDateTime time -> time;
-            case java.time.Instant instant -> instant.atOffset(java.time.ZoneOffset.UTC);
-            case java.sql.Timestamp timestamp -> timestamp.toInstant().atOffset(java.time.ZoneOffset.UTC);
-            default -> throw new IllegalStateException("Unexpected sent_at type " + value.getClass());
-        };
+        return rows.stream().collect(Collectors.toMap(r -> (String) r[0], r -> TimeUtil.toOffsetDateTime(r[1])));
     }
 
     /** Records the sender mailed the addresses about the scope now. */

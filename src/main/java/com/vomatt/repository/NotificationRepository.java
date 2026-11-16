@@ -1,9 +1,8 @@
 package com.vomatt.repository;
 
-import java.sql.Timestamp;
-import java.time.Instant;
+import com.vomatt.common.util.TimeUtil;
+
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.EnumMap;
 import java.util.List;
@@ -332,17 +331,9 @@ public class NotificationRepository {
                                   UUID voteId, UUID commentId, boolean read) {
 
         static NotificationRow of(Object[] row) {
-            return new NotificationRow(NotificationKind.valueOf((String) row[0]), (UUID) row[1], toOffsetDateTime(row[2]),
+            return new NotificationRow(NotificationKind.valueOf((String) row[0]), (UUID) row[1], TimeUtil.toOffsetDateTime(row[2]),
                     (UUID) row[3], (UUID) row[4], (UUID) row[5], (Boolean) row[6]);
         }
 
-        private static OffsetDateTime toOffsetDateTime(Object value) {
-            return switch (value) {
-                case OffsetDateTime time -> time;
-                case Instant instant -> instant.atOffset(ZoneOffset.UTC);
-                case Timestamp timestamp -> timestamp.toInstant().atOffset(ZoneOffset.UTC);
-                default -> throw new IllegalStateException("Unexpected timestamp type " + value.getClass());
-            };
-        }
     }
 }

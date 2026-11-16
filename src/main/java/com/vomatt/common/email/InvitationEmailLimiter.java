@@ -4,12 +4,12 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
 
@@ -77,26 +77,26 @@ public class InvitationEmailLimiter {
     /**
      * Claims one more invitation email about the scope to the address, the way {@link #claim(UUID, UUID, Collection)}
      * would, but says why not: 429 {@code invitation.email.too_soon} within {@link #RESEND_AFTER} of the last one (checked
-     * first, so it uses no quota), 429 {@code invitation.email.daily_limit} over the sender's daily quota.
+     * first, so it uses no quota), 429 {@code invitation.email.daily_limit} over the sender's daily quota. Returns when
+     * the address may next be mailed about the scope.
      */
-    public void claimOrThrow(UUID senderId, UUID scopeId, String email) {
+    public OffsetDateTime claimOrThrow(UUID senderId, UUID scopeId, String email) {
         OffsetDateTime now = OffsetDateTime.now();
-        UUID sender = realSender(senderId);
         if (!invitationEmailRepository.findSentSince(scopeId, List.of(email), now.minus(RESEND_AFTER)).isEmpty()) {
             throw ApiException.tooManyRequests(MessageKey.INVITATION_EMAIL_TOO_SOON);
         }
-        if (takeQuota(sender, 1) == 0) {
-            log.warn("Invitation email daily limit reached: 1 invitation(s) by sender {} not sent", sender);
+        UUID sender = realSender(senderId);
+        if (claim(sender, List.of(email), unsent -> List.of(),
+                recipients -> invitationEmailRepository.recordSent(sender, scopeId, recipients, now)).isEmpty()) {
             throw ApiException.tooManyRequests(MessageKey.INVITATION_EMAIL_DAILY_LIMIT);
         }
-        invitationEmailRepository.recordSent(sender, scopeId, List.of(email), now);
+        return now.plus(RESEND_AFTER);
     }
 
     /** When each address may next be mailed about the scope; addresses never mailed about it are absent (any time). */
     public Map<String, OffsetDateTime> nextSendAt(UUID scopeId, Collection<String> emails) {
-        Map<String, OffsetDateTime> next = new HashMap<>();
-        invitationEmailRepository.findLastSent(scopeId, emails).forEach((email, sentAt) -> next.put(email, sentAt.plus(RESEND_AFTER)));
-        return next;
+        return invitationEmailRepository.findLastSent(scopeId, emails).entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().plus(RESEND_AFTER)));
     }
 
     /**

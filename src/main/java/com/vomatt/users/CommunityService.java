@@ -154,12 +154,12 @@ public class CommunityService {
         log.info("Community account {}: {} invited {} as {} ({})", communityId, callerId, userId != null ? userId : "an address",
                 role, invitation.getId());
         return toResponse(invitation, user, user == null ? null : PublicNames.load(user, preferenceRepository),
-                email == null ? Map.of() : invitationEmailLimiter.nextSendAt(communityId, List.of(email)));
+                email == null ? Map.of() : invitationEmailLimiter.lockedUntil(UUID.fromString(callerId), List.of(email)));
     }
 
     /**
      * OWNER or ADMIN emails an unexpired invitation by email again (only an OWNER one that grants OWNER), within the same
-     * resend window and daily quota as the first email, and says when either stops it. Like {@link #invite}, an address
+     * burst lock and daily quota as the first email, and says when either stops it. Like {@link #invite}, an address
      * with an account is claimed the same way but not mailed, so the answer never tells whether it has one.
      */
     public CommunityInvitationResponse resendInvitation(UUID communityId, UUID invitationId, String callerId) {
@@ -173,18 +173,18 @@ public class CommunityService {
         if (address == null) {
             throw ApiException.badRequest(MessageKey.COMMUNITY_INVITATION_NOT_EMAIL);
         }
-        OffsetDateTime resendAvailableAt = invitationEmailLimiter.claimOrThrow(UUID.fromString(callerId), communityId, address);
+        OffsetDateTime lockedUntil = invitationEmailLimiter.claimOrThrow(UUID.fromString(callerId), address);
         sendUnlessAccount(communityId, invitationId, address, invitation.getRole(), callerId);
         log.info("Community account {}: {} resent invitation {}", communityId, callerId, invitationId);
-        return toResponse(invitation, null, null, Map.of(address, resendAvailableAt));
+        return toResponse(invitation, null, null, lockedUntil == null ? Map.of() : Map.of(address, lockedUntil));
     }
 
     private void mailInvitation(UUID communityId, UUID invitationId, String address, CommunityRole role, String callerId) {
         // Counted against the inviting person, not the community account: anyone can create community accounts, so a
         // per-community budget would multiply with each one they make. Claimed for an address with an account too, so
         // the window and quota never tell whether it has one.
-        if (invitationEmailLimiter.claim(UUID.fromString(callerId), communityId, List.of(address)).isEmpty()) {
-            log.info("Community invitation {} not mailed to {}: mailed within the resend window or over the daily limit",
+        if (invitationEmailLimiter.claim(UUID.fromString(callerId), List.of(address)).isEmpty()) {
+            log.info("Community invitation {} not mailed to {}: the inviter is locked out of the address or over the daily limit",
                     invitationId, TextUtil.maskEmail(address));
             return;
         }
@@ -215,7 +215,7 @@ public class CommunityService {
         Map<UUID, User> users = userRepository.findAllById(invitations.stream().map(CommunityInvitation::getUserId)
                 .filter(Objects::nonNull).toList()).stream().collect(Collectors.toMap(User::getId, Function.identity()));
         Map<UUID, PublicName> names = PublicNames.load(users.values(), preferenceRepository);
-        Map<String, OffsetDateTime> nextSendAt = invitationEmailLimiter.nextSendAt(communityId,
+        Map<String, OffsetDateTime> nextSendAt = invitationEmailLimiter.lockedUntil(UUID.fromString(callerId),
                 invitations.stream().map(CommunityInvitation::getEmail).filter(Objects::nonNull).toList());
         return invitations.stream().map(i -> {
             User user = i.getUserId() == null ? null : users.get(i.getUserId());
@@ -311,7 +311,7 @@ public class CommunityService {
     }
 
     // name: the user's names as their visibility settings show them to others (PublicNames)
-    // nextSendAt: InvitationEmailLimiter#nextSendAt; an address never mailed (over the quota at invite) may be mailed now
+    // nextSendAt: InvitationEmailLimiter#lockedUntil for the caller; an address absent from it may be mailed now
     private static CommunityInvitationResponse toResponse(CommunityInvitation i, User user, PublicName name,
                                                           Map<String, OffsetDateTime> nextSendAt) {
         return new CommunityInvitationResponse(i.getId().toString(), user == null ? null : user.getId().toString(),

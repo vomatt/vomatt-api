@@ -130,8 +130,9 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `community.invitation.not_found` | 404 | 找不到此邀請，或邀請已失效 | Invitation not found or expired | Show resource not found | CommunityController, CommunityService |
 | `community.invitation.exists` | 409 | 已邀請過此對象，邀請尚未失效 | This invitee already has a pending invitation | Show message (resource state conflict) | CommunityController, CommunityService |
 | `community.invitation.not_email` | 400 | 只有寄到 email 的邀請可以重寄 | Only an invitation sent to an email address can be emailed again | Show message so the user can fix the input | CommunityController, CommunityService |
-| `invitation.email.too_soon` | 429 | 最近已寄過邀請信到此信箱，請稍後再試 | This address was emailed an invitation recently; try again later | Retry after the `Retry-After` seconds | CommunityController, InvitationEmailLimiter |
+| `invitation.email.too_soon` | 429 | 短時間內寄給此信箱的邀請信過多，暫時無法再寄 | You emailed this address too many invitations in a short time; you cannot email it for now | Retry after the `Retry-After` seconds | CommunityController, InvitationEmailLimiter |
 | `invitation.email.daily_limit` | 429 | 今天的邀請信已達上限，請明天再試 | You have reached today's invitation email limit; try again tomorrow | Retry after the `Retry-After` seconds | CommunityController, InvitationEmailLimiter |
+| `invitation.email.lock_not_found` | 404 | 此寄件者對此信箱沒有寄信封鎖 | This sender is not locked out of emailing this address | Show resource not found | AdminInvitationEmailLockController, InvitationEmailLimiter |
 | `community.username_immutable` | 400 | 社群帳號的使用者名稱不能變更 | A community account's username cannot be changed | Show message so the user can fix the input | UserController, UserService |
 | `vote.reveal_at.before_end` | 400 | 公布結果時間不可早於結束時間 | Reveal time cannot be before the end time | Show message so the user can fix the input | VoteController, VoteService |
 | `vote.reveal_at.too_late` | 400 | 公布結果時間不可晚於結束時間後 {0} 天 | Reveal time cannot be more than {0} days after the end time | Show message so the user can fix the input | VoteController, VoteService |

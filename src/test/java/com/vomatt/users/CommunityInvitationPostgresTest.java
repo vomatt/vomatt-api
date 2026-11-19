@@ -148,39 +148,44 @@ class CommunityInvitationPostgresTest extends PostgresRepositoryTest {
                 .isEqualTo(CommunityRole.ANALYST);
     }
 
+    private CommunityInvitationResponse resend(CommunityInvitationResponse invitation, User caller) {
+        CommunityInvitationResponse resent = communityService.resendInvitation(communityId, UUID.fromString(invitation.id()),
+                caller.getId().toString());
+        em.flush();
+        return resent;
+    }
+
     @Test
-    void shouldRefuseResendWithinWindowForAnyManagerAndAllowItAfter() {
+    void shouldLockCallerOutOfAddressAfterThirdEmailButNotOtherManagers() {
         memberRepository.save(new com.vomatt.entity.CommunityMember(communityId, dave.getId(), CommunityRole.ADMIN));
         CommunityInvitationResponse invitation = invite("gina@example.com", CommunityRole.EDITOR);
-        assertThat(invitation.resendAvailableAt()).isAfter(OffsetDateTime.now().plusDays(2));
+        // Not locked: a time already past, so now
+        assertThat(invitation.resendAvailableAt()).isBeforeOrEqualTo(OffsetDateTime.now());
+        assertThat(resend(invitation, owner).resendAvailableAt()).isBeforeOrEqualTo(OffsetDateTime.now());
 
-        // Another manager, even after revoking and inviting again, cannot mail the address before the window passes
-        assertKey(() -> communityService.resendInvitation(communityId, UUID.fromString(invitation.id()), dave.getId().toString()),
-                MessageKey.INVITATION_EMAIL_TOO_SOON);
-        communityService.revokeInvitation(communityId, UUID.fromString(invitation.id()), dave.getId().toString());
-        CommunityInvitationResponse again = communityService.invite(communityId, null, "gina@example.com", CommunityRole.EDITOR,
-                dave.getId().toString());
-        assertThat(again.resendAvailableAt()).isEqualTo(invitation.resendAvailableAt());
+        // The third email within 12 hours locks the owner out of the address for 7 days
+        assertThat(resend(invitation, owner).resendAvailableAt()).isAfter(OffsetDateTime.now().plusDays(6));
+        assertKey(() -> resend(invitation, owner), MessageKey.INVITATION_EMAIL_TOO_SOON);
 
-        em.createNativeQuery("UPDATE vomatt.invitation_emails SET sent_at = sent_at - INTERVAL '3 days' WHERE scope_id = :id")
-                .setParameter("id", communityId).executeUpdate();
-        CommunityInvitationResponse resent = communityService.resendInvitation(communityId, UUID.fromString(again.id()),
-                dave.getId().toString());
-
-        assertThat(resent.resendAvailableAt()).isAfter(OffsetDateTime.now().plusDays(2));
+        // Per sender: another manager may still mail it, and sees no lock
+        resend(invitation, dave);
+        assertThat(communityService.listInvitations(communityId, dave.getId().toString()))
+                .allSatisfy(i -> assertThat(i.resendAvailableAt()).isBeforeOrEqualTo(OffsetDateTime.now()));
         assertThat(communityService.listInvitations(communityId, owner.getId().toString()))
-                .extracting(i -> i.resendAvailableAt().toInstant()).containsExactly(resent.resendAvailableAt().toInstant());
+                .allSatisfy(i -> assertThat(i.resendAvailableAt()).isAfter(OffsetDateTime.now().plusDays(6)));
     }
 
     @Test
     void shouldAnswerResendTheSameWhetherOrNotAddressHasAccount() {
         CommunityInvitationResponse withAccount = invite(dave.getEmail(), CommunityRole.EDITOR);
         CommunityInvitationResponse withoutAccount = invite("ivy@example.com", CommunityRole.EDITOR);
+        for (int i = 0; i < 2; i++) {
+            resend(withAccount, owner);
+            resend(withoutAccount, owner);
+        }
 
-        assertThat(withAccount.resendAvailableAt()).isAfter(OffsetDateTime.now().plusDays(2));
-        assertThat(withoutAccount.resendAvailableAt()).isAfter(OffsetDateTime.now().plusDays(2));
-        assertKey(() -> communityService.resendInvitation(communityId, UUID.fromString(withAccount.id()), owner.getId().toString()),
-                MessageKey.INVITATION_EMAIL_TOO_SOON);
+        assertKey(() -> resend(withAccount, owner), MessageKey.INVITATION_EMAIL_TOO_SOON);
+        assertKey(() -> resend(withoutAccount, owner), MessageKey.INVITATION_EMAIL_TOO_SOON);
     }
 
     @Test

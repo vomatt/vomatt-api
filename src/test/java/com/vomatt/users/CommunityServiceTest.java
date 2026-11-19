@@ -297,7 +297,7 @@ class CommunityServiceTest {
         caller(CommunityRole.ADMIN);
         savesInvitation();
         when(userRepository.existsByEmail("dave@example.com")).thenReturn(false);
-        when(invitationEmailLimiter.claim(callerId, communityId, List.of("dave@example.com"))).thenReturn(List.of("dave@example.com"));
+        when(invitationEmailLimiter.claim(callerId, List.of("dave@example.com"))).thenReturn(List.of("dave@example.com"));
         when(userRepository.getReferenceById(communityId)).thenReturn(User.builder().id(communityId).username("tower").displayName("Sunrise Tower").build());
         when(userRepository.getReferenceById(callerId)).thenReturn(User.builder().id(callerId).username("amy").build());
 
@@ -315,12 +315,12 @@ class CommunityServiceTest {
         savesInvitation();
         when(userRepository.existsByEmail("dave@example.com")).thenReturn(true);
 
-        when(invitationEmailLimiter.claim(callerId, communityId, List.of("dave@example.com"))).thenReturn(List.of("dave@example.com"));
+        when(invitationEmailLimiter.claim(callerId, List.of("dave@example.com"))).thenReturn(List.of("dave@example.com"));
 
         service.invite(communityId, null, "dave@example.com", CommunityRole.EDITOR, callerId.toString());
 
-        // Claimed like any address, so the window and quota never tell it has an account; only the email is skipped
-        verify(invitationEmailLimiter).claim(callerId, communityId, List.of("dave@example.com"));
+        // Claimed like any address, so the lock and quota never tell it has an account; only the email is skipped
+        verify(invitationEmailLimiter).claim(callerId, List.of("dave@example.com"));
         org.mockito.Mockito.verifyNoInteractions(emailService);
     }
 

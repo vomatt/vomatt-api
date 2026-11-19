@@ -149,8 +149,9 @@ class InviteListServiceTest {
         when(userRepository.findByEmailIn(Set.of("bob@example.com", "carol@example.com", "dave@example.com")))
                 .thenReturn(List.of(bob, dave));
         // Every new address is claimed, so the lock never tells which have accounts; only carol has none
-        when(invitationEmailLimiter.claim(ownerId, List.of("bob@example.com", "carol@example.com", "dave@example.com")))
-                .thenReturn(List.of("bob@example.com", "carol@example.com", "dave@example.com"));
+        // ...those with no account first, so a nearly used up quota goes to the ones mailed
+        when(invitationEmailLimiter.claim(ownerId, List.of("carol@example.com", "bob@example.com", "dave@example.com")))
+                .thenReturn(List.of("carol@example.com", "bob@example.com", "dave@example.com"));
 
         inviteListService.addMembers(inviteListId.toString(), members(null,
                 List.of("bob@example.com", "carol@example.com", "dave@example.com", "erin@example.com")), ownerId.toString());

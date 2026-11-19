@@ -45,13 +45,13 @@ class InvitationEmailLimiterTest {
 
     @BeforeEach
     void setUp() {
-        lenient().when(lookupService.configDuration(anyString(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        lenient().when(lookupService.configInts(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
     @Test
     void shouldSkipLockedAddressesAndRecordTheRestWhenClaiming() {
         when(repository.findLocked(eq(senderId), any(), any())).thenReturn(Map.of("a@example.com", OffsetDateTime.now().plusDays(7)));
-        when(lookupService.configInt(anyString(), anyInt())).thenReturn(200, 3);
+        when(lookupService.configInt(anyString(), anyInt())).thenReturn(200);
         when(redisService.incrementAndExpire(eq("email:invitation"), anyString(), eq(1L), any())).thenReturn(1L);
 
         assertThat(limiter.claim(senderId, List.of("a@example.com", "b@example.com"))).containsExactly("b@example.com");

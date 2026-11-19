@@ -54,9 +54,7 @@ public class AdminInvitationEmailLockController {
                         "email": "dave@example.com", "lockedUntil": "2026-11-26T14:52:00+08:00" } ],
                       "message": null, "errorCode": null, "error": null }""")))
     public ResponseEntity<ApiResponse<List<InvitationEmailLockResponse>>> list() {
-        return ResponseEntity.ok(ApiResponse.ok(invitationEmailLimiter.locks().stream()
-                .map(l -> new InvitationEmailLockResponse(l.senderId().toString(), l.senderUsername(), l.email(), l.lockedUntil()))
-                .toList()));
+        return ResponseEntity.ok(ApiResponse.ok(invitationEmailLimiter.locks()));
     }
 
     @DeleteMapping("/{senderId}")

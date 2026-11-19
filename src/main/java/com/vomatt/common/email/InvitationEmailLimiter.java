@@ -5,6 +5,7 @@ import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -14,6 +15,7 @@ import java.util.function.Function;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.vomatt.admin.dto.InvitationEmailLockResponse;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.redis.RedisService;
@@ -42,8 +44,8 @@ public class InvitationEmailLimiter {
     public static final String BURST_WINDOW_HOURS_KEY = "invitation_email_burst_window_hours";
     public static final String LOCK_DAYS_KEY = "invitation_email_lock_days";
     static final int DEFAULT_BURST_LIMIT = 3;
-    static final Duration DEFAULT_BURST_WINDOW = Duration.ofHours(12);
-    static final Duration DEFAULT_LOCK = Duration.ofDays(7);
+    static final int DEFAULT_BURST_WINDOW_HOURS = 12;
+    static final int DEFAULT_LOCK_DAYS = 7;
 
     private final RedisService redisService;
     private final LookupService lookupService;
@@ -76,6 +78,10 @@ public class InvitationEmailLimiter {
     public List<String> claim(UUID senderId, Collection<String> emails) {
         OffsetDateTime now = sentNow();
         UUID sender = realSender(senderId);
+        if (emails.isEmpty()) {
+            return List.of();
+        }
+        invitationEmailRepository.lockPairs(sender, emails);
         return claim(sender, emails, unsent -> invitationEmailRepository.findLocked(sender, unsent, now).keySet(),
                 recipients -> record(sender, recipients, now));
     }
@@ -89,20 +95,22 @@ public class InvitationEmailLimiter {
     public OffsetDateTime claimOrThrow(UUID senderId, String email) {
         OffsetDateTime now = sentNow();
         UUID sender = realSender(senderId);
+        invitationEmailRepository.lockPairs(sender, List.of(email));
         if (!invitationEmailRepository.findLocked(sender, List.of(email), now).isEmpty()) {
             throw ApiException.tooManyRequests(MessageKey.INVITATION_EMAIL_TOO_SOON);
         }
-        if (claim(sender, List.of(email), unsent -> List.of(), recipients -> record(sender, recipients, now)).isEmpty()) {
+        Map<String, OffsetDateTime> locked = new HashMap<>();
+        if (claim(sender, List.of(email), unsent -> List.of(), recipients -> locked.putAll(record(sender, recipients, now))).isEmpty()) {
             throw ApiException.tooManyRequests(MessageKey.INVITATION_EMAIL_DAILY_LIMIT);
         }
-        return invitationEmailRepository.findLocked(sender, List.of(email), now).get(email);
+        return locked.get(email);
     }
 
     /**
      * The addresses the sender (or the member acting as it) is locked out of, with when each lock ends; the others may be
-     * mailed now. A sender is locked out of an address for {@value #LOCK_DAYS_KEY} days ({@link #DEFAULT_LOCK}) once they
-     * mail it {@value #BURST_LIMIT_KEY} times ({@link #DEFAULT_BURST_LIMIT}) within one window of
-     * {@value #BURST_WINDOW_HOURS_KEY} hours ({@link #DEFAULT_BURST_WINDOW}), until an admin unlocks the pair.
+     * mailed now. A sender is locked out of an address for {@value #LOCK_DAYS_KEY} days ({@value #DEFAULT_LOCK_DAYS}) once they
+     * mail it {@value #BURST_LIMIT_KEY} times ({@value #DEFAULT_BURST_LIMIT}) within one window of
+     * {@value #BURST_WINDOW_HOURS_KEY} hours ({@value #DEFAULT_BURST_WINDOW_HOURS}), until an admin unlocks the pair.
      */
     public Map<String, OffsetDateTime> lockedUntil(UUID senderId, Collection<String> emails) {
         return invitationEmailRepository.findLocked(realSender(senderId), emails, OffsetDateTime.now());
@@ -110,7 +118,7 @@ public class InvitationEmailLimiter {
 
     /** Admin: every sender locked out of an address now, the latest lock to end first. */
     @Transactional(readOnly = true)
-    public List<InvitationEmailRepository.Lock> locks() {
+    public List<InvitationEmailLockResponse> locks() {
         return invitationEmailRepository.findLocks(OffsetDateTime.now());
     }
 
@@ -123,13 +131,12 @@ public class InvitationEmailLimiter {
         log.info("Invitation email lock of sender {} on {} lifted", senderId, TextUtil.maskEmail(email));
     }
 
-    // ponytail: the lock check and this record are separate statements, so two invitations to one address at the same
-    // moment can both go out past the burst limit; lock the pair first if that matters
-    private void record(UUID sender, List<String> recipients, OffsetDateTime now) {
-        int burstLimit = lookupService.configInt(BURST_LIMIT_KEY, DEFAULT_BURST_LIMIT);
-        Duration window = lookupService.configDuration(BURST_WINDOW_HOURS_KEY, ChronoUnit.HOURS, DEFAULT_BURST_WINDOW);
-        Duration lock = lookupService.configDuration(LOCK_DAYS_KEY, ChronoUnit.DAYS, DEFAULT_LOCK);
-        invitationEmailRepository.recordSent(sender, recipients, now, now.minus(window), burstLimit, now.plus(lock));
+    // Callers hold the pair's advisory lock (lockPairs) from before the lock check, so the check and this count cannot interleave
+    private Map<String, OffsetDateTime> record(UUID sender, List<String> recipients, OffsetDateTime now) {
+        Map<String, Integer> config = lookupService.configInts(Map.of(BURST_LIMIT_KEY, DEFAULT_BURST_LIMIT,
+                BURST_WINDOW_HOURS_KEY, DEFAULT_BURST_WINDOW_HOURS, LOCK_DAYS_KEY, DEFAULT_LOCK_DAYS));
+        return invitationEmailRepository.recordSent(sender, recipients, now,
+                now.minusHours(config.get(BURST_WINDOW_HOURS_KEY)), config.get(BURST_LIMIT_KEY), now.plusDays(config.get(LOCK_DAYS_KEY)));
     }
 
     /**
@@ -159,7 +166,7 @@ public class InvitationEmailLimiter {
         return recipients;
     }
 
-    // At the precision sent_at keeps (Postgres stores microseconds), so a returned time equals the one read back later
+    // At the precision Postgres keeps (microseconds), so a returned time equals the one read back later
     private static OffsetDateTime sentNow() {
         return OffsetDateTime.now().truncatedTo(ChronoUnit.MICROS);
     }

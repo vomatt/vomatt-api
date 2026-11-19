@@ -1,6 +1,7 @@
 package com.vomatt.invitelists;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -158,7 +159,9 @@ public class InviteListService {
         // new address counts toward the lock and quota, so neither tells whether it has an account
         Set<String> known = found.stream().map(User::getEmail).collect(Collectors.toSet());
         String ownEmail = inviteList.getOwner().getEmail();
-        inviteToSignUp(inviteList, newEmails.stream().filter(email -> !email.equals(ownEmail)).toList(), known);
+        // Addresses with no account first, so a nearly used up daily quota goes to the ones that are mailed
+        inviteToSignUp(inviteList, newEmails.stream().filter(email -> !email.equals(ownEmail))
+                .sorted(Comparator.comparing(known::contains)).toList(), known);
         return members(inviteList.getId());
     }
 

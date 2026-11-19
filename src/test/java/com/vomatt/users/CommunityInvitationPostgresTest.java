@@ -207,6 +207,17 @@ class CommunityInvitationPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    void shouldJoinWithHighestRoleWhenInvitedByUserIdAndAddress() {
+        CommunityInvitationResponse byEmail = invite(dave.getEmail(), CommunityRole.EDITOR);
+        communityService.invite(communityId, dave.getId(), null, CommunityRole.ADMIN, owner.getId().toString());
+        em.flush();
+
+        // The notification shows the earlier EDITOR one; accepting it still grants ADMIN
+        assertThat(communityService.acceptInvitation(UUID.fromString(byEmail.id()), dave.getId().toString()).role())
+                .isEqualTo(CommunityRole.ADMIN);
+    }
+
+    @Test
     void shouldRefuseInviteWhenMembersAndPendingInvitationsReachLimit() {
         // The owner plus 4 pending invitations fill the free plan's 5
         for (int i = 0; i < 4; i++) {

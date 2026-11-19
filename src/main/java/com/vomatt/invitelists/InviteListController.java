@@ -182,7 +182,7 @@ public class InviteListController {
             **Side effects**: members get no notification. A new address that belongs to no account at all is mailed, once committed, \
             an invitation to sign up for Vomatt from the owner, naming no Invite List, within the daily invitation email limit of \
             the person adding it (the real member while acting as a community account; shared with Poll invitations). A person who \
-            emails one address 3 times within 12 hours (counting every Invite List and community account invitation) cannot email \
+            emails one address 3 times within one 12-hour window (counted from their first email to it) (counting every Invite List and community account invitation) cannot email \
             it again for 7 days unless an admin lifts the lock (all three admin-configurable). Every new address counts toward that \
             lock and limit, whether or not it has an account, so neither tells. The response is the same whether or not \
             an email was sent. The action is audit-logged.

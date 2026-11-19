@@ -47,7 +47,7 @@ class InvitationEmailPostgresTest extends PostgresRepositoryTest {
                 .hasEntrySatisfying("a@example.com", until -> assertThat(until).isAtSameInstantAs(third.plus(LOCK)));
         // Per sender: another sender mailing the same address is not locked
         assertThat(repository.findLocked(other.getId(), List.of("a@example.com"), third)).isEmpty();
-        assertThat(repository.findLocks(third)).extracting(InvitationEmailRepository.Lock::email).containsExactly("a@example.com");
+        assertThat(repository.findLocks(third)).extracting(com.vomatt.admin.dto.InvitationEmailLockResponse::email).containsExactly("a@example.com");
         assertThat(repository.findLocked(sender.getId(), List.of("a@example.com"), third.plus(LOCK))).isEmpty();
     }
 

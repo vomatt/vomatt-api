@@ -329,8 +329,7 @@ class CommunityServiceTest {
     void shouldRefuseInviteWhenMembersAndPendingInvitationsReachLimit() {
         caller(CommunityRole.OWNER);
         when(planService.memberLimit(communityId)).thenReturn(5);
-        when(memberRepository.countByCommunityUserId(communityId)).thenReturn(3L);
-        when(invitationRepository.countByCommunityUserIdAndExpiresAtAfter(org.mockito.ArgumentMatchers.eq(communityId), any())).thenReturn(2L);
+        when(memberRepository.countMembersAndPendingInvitations(org.mockito.ArgumentMatchers.eq(communityId), any())).thenReturn(5L);
 
         assertThatThrownBy(() -> service.invite(communityId, null, "dave@example.com", CommunityRole.EDITOR, callerId.toString()))
                 .satisfies(ex -> assertKey(ex, MessageKey.COMMUNITY_MEMBER_LIMIT_REACHED));

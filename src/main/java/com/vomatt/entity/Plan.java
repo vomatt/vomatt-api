@@ -7,7 +7,7 @@ package com.vomatt.entity;
  */
 public enum Plan {
     FREE("community_limit_free", 1, "community_member_limit_free", 5),
-    PRO("community_limit_pro", 3, "community_member_limit_pro", 20);
+    PRO("community_limit_pro", 3, "community_member_limit_pro", 10);
 
     private final String limitKey;
     private final int defaultLimit;

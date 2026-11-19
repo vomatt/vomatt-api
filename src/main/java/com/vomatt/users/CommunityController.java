@@ -347,7 +347,7 @@ public class CommunityController {
     @Operation(summary = "Invite a user to a community account", description = """
             **Auth**: required (OWNER or ADMIN)
             **Precondition**: the invitee has no unexpired invitation to this community account; the members (OWNERs included) \
-            plus unexpired invitations are below the community account's limit: 5, or 20 once any OWNER is on the PRO plan \
+            plus unexpired invitations are below the community account's limit: 5, or 10 once any OWNER is on the PRO plan \
             (`community_member_limit_free` / `community_member_limit_pro`, admin-configurable). A user invited both by `userId` \
             and by their address takes two places until they answer. An account already over a lowered limit keeps its members
             **Behavior**: the only way to add a member: invites a user picked by `userId` (e.g. from user search) or an \

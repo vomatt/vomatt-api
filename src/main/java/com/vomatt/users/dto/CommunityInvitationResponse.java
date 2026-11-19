@@ -16,8 +16,8 @@ public record CommunityInvitationResponse(
         @Schema(description = "Role the invitee gets on joining", example = "EDITOR") CommunityRole role,
         @Schema(description = "When it was sent", example = "2026-11-11T14:52:00+08:00") OffsetDateTime invitedAt,
         @Schema(description = "When it stops being usable, 7 days after it was sent; an expired one is listed until the user or address is invited again", example = "2026-11-18T14:52:00+08:00") OffsetDateTime expiresAt,
-        @Schema(description = "For an invitation by email: from when `POST .../invitations/{invitationId}/resend` may email it again "
-                + "(3 days after the last email about this community account to the address, whichever member sent it); in the past "
-                + "means now. Null for an invitation by user id, which is never emailed. Never tells whether the address has an account",
+        @Schema(description = "For an invitation by email: from when the caller may email it again with `POST .../invitations/{invitationId}/resend`: "
+                + "the end of the caller's lock on the address (3 emails within one 12-hour window lock it for 7 days, counting every community "
+                + "account and Invite List), or `invitedAt` (in the past, so now) when not locked. Per caller: another member may have no lock. Null for an invitation by user id, which is never emailed. Never tells whether the address has an account",
                 example = "2026-11-14T14:52:00+08:00", nullable = true) OffsetDateTime resendAvailableAt
 ) {}

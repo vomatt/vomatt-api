@@ -157,7 +157,12 @@ public class NotificationRepository {
                     WHERE (ci.user_id = :userId OR ci.email = (SELECT u.email FROM vomatt.users u WHERE u.id = :userId))
                       AND ci.expires_at > :now
                       AND NOT EXISTS (SELECT 1 FROM vomatt.community_members m
-                                      WHERE m.community_user_id = ci.community_user_id AND m.user_id = :userId)"""),
+                                      WHERE m.community_user_id = ci.community_user_id AND m.user_id = :userId)
+                      -- One per community account: invited by username and by the address too, only the earliest shows
+                      AND NOT EXISTS (SELECT 1 FROM vomatt.community_invitations e
+                                      WHERE e.community_user_id = ci.community_user_id
+                                        AND (e.user_id = :userId OR e.email = (SELECT u.email FROM vomatt.users u WHERE u.id = :userId))
+                                        AND e.expires_at > :now AND (e.created_at, e.id) < (ci.created_at, ci.id))"""),
             // Community accounts the user is an OWNER of, locked because the selection deadline passed; listed while the
             // lock lasts. A later lock of the same account clears its read state (UserRepository.markLocked)
             Map.entry(NotificationKind.COMMUNITY_LOCKED, select(NotificationKind.COMMUNITY_LOCKED, "c.id", "c.locked_at", "c.id", NONE, NONE) + """

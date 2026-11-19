@@ -346,10 +346,14 @@ public class CommunityController {
     @CommonApiResponses
     @Operation(summary = "Invite a user to a community account", description = """
             **Auth**: required (OWNER or ADMIN)
-            **Precondition**: the invitee has no unexpired invitation to this community account
+            **Precondition**: the invitee has no unexpired invitation to this community account; the members (OWNERs included) \
+            plus unexpired invitations are below the community account's limit: 5, or 10 once any OWNER is on the PRO plan \
+            (`community_member_limit_free` / `community_member_limit_pro`, admin-configurable). A user invited both by `userId` \
+            and by their address takes two places until they answer. An account already over a lowered limit keeps its members
             **Behavior**: the only way to add a member: invites a user picked by `userId` (e.g. from user search) or an \
             `email` address, exactly one, with the role; it can be used for 7 days. Nobody joins without answering: the user, \
-            or the account whose email is the address, gets a `COMMUNITY_INVITATION` notification and accepts \
+            or the account whose email is the address, gets a `COMMUNITY_INVITATION` notification (one per community account, \
+            for the earliest invitation, even when invited both by `userId` and by address) and accepts \
             (`POST /api/community-invitations/{invitationId}/accept`) or declines it. An address with no account is mailed an \
             invitation to sign up; once they sign up with it (any sign-in method that verifies the address) the notification \
             waits for them like for anyone else. For an `email` the response \
@@ -357,10 +361,11 @@ public class CommunityController {
             user or address is replaced by the new one. \
             """ + ROLES + """
 
-            **Side effects**: an address with no account at all is mailed once committed; one community account mails one address at most \
-            once every 3 days, whichever member invites it and even after the invitation is revoked and sent again, within the member's own daily invitation email limit (shared with their Poll and Invite List invitations). \
-            Every invitation by email takes from that window and limit, whether or not the address has an account, so neither \
-            tells. Audit-logged.
+            **Side effects**: an address with no account at all is mailed once committed, within the member's own daily invitation \
+            email limit (shared with their Poll and Invite List invitations). A member who emails one address 3 times within one 12-hour window (counted from their first email to it) \
+            (counting every community account and Invite List) cannot email it again for 7 days unless an admin lifts the lock \
+            (all three admin-configurable); the invitation is still created, unmailed. Every invitation by email counts toward that \
+            lock and limit, whether or not the address has an account, so neither tells. Audit-logged.
             """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = {
                     @ExampleObject(name = "Invite a user", value = """
@@ -379,6 +384,7 @@ public class CommunityController {
     @ApiError(status = 409, key = MessageKey.COMMUNITY_INVITATION_EXISTS, when = "the user or address already has an unexpired invitation to this community account")
     @ApiError(status = 403, key = MessageKey.COMMUNITY_NOT_MEMBER, when = "the caller is not a member of this community account, or it does not exist or is suspended")
     @ApiError(status = 403, key = MessageKey.COMMUNITY_ROLE_FORBIDDEN, when = "the caller is not an OWNER or ADMIN, or is an ADMIN and the invitation grants OWNER")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_MEMBER_LIMIT_REACHED, when = "the members plus unexpired invitations have reached the limit; `data` is `{ \"limit\": 5, \"used\": 5 }`")
     public ResponseEntity<ApiResponse<CommunityInvitationResponse>> invite(
             @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
             @PathVariable UUID communityId,
@@ -445,7 +451,7 @@ public class CommunityController {
             address that has an account is notified, not mailed, and the answer is the same either way. Returns the \
             invitation with its new `resendAvailableAt`.
             **Side effects**: an address with no account is mailed once committed; the email counts toward the caller's own \
-            daily invitation email limit and starts a new 3-day window for this community account and address. Audit-logged.
+            daily invitation email limit and toward the caller's 3-emails-per-12-hour-window lock on the address. Audit-logged.
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Invitation emailed again",
             content = @Content(examples = @ExampleObject(name = "Resent", value = "{ \"success\": true, \"data\": " + EX_EMAIL_INVITATION
@@ -454,7 +460,7 @@ public class CommunityController {
     @ApiError(status = 404, key = MessageKey.COMMUNITY_INVITATION_NOT_FOUND, when = "no such invitation of this community account, or it has expired")
     @ApiError(status = 403, key = MessageKey.COMMUNITY_NOT_MEMBER, when = "the caller is not a member of this community account, or it does not exist or is suspended")
     @ApiError(status = 403, key = MessageKey.COMMUNITY_ROLE_FORBIDDEN, when = "the caller is not an OWNER or ADMIN, or is an ADMIN and the invitation grants OWNER")
-    @ApiError(status = 429, key = MessageKey.INVITATION_EMAIL_TOO_SOON, when = "`resendAvailableAt` has not passed: the address was emailed about this community account within 3 days, by any member")
+    @ApiError(status = 429, key = MessageKey.INVITATION_EMAIL_TOO_SOON, when = "`resendAvailableAt` has not passed: the caller emailed the address 3 times within one 12-hour window (counted from their first email to it) and is locked out of it for 7 days")
     @ApiError(status = 429, key = MessageKey.INVITATION_EMAIL_DAILY_LIMIT, when = "the caller has used up today's invitation email limit (`invitation_email_daily_limit`)")
     public ResponseEntity<ApiResponse<CommunityInvitationResponse>> resendInvitation(
             @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
@@ -503,7 +509,7 @@ public class CommunityController {
     @Operation(summary = "Accept a community account invitation", description = """
             **Auth**: required; refused while acting as a community account (`X-Act-As`)
             **Precondition**: the invitation was sent to the caller (by id or to their email address) and has not expired
-            **Behavior**: the caller joins the community account with the invitation's role; every invitation of this community \
+            **Behavior**: the caller joins the community account with the invitation's role, or the highest role among this community account's unexpired invitations to them (by `userId` and to their address); every invitation of this community \
             account to the caller (by id and to their address) is used up. \
             The invitation id is `communityInvitation.id` of the `COMMUNITY_INVITATION` notification. A caller already a \
             member keeps their current role. Returns the membership as `GET /api/users/me/communities` lists it.
@@ -532,8 +538,9 @@ public class CommunityController {
     @Operation(summary = "Decline a community account invitation", description = """
             **Auth**: required; refused while acting as a community account (`X-Act-As`)
             **Precondition**: the invitation was sent to the caller (by id or to their email address) and has not expired
-            **Behavior**: deletes the invitation; the community account can invite the address again.
-            **Side effects**: the invitation and its notification disappear; the action is audit-logged.
+            **Behavior**: deletes every invitation of this community account to the caller, by `userId` and to their address \
+            alike; the community account can invite them again.
+            **Side effects**: the invitations and their one notification disappear; the action is audit-logged.
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Declined",
             content = @Content(examples = @ExampleObject(name = "Declined", value = EX_OK)))

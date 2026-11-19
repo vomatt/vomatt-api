@@ -1,6 +1,7 @@
 package com.vomatt.invitelists;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -154,16 +155,24 @@ public class InviteListService {
         }
         inviteListMemberRepository.saveAllAndFlush(added);
         log.info("{} member(s) added to Invite List {} by user {}", added.size(), inviteListId, userId);
-        // Only an address with no account at all is invited to sign up; a suspended account's owner cannot
+        // Only an address with no account at all is invited to sign up (a suspended account's owner cannot), but every
+        // new address counts toward the lock and quota, so neither tells whether it has an account
         Set<String> known = found.stream().map(User::getEmail).collect(Collectors.toSet());
-        inviteToSignUp(inviteList, newEmails.stream().filter(email -> !known.contains(email)).toList());
+        String ownEmail = inviteList.getOwner().getEmail();
+        // Addresses with no account first, so a nearly used up daily quota goes to the ones that are mailed
+        inviteToSignUp(inviteList, newEmails.stream().filter(email -> !email.equals(ownEmail))
+                .sorted(Comparator.comparing(known::contains)).toList(), known);
         return members(inviteList.getId());
     }
 
-    /** Mails each address a sign-up invitation from the owner, after commit, within the invitation email limits. */
-    private void inviteToSignUp(InviteList inviteList, List<String> emails) {
+    /**
+     * Claims each address within the invitation email limits, then mails the claimed ones not in {@code known} a sign-up
+     * invitation from the owner, after commit.
+     */
+    private void inviteToSignUp(InviteList inviteList, List<String> emails, Set<String> known) {
         User owner = inviteList.getOwner();
-        List<String> recipients = invitationEmailLimiter.claim(owner.getId(), inviteList.getId(), emails);
+        List<String> recipients = invitationEmailLimiter.claim(owner.getId(), emails).stream()
+                .filter(email -> !known.contains(email)).toList();
         if (recipients.isEmpty()) {
             return;
         }

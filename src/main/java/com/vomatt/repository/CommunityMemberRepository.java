@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -61,6 +62,18 @@ public interface CommunityMemberRepository extends JpaRepository<CommunityMember
             + "WHERE m.user_id = :userId AND m.role = 'OWNER' AND c.active AND (c.locked_at IS NOT NULL) = :locked "
             + "ORDER BY c.created_at, c.id", nativeQuery = true)
     List<UUID> findOwnedIds(@Param("userId") UUID userId, @Param("locked") boolean locked);
+
+    /** The plans of the community account's OWNERs, each once. */
+    @Query(value = "SELECT DISTINCT u.plan FROM vomatt.community_members m JOIN vomatt.users u ON u.id = m.user_id "
+            + "WHERE m.community_user_id = :communityId AND m.role = 'OWNER'", nativeQuery = true)
+    List<String> findOwnerPlans(@Param("communityId") UUID communityId);
+
+    /** The community account's members plus its invitations not expired at {@code now}. */
+    @Query(value = """
+            SELECT (SELECT count(*) FROM vomatt.community_members WHERE community_user_id = :communityId)
+                 + (SELECT count(*) FROM vomatt.community_invitations WHERE community_user_id = :communityId AND expires_at > :now)""",
+            nativeQuery = true)
+    long countMembersAndPendingInvitations(@Param("communityId") UUID communityId, @Param("now") OffsetDateTime now);
 
     @Query(value = "SELECT DISTINCT user_id FROM vomatt.community_members WHERE community_user_id IN (:communityIds) AND role = 'OWNER'",
            nativeQuery = true)

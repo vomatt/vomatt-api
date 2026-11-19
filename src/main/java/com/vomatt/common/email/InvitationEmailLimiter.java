@@ -5,19 +5,22 @@ import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
+import com.vomatt.admin.dto.InvitationEmailLockResponse;
 import com.vomatt.common.exception.ApiException;
 import com.vomatt.common.i18n.MessageKey;
 import com.vomatt.common.redis.RedisService;
 import com.vomatt.common.util.TextUtil;
+import com.vomatt.entity.User;
 import com.vomatt.lookups.LookupService;
 import com.vomatt.repository.InvitationEmailRepository;
 
@@ -37,8 +40,12 @@ public class InvitationEmailLimiter {
 
     static final String COUNTER_NS = "email:invitation";
     public static final String LIMIT_KEY = "invitation_email_daily_limit";
-    /** A sign-up invitation about one scope reaches an address at most once in this window, whoever sends it. */
-    static final Duration RESEND_AFTER = Duration.ofDays(3);
+    public static final String BURST_LIMIT_KEY = "invitation_email_burst_limit";
+    public static final String BURST_WINDOW_HOURS_KEY = "invitation_email_burst_window_hours";
+    public static final String LOCK_DAYS_KEY = "invitation_email_lock_days";
+    static final int DEFAULT_BURST_LIMIT = 3;
+    static final int DEFAULT_BURST_WINDOW_HOURS = 12;
+    static final int DEFAULT_LOCK_DAYS = 7;
 
     private final RedisService redisService;
     private final LookupService lookupService;
@@ -64,40 +71,72 @@ public class InvitationEmailLimiter {
     }
 
     /**
-     * Of the sign-up invitation addresses, those to mail now: not mailed about this scope (the Invite List or community
-     * account) within {@link #RESEND_AFTER}, even after the invitation was revoked, within the daily quota.
+     * Of the sign-up invitation addresses (Invite List members, community account invitations), those to mail now: the
+     * ones the sender is not locked out of ({@link #lockedUntil}), within the daily quota. Each one mailed counts toward
+     * the sender's burst for that address, whatever the Invite List or community account.
      */
-    public List<String> claim(UUID senderId, UUID scopeId, Collection<String> emails) {
+    public List<String> claim(UUID senderId, Collection<String> emails) {
         OffsetDateTime now = sentNow();
         UUID sender = realSender(senderId);
-        return claim(sender, emails,
-                unsent -> invitationEmailRepository.findSentSince(scopeId, unsent, now.minus(RESEND_AFTER)),
-                recipients -> invitationEmailRepository.recordSent(sender, scopeId, recipients, now));
+        if (emails.isEmpty()) {
+            return List.of();
+        }
+        invitationEmailRepository.lockPairs(sender, emails);
+        return claim(sender, emails, unsent -> invitationEmailRepository.findLocked(sender, unsent, now).keySet(),
+                recipients -> record(sender, recipients, now));
     }
 
     /**
-     * Claims one more invitation email about the scope to the address, the way {@link #claim(UUID, UUID, Collection)}
-     * would, but says why not: 429 {@code invitation.email.too_soon} within {@link #RESEND_AFTER} of the last one (checked
-     * first, so it uses no quota), 429 {@code invitation.email.daily_limit} over the sender's daily quota. Returns when
-     * the address may next be mailed about the scope.
+     * Claims one more sign-up invitation email to the address, the way {@link #claim(UUID, Collection)} would, but says
+     * why not: 429 {@code invitation.email.too_soon} while the sender is locked out of the address (checked first, so it
+     * uses no quota), 429 {@code invitation.email.daily_limit} over the sender's daily quota. Returns when the sender may
+     * next mail the address: {@code null} at once, or when the lock this email started ends.
      */
-    public OffsetDateTime claimOrThrow(UUID senderId, UUID scopeId, String email) {
+    public OffsetDateTime claimOrThrow(UUID senderId, String email) {
         OffsetDateTime now = sentNow();
-        if (!invitationEmailRepository.findSentSince(scopeId, List.of(email), now.minus(RESEND_AFTER)).isEmpty()) {
+        UUID sender = realSender(senderId);
+        invitationEmailRepository.lockPairs(sender, List.of(email));
+        if (!invitationEmailRepository.findLocked(sender, List.of(email), now).isEmpty()) {
             throw ApiException.tooManyRequests(MessageKey.INVITATION_EMAIL_TOO_SOON);
         }
-        UUID sender = realSender(senderId);
-        if (claim(sender, List.of(email), unsent -> List.of(),
-                recipients -> invitationEmailRepository.recordSent(sender, scopeId, recipients, now)).isEmpty()) {
+        Map<String, OffsetDateTime> locked = new HashMap<>();
+        if (claim(sender, List.of(email), unsent -> List.of(), recipients -> locked.putAll(record(sender, recipients, now))).isEmpty()) {
             throw ApiException.tooManyRequests(MessageKey.INVITATION_EMAIL_DAILY_LIMIT);
         }
-        return now.plus(RESEND_AFTER);
+        return locked.get(email);
     }
 
-    /** When each address may next be mailed about the scope; addresses never mailed about it are absent (any time). */
-    public Map<String, OffsetDateTime> nextSendAt(UUID scopeId, Collection<String> emails) {
-        return invitationEmailRepository.findLastSent(scopeId, emails).entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().plus(RESEND_AFTER)));
+    /**
+     * The addresses the sender (or the member acting as it) is locked out of, with when each lock ends; the others may be
+     * mailed now. A sender is locked out of an address for {@value #LOCK_DAYS_KEY} days ({@value #DEFAULT_LOCK_DAYS}) once they
+     * mail it {@value #BURST_LIMIT_KEY} times ({@value #DEFAULT_BURST_LIMIT}) within one window of
+     * {@value #BURST_WINDOW_HOURS_KEY} hours ({@value #DEFAULT_BURST_WINDOW_HOURS}), until an admin unlocks the pair.
+     */
+    public Map<String, OffsetDateTime> lockedUntil(UUID senderId, Collection<String> emails) {
+        return invitationEmailRepository.findLocked(realSender(senderId), emails, OffsetDateTime.now());
+    }
+
+    /** Admin: every sender locked out of an address now, the latest lock to end first. */
+    @Transactional(readOnly = true)
+    public List<InvitationEmailLockResponse> locks() {
+        return invitationEmailRepository.findLocks(OffsetDateTime.now());
+    }
+
+    /** Admin: lifts the sender's lock on the address and resets its count; 404 when there is no lock in force. */
+    @Transactional
+    public void unlock(UUID senderId, String email) {
+        if (!invitationEmailRepository.unlock(senderId, User.normalizeEmail(email), OffsetDateTime.now())) {
+            throw ApiException.notFound(MessageKey.INVITATION_EMAIL_LOCK_NOT_FOUND);
+        }
+        log.info("Invitation email lock of sender {} on {} lifted", senderId, TextUtil.maskEmail(email));
+    }
+
+    // Callers hold the pair's advisory lock (lockPairs) from before the lock check, so the check and this count cannot interleave
+    private Map<String, OffsetDateTime> record(UUID sender, List<String> recipients, OffsetDateTime now) {
+        Map<String, Integer> config = lookupService.configInts(Map.of(BURST_LIMIT_KEY, DEFAULT_BURST_LIMIT,
+                BURST_WINDOW_HOURS_KEY, DEFAULT_BURST_WINDOW_HOURS, LOCK_DAYS_KEY, DEFAULT_LOCK_DAYS));
+        return invitationEmailRepository.recordSent(sender, recipients, now,
+                now.minusHours(config.get(BURST_WINDOW_HOURS_KEY)), config.get(BURST_LIMIT_KEY), now.plusDays(config.get(LOCK_DAYS_KEY)));
     }
 
     /**
@@ -127,7 +166,7 @@ public class InvitationEmailLimiter {
         return recipients;
     }
 
-    // At the precision sent_at keeps (Postgres stores microseconds), so a returned time equals the one read back later
+    // At the precision Postgres keeps (microseconds), so a returned time equals the one read back later
     private static OffsetDateTime sentNow() {
         return OffsetDateTime.now().truncatedTo(ChronoUnit.MICROS);
     }

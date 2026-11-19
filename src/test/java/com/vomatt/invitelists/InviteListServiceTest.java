@@ -148,7 +148,10 @@ class InviteListServiceTest {
                 .thenReturn(List.of(new InviteListMember(inviteList, "erin@example.com")));
         when(userRepository.findByEmailIn(Set.of("bob@example.com", "carol@example.com", "dave@example.com")))
                 .thenReturn(List.of(bob, dave));
-        when(invitationEmailLimiter.claim(ownerId, inviteListId, List.of("carol@example.com"))).thenReturn(List.of("carol@example.com"));
+        // Every new address is claimed, so the lock never tells which have accounts; only carol has none
+        // ...those with no account first, so a nearly used up quota goes to the ones mailed
+        when(invitationEmailLimiter.claim(ownerId, List.of("carol@example.com", "bob@example.com", "dave@example.com")))
+                .thenReturn(List.of("carol@example.com", "bob@example.com", "dave@example.com"));
 
         inviteListService.addMembers(inviteListId.toString(), members(null,
                 List.of("bob@example.com", "carol@example.com", "dave@example.com", "erin@example.com")), ownerId.toString());
@@ -157,10 +160,10 @@ class InviteListServiceTest {
     }
 
     @Test
-    @DisplayName("should send nothing when the limiter withholds every address (recently mailed or over the daily quota)")
+    @DisplayName("should send nothing when the limiter withholds every address (locked out of the address or over the daily quota)")
     void shouldNotMailWhenLimiterWithholdsAddresses() {
         lockInviteList();
-        when(invitationEmailLimiter.claim(ownerId, inviteListId, List.of("carol@example.com"))).thenReturn(List.of());
+        when(invitationEmailLimiter.claim(ownerId, List.of("carol@example.com"))).thenReturn(List.of());
 
         inviteListService.addMembers(inviteListId.toString(), members(null, List.of("carol@example.com")), ownerId.toString());
 

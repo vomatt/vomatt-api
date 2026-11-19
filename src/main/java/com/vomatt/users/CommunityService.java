@@ -21,6 +21,7 @@ import com.vomatt.users.dto.UserDto;
 import com.vomatt.users.dto.UserProfileResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,6 +44,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -70,6 +72,9 @@ public class CommunityService {
     private final AuditService auditService;
     private final PlanService planService;
     private final UserPreferenceRepository preferenceRepository;
+
+    /** The {@code data} of 403 {@code community.member_limit_reached}: the limit, and the members plus pending invitations. */
+    public record MemberLimitReached(int limit, int used) {}
 
     /** How long an invitation can be accepted. */
     static final Duration INVITATION_TTL = Duration.ofDays(7);
@@ -140,6 +145,7 @@ public class CommunityService {
             // Runs now, before the insert; a concurrent replacement that deleted it first makes the insert conflict
             invitationRepository.removeById(existing.getId());
         });
+        requireMemberRoom(communityId, now);
         CommunityInvitation invitation;
         try {
             invitation = invitationRepository.saveAndFlush(new CommunityInvitation(communityId, userId, email, role,
@@ -154,17 +160,17 @@ public class CommunityService {
         log.info("Community account {}: {} invited {} as {} ({})", communityId, callerId, userId != null ? userId : "an address",
                 role, invitation.getId());
         return toResponse(invitation, user, user == null ? null : PublicNames.load(user, preferenceRepository),
-                email == null ? Map.of() : invitationEmailLimiter.nextSendAt(communityId, List.of(email)));
+                email == null ? Map.of() : invitationEmailLimiter.lockedUntil(UUID.fromString(callerId), List.of(email)));
     }
 
     /**
      * OWNER or ADMIN emails an unexpired invitation by email again (only an OWNER one that grants OWNER), within the same
-     * resend window and daily quota as the first email, and says when either stops it. Like {@link #invite}, an address
+     * burst lock and daily quota as the first email, and says when either stops it. Like {@link #invite}, an address
      * with an account is claimed the same way but not mailed, so the answer never tells whether it has one.
      */
     public CommunityInvitationResponse resendInvitation(UUID communityId, UUID invitationId, String callerId) {
         CommunityRole caller = requireManager(communityId, callerId);
-        // Locked: two clicks at once must not both pass the resend window
+        // Locked: two clicks at once are counted toward the lock one after the other
         CommunityInvitation invitation = lockTimeout.within(() -> invitationRepository.lockByIdAndCommunityUserId(invitationId, communityId))
                 .filter(i -> !i.isExpiredAt(OffsetDateTime.now()))
                 .orElseThrow(() -> ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
@@ -173,18 +179,32 @@ public class CommunityService {
         if (address == null) {
             throw ApiException.badRequest(MessageKey.COMMUNITY_INVITATION_NOT_EMAIL);
         }
-        OffsetDateTime resendAvailableAt = invitationEmailLimiter.claimOrThrow(UUID.fromString(callerId), communityId, address);
+        OffsetDateTime lockedUntil = invitationEmailLimiter.claimOrThrow(UUID.fromString(callerId), address);
         sendUnlessAccount(communityId, invitationId, address, invitation.getRole(), callerId);
         log.info("Community account {}: {} resent invitation {}", communityId, callerId, invitationId);
-        return toResponse(invitation, null, null, Map.of(address, resendAvailableAt));
+        return toResponse(invitation, null, null, lockedUntil == null ? Map.of() : Map.of(address, lockedUntil));
+    }
+
+    /**
+     * 403 {@code community.member_limit_reached} once the members (OWNERs included) plus unexpired invitations reach
+     * {@link PlanService#memberLimit}. Locks the community account's row first, so two invitations at once count each
+     * other. An account already over a lowered limit keeps its members; it only cannot invite.
+     */
+    private void requireMemberRoom(UUID communityId, OffsetDateTime now) {
+        lockTimeout.within(() -> userRepository.lockIds(List.of(communityId)));
+        int limit = planService.memberLimit(communityId);
+        int used = Math.toIntExact(memberRepository.countMembersAndPendingInvitations(communityId, now));
+        if (used >= limit) {
+            throw ApiException.withData(HttpStatus.FORBIDDEN, MessageKey.COMMUNITY_MEMBER_LIMIT_REACHED, new MemberLimitReached(limit, used));
+        }
     }
 
     private void mailInvitation(UUID communityId, UUID invitationId, String address, CommunityRole role, String callerId) {
         // Counted against the inviting person, not the community account: anyone can create community accounts, so a
         // per-community budget would multiply with each one they make. Claimed for an address with an account too, so
-        // the window and quota never tell whether it has one.
-        if (invitationEmailLimiter.claim(UUID.fromString(callerId), communityId, List.of(address)).isEmpty()) {
-            log.info("Community invitation {} not mailed to {}: mailed within the resend window or over the daily limit",
+        // the lock and quota never tell whether it has one.
+        if (invitationEmailLimiter.claim(UUID.fromString(callerId), List.of(address)).isEmpty()) {
+            log.info("Community invitation {} not mailed to {}: the inviter is locked out of the address or over the daily limit",
                     invitationId, TextUtil.maskEmail(address));
             return;
         }
@@ -215,11 +235,11 @@ public class CommunityService {
         Map<UUID, User> users = userRepository.findAllById(invitations.stream().map(CommunityInvitation::getUserId)
                 .filter(Objects::nonNull).toList()).stream().collect(Collectors.toMap(User::getId, Function.identity()));
         Map<UUID, PublicName> names = PublicNames.load(users.values(), preferenceRepository);
-        Map<String, OffsetDateTime> nextSendAt = invitationEmailLimiter.nextSendAt(communityId,
+        Map<String, OffsetDateTime> lockedUntil = invitationEmailLimiter.lockedUntil(UUID.fromString(callerId),
                 invitations.stream().map(CommunityInvitation::getEmail).filter(Objects::nonNull).toList());
         return invitations.stream().map(i -> {
             User user = i.getUserId() == null ? null : users.get(i.getUserId());
-            return toResponse(i, user, user == null ? null : names.get(user.getId()), nextSendAt);
+            return toResponse(i, user, user == null ? null : names.get(user.getId()), lockedUntil);
         }).toList();
     }
 
@@ -236,7 +256,8 @@ public class CommunityService {
     /**
      * The invitee joins with the invitation's role. Only the user it was sent to, or the account whose (always verified)
      * email it was sent to, can see it; any other caller, an expired invitation or a suspended community account is not found. Already a
-     * member: the membership is kept as it is. Every invitation of the community account to the caller is used up.
+     * member: the membership is kept as it is. Invited more than once (by id and by address), the invitee joins with the
+     * highest role among them. Every invitation of the community account to the caller is used up.
      */
     public MyCommunityResponse acceptInvitation(UUID invitationId, String callerId) {
         User caller = requireEligible(UUID.fromString(callerId));
@@ -248,14 +269,18 @@ public class CommunityService {
         if (community.getLockedAt() != null) {
             throw ApiException.forbidden(MessageKey.COMMUNITY_LOCKED);
         }
+        // Invited both by id and by address, the invitee sees one notification (NotificationRepository) and gets the
+        // highest role of them (CommunityRole is declared highest first)
+        CommunityRole granted = invitationRepository.findRolesForInvitee(community.getId(), caller.getId(), caller.getEmail(),
+                OffsetDateTime.now()).stream().min(Comparator.naturalOrder()).orElse(invitation.getRole());
         // A member keeps their role. Insert-or-keep, then read what is stored: a concurrent accept may have won the
         // primary key with another invitation's role
         CommunityRole role = memberRepository.findByCommunityUserIdAndUserId(community.getId(), caller.getId())
                 .map(CommunityMember::getRole).orElseGet(() -> {
-                    if (invitation.getRole() == OWNER) {
+                    if (granted == OWNER) {
                         planService.requireRoom(caller.getId());
                     }
-                    memberRepository.insertIfAbsent(community.getId(), caller.getId(), invitation.getRole().name());
+                    memberRepository.insertIfAbsent(community.getId(), caller.getId(), granted.name());
                     return memberRepository.findByCommunityUserIdAndUserId(community.getId(), caller.getId()).orElseThrow().getRole();
                 });
         invitationRepository.deleteForInvitee(community.getId(), caller.getId(), caller.getEmail());
@@ -284,11 +309,18 @@ public class CommunityService {
                 memberRepository.findByCommunityUserIdAndUserId(community.getId(), caller.getId()).isPresent());
     }
 
-    /** The invitee turns the invitation down; it is deleted, and its notification goes with it. */
+    /**
+     * The invitee turns the community account down: every invitation of it to the caller (by user and by address) is
+     * deleted, so the one notification it shows goes and no other takes its place.
+     */
     public void declineInvitation(UUID invitationId, String callerId) {
         User caller = userRepository.findById(UUID.fromString(callerId))
                 .orElseThrow(() -> ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
-        removeOrNotFound(findOwnInvitation(invitationId, caller).getId());
+        CommunityInvitation invitation = findOwnInvitation(invitationId, caller);
+        // A concurrent decline or accept that deleted them first is a miss, as for revoking
+        if (invitationRepository.deleteForInvitee(invitation.getCommunityUserId(), caller.getId(), caller.getEmail()) == 0) {
+            throw ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND);
+        }
         log.info("User {} declined community invitation {}", callerId, invitationId);
     }
 
@@ -311,13 +343,13 @@ public class CommunityService {
     }
 
     // name: the user's names as their visibility settings show them to others (PublicNames)
-    // nextSendAt: InvitationEmailLimiter#nextSendAt; an address never mailed (over the quota at invite) may be mailed now
+    // lockedUntil: InvitationEmailLimiter#lockedUntil for the caller; an address absent from it may be mailed now
     private static CommunityInvitationResponse toResponse(CommunityInvitation i, User user, PublicName name,
-                                                          Map<String, OffsetDateTime> nextSendAt) {
+                                                          Map<String, OffsetDateTime> lockedUntil) {
         return new CommunityInvitationResponse(i.getId().toString(), user == null ? null : user.getId().toString(),
                 user == null ? null : user.getUsername(), user == null ? null : name.displayName(),
                 user == null ? null : user.getAvatarUrl(), i.getEmail(), i.getRole(), i.getCreatedAt(), i.getExpiresAt(),
-                i.getEmail() == null ? null : nextSendAt.getOrDefault(i.getEmail(), i.getCreatedAt()));
+                i.getEmail() == null ? null : lockedUntil.getOrDefault(i.getEmail(), i.getCreatedAt()));
     }
 
     public CommunityMemberResponse changeRole(UUID communityId, UUID userId, CommunityRole role, String callerId) {

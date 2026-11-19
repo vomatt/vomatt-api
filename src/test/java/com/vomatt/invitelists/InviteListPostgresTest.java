@@ -96,22 +96,20 @@ class InviteListPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
-    @DisplayName("should record a sign-up invitation for an address with no account once, and not again when removed and re-added")
-    void shouldRecordSignupInvitationOnceWhenAddressReAdded() {
+    @DisplayName("should count each new address toward the owner's lock on it, an address with an account too")
+    void shouldCountSignupInvitationEachTimeAddressIsReAdded() {
         addMembers(inviteListId, null, List.of(carolEmail), ownerId);
-        OffsetDateTime firstSent = sentAt(carolEmail);
         inviteListService.removeEmailMember(inviteListId, carolEmail, ownerId);
         addMembers(inviteListId, null, List.of(carolEmail, bob.getEmail()), ownerId);
 
-        assertThat(firstSent).isNotNull();
-        assertThat(sentAt(carolEmail)).isEqualTo(firstSent);
-        assertThat(sentAt(bob.getEmail())).as("an address with an account gets no sign-up invitation").isNull();
+        assertThat(sentCount(carolEmail)).isEqualTo(2);
+        assertThat(sentCount(bob.getEmail())).as("counted though not mailed, so the lock never tells it has an account").isEqualTo(1);
     }
 
-    private OffsetDateTime sentAt(String email) {
-        List<?> rows = em.createNativeQuery("SELECT sent_at FROM vomatt.invitation_emails WHERE sender_id = :s AND scope_id = CAST(:l AS uuid) AND email = :e")
-                .setParameter("s", owner.getId()).setParameter("l", inviteListId).setParameter("e", email).getResultList();
-        return rows.isEmpty() ? null : ((java.time.Instant) rows.getFirst()).atOffset(java.time.ZoneOffset.UTC);
+    private Integer sentCount(String email) {
+        List<?> rows = em.createNativeQuery("SELECT sent_count FROM vomatt.invitation_email_limits WHERE sender_id = :s AND email = :e")
+                .setParameter("s", owner.getId()).setParameter("e", email).getResultList();
+        return rows.isEmpty() ? null : ((Number) rows.getFirst()).intValue();
     }
 
     @Test

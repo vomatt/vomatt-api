@@ -189,6 +189,24 @@ class CommunityInvitationPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    void shouldShowOneNotificationWhenInvitedByUserIdAndAddress() {
+        CommunityInvitationResponse byId = communityService.invite(communityId, dave.getId(), null, CommunityRole.EDITOR,
+                owner.getId().toString());
+        em.flush();
+        CommunityInvitationResponse byEmail = invite(dave.getEmail(), CommunityRole.ANALYST);
+
+        assertThat(hasNotification(dave, byId.id())).isTrue();
+        assertThat(hasNotification(dave, byEmail.id())).isFalse();
+        assertThat(notificationRepository.countUnread(dave.getId(), EnumSet.allOf(NotificationKind.class), OffsetDateTime.now()))
+                .isEqualTo(1);
+
+        communityService.declineInvitation(UUID.fromString(byId.id()), dave.getId().toString());
+        em.flush();
+        assertThat(hasNotification(dave, byEmail.id())).as("declining turns down the community account").isFalse();
+        assertThat(invitationRepository.findById(UUID.fromString(byEmail.id()))).isEmpty();
+    }
+
+    @Test
     void shouldRefuseInviteWhenMembersAndPendingInvitationsReachLimit() {
         // The owner plus 4 pending invitations fill the free plan's 5
         for (int i = 0; i < 4; i++) {

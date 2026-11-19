@@ -304,11 +304,16 @@ public class CommunityService {
                 memberRepository.findByCommunityUserIdAndUserId(community.getId(), caller.getId()).isPresent());
     }
 
-    /** The invitee turns the invitation down; it is deleted, and its notification goes with it. */
+    /**
+     * The invitee turns the community account down: every invitation of it to the caller (by user and by address) is
+     * deleted, so the one notification it shows goes and no other takes its place.
+     */
     public void declineInvitation(UUID invitationId, String callerId) {
         User caller = userRepository.findById(UUID.fromString(callerId))
                 .orElseThrow(() -> ApiException.notFound(MessageKey.COMMUNITY_INVITATION_NOT_FOUND));
-        removeOrNotFound(findOwnInvitation(invitationId, caller).getId());
+        CommunityInvitation invitation = findOwnInvitation(invitationId, caller);
+        removeOrNotFound(invitation.getId());
+        invitationRepository.deleteForInvitee(invitation.getCommunityUserId(), caller.getId(), caller.getEmail());
         log.info("User {} declined community invitation {}", callerId, invitationId);
     }
 

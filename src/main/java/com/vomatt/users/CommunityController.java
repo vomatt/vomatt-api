@@ -352,7 +352,8 @@ public class CommunityController {
             and by their address takes two places until they answer. An account already over a lowered limit keeps its members
             **Behavior**: the only way to add a member: invites a user picked by `userId` (e.g. from user search) or an \
             `email` address, exactly one, with the role; it can be used for 7 days. Nobody joins without answering: the user, \
-            or the account whose email is the address, gets a `COMMUNITY_INVITATION` notification and accepts \
+            or the account whose email is the address, gets a `COMMUNITY_INVITATION` notification (one per community account, \
+            for the earliest invitation, even when invited both by `userId` and by address) and accepts \
             (`POST /api/community-invitations/{invitationId}/accept`) or declines it. An address with no account is mailed an \
             invitation to sign up; once they sign up with it (any sign-in method that verifies the address) the notification \
             waits for them like for anyone else. For an `email` the response \
@@ -537,8 +538,9 @@ public class CommunityController {
     @Operation(summary = "Decline a community account invitation", description = """
             **Auth**: required; refused while acting as a community account (`X-Act-As`)
             **Precondition**: the invitation was sent to the caller (by id or to their email address) and has not expired
-            **Behavior**: deletes the invitation; the community account can invite the address again.
-            **Side effects**: the invitation and its notification disappear; the action is audit-logged.
+            **Behavior**: deletes every invitation of this community account to the caller, by `userId` and to their address \
+            alike; the community account can invite them again.
+            **Side effects**: the invitations and their one notification disappear; the action is audit-logged.
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Declined",
             content = @Content(examples = @ExampleObject(name = "Declined", value = EX_OK)))

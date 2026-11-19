@@ -285,6 +285,7 @@ class CommunityServiceTest {
     }
 
     private void savesInvitation() {
+        when(planService.memberLimit(communityId)).thenReturn(5);
         when(invitationRepository.saveAndFlush(org.mockito.ArgumentMatchers.any())).thenAnswer(inv -> {
             com.vomatt.entity.CommunityInvitation saved = inv.getArgument(0);
             org.springframework.test.util.ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
@@ -322,6 +323,18 @@ class CommunityServiceTest {
         // Claimed like any address, so the lock and quota never tell it has an account; only the email is skipped
         verify(invitationEmailLimiter).claim(callerId, List.of("dave@example.com"));
         org.mockito.Mockito.verifyNoInteractions(emailService);
+    }
+
+    @Test
+    void shouldRefuseInviteWhenMembersAndPendingInvitationsReachLimit() {
+        caller(CommunityRole.OWNER);
+        when(planService.memberLimit(communityId)).thenReturn(5);
+        when(memberRepository.countByCommunityUserId(communityId)).thenReturn(3L);
+        when(invitationRepository.countByCommunityUserIdAndExpiresAtAfter(org.mockito.ArgumentMatchers.eq(communityId), any())).thenReturn(2L);
+
+        assertThatThrownBy(() -> service.invite(communityId, null, "dave@example.com", CommunityRole.EDITOR, callerId.toString()))
+                .satisfies(ex -> assertKey(ex, MessageKey.COMMUNITY_MEMBER_LIMIT_REACHED));
+        verify(invitationRepository, never()).saveAndFlush(any());
     }
 
     @Test

@@ -146,6 +146,7 @@ public enum MessageKey {
     INVITATION_EMAIL_TOO_SOON("invitation.email.too_soon"),
     INVITATION_EMAIL_DAILY_LIMIT("invitation.email.daily_limit"),
     INVITATION_EMAIL_LOCK_NOT_FOUND("invitation.email.lock_not_found"),
+    COMMUNITY_MEMBER_LIMIT_REACHED("community.member_limit_reached"),
     COMMUNITY_USERNAME_IMMUTABLE("community.username_immutable"),
     VOTE_REVEAL_BEFORE_END("vote.reveal_at.before_end"),
     VOTE_REVEAL_TOO_LATE("vote.reveal_at.too_late"),

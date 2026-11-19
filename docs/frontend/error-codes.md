@@ -133,6 +133,7 @@ HTTP status is obtained by scanning source text for `ApiException.xxx(MessageKey
 | `invitation.email.too_soon` | 429 | 短時間內寄給此信箱的邀請信過多，暫時無法再寄 | You emailed this address too many invitations in a short time; you cannot email it for now | Retry after the `Retry-After` seconds | CommunityController, InvitationEmailLimiter |
 | `invitation.email.daily_limit` | 429 | 今天的邀請信已達上限，請明天再試 | You have reached today's invitation email limit; try again tomorrow | Retry after the `Retry-After` seconds | CommunityController, InvitationEmailLimiter |
 | `invitation.email.lock_not_found` | 404 | 此寄件者對此信箱沒有寄信封鎖 | This sender is not locked out of emailing this address | Show resource not found | AdminInvitationEmailLockController, InvitationEmailLimiter |
+| `community.member_limit_reached` | 403 | 社群帳號的成員與待接受邀請已達方案上限 | This community account has as many members and pending invitations as its plan allows | Show a permission-denied notice | CommunityController, CommunityService |
 | `community.username_immutable` | 400 | 社群帳號的使用者名稱不能變更 | A community account's username cannot be changed | Show message so the user can fix the input | UserController, UserService |
 | `vote.reveal_at.before_end` | 400 | 公布結果時間不可早於結束時間 | Reveal time cannot be before the end time | Show message so the user can fix the input | VoteController, VoteService |
 | `vote.reveal_at.too_late` | 400 | 公布結果時間不可晚於結束時間後 {0} 天 | Reveal time cannot be more than {0} days after the end time | Show message so the user can fix the input | VoteController, VoteService |

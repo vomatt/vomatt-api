@@ -21,6 +21,7 @@ import com.vomatt.users.dto.UserDto;
 import com.vomatt.users.dto.UserProfileResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -70,6 +71,9 @@ public class CommunityService {
     private final AuditService auditService;
     private final PlanService planService;
     private final UserPreferenceRepository preferenceRepository;
+
+    /** The {@code data} of 403 {@code community.member_limit_reached}: the limit, and the members plus pending invitations. */
+    public record MemberLimitReached(int limit, int used) {}
 
     /** How long an invitation can be accepted. */
     static final Duration INVITATION_TTL = Duration.ofDays(7);
@@ -140,6 +144,7 @@ public class CommunityService {
             // Runs now, before the insert; a concurrent replacement that deleted it first makes the insert conflict
             invitationRepository.removeById(existing.getId());
         });
+        requireMemberRoom(communityId, now);
         CommunityInvitation invitation;
         try {
             invitation = invitationRepository.saveAndFlush(new CommunityInvitation(communityId, userId, email, role,
@@ -177,6 +182,21 @@ public class CommunityService {
         sendUnlessAccount(communityId, invitationId, address, invitation.getRole(), callerId);
         log.info("Community account {}: {} resent invitation {}", communityId, callerId, invitationId);
         return toResponse(invitation, null, null, lockedUntil == null ? Map.of() : Map.of(address, lockedUntil));
+    }
+
+    /**
+     * 403 {@code community.member_limit_reached} once the members (OWNERs included) plus unexpired invitations reach
+     * {@link PlanService#memberLimit}. Locks the community account's row first, so two invitations at once count each
+     * other. An account already over a lowered limit keeps its members; it only cannot invite.
+     */
+    private void requireMemberRoom(UUID communityId, OffsetDateTime now) {
+        lockTimeout.within(() -> userRepository.lockIds(List.of(communityId)));
+        int limit = planService.memberLimit(communityId);
+        int used = Math.toIntExact(memberRepository.countByCommunityUserId(communityId)
+                + invitationRepository.countByCommunityUserIdAndExpiresAtAfter(communityId, now));
+        if (used >= limit) {
+            throw ApiException.withData(HttpStatus.FORBIDDEN, MessageKey.COMMUNITY_MEMBER_LIMIT_REACHED, new MemberLimitReached(limit, used));
+        }
     }
 
     private void mailInvitation(UUID communityId, UUID invitationId, String address, CommunityRole role, String callerId) {

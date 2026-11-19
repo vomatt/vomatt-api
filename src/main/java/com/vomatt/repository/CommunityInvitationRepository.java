@@ -1,5 +1,6 @@
 package com.vomatt.repository;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -41,6 +42,8 @@ public interface CommunityInvitationRepository extends JpaRepository<CommunityIn
      * Uses up every invitation of the community account to the user, by id or to their address, so a second one cannot
      * bring them back after they leave.
      */
+    long countByCommunityUserIdAndExpiresAtAfter(UUID communityUserId, OffsetDateTime now);
+
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM CommunityInvitation i WHERE i.communityUserId = :communityId AND (i.userId = :userId OR i.email = :email)")
     void deleteForInvitee(@Param("communityId") UUID communityId, @Param("userId") UUID userId, @Param("email") String email);

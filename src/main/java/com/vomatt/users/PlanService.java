@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -94,6 +95,17 @@ public class PlanService {
         if (owned >= limit) {
             throw ApiException.withData(HttpStatus.FORBIDDEN, MessageKey.COMMUNITY_LIMIT_REACHED, new LimitReached(limit, owned));
         }
+    }
+
+    /**
+     * How many members plus pending invitations the community account may have: the limit of the highest plan among its
+     * OWNERs, so one paying OWNER raises it for the account.
+     */
+    @Transactional(readOnly = true)
+    public int memberLimit(UUID communityId) {
+        Plan plan = memberRepository.findOwnerPlans(communityId).stream().map(Plan::valueOf)
+                .max(Comparator.naturalOrder()).orElse(Plan.FREE);
+        return lookupService.configInt(plan.memberLimitKey(), plan.defaultMemberLimit());
     }
 
     /**

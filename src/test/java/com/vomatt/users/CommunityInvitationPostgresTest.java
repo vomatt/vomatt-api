@@ -189,6 +189,26 @@ class CommunityInvitationPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    void shouldRefuseInviteWhenMembersAndPendingInvitationsReachLimit() {
+        // The owner plus 4 pending invitations fill the free plan's 5
+        for (int i = 0; i < 4; i++) {
+            invite("cap" + i + "@example.com", CommunityRole.EDITOR);
+        }
+        assertKey(() -> invite("cap4@example.com", CommunityRole.EDITOR), MessageKey.COMMUNITY_MEMBER_LIMIT_REACHED);
+
+        // An expired invitation frees its place
+        em.createNativeQuery("UPDATE vomatt.community_invitations SET expires_at = now() - INTERVAL '1 minute' WHERE email = 'cap0@example.com'")
+                .executeUpdate();
+        em.clear();
+        invite("cap4@example.com", CommunityRole.EDITOR);
+
+        // One PRO owner raises the limit
+        em.createNativeQuery("UPDATE vomatt.users SET plan = 'PRO' WHERE id = :id").setParameter("id", owner.getId()).executeUpdate();
+        em.clear();
+        invite("cap5@example.com", CommunityRole.EDITOR);
+    }
+
+    @Test
     void shouldRefuseResendWhenInvitedByUserId() {
         CommunityInvitationResponse invitation = communityService.invite(communityId, dave.getId(), null, CommunityRole.EDITOR,
                 owner.getId().toString());

@@ -346,7 +346,10 @@ public class CommunityController {
     @CommonApiResponses
     @Operation(summary = "Invite a user to a community account", description = """
             **Auth**: required (OWNER or ADMIN)
-            **Precondition**: the invitee has no unexpired invitation to this community account
+            **Precondition**: the invitee has no unexpired invitation to this community account; the members (OWNERs included) \
+            plus unexpired invitations are below the community account's limit: 5, or 20 once any OWNER is on the PRO plan \
+            (`community_member_limit_free` / `community_member_limit_pro`, admin-configurable). A user invited both by `userId` \
+            and by their address takes two places until they answer. An account already over a lowered limit keeps its members
             **Behavior**: the only way to add a member: invites a user picked by `userId` (e.g. from user search) or an \
             `email` address, exactly one, with the role; it can be used for 7 days. Nobody joins without answering: the user, \
             or the account whose email is the address, gets a `COMMUNITY_INVITATION` notification and accepts \
@@ -380,6 +383,7 @@ public class CommunityController {
     @ApiError(status = 409, key = MessageKey.COMMUNITY_INVITATION_EXISTS, when = "the user or address already has an unexpired invitation to this community account")
     @ApiError(status = 403, key = MessageKey.COMMUNITY_NOT_MEMBER, when = "the caller is not a member of this community account, or it does not exist or is suspended")
     @ApiError(status = 403, key = MessageKey.COMMUNITY_ROLE_FORBIDDEN, when = "the caller is not an OWNER or ADMIN, or is an ADMIN and the invitation grants OWNER")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_MEMBER_LIMIT_REACHED, when = "the members plus unexpired invitations have reached the limit; `data` is `{ \"limit\": 5, \"used\": 5 }`")
     public ResponseEntity<ApiResponse<CommunityInvitationResponse>> invite(
             @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
             @PathVariable UUID communityId,

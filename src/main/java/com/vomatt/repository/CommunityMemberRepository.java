@@ -62,6 +62,13 @@ public interface CommunityMemberRepository extends JpaRepository<CommunityMember
             + "ORDER BY c.created_at, c.id", nativeQuery = true)
     List<UUID> findOwnedIds(@Param("userId") UUID userId, @Param("locked") boolean locked);
 
+    /** The plans of the community account's OWNERs, each once. */
+    @Query(value = "SELECT DISTINCT u.plan FROM vomatt.community_members m JOIN vomatt.users u ON u.id = m.user_id "
+            + "WHERE m.community_user_id = :communityId AND m.role = 'OWNER'", nativeQuery = true)
+    List<String> findOwnerPlans(@Param("communityId") UUID communityId);
+
+    long countByCommunityUserId(UUID communityUserId);
+
     @Query(value = "SELECT DISTINCT user_id FROM vomatt.community_members WHERE community_user_id IN (:communityIds) AND role = 'OWNER'",
            nativeQuery = true)
     List<UUID> findOwnerIds(@Param("communityIds") Collection<UUID> communityIds);

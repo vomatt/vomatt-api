@@ -2,6 +2,9 @@
 
 Contract changes that affect the frontend. 💥 BREAKING means frontend code must change. See [openapi.json](openapi.json) for the contract snapshot and [error-codes.md](error-codes.md) for error codes.
 
+## 2026-11-21
+- 💥 `POST /api/communities/{communityId}/invitations` with an `email` now answers 429 `invitation.email.too_soon` while the caller is locked out of the address, and 429 `invitation.email.daily_limit` over their daily invitation email limit, and creates no invitation. Before, it created the invitation unmailed, so revoking it and inviting the same address again got around the 3-emails-in-12-hours lock. Each invite by email still counts toward that lock, like a resend.
+
 ## 2026-11-19
 - 💥 Invitation emails to addresses with no account (Invite List members, community account invitations) are now limited per sender and address instead of per Invite List / community account: a sender who emails one address 3 times within one 12-hour window (counted from their first email to it), across every Invite List and community account, cannot email it again for 7 days unless an admin lifts the lock (`invitation_email_burst_limit`, `invitation_email_burst_window_hours`, `invitation_email_lock_days`; admin-configurable). The 3-day resend window is gone: resend works right away until the caller is locked. `resendAvailableAt` is now per caller: the end of the caller's lock on the address, or `invitedAt` (past, so now) when not locked; another member may resend sooner. 429 `invitation.email.too_soon` now means the caller is locked out of the address (new message).
 - New admin `GET /api/admin/invitation-email-locks` (locks in force) and `DELETE /api/admin/invitation-email-locks/{senderId}?email=` (lifts a lock and resets the count; 404 `invitation.email.lock_not_found` when none). Audit-logged as `UNLOCK` on `INVITATION_EMAIL`.

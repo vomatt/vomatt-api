@@ -148,8 +148,12 @@ public class CommunityService {
         requireMemberRoom(communityId, now);
         // Counted against the inviting person, not the community account: anyone can create community accounts, so a
         // per-community budget would multiply with each one they make. Claimed for an address with an account too, so the
-        // lock and quota never tell whether it has one; claimed before the insert, so a refused invite leaves no invitation.
-        OffsetDateTime lockedUntil = email == null ? null : invitationEmailLimiter.claimOrThrow(UUID.fromString(callerId), email);
+        // lock and quota never tell whether it has one. A locked address is refused before the insert, so revoking and
+        // inviting again cannot get around the lock; over the daily quota (or with Redis down) the invitation is still
+        // created, unmailed.
+        if (email != null) {
+            invitationEmailLimiter.requireNotLocked(UUID.fromString(callerId), email);
+        }
         CommunityInvitation invitation;
         try {
             invitation = invitationRepository.saveAndFlush(new CommunityInvitation(communityId, userId, email, role,
@@ -158,13 +162,13 @@ public class CommunityService {
             // A concurrent invite of the same user or address won the unique key
             throw ApiException.conflict(MessageKey.COMMUNITY_INVITATION_EXISTS);
         }
-        if (email != null) {
+        if (email != null && !invitationEmailLimiter.claim(UUID.fromString(callerId), List.of(email)).isEmpty()) {
             sendUnlessAccount(communityId, invitation.getId(), email, role, callerId);
         }
         log.info("Community account {}: {} invited {} as {} ({})", communityId, callerId, userId != null ? userId : "an address",
                 role, invitation.getId());
         return toResponse(invitation, user, user == null ? null : PublicNames.load(user, preferenceRepository),
-                lockedUntil == null ? Map.of() : Map.of(email, lockedUntil));
+                email == null ? Map.of() : invitationEmailLimiter.lockedUntil(UUID.fromString(callerId), List.of(email)));
     }
 
     /**

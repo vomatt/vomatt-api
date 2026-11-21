@@ -364,8 +364,8 @@ public class CommunityController {
             **Side effects**: an address with no account at all is mailed once committed, within the member's own daily invitation \
             email limit (shared with their Poll and Invite List invitations). A member who emails one address 3 times within one 12-hour window (counted from their first email to it) \
             (counting every community account and Invite List) cannot email it again for 7 days unless an admin lifts the lock \
-            (all three admin-configurable). While locked, or over the daily limit, inviting it is refused (429) and no invitation \
-            is created, so revoking and inviting again does not get around the lock. Every invitation by email counts toward that \
+            (all three admin-configurable). While locked, inviting it is refused (429) and no invitation is created, so revoking \
+            and inviting again does not get around the lock; over the daily limit the invitation is still created, unmailed. Every invitation by email counts toward that \
             lock and limit, whether or not the address has an account, so neither tells. Audit-logged.
             """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = {
@@ -386,8 +386,7 @@ public class CommunityController {
     @ApiError(status = 403, key = MessageKey.COMMUNITY_NOT_MEMBER, when = "the caller is not a member of this community account, or it does not exist or is suspended")
     @ApiError(status = 403, key = MessageKey.COMMUNITY_ROLE_FORBIDDEN, when = "the caller is not an OWNER or ADMIN, or is an ADMIN and the invitation grants OWNER")
     @ApiError(status = 403, key = MessageKey.COMMUNITY_MEMBER_LIMIT_REACHED, when = "the members plus unexpired invitations have reached the limit; `data` is `{ \"limit\": 5, \"used\": 5 }`")
-    @ApiError(status = 429, key = MessageKey.INVITATION_EMAIL_TOO_SOON, when = "an `email` the caller emailed 3 times within one 12-hour window (counted from their first email to it), by invite or resend; locked out of it for 7 days")
-    @ApiError(status = 429, key = MessageKey.INVITATION_EMAIL_DAILY_LIMIT, when = "an `email` when the caller has used up today's invitation email limit (`invitation_email_daily_limit`)")
+    @ApiError(status = 429, key = MessageKey.INVITATION_EMAIL_TOO_SOON, when = "an `email` the caller emailed 3 times within one 12-hour window (counted from their first email to it), across every community account and Invite List; locked out of it for 7 days")
     public ResponseEntity<ApiResponse<CommunityInvitationResponse>> invite(
             @Parameter(description = "Community account's user id", required = true, example = "0199c1a2-7b3e-7d4a-9f10-2c5e8a1b3d48")
             @PathVariable UUID communityId,

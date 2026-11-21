@@ -315,7 +315,6 @@ class CommunityServiceTest {
         savesInvitation();
         when(userRepository.existsByEmail("dave@example.com")).thenReturn(true);
 
-
         service.invite(communityId, null, "dave@example.com", CommunityRole.EDITOR, callerId.toString());
 
         // Claimed like any address, so the lock and quota never tell it has an account; only the email is skipped

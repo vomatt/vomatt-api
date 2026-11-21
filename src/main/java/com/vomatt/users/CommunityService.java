@@ -146,6 +146,14 @@ public class CommunityService {
             invitationRepository.removeById(existing.getId());
         });
         requireMemberRoom(communityId, now);
+        // Counted against the inviting person, not the community account: anyone can create community accounts, so a
+        // per-community budget would multiply with each one they make. Claimed for an address with an account too, so the
+        // lock and quota never tell whether it has one. A locked address is refused before the insert, so revoking and
+        // inviting again cannot get around the lock; over the daily quota (or with Redis down) the invitation is still
+        // created, unmailed.
+        if (email != null) {
+            invitationEmailLimiter.requireNotLocked(UUID.fromString(callerId), email);
+        }
         CommunityInvitation invitation;
         try {
             invitation = invitationRepository.saveAndFlush(new CommunityInvitation(communityId, userId, email, role,
@@ -154,8 +162,8 @@ public class CommunityService {
             // A concurrent invite of the same user or address won the unique key
             throw ApiException.conflict(MessageKey.COMMUNITY_INVITATION_EXISTS);
         }
-        if (email != null) {
-            mailInvitation(communityId, invitation.getId(), email, role, callerId);
+        if (email != null && !invitationEmailLimiter.claim(UUID.fromString(callerId), List.of(email)).isEmpty()) {
+            sendUnlessAccount(communityId, invitation.getId(), email, role, callerId);
         }
         log.info("Community account {}: {} invited {} as {} ({})", communityId, callerId, userId != null ? userId : "an address",
                 role, invitation.getId());
@@ -197,18 +205,6 @@ public class CommunityService {
         if (used >= limit) {
             throw ApiException.withData(HttpStatus.FORBIDDEN, MessageKey.COMMUNITY_MEMBER_LIMIT_REACHED, new MemberLimitReached(limit, used));
         }
-    }
-
-    private void mailInvitation(UUID communityId, UUID invitationId, String address, CommunityRole role, String callerId) {
-        // Counted against the inviting person, not the community account: anyone can create community accounts, so a
-        // per-community budget would multiply with each one they make. Claimed for an address with an account too, so
-        // the lock and quota never tell whether it has one.
-        if (invitationEmailLimiter.claim(UUID.fromString(callerId), List.of(address)).isEmpty()) {
-            log.info("Community invitation {} not mailed to {}: the inviter is locked out of the address or over the daily limit",
-                    invitationId, TextUtil.maskEmail(address));
-            return;
-        }
-        sendUnlessAccount(communityId, invitationId, address, role, callerId);
     }
 
     // An address with an account gets the COMMUNITY_INVITATION notification instead

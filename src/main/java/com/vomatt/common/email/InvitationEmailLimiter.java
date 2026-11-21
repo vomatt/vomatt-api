@@ -93,17 +93,26 @@ public class InvitationEmailLimiter {
      * next mail the address: {@code null} at once, or when the lock this email started ends.
      */
     public OffsetDateTime claimOrThrow(UUID senderId, String email) {
+        requireNotLocked(senderId, email);
         OffsetDateTime now = sentNow();
         UUID sender = realSender(senderId);
-        invitationEmailRepository.lockPairs(sender, List.of(email));
-        if (!invitationEmailRepository.findLocked(sender, List.of(email), now).isEmpty()) {
-            throw ApiException.tooManyRequests(MessageKey.INVITATION_EMAIL_TOO_SOON);
-        }
         Map<String, OffsetDateTime> locked = new HashMap<>();
         if (claim(sender, List.of(email), unsent -> List.of(), recipients -> locked.putAll(record(sender, recipients, now))).isEmpty()) {
             throw ApiException.tooManyRequests(MessageKey.INVITATION_EMAIL_DAILY_LIMIT);
         }
         return locked.get(email);
+    }
+
+    /**
+     * 429 {@code invitation.email.too_soon} while the sender is locked out of the address. Holds the pair's advisory lock
+     * until commit, so a {@link #claim} later in the transaction counts after this check.
+     */
+    public void requireNotLocked(UUID senderId, String email) {
+        UUID sender = realSender(senderId);
+        invitationEmailRepository.lockPairs(sender, List.of(email));
+        if (!invitationEmailRepository.findLocked(sender, List.of(email), OffsetDateTime.now()).isEmpty()) {
+            throw ApiException.tooManyRequests(MessageKey.INVITATION_EMAIL_TOO_SOON);
+        }
     }
 
     /**

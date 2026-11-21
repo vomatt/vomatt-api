@@ -315,13 +315,37 @@ class CommunityServiceTest {
         caller(CommunityRole.OWNER);
         savesInvitation();
         when(userRepository.existsByEmail("dave@example.com")).thenReturn(true);
-
         when(invitationEmailLimiter.claim(callerId, List.of("dave@example.com"))).thenReturn(List.of("dave@example.com"));
 
         service.invite(communityId, null, "dave@example.com", CommunityRole.EDITOR, callerId.toString());
 
         // Claimed like any address, so the lock and quota never tell it has an account; only the email is skipped
         verify(invitationEmailLimiter).claim(callerId, List.of("dave@example.com"));
+        org.mockito.Mockito.verifyNoInteractions(emailService);
+    }
+
+    @Test
+    void shouldRefuseInviteWithoutSavingWhenInviterIsLockedOutOfAddress() {
+        caller(CommunityRole.OWNER);
+        when(planService.memberLimit(communityId)).thenReturn(5);
+        org.mockito.Mockito.doThrow(ApiException.tooManyRequests(MessageKey.INVITATION_EMAIL_TOO_SOON))
+                .when(invitationEmailLimiter).requireNotLocked(callerId, "dave@example.com");
+
+        assertThatThrownBy(() -> service.invite(communityId, null, "dave@example.com", CommunityRole.EDITOR, callerId.toString()))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKey.INVITATION_EMAIL_TOO_SOON));
+        verify(invitationRepository, org.mockito.Mockito.never()).saveAndFlush(org.mockito.ArgumentMatchers.any());
+        org.mockito.Mockito.verifyNoInteractions(emailService);
+    }
+
+    @Test
+    void shouldSaveUnmailedInvitationWhenInviterIsOverDailyLimit() {
+        caller(CommunityRole.OWNER);
+        savesInvitation();
+        when(invitationEmailLimiter.claim(callerId, List.of("dave@example.com"))).thenReturn(List.of());
+
+        service.invite(communityId, null, "dave@example.com", CommunityRole.EDITOR, callerId.toString());
+
+        verify(invitationRepository).saveAndFlush(org.mockito.ArgumentMatchers.any());
         org.mockito.Mockito.verifyNoInteractions(emailService);
     }
 

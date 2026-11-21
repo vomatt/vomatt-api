@@ -176,6 +176,23 @@ class CommunityInvitationPostgresTest extends PostgresRepositoryTest {
     }
 
     @Test
+    void shouldRefuseInviteWhenRevokingAndInvitingAgainReachesLock() {
+        for (int i = 0; i < 2; i++) {
+            CommunityInvitationResponse invitation = invite("gina@example.com", CommunityRole.EDITOR);
+            communityService.revokeInvitation(communityId, UUID.fromString(invitation.id()), owner.getId().toString());
+            em.flush();
+        }
+        // The third invite is created and starts the 7-day lock; once revoked, a fourth is refused
+        CommunityInvitationResponse third = invite("gina@example.com", CommunityRole.EDITOR);
+        assertThat(third.resendAvailableAt()).isAfter(OffsetDateTime.now().plusDays(6));
+        communityService.revokeInvitation(communityId, UUID.fromString(third.id()), owner.getId().toString());
+        em.flush();
+
+        assertKey(() -> invite("gina@example.com", CommunityRole.EDITOR), MessageKey.INVITATION_EMAIL_TOO_SOON);
+        assertThat(communityService.listInvitations(communityId, owner.getId().toString())).isEmpty();
+    }
+
+    @Test
     void shouldAnswerResendTheSameWhetherOrNotAddressHasAccount() {
         CommunityInvitationResponse withAccount = invite(dave.getEmail(), CommunityRole.EDITOR);
         CommunityInvitationResponse withoutAccount = invite("ivy@example.com", CommunityRole.EDITOR);

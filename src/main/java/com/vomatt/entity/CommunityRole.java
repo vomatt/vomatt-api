@@ -24,7 +24,7 @@ public enum CommunityRole {
         return this == OWNER || this == ADMIN || this == CHIEF_EDITOR;
     }
 
-    /** Read the community account's result reports. */
+    /** Read the community account's result reports, and the voter lists of its Polls whose Voter Visibility is OWNER. */
     public boolean canReadReports() {
         return this == OWNER || this == ADMIN || this == ANALYST;
     }

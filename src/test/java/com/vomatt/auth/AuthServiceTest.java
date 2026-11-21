@@ -199,6 +199,30 @@ class AuthServiceTest {
     }
 
     @Test
+    void shouldStoreTestCodeAndSendNothingWhenTestAccountAndTestCodeSet() {
+        ReflectionTestUtils.setField(authService, "otpTestCode", "246810");
+        when(userRepository.existsByEmail("test01@vomatt.test")).thenReturn(true);
+
+        authService.sendOtp("test01@vomatt.test", null, null, IP);
+
+        assertThat(storedOtp("otp:email", k("test01@vomatt.test")).codeHash())
+                .isEqualTo(h("test01@vomatt.test", "246810"));
+        org.mockito.Mockito.verifyNoInteractions(emailService);
+    }
+
+    @Test
+    void shouldSendRandomCodeWhenTestCodeSetButNotTestAccount() {
+        ReflectionTestUtils.setField(authService, "otpTestCode", "246810");
+        when(userRepository.existsByEmail("user@example.com")).thenReturn(true);
+
+        authService.sendOtp("user@example.com", null, null, IP);
+
+        assertThat(storedOtp("otp:email", k("user@example.com")).codeHash())
+                .isNotEqualTo(h("user@example.com", "246810"));
+        verify(emailService).sendVerificationEmail(eq("user@example.com"), anyString());
+    }
+
+    @Test
     void sendOtp_whenOtpStoreFails_shouldThrowAndNotSendEmail() {
         when(userRepository.existsByEmail("user@example.com")).thenReturn(true);
         org.mockito.Mockito.doThrow(new com.vomatt.common.redis.RedisOperationException("redis down", null))

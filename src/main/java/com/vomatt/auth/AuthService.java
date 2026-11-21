@@ -150,6 +150,16 @@ public class AuthService {
     @Value("${otp.daily-limit.phone:5}")
     private long otpDailyLimitPhone;
 
+    /**
+     * Fixed consumer OTP for {@value #TEST_EMAIL_DOMAIN} accounts (manual test accounts without a mailbox), sent
+     * nowhere; blank turns it off. Lockouts, cooldown and daily quota still apply.
+     */
+    @Value("${otp.test-code:}")
+    private String otpTestCode;
+
+    /** Reserved TLD (RFC 2606), so no real person can own an address in it. */
+    static final String TEST_EMAIL_DOMAIN = "@vomatt.test";
+
     public void sendOtp(String email, String phone, String type, String clientIp) {
         String otpType = (type != null) ? type : "login";
         String code = generateOtpCode();
@@ -182,7 +192,8 @@ public class AuthService {
         // Checked before the DB lookup, for the same reason as sendAdminOtp; sendEmailOtp checks again (Redis only)
         rejectIfLocked(OTP_EMAIL_NS, attemptKey(normalizedEmail, clientIp));
         String otpType = userRepository.existsByEmail(normalizedEmail) ? "login" : "signup";
-        sendEmailOtp(OTP_EMAIL_NS, normalizedEmail, otpType, code, clientIp, true);
+        boolean testAccount = StringUtils.hasText(otpTestCode) && normalizedEmail.endsWith(TEST_EMAIL_DOMAIN);
+        sendEmailOtp(OTP_EMAIL_NS, normalizedEmail, otpType, testAccount ? otpTestCode : code, clientIp, !testAccount);
     }
 
     /** {@code deliver} false stores the OTP like any other but sends nothing, so it can never be redeemed. */

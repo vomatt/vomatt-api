@@ -2106,6 +2106,36 @@ class VoteServiceTest {
 
             assertThat(vote.getDeletedAt()).isNotNull();
         }
+
+        private void endedOwnerOnly() {
+            vote.setEndTime(OffsetDateTime.now().minusMinutes(1));
+            vote.setVoterVisibility(VoterVisibility.OWNER);
+            when(voteRepository.findById(voteId)).thenReturn(Optional.of(vote));
+        }
+
+        @Test
+        void shouldListVotersOfOwnerOnlyPollWhenRoleMayReadReports() {
+            endedOwnerOnly();
+            when(userVoteRepository.findVoterPage(eq(voteId), any())).thenReturn(List.of());
+
+            for (var role : List.of(com.vomatt.entity.CommunityRole.OWNER, com.vomatt.entity.CommunityRole.ADMIN,
+                    com.vomatt.entity.CommunityRole.ANALYST)) {
+                actAs(role);
+                assertThat(voteService.getVoters(voteId.toString(), userId.toString(), null, null).items()).isEmpty();
+            }
+        }
+
+        @Test
+        void shouldRefuseVotersOfOwnerOnlyPollWhenRoleMayNotReadReports() {
+            endedOwnerOnly();
+
+            for (var role : List.of(com.vomatt.entity.CommunityRole.CHIEF_EDITOR, com.vomatt.entity.CommunityRole.EDITOR)) {
+                actAs(role);
+                assertThatThrownBy(() -> voteService.getVoters(voteId.toString(), userId.toString(), null, null))
+                        .satisfies(ex -> assertApiException(ex, HttpStatus.FORBIDDEN, MessageKey.COMMUNITY_ROLE_FORBIDDEN));
+            }
+            verify(userVoteRepository, never()).findVoterPage(any(), any());
+        }
     }
 
     // ─── Pro polls ────────────────────────────────────────────────────────────

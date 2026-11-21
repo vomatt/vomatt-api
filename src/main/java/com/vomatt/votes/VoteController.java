@@ -658,7 +658,7 @@ public class VoteController {
     @CommonApiResponses
     @Operation(summary = "List Participants of an Ended Poll", description = """
             **Auth**: required
-            **Precondition**: the Poll has Ended and its `revealAt` (if set) has passed, and its Voter Visibility allows the caller: NOBODY allows no one (not even the owner), OWNER allows only the owner, SIGNED_IN allows anyone who can see the Poll (for INVITE_ONLY: the owner and Invitees)
+            **Precondition**: the Poll has Ended and its `revealAt` (if set) has passed, and its Voter Visibility allows the caller: NOBODY allows no one (not even the owner), OWNER allows only the owner (for a community account's Poll: members acting as it with role OWNER, ADMIN or ANALYST), SIGNED_IN allows anyone who can see the Poll (for INVITE_ONLY: the owner and Invitees)
             **Behavior**: cursor-paged list of who took part, oldest Ballot first. Anonymous Ballots are left out, so the list can be shorter than `participantCount`. \
             `optionId` is present only when the Poll holds no Anonymous Ballot other than the caller's own; otherwise it is null for every Participant, \
             so the anonymous choices cannot be worked out from the named ones and the option totals. \
@@ -677,6 +677,7 @@ public class VoteController {
     @ApiError(status = 404, key = MessageKey.VOTE_NOT_FOUND, when = "Poll does not exist, is Deleted, or is INVITE_ONLY and the caller is neither its owner nor an Invitee, or its owner blocked the caller")
     @ApiError(status = 403, key = MessageKey.VOTE_RESULTS_SEALED, when = "the Poll is still Scheduled or Open, or its `revealAt` has not passed")
     @ApiError(status = 403, key = MessageKey.VOTE_VOTERS_HIDDEN, when = "Voter Visibility does not allow the caller")
+    @ApiError(status = 403, key = MessageKey.COMMUNITY_ROLE_FORBIDDEN, when = "Voter Visibility is OWNER and the caller acts as the owning community account with role CHIEF_EDITOR or EDITOR")
     @ApiError(status = 400, key = MessageKey.COMMON_CURSOR_INVALID, when = "`cursor` is malformed or was issued by another list or another ordering of this list")
     public ResponseEntity<ApiResponse<CursorResponse<VoterResponse>>> getVoters(
             @Parameter(description = "Poll ID", required = true, example = "0199f2a3-5b7e-7d40-a1c8-9e3b2f6d4c05")

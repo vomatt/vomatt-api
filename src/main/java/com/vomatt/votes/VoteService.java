@@ -578,6 +578,14 @@ public class VoteService {
         if (!allowed) {
             throw ApiException.forbidden(MessageKey.VOTE_VOTERS_HIDDEN);
         }
+        // An OWNER list of a community account's Poll goes only to the members whose role reads its results
+        if (vote.getVoterVisibility() == VoterVisibility.OWNER) {
+            ActingMember.current()
+                .filter(a -> !a.role().canReadReports())
+                .ifPresent(a -> {
+                    throw ApiException.forbidden(MessageKey.COMMUNITY_ROLE_FORBIDDEN);
+                });
+        }
         // The caller's own Anonymous Ballot does not count: they know its option, so it hides no one else's.
         // ponytail: Ballots of other accounts the caller controls (invited sock puppets) still count; no count-based rule can tell them apart.
         // Re-checked on every page: an account deletion can drop Ballots between pages, so this only ever hides more.

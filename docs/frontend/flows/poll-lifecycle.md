@@ -75,7 +75,7 @@ A Poll has no `status` field; the status is derived from times and `votingActive
 | `OWNER` (default) | Allowed | 403 `vote.voters.hidden` | 401 |
 | `SIGNED_IN` | Allowed | Allowed | 401 |
 
-`SIGNED_IN` means anyone who can see the Poll: on an Invite-only Poll, only the owner and Invitees (everyone else gets 404 `vote.not_found`). Before the Poll is Ended, every level returns 403 `vote.results.sealed`. Participants can see this level from the Poll's `voterVisibility` before voting; show it to the user before they vote.
+On a community account's Poll, "Owner" means members acting as it (`X-Act-As`) with role `OWNER`, `ADMIN` or `ANALYST`; at `OWNER` visibility `CHIEF_EDITOR` and `EDITOR` get 403 `community.role_forbidden`, as for the Pro report. `SIGNED_IN` means anyone who can see the Poll: on an Invite-only Poll, only the owner and Invitees (everyone else gets 404 `vote.not_found`). Before the Poll is Ended, every level returns 403 `vote.results.sealed`. Participants can see this level from the Poll's `voterVisibility` before voting; show it to the user before they vote.
 
 ### Anonymous Ballots
 
